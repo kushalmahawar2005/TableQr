@@ -1,25 +1,20 @@
-import Link from "next/link";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { consoleSections } from "@/lib/console-nav";
+import { LANG_COOKIE, parseLang } from "@/lib/i18n";
+import { canSee } from "@/lib/staff-permissions";
+import { currentStaff } from "@/server/staff/request";
+import { StaffShell } from "./_components/staff-shell";
 
-// Sidebar plus content, used by host, cashier, manager and owner screens.
-export default function ConsoleLayout({ children }: LayoutProps<"/console">) {
+// Staff console: sign-in first, then a sidebar showing only what this role may open (UI spec 3.5).
+export default async function ConsoleLayout({ children }: LayoutProps<"/console">) {
+  const staff = await currentStaff();
+  if (!staff) redirect("/console/login");
+  const lang = parseLang((await cookies()).get(LANG_COOKIE)?.value);
+  const sections = consoleSections.filter((s) => canSee(staff.roles, s.slug)).map((s) => ({ slug: s.slug, label: lang === "hi" ? s.hi : s.label }));
   return (
-    <div className="flex flex-1">
-      <aside className="hidden w-56 shrink-0 flex-col bg-ink px-3 py-5 text-white md:flex">
-        <p className="px-3 font-display text-section font-medium">TableQR</p>
-        <nav className="mt-6 flex flex-col gap-1">
-          {consoleSections.map((s) => (
-            <Link
-              key={s.slug}
-              href={`/console/${s.slug}`}
-              className="rounded-input px-3 py-2 text-white/80 hover:bg-white/10 hover:text-white"
-            >
-              {s.label}
-            </Link>
-          ))}
-        </nav>
-      </aside>
-      <div className="flex flex-1 flex-col bg-paper">{children}</div>
-    </div>
+    <StaffShell lang={lang} sections={sections} staff={{ name: staff.name, roles: staff.roles, outlet: staff.outlet.name, shiftEnds: staff.expiresAt }}>
+      {children}
+    </StaffShell>
   );
 }

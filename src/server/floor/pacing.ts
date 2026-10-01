@@ -43,7 +43,7 @@ export async function getPacing(run: Runner, scope: Scope, opts: { date: string;
     .select()
     .from(s.serviceDayOverrides)
     .where(and(eq(s.serviceDayOverrides.tenantId, scope.tenantId), eq(s.serviceDayOverrides.outletId, scope.outletId), eq(s.serviceDayOverrides.serviceDate, opts.date)));
-  if (starts.length === 0) return { date: opts.date, slots: [], paused: !!day?.onlineBookingsPaused, pausedAt: day?.updatedAt.getTime() ?? null };
+  if (starts.length === 0) return { date: opts.date, slots: [], paused: !!day?.onlineBookingsPaused, pausedAt: (day?.updatedAt.getTime() ?? null) as number | null };
   const first = starts[0];
   const last = new Date(starts[starts.length - 1].getTime() + step * 60_000);
   const [bookings, extra] = await Promise.all([
@@ -63,7 +63,7 @@ export async function getPacing(run: Runner, scope: Scope, opts: { date: string;
     const capacity = opts.policy.pacingCoversPerSlot + extraCovers;
     return { startAt: startAt.getTime(), covers, capacity, extraCovers, state: pacingState(covers, capacity) };
   });
-  return { date: opts.date, slots, paused: !!day?.onlineBookingsPaused, pausedAt: day?.updatedAt.getTime() ?? null };
+  return { date: opts.date, slots, paused: !!day?.onlineBookingsPaused, pausedAt: (day?.updatedAt.getTime() ?? null) as number | null };
 }
 
 async function outletInfo(run: Runner, scope: Scope) {
