@@ -136,8 +136,44 @@ describe("G9 paid", () => {
     expect(paid(g9Cases().find((c) => c.id === "all-paid")!.data)).toContain("Thanks for dining with us.");
   });
 
+  it("asks for a rating with optional feedback, then thanks for the feedback", () => {
+    const g9 = (id: string) => g9Cases().find((c) => c.id === id)!;
+    const fresh = paid(g9Base);
+    expect(fresh).toContain("How was your meal?");
+    expect(fresh.match(/role="radio"/g)).toHaveLength(5);
+    expect(fresh).not.toContain(">Submit<");
+    const picked = paid(g9("rating-picked").data, g9("rating-picked").preview);
+    expect(picked).toContain("Tell us more (optional)");
+    expect(picked).toContain(">Submit<");
+    for (const id of ["high", "low"]) expect(paid(g9(id).data, g9(id).preview)).toContain("Thanks for your feedback.");
+  });
+
+  it("never says the receipt was sent unless delivery confirmed it, and labels the document honestly", () => {
+    const g9 = (id: string) => g9Cases().find((c) => c.id === id)!;
+    expect(paid(g9Base)).not.toContain("Receipt sent");
+    expect(paid(g9("channels").data)).not.toContain("Receipt sent");
+    expect(paid(g9("channels").data, g9("channels").preview)).toContain("Receipt sent to +9198xxxxxx10.");
+    expect(paid(g9("receipt").data)).toContain("View final receipt");
+    expect(paid(g9("receipt").data)).not.toContain("invoice");
+  });
+
+  it("after the table closes: no ordering navigation; later a read-only summary", () => {
+    const g9 = (id: string) => g9Cases().find((c) => c.id === id)!;
+    expect(paid(g9Base)).toContain('href="/r/SRJ01/t/k7Qm/menu"');
+    const settled = paid(g9("all-paid").data);
+    expect(settled).toContain("All settled");
+    expect(settled).toContain("Table T12 is now closed.");
+    expect(settled).not.toContain('href="/r/SRJ01/t/k7Qm/menu"');
+    const later = paid(g9("read-only").data);
+    expect(later).toContain("Your visit summary");
+    expect(later).toContain("You can still view your receipt and rate your visit for 24 hours.");
+    expect(later).toContain("You rated your meal 4 out of 5.");
+    const expired = paid(g9("expired").data);
+    expect(expired).not.toMatch(/₹|receipt|invoice/i);
+  });
+
   it("does not offer booking until the booking flow is real, and ends access after 24 hours", () => {
     expect(paid(g9Base)).not.toContain("Book your next visit");
-    expect(paid(g9Cases().find((c) => c.id === "expired")!.data)).toContain("This visit has ended");
+    expect(paid(g9Cases().find((c) => c.id === "expired")!.data)).toContain("This visit has ended.");
   });
 });

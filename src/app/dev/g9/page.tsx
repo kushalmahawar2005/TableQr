@@ -9,7 +9,7 @@ export const metadata: Metadata = { title: "G9 states (dev)", robots: { index: f
 export const dynamic = "force-dynamic";
 
 // Development-only review board for G9 Paid, receipt and next visit.
-// Open a state alone with ?solo=<id>; add &text=2 for 200% text.
+// Open a state alone with ?solo=<id>; add &text=2 for 200% text (state 17).
 export default async function G9Preview(props: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   if (process.env.NODE_ENV === "production") notFound();
   const q = await props.searchParams;

@@ -20,10 +20,10 @@ export async function afterVisitAction(outlet: string, table: string) {
   }
 }
 
-export async function rateAction(outlet: string, table: string, rating: number) {
+export async function rateAction(outlet: string, table: string, rating: number, comment?: string) {
   try {
     const visit = await requireVisit(outlet, table, await device());
-    return { ok: true as const, ...(await submitFeedback(visit, Number(rating))) };
+    return { ok: true as const, ...(await submitFeedback(visit, Number(rating), typeof comment === "string" ? comment : undefined)) };
   } catch {
     return { ok: false as const };
   }
