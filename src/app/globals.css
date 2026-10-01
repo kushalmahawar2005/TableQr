@@ -1,0 +1,251 @@
+@import "tailwindcss";
+
+/*
+ * TableQR Design Foundation v1 (locked). Overrides the visual tokens in UI/UX spec section 2;
+ * the spec still decides behaviour, content and states.
+ * Guest and staff screens are light-only; the KDS uses its own dark tokens.
+ */
+:root {
+  color-scheme: only light;
+
+  /* Core palette */
+  --ink: #1f2937; /* main text */
+  --accent: #c9482b; /* Deep Chilli, the TableQR default */
+  --paper: #fbf8f3; /* Warm Paper background */
+  --surface: #ffffff;
+  --muted: #626a78;
+  --line: #ddd6ca;
+  --success: #237a68;
+  --warning: #8a5a00;
+  --danger: #b83a3a;
+  --info: #315e9e;
+
+  /* Table states: main (border, icon), text, soft (fill). Never colour alone. */
+  --state-available: #237a68;
+  --state-available-text: #237a68;
+  --state-available-soft: #e8f3ef;
+  --state-held: #a86a00;
+  --state-held-text: #946000;
+  --state-held-soft: #fff3d6;
+  --state-reserved: #c18400;
+  --state-reserved-text: #8f6400;
+  --state-reserved-soft: #fff0c2;
+  --state-seated: #b83a3a;
+  --state-seated-text: #b83a3a;
+  --state-seated-soft: #fbe9e9;
+  --state-bill: #a74608;
+  --state-bill-text: #a74608;
+  --state-bill-soft: #fdeedc;
+  --state-paid: #6b7280;
+  --state-paid-text: #5b616b;
+  --state-paid-soft: #f0f1f3;
+  --state-cleaning: #315e9e;
+  --state-cleaning-text: #315e9e;
+  --state-cleaning-soft: #eaf0f8;
+  --state-blocked: #343a40;
+  --state-blocked-text: #343a40;
+  --state-blocked-soft: #e8eaec;
+
+  /* KDS dark system */
+  --kds-bg: #141a2b;
+  --kds-card: #1f2740;
+  --kds-text: #f8fafc;
+  --kds-muted: #b8c0cc;
+
+  /*
+   * Adaptive brand layer. These are the tokens derived from the TableQR default accent;
+   * a guest page overrides them from the outlet's own colour (src/domain/brand.ts).
+   */
+  --brand-main: #c9482b;
+  --brand-strong: #a13a22;
+  --brand-hover: #b94228;
+  --brand-pressed: #a93c24;
+  --brand-soft: #faedea;
+  --brand-border: #efc8bf;
+  --brand-on: #ffffff;
+
+  /* Hindi runs the same scale with about 10% more line height */
+  --lh: 1;
+}
+
+:lang(hi) {
+  --lh: 1.1;
+  font-family: var(--font-hindi);
+}
+
+@theme inline {
+  --color-ink: var(--ink);
+  --color-accent: var(--accent);
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-line: var(--line);
+  --color-muted: var(--muted);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-info: var(--info);
+  --color-kds-bg: var(--kds-bg);
+  --color-kds-card: var(--kds-card);
+  --color-kds-text: var(--kds-text);
+  --color-kds-muted: var(--kds-muted);
+
+  --color-brand: var(--brand-main);
+  --color-brand-strong: var(--brand-strong);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-pressed: var(--brand-pressed);
+  --color-brand-soft: var(--brand-soft);
+  --color-brand-border: var(--brand-border);
+  --color-brand-on: var(--brand-on);
+
+  --font-sans: var(--font-inter), var(--font-devanagari), system-ui, sans-serif;
+  --font-display: var(--font-manrope), var(--font-devanagari), system-ui, sans-serif;
+  --font-hindi: var(--font-devanagari), var(--font-inter), system-ui, sans-serif;
+
+  /* Type scale: size / line height */
+  --text-display: 32px;
+  --text-display--line-height: calc(38px * var(--lh));
+  --text-title: 22px;
+  --text-title--line-height: calc(28px * var(--lh));
+  --text-section: 16px;
+  --text-section--line-height: calc(22px * var(--lh));
+  --text-body: 14px;
+  --text-body--line-height: calc(20px * var(--lh));
+  --text-caption: 12px;
+  --text-caption--line-height: calc(16px * var(--lh));
+  --text-label: 11px;
+  --text-label--line-height: calc(14px * var(--lh));
+  --text-button: 14px;
+  --text-button--line-height: calc(20px * var(--lh));
+  --text-kds: 22px;
+  --text-kds--line-height: 28px;
+  --text-kds-timer: 28px;
+  --text-kds-timer--line-height: 32px;
+
+  /* Radius hierarchy */
+  --radius-input: 10px;
+  --radius-card: 12px; /* admin cards and table containers */
+  --radius-cta: 14px; /* guest primary button, never a full pill */
+  --radius-guest: 16px; /* standard guest card */
+  --radius-modal: 16px;
+  --radius-banner: 20px;
+  --radius-sheet: 24px;
+
+  /* Elevation: normal cards have none */
+  --shadow-float: 0 6px 20px -6px rgb(31 41 55 / 0.18);
+  --shadow-sheet: 0 -8px 28px -10px rgb(31 41 55 / 0.2);
+  --shadow-modal: 0 18px 48px -12px rgb(31 41 55 / 0.25);
+  --shadow-dropdown: 0 4px 12px -4px rgb(31 41 55 / 0.12);
+
+  /* Motion: Natural Responsive by default, Cinematic Hospitality for chosen guest moments */
+  --ease-natural: cubic-bezier(0.2, 0, 0, 1);
+  --ease-hospitality: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+/* Amounts, timers and IDs use tabular figures so columns line up */
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Cinematic Hospitality entry: one soft rise, for guest delight moments only */
+@utility animate-rise {
+  animation: rise-in 380ms var(--ease-hospitality) both;
+}
+
+/* Natural Responsive content swap, e.g. skeleton to content */
+@utility animate-fade {
+  animation: fade-in 180ms var(--ease-natural) both;
+}
+
+/* One restrained shake for a wrong code (G2) */
+@keyframes shake {
+  0%,
+  100% {
+    transform: none;
+  }
+  20%,
+  60% {
+    transform: translateX(-4px);
+  }
+  40%,
+  80% {
+    transform: translateX(4px);
+  }
+}
+
+@utility animate-shake {
+  animation: shake 280ms var(--ease-natural) both;
+}
+
+@keyframes sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: none;
+  }
+}
+
+/* Bottom sheet entry, Natural Responsive */
+@utility animate-sheet {
+  animation: sheet-up 230ms var(--ease-natural) both;
+}
+
+@keyframes pulse-once {
+  50% {
+    transform: scale(1.06);
+  }
+}
+
+/* Cart count tick: one short scale pulse, no flying images (UI spec motion) */
+@utility animate-pulse-once {
+  animation: pulse-once 180ms var(--ease-natural);
+}
+
+/* Reduced motion: short opacity fades only */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 1ms !important;
+    animation-duration: 120ms !important;
+    animation-iteration-count: 1 !important;
+  }
+  /* Looping pulses and spinners would flicker when shortened: hold them still instead */
+  .animate-pulse,
+  .animate-spin {
+    animation: none !important;
+  }
+  .animate-rise,
+  .animate-sheet {
+    animation-name: fade-in !important;
+  }
+  .animate-shake,
+  .animate-pulse-once {
+    animation: none !important;
+  }
+}

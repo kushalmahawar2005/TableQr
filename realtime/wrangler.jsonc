@@ -1,0 +1,18 @@
+{
+  // TableQR realtime fan-out: one Durable Object per outlet holds that outlet's WebSockets.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "tableqr-realtime",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-30",
+  "durable_objects": {
+    "bindings": [{ "name": "OUTLET_HUB", "class_name": "OutletHub" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["OutletHub"] }],
+  "triggers": { "crons": ["* * * * *"] },
+  "observability": { "enabled": true }
+  // Secrets (set with `wrangler secret put`, or .dev.vars locally):
+  //   TOKEN_SECRET    verifies connect tokens signed by the Next.js server
+  //   PUBLISH_SECRET  authorises the Next.js server to publish events
+}
+
+// G6 scheduler secrets: TABLEQR_API_URL (deployed app URL), SERVICE_TASK_SECRET (same as app).

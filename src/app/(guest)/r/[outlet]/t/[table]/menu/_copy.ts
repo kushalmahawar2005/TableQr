@@ -1,0 +1,150 @@
+import type { Lang } from "@/lib/i18n";
+
+// Every interface word on G3 in English and Hindi. Restaurant content (dish and category names,
+// descriptions) is shown as the restaurant entered it, never translated by us.
+
+const en = {
+  language: "Language",
+  tableLine: (code: string, people: number) => `Table ${code} · ${people === 1 ? "Just you" : `${people} here`}`,
+
+  searchLabel: "Search the menu",
+  searchPlaceholder: "Search for dishes…",
+  clearSearch: "Clear search",
+  results: (n: number, q: string) => (n === 1 ? `1 result for “${q}”` : `${n} results for “${q}”`),
+  noResults: { title: "No dishes found", body: "Try a different name or check the spelling." },
+
+  filtersLabel: "Filter dishes",
+  diet: { all: "All", veg: "Veg", non_veg: "Non-veg" },
+  jain: "Jain",
+  spice: "Spice",
+  spiceChoice: { 0: "Not spicy", 1: "Mild or less", 2: "Medium or less", 3: "Up to hot" } as Record<number, string>,
+  spiceAny: "Any spice level",
+  spiceSheetTitle: "How spicy?",
+  spiceSheetNote: "Dishes without a spice level from the restaurant are hidden while this is on.",
+  allergens: "Avoid allergens",
+  allergensActive: (n: number) => `Avoiding ${n}`,
+  allergenSheetTitle: "Avoid allergens",
+  allergenSheetNote: "Dishes that contain what you pick are hidden. So are dishes whose allergen information is incomplete.",
+  apply: "Show dishes",
+  reset: "Reset",
+  close: "Close",
+  hidden: (n: number) => (n === 1 ? "1 dish hidden" : `${n} dishes hidden`),
+  clearFilters: "Clear filters",
+  allergenUnknownNotice: "Some dishes hidden: allergen info incomplete. Ask staff if needed.",
+  filteredEmpty: { title: "No dishes match your filters", body: "Change or clear the filters to see more." },
+
+  categoriesLabel: "Menu sections",
+  popular: "Popular",
+
+  veg: "Vegetarian",
+  nonVeg: "Non-vegetarian",
+  jainMark: "Jain",
+  tag: { bestseller: "Bestseller", chefs_pick: "Chef's pick", new: "New" },
+  spiceLevel: { 0: "Not spicy", 1: "Mild", 2: "Medium", 3: "Hot" } as Record<number, string>,
+  from: (price: string) => `From ${price}`,
+  add: "Add",
+  addOne: (name: string) => `Add one ${name}`,
+  removeOne: (name: string) => `Remove one ${name}`,
+  inCart: (n: number) => `${n} in cart`,
+  qtyOf: (n: number, name: string) => `${n} ${name} in your cart`,
+  maxReached: "Maximum 50",
+  choose: "Choose",
+  chooseFor: (name: string) => `Choose options for ${name}`,
+  backSoon: "Back soon",
+  soldOut: (name: string) => `${name} is sold out`,
+
+  cartSummary: (count: number, total: string) => `${count === 1 ? "1 item" : `${count} items`} · ${total}`,
+  viewCart: "View cart",
+  cartLabel: (count: number, total: string) => `Your cart: ${count === 1 ? "1 item" : `${count} items`}, ${total}`,
+
+  pausedBy: (name: string | null) => (name ? `Ordering paused by ${name}` : "Ordering paused by the host"),
+  pausedBody: "You can still browse the menu and view your cart.",
+  billRequested: "Bill requested. New orders are paused.",
+  billRequestedBody: "You can still browse the menu and view your cart.",
+  offline: "You're offline",
+  offlineBody: "Cart changes are paused until you're back online.",
+  blockedReason: "Ordering is paused right now",
+
+  failed: "Couldn't update your cart. Try again.",
+  justSoldOut: (name: string) => `${name} just sold out.`,
+  notAvailableNow: (name: string) => `${name} isn't available right now.`,
+  orderSent: (round: number) => `Order sent to the kitchen · Round ${round}`,
+  slow: "Slow connection. Still working on it…",
+
+  emptyMenu: { title: "The menu isn't ready yet", body: "Please ask staff to continue." },
+};
+
+export type G3Copy = typeof en;
+
+const hi: G3Copy = {
+  language: "भाषा",
+  tableLine: (code, people) => `टेबल ${code} · ${people === 1 ? "सिर्फ़ आप" : `${people} लोग`}`,
+
+  searchLabel: "मेन्यू में खोजें",
+  searchPlaceholder: "डिश खोजें…",
+  clearSearch: "खोज साफ़ करें",
+  results: (n, q) => `“${q}” के लिए ${n} डिश`,
+  noResults: { title: "कोई डिश नहीं मिली", body: "कोई और नाम आज़माएँ या स्पेलिंग जाँचें।" },
+
+  filtersLabel: "डिश फ़िल्टर करें",
+  diet: { all: "सभी", veg: "शाकाहारी", non_veg: "मांसाहारी" },
+  jain: "जैन",
+  spice: "तीखापन",
+  spiceChoice: { 0: "तीखा नहीं", 1: "हल्का या कम", 2: "मध्यम या कम", 3: "तेज़ तक" },
+  spiceAny: "कोई भी तीखापन",
+  spiceSheetTitle: "कितना तीखा?",
+  spiceSheetNote: "जिन डिश का तीखापन रेस्टोरेंट ने नहीं बताया, वे इस दौरान नहीं दिखेंगी।",
+  allergens: "एलर्जी से बचें",
+  allergensActive: (n) => `${n} से बच रहे हैं`,
+  allergenSheetTitle: "एलर्जी से बचें",
+  allergenSheetNote: "जिन डिश में आपकी चुनी चीज़ है, वे नहीं दिखेंगी। जिनकी एलर्जी जानकारी अधूरी है, वे भी नहीं दिखेंगी।",
+  apply: "डिश दिखाएँ",
+  reset: "रीसेट",
+  close: "बंद करें",
+  hidden: (n) => `${n} डिश छिपी हैं`,
+  clearFilters: "फ़िल्टर हटाएँ",
+  allergenUnknownNotice: "कुछ डिश छिपी हैं: एलर्जी जानकारी अधूरी। ज़रूरत हो तो स्टाफ से पूछें।",
+  filteredEmpty: { title: "आपके फ़िल्टर से कोई डिश मेल नहीं खाती", body: "और डिश देखने के लिए फ़िल्टर बदलें या हटाएँ।" },
+
+  categoriesLabel: "मेन्यू के हिस्से",
+  popular: "लोकप्रिय",
+
+  veg: "शाकाहारी",
+  nonVeg: "मांसाहारी",
+  jainMark: "जैन",
+  tag: { bestseller: "बेस्टसेलर", chefs_pick: "शेफ़ की पसंद", new: "नया" },
+  spiceLevel: { 0: "तीखा नहीं", 1: "हल्का", 2: "मध्यम", 3: "तेज़" },
+  from: (price) => `${price} से`,
+  add: "जोड़ें",
+  addOne: (name) => `एक ${name} जोड़ें`,
+  removeOne: (name) => `एक ${name} हटाएँ`,
+  inCart: (n) => `कार्ट में ${n}`,
+  qtyOf: (n, name) => `आपके कार्ट में ${n} ${name}`,
+  maxReached: "अधिकतम 50",
+  choose: "चुनें",
+  chooseFor: (name) => `${name} के विकल्प चुनें`,
+  backSoon: "जल्द वापस",
+  soldOut: (name) => `${name} ख़त्म हो गया है`,
+
+  cartSummary: (count, total) => `${count} आइटम · ${total}`,
+  viewCart: "कार्ट देखें",
+  cartLabel: (count, total) => `आपका कार्ट: ${count} आइटम, ${total}`,
+
+  pausedBy: (name) => (name ? `${name} ने ऑर्डर रोका है` : "होस्ट ने ऑर्डर रोका है"),
+  pausedBody: "आप मेन्यू और अपना कार्ट देख सकते हैं।",
+  billRequested: "बिल माँगा गया है। नए ऑर्डर रुके हैं।",
+  billRequestedBody: "आप मेन्यू और अपना कार्ट देख सकते हैं।",
+  offline: "आप ऑफ़लाइन हैं",
+  offlineBody: "ऑनलाइन आने तक कार्ट में बदलाव रुके हैं।",
+  blockedReason: "अभी ऑर्डर रुका हुआ है",
+
+  failed: "कार्ट अपडेट नहीं हो सका। फिर से कोशिश करें।",
+  justSoldOut: (name) => `${name} अभी ख़त्म हो गया।`,
+  notAvailableNow: (name) => `${name} अभी उपलब्ध नहीं है।`,
+  orderSent: (round) => `ऑर्डर किचन को भेज दिया गया · राउंड ${round}`,
+  slow: "कनेक्शन धीमा है। काम जारी है…",
+
+  emptyMenu: { title: "मेन्यू अभी तैयार नहीं है", body: "आगे बढ़ने के लिए कृपया स्टाफ से पूछें।" },
+};
+
+export const g3Copy: Record<Lang, G3Copy> = { en, hi };
