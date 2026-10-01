@@ -131,6 +131,26 @@ export const otpChallenges = mysqlTable(
   ],
 );
 
+/**
+ * Wrong table join codes (Host-confirmed mode, G1). Only failures are kept: they rate-limit
+ * guessing per phone and per table. The code itself is never stored here.
+ */
+export const joinCodeAttempts = mysqlTable(
+  "join_code_attempts",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    tableId: ref("table_id").notNull(),
+    deviceId: varchar("device_id", { length: 64 }).notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("join_code_attempts_table_idx").on(t.tenantId, t.tableId, t.createdAt),
+    index("join_code_attempts_device_idx").on(t.tenantId, t.deviceId, t.createdAt),
+    sameTenant("fk_join_code_attempts_table", t, t.tableId, diningTables),
+  ],
+);
+
 export type ModifierChoice = { modifierId: string; groupId: string };
 
 /** Per-person cart inside the table session; prices are resolved on the server */

@@ -7,7 +7,7 @@ import { uuidv7 } from "@/db/id";
 import { LANG_COOKIE, parseLang } from "@/lib/i18n";
 import { DEVICE_COOKIE } from "@/lib/guest-device";
 import { AppError } from "@/server/errors";
-import { startOrJoinTable } from "@/server/guest/session";
+import { joinTableWithCode, startOrJoinTable } from "@/server/guest/session";
 
 const YEAR = 60 * 60 * 24 * 365;
 const cookieBase = { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/" } as const;
@@ -44,6 +44,35 @@ export async function startOrJoin(outletCode: string, shortCode: string, _prev: 
     return null;
   }
   redirect(`${tablePath}/menu`);
+}
+
+export type CodeResult =
+  | { error: "invalid" | "failed" | "changed" }
+  | { error: "wrong"; attemptsLeft: number }
+  | { error: "locked"; retryIn: number };
+
+/**
+ * Join with the table code (Host-confirmed mode). The server checks the code against this table;
+ * a right code joins the open session and goes to the menu. If the table changed meanwhile
+ * (closed, settling, no session), the page re-renders with its current state.
+ */
+export async function joinWithCode(outletCode: string, shortCode: string, code: string): Promise<CodeResult> {
+  const jar = await cookies();
+  let deviceId = jar.get(DEVICE_COOKIE)?.value;
+  if (!deviceId) {
+    deviceId = uuidv7();
+    jar.set(DEVICE_COOKIE, deviceId, { ...cookieBase, maxAge: YEAR });
+  }
+  let res;
+  try {
+    res = await joinTableWithCode({ outletCode, shortCode, deviceId, joinCode: String(code) });
+  } catch (err) {
+    if (!(err instanceof AppError)) return { error: "failed" };
+    refresh();
+    return { error: "changed" };
+  }
+  if (!res.ok) return res.error === "wrong" ? { error: "wrong", attemptsLeft: res.attemptsLeft } : res.error === "locked" ? { error: "locked", retryIn: res.retryIn } : { error: "invalid" };
+  redirect(`/r/${encodeURIComponent(outletCode)}/t/${encodeURIComponent(shortCode)}/menu`);
 }
 
 /** EN / HI switch, remembered on this phone. Setting the cookie re-renders the page. */

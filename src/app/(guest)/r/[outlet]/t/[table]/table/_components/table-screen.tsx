@@ -18,7 +18,6 @@ import {
   PlayIcon,
   QrCodeIcon,
   Restaurant01Icon,
-  Share08Icon,
   UserGroupIcon,
   UserIcon,
   UserRemove01Icon,
@@ -48,8 +47,11 @@ type Person = TableScreenData["people"][number];
 type Notice = { text: string; error?: boolean };
 type Confirm = { kind: "remove" | "pass"; person: Person } | { kind: "bill" };
 
-/** The table's own address and its QR, made on the server; never carries a participant or secret */
-export type InviteLink = { url: string; display: string; qrPath: string; qrBox: number };
+/**
+ * The table QR, drawn on the server from the table's own address; never a participant or secret.
+ * Only the QR reaches the phone: v1 has no link to share, so joining needs someone at the table.
+ */
+export type InviteLink = { qrPath: string; qrBox: number };
 
 /** A frozen state for the dev review board */
 export type TablePreview = {
@@ -761,22 +763,7 @@ function Sheet({
 function InviteSheet({ data, invite, c, onClose }: { data: TableScreenData; invite: InviteLink; c: G7Copy; onClose: () => void }) {
   const code = data.table.code;
   const joinCode = data.invite.joinCode;
-  const [copied, setCopied] = useState(false);
   const body = joinCode ? c.inviteBodyCode : data.invite.mode === "verified" ? c.inviteBodyVerified : c.inviteBodyOpen;
-
-  // Native sharing where the phone has it, otherwise copy the link. Only the table's address.
-  async function share() {
-    try {
-      if (navigator.share) {
-        await navigator.share({ title: data.outlet.name, text: c.shareText(data.outlet.name, code), url: invite.url });
-        return;
-      }
-      await navigator.clipboard.writeText(invite.url);
-      setCopied(true);
-    } catch {
-      // Share sheet dismissed, or clipboard blocked: the QR and the link text are still there
-    }
-  }
 
   return (
     <Sheet titleId="g7-invite" title={c.inviteTitle(code)} c={c} busy={false} onClose={onClose}>
@@ -799,7 +786,6 @@ function InviteSheet({ data, invite, c, onClose }: { data: TableScreenData; invi
             {data.outlet.name}
             {data.outlet.city ? `, ${data.outlet.city}` : ""}
           </span>
-          <span className="mt-1.5 block text-label break-all text-muted select-all">{invite.display}</span>
         </figcaption>
       </figure>
 
@@ -825,16 +811,6 @@ function InviteSheet({ data, invite, c, onClose }: { data: TableScreenData; invi
             <p className="mt-2.5 text-caption text-muted">{c.joinCodeHelp}</p>
           </div>
         </>
-      )}
-
-      <button type="button" onClick={() => void share()} className={`${outline} mt-4 w-full`}>
-        <HugeiconsIcon icon={Share08Icon} size={18} aria-hidden />
-        {c.share}
-      </button>
-      {copied && (
-        <p role="status" className="mt-2 text-center text-caption font-semibold text-success">
-          {c.copied}
-        </p>
       )}
 
       {!joinCode && (

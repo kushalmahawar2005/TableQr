@@ -22,7 +22,7 @@ export default async function TablePage(props: { params: Promise<{ outlet: strin
     if (err instanceof AppError) redirect(`/r/${encodeURIComponent(outlet)}/t/${encodeURIComponent(table)}`);
     throw err;
   }
-  const invite = tableInvite(publicOrigin(await headers()), data.outlet.code, table);
+  const { qrPath, qrBox } = tableInvite(publicOrigin(await headers()), data.outlet.code, table);
   const realtimeUrl = process.env.REALTIME_URL?.replace(/^http/, "ws") ?? null;
-  return <TableScreen data={data} lang={parseLang(jar.get(LANG_COOKIE)?.value)} shortCode={table} realtimeUrl={realtimeUrl} invite={invite} />;
+  return <TableScreen data={data} lang={parseLang(jar.get(LANG_COOKIE)?.value)} shortCode={table} realtimeUrl={realtimeUrl} invite={{ qrPath, qrBox }} />;
 }

@@ -23,6 +23,7 @@ import type { TableLanding } from "@/server/guest/table";
 import { g1Copy, type G1Copy } from "../_copy";
 import { LanguageToggle } from "./language-toggle";
 import { OutletHeader } from "./outlet-header";
+import { JoinCodeCta } from "./join-code-cta";
 import { StartCta } from "./start-cta";
 import { StatusPill, type Tone } from "./status-pill";
 import { CardMessage, PeopleHere, TableCard } from "./table-card";
@@ -32,7 +33,7 @@ type View = {
   pill: Pill;
   message?: { title: string; body?: string };
   people?: { names: string[] | null; line: string; hostLine?: string };
-  cta?: "start" | "join" | "ask_staff";
+  cta?: "start" | "join" | "code" | "ask_staff";
   /** No table identity to show: revoked code or suspended restaurant */
   hideTable?: boolean;
 };
@@ -85,7 +86,8 @@ function describe(data: TableLanding, c: G1Copy, lang: Lang): View {
     case "awaiting_staff":
       return { pill: { tone: "paid", icon: Clock01Icon, label: c.pill.awaitingStaff }, message: c.awaitingStaff };
     case "code_required":
-      return { pill: { tone: "paid", icon: SquareLock02Icon, label: c.pill.codeRequired }, message: c.codeRequired };
+      // The table is open: someone there gives the 4-digit code (G7 shows it to the table)
+      return { pill: { tone: "paid", icon: SquareLock02Icon, label: c.pill.codeRequired }, cta: "code" };
     case "removed":
       return { pill: { tone: "blocked", icon: UserRemove01Icon, label: c.pill.removed }, message: c.removed };
     case "revoked":
@@ -111,7 +113,7 @@ export function LandingView({
   const { outlet, table } = data;
   const v = describe(data, c, lang);
   const style = brandStyle(deriveBrandTokens(outlet.accentColor)) as CSSProperties;
-  const welcoming = v.cta === "start" || v.cta === "join";
+  const welcoming = v.cta === "start" || v.cta === "join" || v.cta === "code";
 
   const subline = [
     outlet.city,
@@ -145,16 +147,20 @@ export function LandingView({
         {/* The action sits right under the table it acts on */}
         {welcoming ? (
           <div className="mt-4 animate-fade [animation-delay:120ms]">
-            <StartCta
-              outletCode={outlet.code}
-              shortCode={shortCode}
-              label={v.cta === "join" ? c.joinTable(table.code) : c.startOrdering}
-              ariaLabel={v.cta === "join" ? c.joinTable(table.code) : c.startingFor(table.code)}
-              pendingLabel={c.opening}
-              askStaffText={c.askStaffToContinue}
-              failedText={c.actionError}
-              preview={preview}
-            />
+            {v.cta === "code" ? (
+              <JoinCodeCta outletCode={outlet.code} shortCode={shortCode} label={c.joinTable(table.code)} lang={lang} preview={preview} />
+            ) : (
+              <StartCta
+                outletCode={outlet.code}
+                shortCode={shortCode}
+                label={v.cta === "join" ? c.joinTable(table.code) : c.startOrdering}
+                ariaLabel={v.cta === "join" ? c.joinTable(table.code) : c.startingFor(table.code)}
+                pendingLabel={c.opening}
+                askStaffText={c.askStaffToContinue}
+                failedText={c.actionError}
+                preview={preview}
+              />
+            )}
             <p className="mt-3 flex items-start justify-center gap-1.5 text-center text-caption text-muted">
               <HugeiconsIcon icon={QrCodeIcon} size={14} className="mt-px shrink-0" aria-hidden />
               {c.notYourTable}

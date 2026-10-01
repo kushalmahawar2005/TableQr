@@ -10,7 +10,7 @@ import { tableInvite } from "@/server/guest/invite";
 import { getMenuScreen } from "@/server/guest/menu-screen";
 import { placeOrder } from "@/server/guest/order";
 import { createServiceRequest, getServiceRequests } from "@/server/guest/service-requests";
-import { startOrJoinTable } from "@/server/guest/session";
+import { JOIN_CODE, joinTableWithCode, startOrJoinTable } from "@/server/guest/session";
 import { getTableLanding } from "@/server/guest/table";
 import { getTableScreen } from "@/server/guest/table-screen";
 import { cancelOrderLine } from "@/server/guest/tracker";
@@ -298,5 +298,69 @@ describe("G7 service requests reuse G6", () => {
     await failsWith(assertCartEditable(riya), "table_settling");
     const [table] = await env.db.select({ state: s.diningTables.state }).from(s.diningTables).where(and(eq(s.diningTables.id, host.tableId)));
     expect(table.state).toBe("bill_requested");
+  });
+});
+
+describe("G1 join with the table code (Host-confirmed)", () => {
+  const T0 = new Date();
+  const later = (s: number) => new Date(T0.getTime() + s * 1000);
+  const tryCode = (deviceId: string, joinCode: string, now = T0) => joinTableWithCode({ outletCode: "SRJ01", shortCode: "k7Qm", deviceId, joinCode, now });
+  const attempts = async () => (await env.db.select().from(s.joinCodeAttempts)).length;
+
+  beforeEach(async () => {
+    await env.db.update(s.outlets).set({ sessionMode: "host_confirmed" }).where(eq(s.outlets.id, host.outletId));
+    await env.db.update(s.tableSessions).set({ mode: "host_confirmed" }).where(eq(s.tableSessions.id, host.sessionId));
+  });
+
+  it("offers the code on G1 and never lets the plain Join button in", async () => {
+    expect((await getTableLanding("SRJ01", "k7Qm", "g1-new")).landing.kind).toBe("code_required");
+    await failsWith(startOrJoinTable({ outletCode: "SRJ01", shortCode: "k7Qm", deviceId: "g1-new" }), "verification_required");
+  });
+
+  it("joins the existing session with the right code, as a guest, never as host", async () => {
+    const res = await tryCode("g1-new", "4821");
+    expect(res).toMatchObject({ ok: true, sessionId: host.sessionId, isHost: false, isNew: false });
+    expect(events).toContainEqual(expect.objectContaining({ topic: `session:${host.sessionId}`, type: "participant.joined" }));
+    expect((await screen("g1-new")).people.find((p) => p.isMe)).toMatchObject({ name: null, isHost: false });
+    expect(await attempts()).toBe(0);
+  });
+
+  it("refuses a wrong code with tries left, counts it, and adds no one", async () => {
+    expect(await tryCode("g1-new", "1234")).toEqual({ ok: false, error: "wrong", attemptsLeft: JOIN_CODE.perDevice - 1 });
+    expect(await attempts()).toBe(1);
+    expect(await tryCode("g1-new", "12a4")).toEqual({ ok: false, error: "invalid" });
+    expect(await tryCode("g1-new", "")).toEqual({ ok: false, error: "invalid" });
+    expect(await attempts()).toBe(1);
+    const rows = await env.db.select().from(s.participants).where(eq(s.participants.sessionId, host.sessionId));
+    expect(rows).toHaveLength(3);
+  });
+
+  it("locks a phone after five wrong codes, even for the right one, until the window passes", async () => {
+    for (let i = 0; i < JOIN_CODE.perDevice - 1; i++) expect(await tryCode("g1-guess", `000${i}`)).toMatchObject({ error: "wrong" });
+    expect(await tryCode("g1-guess", "0009")).toEqual({ ok: false, error: "locked", retryIn: JOIN_CODE.windowSeconds });
+    expect(await tryCode("g1-guess", "4821", later(60))).toMatchObject({ ok: false, error: "locked" });
+    expect(await tryCode("g1-guess", "4821", later(JOIN_CODE.windowSeconds + 1))).toMatchObject({ ok: true });
+  });
+
+  it("limits guessing per table across phones", async () => {
+    for (let i = 0; i < JOIN_CODE.perTable; i++) await tryCode(`g1-bot-${i}`, String(1000 + i));
+    expect(await tryCode("g1-fresh", "4821")).toMatchObject({ ok: false, error: "locked" });
+  });
+
+  it("checks the code against this table only", async () => {
+    const [other] = await env.db.select({ joinCode: s.diningTables.joinCode }).from(s.diningTables).where(eq(s.diningTables.code, "T3"));
+    if (other.joinCode !== "4821") expect(await tryCode("g1-new", other.joinCode)).toMatchObject({ error: "wrong" });
+  });
+
+  it("does not open a table, keeps removed phones out, and reconciles a settled table", async () => {
+    await removeParticipant(host, karan.participantId);
+    await failsWith(tryCode(devices.karan, "4821"), "participant_removed");
+    await order(host, "Cola");
+    await createServiceRequest(host, "request_bill", "g1-bill-req");
+    await failsWith(tryCode("g1-late", "4821"), "table_settling");
+    await env.db.update(s.tableSessions).set({ status: "closed", openKey: null, closedAt: new Date() }).where(eq(s.tableSessions.id, host.sessionId));
+    await env.db.update(s.diningTables).set({ state: "seated" }).where(eq(s.diningTables.id, host.tableId));
+    await failsWith(tryCode("g1-late", "4821"), "table_not_open");
+    expect(await env.db.select().from(s.tableSessions)).toHaveLength(1);
   });
 });

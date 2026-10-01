@@ -1,10 +1,11 @@
 import "server-only";
-import { and, eq } from "drizzle-orm";
+import { timingSafeEqual } from "node:crypto";
+import { and, count, eq, gte, min } from "drizzle-orm";
 import { db } from "@/db";
 import { uuidv7 } from "@/db/id";
 import * as s from "@/db/schema";
 import { placeholderName } from "@/domain/guest-name";
-import { LOCK_THEN_READ } from "../db-types";
+import { LOCK_THEN_READ, type Tx } from "../db-types";
 import { AppError } from "../errors";
 import { publish } from "../realtime/publish";
 import { topics } from "../realtime/token";
@@ -13,13 +14,38 @@ import { findRecentVerification } from "./verify";
 
 // Start ordering / Join this table (PS 3.2, 3.6). One open session per table.
 
-export async function startOrJoinTable(input: {
+type SeatInput = {
   outletCode: string;
   shortCode: string;
   deviceId: string;
   displayName?: string;
+  /** Host-confirmed mode only: the table's 4-digit code, checked here on the server */
+  joinCode?: string;
   now?: Date;
-}): Promise<{ sessionId: string; participantId: string; isHost: boolean; isNew: boolean }> {
+};
+type Seated = { sessionId: string; participantId: string; isHost: boolean; isNew: boolean };
+
+export async function startOrJoinTable(input: Omit<SeatInput, "joinCode">): Promise<Seated> {
+  const res = await seat(input);
+  if ("refused" in res) throw new AppError("invalid_state", "This table needs its code to join.");
+  return res;
+}
+
+export type CodeJoin = ({ ok: true } & Seated) | { ok: false; error: "invalid" } | JoinCodeRefusal;
+
+/**
+ * Join this table with its code (Host-confirmed mode, G1). Joins only a session staff have
+ * already opened; it never opens one. A wrong code counts towards the guessing limits.
+ * Table problems (closed, settling, no open session, removed) throw like Start ordering.
+ */
+export async function joinTableWithCode(input: Omit<SeatInput, "displayName"> & { joinCode: string }): Promise<CodeJoin> {
+  const code = String(input.joinCode ?? "").trim();
+  if (!/^\d{4}$/.test(code)) return { ok: false, error: "invalid" };
+  const res = await seat({ ...input, joinCode: code });
+  return "refused" in res ? res.refused : { ok: true, ...res };
+}
+
+async function seat(input: SeatInput): Promise<Seated | { refused: JoinCodeRefusal }> {
   const now = input.now ?? new Date();
   let where: { tenantId: string; outletId: string; tableId: string } | null = null;
 
@@ -30,7 +56,7 @@ export async function startOrJoinTable(input: {
 
     // Serialise concurrent scans on the same table so only one session is ever opened
     const [table] = await tx
-      .select({ state: s.diningTables.state })
+      .select({ state: s.diningTables.state, joinCode: s.diningTables.joinCode })
       .from(s.diningTables)
       .where(and(eq(s.diningTables.tenantId, tenantId), eq(s.diningTables.id, t.table.id)))
       .for("update");
@@ -53,11 +79,22 @@ export async function startOrJoinTable(input: {
     }
     assertCanSeat(t, table.state, open, now);
 
-    // Verified mode: this phone confirmed its number at this table within the last 12 hours
-    // (G2). Host-confirmed joining arrives with the staff code flow.
+    // Host-confirmed mode: the table's code, given by the host or waiter, joins a session staff opened
+    if (t.outlet.sessionMode === "host_confirmed") {
+      if (input.joinCode === undefined) {
+        throw new AppError("verification_required", "Please ask staff to join this table.", { mode: t.outlet.sessionMode });
+      }
+      if (!open || open.session.status !== "open") {
+        throw new AppError("table_not_open", "This table is not open for joining. Please ask staff.");
+      }
+      const check = await checkJoinCode(tx, { tenantId, tableId: t.table.id, deviceId: input.deviceId }, input.joinCode, table.joinCode, now);
+      if (check) return { refused: check };
+    }
+
+    // Verified mode: this phone confirmed its number at this table within the last 12 hours (G2)
     const verified =
       t.outlet.sessionMode === "verified" ? await findRecentVerification(tx, tenantId, t.table.id, input.deviceId, now) : null;
-    if (t.outlet.sessionMode !== "open" && !verified) {
+    if (t.outlet.sessionMode === "verified" && !verified) {
       throw new AppError("verification_required", "Please verify your number to order at this table.", {
         mode: t.outlet.sessionMode,
       });
@@ -106,6 +143,7 @@ export async function startOrJoinTable(input: {
     return { sessionId, participantId, isHost: isNew, isNew, changed: true };
   }, LOCK_THEN_READ);
 
+  if ("refused" in res) return res;
   // A returning phone changes nothing, so it announces nothing
   const w = where as { tenantId: string; outletId: string; tableId: string } | null;
   if (w && res.changed) {
@@ -115,4 +153,45 @@ export async function startOrJoinTable(input: {
     ]);
   }
   return { sessionId: res.sessionId, participantId: res.participantId, isHost: res.isHost, isNew: res.isNew };
+}
+
+/** Guessing limits for table codes: per phone and per table, over a rolling 10 minutes */
+export const JOIN_CODE = { windowSeconds: 600, perDevice: 5, perTable: 20 } as const;
+
+export type JoinCodeRefusal = { ok: false; error: "wrong"; attemptsLeft: number } | { ok: false; error: "locked"; retryIn: number };
+
+/** Null when the code is right; otherwise why not. A wrong code is recorded, the code never is. */
+async function checkJoinCode(
+  tx: Tx,
+  where: { tenantId: string; tableId: string; deviceId: string },
+  given: string,
+  actual: string,
+  now: Date,
+): Promise<JoinCodeRefusal | null> {
+  const since = new Date(now.getTime() - JOIN_CODE.windowSeconds * 1000);
+  const recent = (byDevice: boolean) =>
+    tx
+      .select({ n: count(), first: min(s.joinCodeAttempts.createdAt) })
+      .from(s.joinCodeAttempts)
+      .where(
+        and(
+          eq(s.joinCodeAttempts.tenantId, where.tenantId),
+          eq(s.joinCodeAttempts.tableId, where.tableId),
+          byDevice ? eq(s.joinCodeAttempts.deviceId, where.deviceId) : undefined,
+          gte(s.joinCodeAttempts.createdAt, since),
+        ),
+      );
+  const [[mine], [all]] = await Promise.all([recent(true), recent(false)]);
+  const retryIn = (first: Date | null) =>
+    Math.max(1, Math.ceil(((first?.getTime() ?? now.getTime()) + JOIN_CODE.windowSeconds * 1000 - now.getTime()) / 1000));
+  if (mine.n >= JOIN_CODE.perDevice) return { ok: false, error: "locked", retryIn: retryIn(mine.first) };
+  if (all.n >= JOIN_CODE.perTable) return { ok: false, error: "locked", retryIn: retryIn(all.first) };
+
+  const a = Buffer.from(given);
+  const b = Buffer.from(actual);
+  if (a.length === b.length && timingSafeEqual(a, b)) return null;
+
+  await tx.insert(s.joinCodeAttempts).values({ tenantId: where.tenantId, tableId: where.tableId, deviceId: where.deviceId, createdAt: now });
+  const attemptsLeft = JOIN_CODE.perDevice - mine.n - 1;
+  return attemptsLeft > 0 ? { ok: false, error: "wrong", attemptsLeft } : { ok: false, error: "locked", retryIn: JOIN_CODE.windowSeconds };
 }

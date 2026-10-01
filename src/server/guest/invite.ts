@@ -16,5 +16,5 @@ export function publicOrigin(h: Headers): string {
 export function tableInvite(origin: string, outletCode: string, shortCode: string) {
   const url = `${origin}/r/${encodeURIComponent(outletCode)}/t/${encodeURIComponent(shortCode)}`;
   const qr = encodeQr(url);
-  return { url, display: url.replace(/^https?:\/\//, ""), qrPath: qrSvgPath(qr), qrBox: qr.size + 8 };
+  return { url, qrPath: qrSvgPath(qr), qrBox: qr.size + 8 };
 }

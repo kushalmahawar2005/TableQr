@@ -15,6 +15,13 @@
       "when": 1790851048918,
       "tag": "0001_g6_tracker_tasks",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1790859458817,
+      "tag": "0002_g7_join_code_attempts",
+      "breakpoints": true
     }
   ]
 }

@@ -1,6 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
+import { LandingView } from "@/app/(guest)/r/[outlet]/t/[table]/_components/landing-view";
 import { DiningNav } from "@/app/(guest)/r/[outlet]/t/[table]/_components/dining-nav";
 import { MenuScreen } from "@/app/(guest)/r/[outlet]/t/[table]/menu/_components/menu-screen";
 import { TableScreen, type TablePreview } from "@/app/(guest)/r/[outlet]/t/[table]/table/_components/table-screen";
@@ -18,7 +19,7 @@ vi.mock("@/app/(guest)/r/[outlet]/t/[table]/orders/actions", () => ({}));
 vi.mock("@/app/(guest)/r/[outlet]/t/[table]/menu/actions", () => ({}));
 vi.mock("@/app/(guest)/r/[outlet]/t/[table]/actions", () => ({ setLanguage() {} }));
 
-const invite = { url: "https://tableqr.example/r/SRJ01/t/k7Qm", display: "tableqr.example/r/SRJ01/t/k7Qm", qrPath: "M4 4h1v1h-1z", qrBox: 37 };
+const invite = { qrPath: "M4 4h1v1h-1z", qrBox: 37 };
 const table = (data: TableScreenData, preview?: TablePreview, lang: Lang = "en") =>
   renderToStaticMarkup(createElement(TableScreen, { data, lang, shortCode: "k7Qm", realtimeUrl: null, invite, preview }));
 const caseData = (id: string) => g7Cases().find((c) => c.id === id)!.data;
@@ -116,6 +117,11 @@ describe("G7 rendering", () => {
     expect(open).toContain("Ask them to scan this QR to join.");
     expect(open).toContain("Join code is not shown in this mode.");
     expect(open).not.toContain("Share this code with someone near your table.");
+    // v1 has no remote invite: no share or copy, and no link text, only the QR
+    for (const html of [open, table(caseData("invite-code"), { sheet: "invite" })]) {
+      expect(html).not.toMatch(/Share table link|Copy table link|\/r\/SRJ01/);
+      expect(html).toContain('aria-label="QR code to join Table T12"');
+    }
     const code = table(caseData("invite-code"), { sheet: "invite" });
     expect(code).toContain("Join code 4 7 2 9");
     expect(code).toContain("Share this code with someone near your table.");
@@ -138,5 +144,24 @@ describe("G7 rendering", () => {
     expect(html).toContain("आपकी टेबल");
     expect(html).toContain("आरव");
     expect(html).toContain("होस्ट कंट्रोल");
+  });
+});
+
+describe("G1 Host-confirmed join", () => {
+  it("offers Join Table with the code sheet instead of asking staff", () => {
+    const html = renderToStaticMarkup(
+      createElement(LandingView, {
+        lang: "en",
+        shortCode: "k7Qm",
+        data: {
+          outlet: { code: "SRJ01", name: "Spice Route", city: "Jaipur", logoUrl: null, accentColor: null, sessionMode: "host_confirmed", isOpen: true, closesAt: "23:30", nextOpen: null, poweredBy: false },
+          table: { code: "T12", maxSeats: 4, zone: "Indoor", state: "seated" },
+          landing: { kind: "code_required" },
+        },
+      }),
+    );
+    expect(html).toContain("Table code needed");
+    expect(html).toMatch(/<button type="button"[^>]*>Join Table T12/);
+    expect(html).not.toContain("Please ask staff to continue");
   });
 });

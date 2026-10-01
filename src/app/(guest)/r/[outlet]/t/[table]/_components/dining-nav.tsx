@@ -36,9 +36,9 @@ export function DiningNav({ tablePath, active, lang, inProgress = 0, preview = f
         {(["menu", "orders", "table"] as const).map((tab) => (
           <Link key={tab} href={preview ? "#" : `${tablePath}/${tab}`} prefetch={false} aria-current={active === tab ? "page" : undefined}
             onNavigate={(event) => { if (preview || active === tab) event.preventDefault(); else onLeave?.(); }}
-            className={`flex min-h-16 flex-wrap items-center justify-center gap-2 border-t-2 px-2 py-3 text-body font-semibold focus-visible:outline-2 focus-visible:outline-brand ${active === tab ? "border-brand text-brand" : "border-transparent text-muted hover:text-ink"}`}>
+            className={`flex min-h-16 min-w-0 flex-wrap items-center justify-center gap-1.5 border-t-2 px-1 py-3 text-body font-semibold focus-visible:outline-2 focus-visible:outline-brand ${active === tab ? "border-brand text-brand" : "border-transparent text-muted hover:text-ink"}`}>
             {labels[tab]}
-            {tab === "orders" && inProgress > 0 && <span className="rounded-full bg-ink px-2 py-0.5 text-label tabular text-white">{inProgress}</span>}
+            {tab === "orders" && inProgress > 0 && <span className="shrink-0 rounded-full bg-ink px-1.5 py-0.5 text-label tabular text-white">{inProgress}</span>}
           </Link>
         ))}
       </div>

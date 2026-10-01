@@ -18,7 +18,8 @@ export default async function G7Preview(props: { searchParams: Promise<Record<st
   if (process.env.NODE_ENV === "production") notFound();
   const q = await props.searchParams;
   const lang = parseLang(typeof q.lang === "string" ? q.lang : undefined);
-  const invite = tableInvite(publicOrigin(await headers()), "SRJ01", "k7Qm");
+  const { qrPath, qrBox } = tableInvite(publicOrigin(await headers()), "SRJ01", "k7Qm");
+  const invite = { qrPath, qrBox };
   const cases = g7Cases();
 
   const render = (c: G7Case, l: Lang) =>
