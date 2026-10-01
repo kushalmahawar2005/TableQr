@@ -1,6 +1,6 @@
 import "server-only";
 import { timingSafeEqual } from "node:crypto";
-import { and, count, eq, gte, min } from "drizzle-orm";
+import { and, count, eq, gte, isNull, min } from "drizzle-orm";
 import { db } from "@/db";
 import { uuidv7 } from "@/db/id";
 import * as s from "@/db/schema";
@@ -9,7 +9,8 @@ import { LOCK_THEN_READ, type Tx } from "../db-types";
 import { AppError } from "../errors";
 import { publish } from "../realtime/publish";
 import { topics } from "../realtime/token";
-import { assertCanSeat, findOpenSession, findTableByQr, wasRemoved } from "./table";
+import { assignTable, visitChanged } from "../floor/assignments";
+import { assertCanSeat, findMovedSession, findOpenSession, findTableByQr, wasRemoved } from "./table";
 import { findRecentVerification } from "./verify";
 
 // Start ordering / Join this table (PS 3.2, 3.6). One open session per table.
@@ -73,6 +74,14 @@ async function seat(input: SeatInput): Promise<Seated | { refused: JoinCodeRefus
         changed: false,
       };
     }
+    // The host moved this phone's party to another table (S1): back into its own visit, never a new one here
+    if (!existing) {
+      const moved = await findMovedSession(tx, tenantId, t.table.id, input.deviceId);
+      const mine = moved?.people.find((p) => p.deviceId === input.deviceId);
+      if (moved && mine && moved.session.status === "open") {
+        return { sessionId: moved.session.id, participantId: mine.id, isHost: moved.session.hostParticipantId === mine.id, isNew: false, changed: false };
+      }
+    }
     // Removed by the host: this phone stays out for the rest of the session (G7)
     if (open && (await wasRemoved(tx, tenantId, open.session.id, input.deviceId))) {
       throw new AppError("participant_removed", "You were removed from this table. Please ask staff if you need help.");
@@ -114,6 +123,7 @@ async function seat(input: SeatInput): Promise<Seated | { refused: JoinCodeRefus
         openedAt: now,
         lastActivityAt: now,
       });
+      await assignTable(tx, { tenantId, outletId: t.outlet.id, sessionId }, t.table.id, { primary: true, now });
     }
 
     const participantId = uuidv7();
@@ -129,18 +139,21 @@ async function seat(input: SeatInput): Promise<Seated | { refused: JoinCodeRefus
       joinedAt: now,
     });
 
+    // The first phone becomes host: of a new visit, or of one staff opened with nobody in it yet (S1).
+    // Only one join can win the "no host yet" update, even from two tables combined into one visit.
+    const [won] = await tx
+      .update(s.tableSessions)
+      .set({ hostParticipantId: participantId })
+      .where(and(eq(s.tableSessions.tenantId, tenantId), eq(s.tableSessions.id, sessionId), isNull(s.tableSessions.hostParticipantId)));
+    const isHost = won.affectedRows === 1;
     if (isNew) {
       await tx
-        .update(s.tableSessions)
-        .set({ hostParticipantId: participantId })
-        .where(and(eq(s.tableSessions.tenantId, tenantId), eq(s.tableSessions.id, sessionId)));
-      await tx
         .update(s.diningTables)
-        .set({ state: "seated" })
+        .set({ state: "seated", stateChangedAt: now })
         .where(and(eq(s.diningTables.tenantId, tenantId), eq(s.diningTables.id, t.table.id)));
     }
 
-    return { sessionId, participantId, isHost: isNew, isNew, changed: true };
+    return { sessionId, participantId, isHost, isNew, changed: true };
   }, LOCK_THEN_READ);
 
   if ("refused" in res) return res;
@@ -150,6 +163,7 @@ async function seat(input: SeatInput): Promise<Seated | { refused: JoinCodeRefus
     void publish({ tenantId: w.tenantId, outletId: w.outletId }, [
       { topic: topics.session(res.sessionId), type: "participant.joined", data: { participantId: res.participantId } },
       ...(res.isNew ? [{ topic: topics.floor, type: "table.state_changed", data: { tableId: w.tableId, state: "seated" } }] : []),
+      visitChanged(res.sessionId, "participant_joined"),
     ]);
   }
   return { sessionId: res.sessionId, participantId: res.participantId, isHost: res.isHost, isNew: res.isNew };

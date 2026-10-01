@@ -5,6 +5,7 @@ import type { MySql2Database } from "drizzle-orm/mysql2";
 import { randomInt } from "node:crypto";
 import { uuidv7 } from "../src/db/id";
 import * as s from "../src/db/schema";
+import { hashPin } from "../src/server/staff/pin";
 
 export type Db = MySql2Database<typeof s>;
 
@@ -135,6 +136,7 @@ const FLOOR: TableDef[] = [
   { code: "T9", zone: "Terrace", min: 2, max: 4, cls: "4-top", shape: "square", x: 0, y: 0 },
   { code: "T10", zone: "Terrace", min: 2, max: 4, cls: "4-top", shape: "square", x: 3, y: 0 },
   ...[1, 2, 3, 4, 5].map((n) => ({ code: `B${n}`, zone: "Bar", min: 1, max: 2, cls: "bar", shape: "round" as const, x: (n - 1) * 2, y: 0 })),
+  { code: "P1", zone: "Private room", min: 6, max: 12, cls: "12-top", shape: "long", x: 0, y: 0 },
 ];
 
 /**
@@ -181,6 +183,7 @@ export async function seedDemo(db: Db, opts: { adminId?: string; openAllDay?: bo
     sessionMode: "open",
   });
 
+  // Demo staff PINs are the last digit four times (owner 1111 ... kitchen 6666). Demo data only.
   const staff = [
     { name: "Rohan Sharma", phone: "9000000001", role: "owner", outlet: null },
     { name: "Meera Joshi", phone: "9000000002", role: "manager", outlet: outletId },
@@ -189,14 +192,16 @@ export async function seedDemo(db: Db, opts: { adminId?: string; openAllDay?: bo
     { name: "Rahul Verma", phone: "9000000005", role: "waiter", outlet: outletId },
     { name: "Ramesh Yadav", phone: "9000000006", role: "kitchen", outlet: outletId },
   ] as const;
+  const staffIds: Record<string, string> = {};
   for (const p of staff) {
     const userId = uuidv7();
-    await db.insert(s.users).values({ id: userId, tenantId, name: p.name, phone: p.phone });
+    staffIds[p.role] = userId;
+    await db.insert(s.users).values({ id: userId, tenantId, name: p.name, phone: p.phone, pinHash: await hashPin(p.phone.slice(-1).repeat(4)) });
     await db.insert(s.staffRoles).values({ tenantId, userId, outletId: p.outlet, role: p.role });
   }
 
   const zoneIds: Record<string, string> = {};
-  for (const [i, name] of ["Indoor", "Terrace", "Bar"].entries()) {
+  for (const [i, name] of ["Indoor", "Terrace", "Bar", "Private room"].entries()) {
     zoneIds[name] = uuidv7();
     await db.insert(s.zones).values({ id: zoneIds[name], tenantId, outletId, name, sortOrder: i });
   }
@@ -284,7 +289,7 @@ export async function seedDemo(db: Db, opts: { adminId?: string; openAllDay?: bo
 
   const itemCount = Object.values(MENU).reduce((n, c) => n + c.items.length, 0);
   return {
-    tenantId, brandId, outletId, outletCode: "SRJ01", tableIds, tableQr, itemIds, modifierIds,
+    tenantId, brandId, outletId, outletCode: "SRJ01", tableIds, tableQr, itemIds, modifierIds, staffIds, zoneIds,
     counts: { tables: FLOOR.length, categories: Object.keys(MENU).length, items: itemCount, staff: staff.length },
   };
 }

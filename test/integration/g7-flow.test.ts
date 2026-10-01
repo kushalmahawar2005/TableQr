@@ -359,6 +359,8 @@ describe("G1 join with the table code (Host-confirmed)", () => {
     await createServiceRequest(host, "request_bill", "g1-bill-req");
     await failsWith(tryCode("g1-late", "4821"), "table_settling");
     await env.db.update(s.tableSessions).set({ status: "closed", openKey: null, closedAt: new Date() }).where(eq(s.tableSessions.id, host.sessionId));
+    // A real close also lets go of the table (S1 session_tables)
+    await env.db.update(s.sessionTables).set({ activeKey: null, releasedAt: new Date() }).where(eq(s.sessionTables.sessionId, host.sessionId));
     await env.db.update(s.diningTables).set({ state: "seated" }).where(eq(s.diningTables.id, host.tableId));
     await failsWith(tryCode("g1-late", "4821"), "table_not_open");
     expect(await env.db.select().from(s.tableSessions)).toHaveLength(1);

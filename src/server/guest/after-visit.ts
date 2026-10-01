@@ -37,12 +37,14 @@ export async function findVisit(outletCode: string, shortCode: string, deviceId:
     .select({ participantId: s.participants.id, session: s.tableSessions })
     .from(s.participants)
     .innerJoin(s.tableSessions, and(eq(s.tableSessions.tenantId, s.participants.tenantId), eq(s.tableSessions.id, s.participants.sessionId)))
+    // Any table the visit sat at, so a party moved or combined by the host (S1) still finds it
+    .innerJoin(s.sessionTables, and(eq(s.sessionTables.tenantId, s.participants.tenantId), eq(s.sessionTables.sessionId, s.participants.sessionId)))
     .where(
       and(
         eq(s.participants.tenantId, t.outlet.tenantId),
         eq(s.participants.deviceId, deviceId),
         isNull(s.participants.removedAt),
-        eq(s.tableSessions.tableId, t.table.id),
+        eq(s.sessionTables.tableId, t.table.id),
       ),
     )
     .orderBy(desc(s.tableSessions.openedAt))
@@ -55,7 +57,7 @@ export async function findVisit(outletCode: string, shortCode: string, deviceId:
     outletId: t.outlet.id,
     sessionId: row.session.id,
     participantId: row.participantId,
-    tableId: t.table.id,
+    tableId: row.session.tableId,
     state: closed ? "closed" : "open",
     closedAt: row.session.closedAt,
   };

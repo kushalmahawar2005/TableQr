@@ -1,5 +1,6 @@
 import {
   boolean,
+  char,
   index,
   int,
   json,
@@ -164,4 +165,44 @@ export const staffRoles = mysqlTable(
     sameTenant("fk_staff_roles_user", t, t.userId, users),
     sameTenant("fk_staff_roles_outlet", t, t.outletId, outlets),
   ],
+);
+
+/**
+ * Signed-in staff devices (S1). The cookie holds a random token; only its SHA-256 is stored.
+ * Role is never stored here: it is read from staff_roles on every request, so a change of role
+ * or a deactivated user takes effect at once. outlet_id is the outlet this device works in.
+ */
+export const staffSessions = mysqlTable(
+  "staff_sessions",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    userId: ref("user_id").notNull(),
+    outletId: ref("outlet_id").notNull(),
+    tokenHash: char("token_hash", { length: 64 }).notNull(),
+    createdAt: createdAt(),
+    expiresAt: at("expires_at").notNull(),
+    lastSeenAt: at("last_seen_at"),
+    revokedAt: at("revoked_at"),
+  },
+  (t) => [
+    uniqueIndex("staff_sessions_token_uq").on(t.tokenHash),
+    index("staff_sessions_user_idx").on(t.tenantId, t.userId),
+    sameTenant("fk_staff_sessions_user", t, t.userId, users),
+    sameTenant("fk_staff_sessions_outlet", t, t.outletId, outlets),
+  ],
+);
+
+/** Staff PIN attempts, for lock-out after repeated wrong PINs. The PIN itself is never stored. */
+export const staffLoginAttempts = mysqlTable(
+  "staff_login_attempts",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    outletId: ref("outlet_id").notNull(),
+    phone: varchar("phone", { length: 15 }).notNull(),
+    ok: boolean("ok").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("staff_login_attempts_phone_idx").on(t.tenantId, t.outletId, t.phone, t.createdAt)],
 );

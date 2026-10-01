@@ -36,6 +36,13 @@
       "when": 1790864430017,
       "tag": "0004_g8_custom_amounts",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1790878525631,
+      "tag": "0005_s1_floor_booking",
+      "breakpoints": true
     }
   ]
 }

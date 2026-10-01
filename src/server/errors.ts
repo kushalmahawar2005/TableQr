@@ -21,7 +21,15 @@ export type AppErrorCode =
   | "recall_expired"
   | "needs_choice"
   | "name_required"
-  | "invalid_name";
+  | "invalid_name"
+  /** Staff: not signed in, or the sign-in has ended */
+  | "staff_signed_out"
+  /** Staff: signed in, but this role may not do this */
+  | "forbidden"
+  /** Staff: wrong phone or PIN, or locked after too many tries */
+  | "sign_in_failed"
+  /** Floor: the table, booking or party changed since the screen loaded; reload and retry */
+  | "conflict";
 
 export class AppError extends Error {
   constructor(

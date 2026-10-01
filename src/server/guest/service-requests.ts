@@ -9,6 +9,7 @@ import { lockSession } from "../billing/bill";
 import { announceBill, requestBillInTransaction } from "../billing/payments";
 import { publish } from "../realtime/publish";
 import { topics } from "../realtime/token";
+import { visitChanged } from "../floor/assignments";
 import type { StaffContext } from "../staff/context";
 import type { GuestContext } from "./context";
 
@@ -57,37 +58,38 @@ export async function createServiceRequest(ctx: GuestContext, kind: StoredServic
       .where(and(eq(s.serviceRequests.tenantId, ctx.tenantId), eq(s.serviceRequests.sessionId, ctx.sessionId), eq(s.serviceRequests.clientRequestId, requestId)));
     if (replay) {
       if (replay.kind !== kind) throw new AppError("invalid_state", "This request was already used.");
-      return { id: replay.id, createdAt: replay.createdAt.getTime(), replayed: true };
+      return { id: replay.id, createdAt: replay.createdAt.getTime(), replayed: true, tableIds: [] as string[] };
     }
     const [latest] = await tx.select().from(s.serviceRequests)
       .where(and(eq(s.serviceRequests.tenantId, ctx.tenantId), eq(s.serviceRequests.sessionId, ctx.sessionId), eq(s.serviceRequests.kind, kind)))
       .orderBy(desc(s.serviceRequests.createdAt), desc(s.serviceRequests.id)).limit(1);
     if (latest && now.getTime() < latest.createdAt.getTime() + SERVICE_COOLDOWN_MS) {
-      return { id: latest.id, createdAt: latest.createdAt.getTime(), replayed: true };
+      return { id: latest.id, createdAt: latest.createdAt.getTime(), replayed: true, tableIds: [] as string[] };
     }
     // A pending task stays one task; pressing again after cooldown does not reset its escalation clock.
     const [pending] = await tx.select().from(s.serviceRequests)
       .where(and(eq(s.serviceRequests.tenantId, ctx.tenantId), eq(s.serviceRequests.sessionId, ctx.sessionId), eq(s.serviceRequests.kind, kind), eq(s.serviceRequests.status, "open")))
       .orderBy(asc(s.serviceRequests.createdAt)).limit(1);
-    if (pending) return { id: pending.id, createdAt: pending.createdAt.getTime(), replayed: true };
+    if (pending) return { id: pending.id, createdAt: pending.createdAt.getTime(), replayed: true, tableIds: [] as string[] };
     if (kind === "request_bill" && session.status === "bill_requested") {
       throw new AppError("table_settling", "The bill has already been requested.");
     }
-    if (kind === "request_bill") await requestBillInTransaction(tx, ctx, now);
+    const tableIds = kind === "request_bill" ? (await requestBillInTransaction(tx, ctx, now)).tableIds : [];
     const id = uuidv7();
     await tx.insert(s.serviceRequests).values({ id, tenantId: ctx.tenantId, outletId: ctx.outletId, sessionId: ctx.sessionId, tableId: ctx.tableId, participantId: ctx.participantId, kind, clientRequestId: requestId, createdAt: now });
     await tx.update(s.tableSessions).set({ lastActivityAt: now })
       .where(and(eq(s.tableSessions.tenantId, ctx.tenantId), eq(s.tableSessions.id, ctx.sessionId)));
-    return { id, createdAt: now.getTime(), replayed: false };
+    return { id, createdAt: now.getTime(), replayed: false, tableIds };
   }, LOCK_THEN_READ);
   if (!result.replayed) {
     await publish(ctx, [
       { topic: topics.tasks, type: "service_request.created", data: { requestId: result.id, tableId: ctx.tableId } },
       { topic: topics.session(ctx.sessionId), type: "service_request.created", data: { requestId: result.id } },
+      visitChanged(ctx.sessionId, "service_request"),
     ]);
-    if (kind === "request_bill") announceBill(ctx, { tableId: ctx.tableId, state: "bill_requested" });
+    if (kind === "request_bill") announceBill(ctx, { tableIds: result.tableIds, state: "bill_requested" });
   }
-  return { ...result, cooldownUntil: result.createdAt + SERVICE_COOLDOWN_MS };
+  return { id: result.id, createdAt: result.createdAt, replayed: result.replayed, cooldownUntil: result.createdAt + SERVICE_COOLDOWN_MS };
 }
 
 /** Internal staff domain function. No guest action exposes completion; staff auth must supply ctx. */
@@ -113,6 +115,7 @@ export async function completeServiceRequest(ctx: StaffContext, requestId: strin
   if (request) await publish(ctx, [
     { topic: topics.tasks, type: "service_request.done", data: { requestId } },
     { topic: topics.session(request.sessionId), type: "service_request.done", data: { requestId } },
+    visitChanged(request.sessionId, "service_request"),
   ]);
 }
 

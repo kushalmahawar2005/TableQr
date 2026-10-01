@@ -27,12 +27,17 @@ export async function getGuestContext(
   deviceId: string,
 ): Promise<GuestContext> {
   const t = await findTableByQr(db, outletCode, shortCode);
+  // The visit must have sat at this QR's table: now, combined with it, or before a move (S1)
   const [row] = await db
-    .select({ sessionId: s.tableSessions.id })
+    .select({ sessionId: s.tableSessions.id, tableId: s.tableSessions.tableId })
     .from(s.participants)
     .innerJoin(
       s.tableSessions,
       and(eq(s.tableSessions.id, s.participants.sessionId), eq(s.tableSessions.tenantId, s.participants.tenantId)),
+    )
+    .innerJoin(
+      s.sessionTables,
+      and(eq(s.sessionTables.sessionId, s.participants.sessionId), eq(s.sessionTables.tenantId, s.participants.tenantId)),
     )
     .where(
       and(
@@ -40,7 +45,7 @@ export async function getGuestContext(
         eq(s.participants.id, participantId),
         eq(s.participants.deviceId, deviceId),
         isNull(s.participants.removedAt),
-        eq(s.tableSessions.tableId, t.table.id),
+        eq(s.sessionTables.tableId, t.table.id),
         ne(s.tableSessions.status, "closed"),
       ),
     )
@@ -54,7 +59,7 @@ export async function getGuestContext(
     brandId: t.outlet.brandId,
     timezone: t.outlet.timezone,
     sessionId: row.sessionId,
-    tableId: t.table.id,
+    tableId: row.tableId,
     participantId,
   };
 }

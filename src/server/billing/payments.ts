@@ -14,6 +14,7 @@ import { topics } from "../realtime/token";
 import type { StaffContext } from "../staff/context";
 import { ATTEMPT_WINDOW_MS, computeDraft, isBillLocked, loadBillInputs, lockSession, lockShares, syncBill, type BillScope, type CreatedRefund, type SplitMode } from "./bill";
 import { nextInvoiceNumber } from "./invoice-number";
+import { releaseVisitTables, setVisitTablesState, tableStateEvents, visitChanged } from "../floor/assignments";
 
 // Paying the bill (PS 3.6, 3.8, 6.2, 6.4). Rules that keep money right:
 // - amounts come from the server; the phone only says whose shares and how much tip
@@ -27,11 +28,12 @@ import { nextInvoiceNumber } from "./invoice-number";
 const scopeOf = (ctx: GuestContext): BillScope => ({ tenantId: ctx.tenantId, outletId: ctx.outletId, sessionId: ctx.sessionId });
 
 /** After commit: phones at the table reload the bill; the floor map recolours the table */
-export function announceBill(scope: BillScope, table?: { tableId: string; state: "bill_requested" | "paid" | "seated" }, extra: RealtimeEvent[] = []) {
+export function announceBill(scope: BillScope, tables?: { tableIds: string[]; state: "bill_requested" | "paid" | "seated" }, extra: RealtimeEvent[] = []) {
   void publish(scope, [
     { topic: topics.session(scope.sessionId), type: "bill.updated" },
     ...extra,
-    ...(table ? [{ topic: topics.floor, type: "table.state_changed", data: { tableId: table.tableId, state: table.state } }] : []),
+    ...(tables ? tableStateEvents(tables.tableIds, tables.state) : []),
+    visitChanged(scope.sessionId, "bill"),
   ]);
 }
 
@@ -41,7 +43,7 @@ export const refundEvents = (scope: BillScope, refunds: CreatedRefund[]): Realti
 /** Request bill: pauses ordering and puts the table in Bill requested (PS 4.2) */
 export async function requestBill(scope: BillScope, now = new Date()) {
   const res = await db.transaction((tx) => requestBillInTransaction(tx, scope, now), LOCK_THEN_READ);
-  announceBill(scope, { tableId: res.tableId, state: "bill_requested" });
+  announceBill(scope, { tableIds: res.tableIds, state: "bill_requested" });
   return { billId: res.billId, totalPaise: res.totalPaise };
 }
 
@@ -49,18 +51,17 @@ export async function requestBill(scope: BillScope, now = new Date()) {
 export async function requestBillInTransaction(tx: Tx, scope: BillScope, now: Date) {
   const session = await lockSession(tx, scope);
   if (session.status === "closed") throw new AppError("session_expired", "This table has already been settled.");
+  let tableIds: string[] = [];
   if (session.status === "open") {
     await tx
       .update(s.tableSessions)
       .set({ status: "bill_requested", lastActivityAt: now })
       .where(and(eq(s.tableSessions.tenantId, scope.tenantId), eq(s.tableSessions.id, scope.sessionId)));
-    await tx
-      .update(s.diningTables)
-      .set({ state: "bill_requested" })
-      .where(and(eq(s.diningTables.tenantId, scope.tenantId), eq(s.diningTables.id, session.tableId)));
+    // Every table of the visit, including tables combined with it
+    tableIds = await setVisitTablesState(tx, scope.tenantId, scope.sessionId, "bill_requested", now);
   }
   const { billId, draft } = await syncBill(tx, scope, now, { requestedAt: now });
-  return { billId, totalPaise: draft.totals.totalPaise, tableId: session.tableId };
+  return { billId, totalPaise: draft.totals.totalPaise, tableIds };
 }
 
 /**
@@ -285,9 +286,9 @@ type Verdict = { gatewayRef: string; status: "success" | "failed"; amountPaise: 
 export async function confirmPayment(paymentId: string, verdict: Verdict, now = new Date()) {
   const res = await db.transaction((tx) => confirmPaymentTx(tx, paymentId, verdict, now), LOCK_THEN_READ);
   if (res.scope) {
-    announceBill(res.scope, res.closedTableId ? { tableId: res.closedTableId, state: "paid" } : undefined, [
+    announceBill(res.scope, res.closedTableIds ? { tableIds: res.closedTableIds, state: "paid" } : undefined, [
       { topic: topics.session(res.scope.sessionId), type: "payment.updated", data: { paymentId } },
-      ...(res.closedTableId ? [{ topic: topics.session(res.scope.sessionId), type: "session.closed" }] : []),
+      ...(res.closedTableIds ? [{ topic: topics.session(res.scope.sessionId), type: "session.closed" }] : []),
     ]);
   }
   return { status: res.status, alreadyFinal: res.alreadyFinal, billPaid: res.billPaid, refundPaise: res.refundPaise };
@@ -310,7 +311,7 @@ type Confirmed = {
   billPaid: boolean;
   refundPaise: number;
   scope?: BillScope;
-  closedTableId?: string;
+  closedTableIds?: string[];
 };
 
 async function confirmPaymentTx(tx: Tx, paymentId: string, verdict: Verdict, now: Date): Promise<Confirmed> {
@@ -470,12 +471,12 @@ export async function settleAtCounter(
       amountPaise,
       changePaise: input.method === "cash" && input.receivedPaise !== undefined ? input.receivedPaise - amountPaise : 0,
       billPaid: applied.billPaid,
-      closedTableId: applied.closedTableId,
+      closedTableIds: applied.closedTableIds,
     };
   }, LOCK_THEN_READ);
-  announceBill(scope, res.closedTableId ? { tableId: res.closedTableId, state: "paid" } : undefined, [
+  announceBill(scope, res.closedTableIds ? { tableIds: res.closedTableIds, state: "paid" } : undefined, [
     { topic: topics.session(scope.sessionId), type: "payment.updated", data: { paymentId: res.paymentId } },
-    ...(res.closedTableId ? [{ topic: topics.session(scope.sessionId), type: "session.closed" }] : []),
+    ...(res.closedTableIds ? [{ topic: topics.session(scope.sessionId), type: "session.closed" }] : []),
   ]);
   return { paymentId: res.paymentId, amountPaise: res.amountPaise, changePaise: res.changePaise, billPaid: res.billPaid };
 }
@@ -487,7 +488,7 @@ type PaymentRow = typeof s.payments.$inferSelect;
  * Money beyond that (a share paid twice, e.g. online and in cash) becomes a pending refund for
  * the manager instead of being lost or double counted. Closes the bill when nothing is left.
  */
-async function applyPayment(tx: Tx, payment: PaymentRow, now: Date): Promise<{ billPaid: boolean; refundPaise: number; scope: BillScope; closedTableId?: string }> {
+async function applyPayment(tx: Tx, payment: PaymentRow, now: Date): Promise<{ billPaid: boolean; refundPaise: number; scope: BillScope; closedTableIds?: string[] }> {
   const t = payment.tenantId;
   // Lock order is always session, then bill, everywhere, so payments never deadlock. The bill is
   // read again after the lock: a copy read before it could miss that another payment just closed it.
@@ -554,8 +555,8 @@ async function applyPayment(tx: Tx, payment: PaymentRow, now: Date): Promise<{ b
     .where(and(eq(s.billShares.tenantId, t), eq(s.billShares.billId, bill.id), eq(s.billShares.status, "unpaid")));
   if (Number(unpaid) > 0) return { billPaid: false, refundPaise, scope };
 
-  const closedTableId = await closeBill(tx, bill, now);
-  return { billPaid: true, refundPaise, scope, closedTableId };
+  const closedTableIds = await closeBill(tx, bill, now);
+  return { billPaid: true, refundPaise, scope, closedTableIds };
 }
 
 export type InvoicePayment = { method: string; channel: string; amountPaise: number; tipPaise: number; payer: string | null; covered: string[]; at: number };
@@ -564,7 +565,7 @@ export type InvoicePayment = { method: string; channel: string; amountPaise: num
  * Everything settled: bill paid, one table invoice issued, session closed, table waits for reset.
  * A restaurant with a GSTIN issues a Tax invoice; without one it is a Receipt, never labelled as tax.
  */
-async function closeBill(tx: Tx, bill: typeof s.bills.$inferSelect, now: Date): Promise<string> {
+async function closeBill(tx: Tx, bill: typeof s.bills.$inferSelect, now: Date): Promise<string[]> {
   const t = bill.tenantId;
   const [[outlet], [session], lines, paid, people, shares] = await Promise.all([
     tx.select().from(s.outlets).where(and(eq(s.outlets.tenantId, t), eq(s.outlets.id, bill.outletId))),
@@ -632,8 +633,15 @@ async function closeBill(tx: Tx, bill: typeof s.bills.$inferSelect, now: Date): 
 
   await tx.update(s.bills).set({ status: "paid", closedAt: now }).where(and(eq(s.bills.tenantId, t), eq(s.bills.id, bill.id)));
   await tx.update(s.tableSessions).set({ status: "closed", openKey: null, closedAt: now }).where(and(eq(s.tableSessions.tenantId, t), eq(s.tableSessions.id, bill.sessionId)));
-  await tx.update(s.diningTables).set({ state: "paid" }).where(and(eq(s.diningTables.tenantId, t), eq(s.diningTables.id, session.tableId)));
-  return session.tableId;
+  // Every table of the visit waits in Paid until staff mark it for cleaning (S1); the visit lets go
+  // of them now, so nothing open still claims a table that is about to be reset
+  const tableIds = await setVisitTablesState(tx, t, bill.sessionId, "paid", now);
+  await releaseVisitTables(tx, t, bill.sessionId, now);
+  await tx
+    .update(s.reservations)
+    .set({ status: "completed", completedAt: now })
+    .where(and(eq(s.reservations.tenantId, t), eq(s.reservations.sessionId, bill.sessionId), eq(s.reservations.status, "seated")));
+  return tableIds.length ? tableIds : [session.tableId];
 }
 
 type Actor = { kind: "guest"; ctx: GuestContext } | { kind: "staff"; ctx: StaffContext; sessionId: string };
@@ -695,7 +703,7 @@ export async function markPaidAndLeft(actor: Actor, participantId: string, now =
  */
 export async function reopenBill(actor: Actor, now = new Date()) {
   const scope = actorScope(actor);
-  const tableId = await db.transaction(async (tx) => {
+  const tableIds = await db.transaction(async (tx) => {
     const session = await lockSession(tx, scope);
     if (session.status !== "bill_requested") throw new AppError("invalid_state", "The bill is not requested.", { reason: "not_requested" });
     await assertActorMayManage(tx, actor, session);
@@ -707,11 +715,11 @@ export async function reopenBill(actor: Actor, now = new Date()) {
       .update(s.tableSessions)
       .set({ status: "open", lastActivityAt: now })
       .where(and(eq(s.tableSessions.tenantId, scope.tenantId), eq(s.tableSessions.id, scope.sessionId)));
-    await tx.update(s.diningTables).set({ state: "seated" }).where(and(eq(s.diningTables.tenantId, scope.tenantId), eq(s.diningTables.id, session.tableId)));
+    const ids = await setVisitTablesState(tx, scope.tenantId, scope.sessionId, "seated", now);
     if (inputs.bill) await tx.update(s.bills).set({ reopenedAt: now }).where(and(eq(s.bills.tenantId, scope.tenantId), eq(s.bills.id, inputs.bill.id)));
-    return session.tableId;
+    return ids;
   }, LOCK_THEN_READ);
-  announceBill(scope, { tableId, state: "seated" }, [{ topic: topics.session(scope.sessionId), type: "session.updated", data: { change: "bill_reopened" } }]);
+  announceBill(scope, { tableIds, state: "seated" }, [{ topic: topics.session(scope.sessionId), type: "session.updated", data: { change: "bill_reopened" } }]);
 }
 
 /**

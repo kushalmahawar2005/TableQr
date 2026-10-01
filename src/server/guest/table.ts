@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, isNotNull, isNull } from "drizzle-orm";
+import { and, desc, eq, isNotNull, isNull, ne } from "drizzle-orm";
 import { db } from "@/db";
 import * as s from "@/db/schema";
 import { isPlaceholderName } from "@/domain/guest-name";
@@ -95,26 +95,72 @@ export function assertCanSeat(
   }
 }
 
-/** The open session on a table, if any, with the people in it */
+/**
+ * The open session on a table, if any, with the people in it. A table belongs to a visit through
+ * its live assignment (S1), so a table combined with another, or the table a party was moved to,
+ * resolves to that party's visit.
+ */
 export async function findOpenSession(run: Runner, tenantId: string, tableId: string) {
-  const [session] = await run
-    .select()
-    .from(s.tableSessions)
-    .where(and(eq(s.tableSessions.tenantId, tenantId), eq(s.tableSessions.openKey, tableId)))
+  const [row] = await run
+    .select({ session: s.tableSessions })
+    .from(s.sessionTables)
+    .innerJoin(s.tableSessions, and(eq(s.tableSessions.tenantId, s.sessionTables.tenantId), eq(s.tableSessions.id, s.sessionTables.sessionId)))
+    .where(and(eq(s.sessionTables.tenantId, tenantId), eq(s.sessionTables.activeKey, tableId), ne(s.tableSessions.status, "closed")))
     .limit(1);
+  const session = row?.session;
   if (!session) return null;
-  const people = await run
+  return { session, people: await livePeople(run, tenantId, session.id) };
+}
+
+/**
+ * A phone whose party was moved away from this table by the host (S1): the visit the phone is
+ * still part of, which once sat at this table but no longer holds it. Null if there is none.
+ */
+export async function findMovedSession(run: Runner, tenantId: string, tableId: string, deviceId: string | null) {
+  if (!deviceId) return null;
+  const [row] = await run
+    .select({ session: s.tableSessions })
+    .from(s.participants)
+    .innerJoin(s.tableSessions, and(eq(s.tableSessions.tenantId, s.participants.tenantId), eq(s.tableSessions.id, s.participants.sessionId)))
+    .innerJoin(s.sessionTables, and(eq(s.sessionTables.tenantId, s.participants.tenantId), eq(s.sessionTables.sessionId, s.participants.sessionId)))
+    .where(
+      and(
+        eq(s.participants.tenantId, tenantId),
+        eq(s.participants.deviceId, deviceId),
+        isNull(s.participants.removedAt),
+        eq(s.sessionTables.tableId, tableId),
+        isNotNull(s.sessionTables.releasedAt),
+        ne(s.tableSessions.status, "closed"),
+      ),
+    )
+    .orderBy(desc(s.tableSessions.openedAt))
+    .limit(1);
+  if (!row) return null;
+  return { session: row.session, people: await livePeople(run, tenantId, row.session.id) };
+}
+
+/** The table a visit sits at now, resolved like a QR scan of that table */
+export async function findTableById(run: Runner, tenantId: string, outletCode: string, tableId: string) {
+  const [qr] = await run
+    .select({ shortCode: s.qrCodes.shortCode })
+    .from(s.qrCodes)
+    .where(and(eq(s.qrCodes.tenantId, tenantId), eq(s.qrCodes.tableId, tableId), eq(s.qrCodes.type, "table"), isNull(s.qrCodes.revokedAt)))
+    .limit(1);
+  return qr ? findTableByQr(run, outletCode, qr.shortCode) : null;
+}
+
+async function livePeople(run: Runner, tenantId: string, sessionId: string) {
+  return run
     .select({ id: s.participants.id, displayName: s.participants.displayName, deviceId: s.participants.deviceId })
     .from(s.participants)
     .where(
       and(
         eq(s.participants.tenantId, tenantId),
-        eq(s.participants.sessionId, session.id),
+        eq(s.participants.sessionId, sessionId),
         isNull(s.participants.removedAt),
       ),
     )
     .orderBy(s.participants.id);
-  return { session, people };
 }
 
 /**
@@ -185,7 +231,10 @@ export async function getTableLanding(outletCode: string, shortCode: string, dev
   if (t.qrRevokedAt) return { outlet, table, landing: { kind: "revoked" } as Landing };
   if (isUnavailable(t)) return { outlet, table, landing: { kind: "unavailable" } as Landing };
 
-  const open = await findOpenSession(db, t.outlet.tenantId, t.table.id);
+  const here = await findOpenSession(db, t.outlet.tenantId, t.table.id);
+  // A phone whose party the host moved to another table goes back into its own visit
+  const moved = here?.people.some((p) => p.deviceId === deviceId) ? null : await findMovedSession(db, t.outlet.tenantId, t.table.id, deviceId);
+  const open = moved?.session.status === "open" ? moved : here;
   const removed = !!open && !open.people.some((p) => p.deviceId === deviceId) && (await wasRemoved(db, t.outlet.tenantId, open.session.id, deviceId));
   if (removed) return { outlet, table, landing: { kind: "removed" } as Landing };
   return { outlet, table, landing: decideLanding(t, open, deviceId, outlet.isOpen) };

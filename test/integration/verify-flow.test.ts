@@ -207,6 +207,8 @@ describe("G2 verify number", () => {
 
     // The session closes (paid and cleaned) and the guest scans again two hours later
     await env.db.update(s.tableSessions).set({ status: "closed", openKey: null }).where(eq(s.tableSessions.id, first.sessionId));
+    // A real close also lets go of the table (S1 session_tables)
+    await env.db.update(s.sessionTables).set({ activeKey: null, releasedAt: new Date() }).where(eq(s.sessionTables.sessionId, first.sessionId));
     await env.db.update(s.diningTables).set({ state: "available" }).where(eq(s.diningTables.id, env.demo.tableIds.B3));
     expect(await isRecentlyVerified("SRJ01", qr, "d-skip", at(7200))).toBe(true);
     const again = await startOrJoinTable({ outletCode: "SRJ01", shortCode: qr, deviceId: "d-skip", now: at(7200) });

@@ -1,3 +1,4 @@
+import { reconcileFloor } from "@/server/floor/sync";
 import { timingSafeEqual } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
@@ -27,6 +28,8 @@ export async function POST(request: Request) {
         escalated += await escalateServiceRequests({ tenantId, outletId }, now);
         // Pending payments are re-checked with the gateway every minute (PS 6.4)
         await reconcilePendingPayments({ tenantId, outletId }, now);
+        // Held/Reserved follow the clock; expired online holds and timed blocks are released (S1)
+        await reconcileFloor({ tenantId, outletId }, now);
       } catch (error) {
         // One outlet's transient failure must not prevent later outlets from receiving escalation.
         failedOutlets += 1;

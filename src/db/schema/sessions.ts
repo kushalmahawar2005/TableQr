@@ -16,6 +16,8 @@ import { outlets, sessionModes, tenants, users } from "./tenancy";
 
 // Guests and the table session, the object everything else hangs off (PS 3.6, 8.3).
 
+export const sessionSources = ["qr", "walk_in", "reservation", "waitlist"] as const;
+
 /** Verified guests, per tenant; never shared across tenants */
 export const guests = mysqlTable(
   "guests",
@@ -45,6 +47,16 @@ export const tableSessions = mysqlTable(
     tableId: ref("table_id").notNull(),
     mode: mysqlEnum("mode", sessionModes).notNull(),
     status: mysqlEnum("status", ["open", "bill_requested", "closed"]).notNull().default("open"),
+    /** How the party sat down: a guest scan, or staff seating a walk-in, booking or waitlist party */
+    source: mysqlEnum("source", sessionSources).notNull().default("qr"),
+    /** Party size given by staff when seating; guests who scan are counted as participants */
+    partySize: int("party_size"),
+    /** Name given by staff for a walk-in, booking or waitlist party */
+    guestName: varchar("guest_name", { length: 80 }),
+    /** When the table is expected back, from the dining-duration policy plus any extensions */
+    expectedEndAt: at("expected_end_at"),
+    openedByUserId: ref("opened_by_user_id"),
+    reservationId: ref("reservation_id"),
     /** No FK: participants reference the session, so this would be circular */
     hostParticipantId: ref("host_participant_id"),
     orderingLocked: boolean("ordering_locked").notNull().default(false),
@@ -65,6 +77,39 @@ export const tableSessions = mysqlTable(
     tenantKey("table_sessions", t),
     sameTenant("fk_sessions_outlet", t, t.outletId, outlets),
     sameTenant("fk_sessions_table", t, t.tableId, diningTables),
+    sameTenant("fk_sessions_opened_by", t, t.openedByUserId, users),
+  ],
+);
+
+/**
+ * Which physical tables a visit occupies (S1). A visit has one primary table (also
+ * table_sessions.table_id) and, when tables are combined, more. Rows are kept after release, so
+ * a phone that sat at a table before a move still finds its visit. active_key equals table_id
+ * while the assignment is live and is null after: its unique index means a physical table belongs
+ * to at most one live visit.
+ */
+export const sessionTables = mysqlTable(
+  "session_tables",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    outletId: ref("outlet_id").notNull(),
+    sessionId: ref("session_id").notNull(),
+    tableId: ref("table_id").notNull(),
+    isPrimary: boolean("is_primary").notNull().default(false),
+    activeKey: ref("active_key"),
+    assignedAt: createdAt("assigned_at"),
+    releasedAt: at("released_at"),
+    assignedByUserId: ref("assigned_by_user_id"),
+  },
+  (t) => [
+    uniqueIndex("session_tables_active_uq").on(t.activeKey),
+    index("session_tables_session_idx").on(t.tenantId, t.sessionId),
+    index("session_tables_table_idx").on(t.tenantId, t.tableId),
+    sameTenant("fk_session_tables_outlet", t, t.outletId, outlets),
+    sameTenant("fk_session_tables_session", t, t.sessionId, tableSessions),
+    sameTenant("fk_session_tables_table", t, t.tableId, diningTables),
+    sameTenant("fk_session_tables_by", t, t.assignedByUserId, users),
   ],
 );
 
