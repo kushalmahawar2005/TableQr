@@ -52,7 +52,7 @@ export function useTrackerSync(initial: TrackerScreenData, shortCode: string, re
     const stop = connectRealtime({
       url: realtimeUrl,
       getToken: () => trackerTokenAction(initial.outlet.code, shortCode),
-      onEvents: (events) => { if (events.some((e) => e.type === "order.status" || e.type === "bill.updated" || e.type.startsWith("service_request.") || e.type === "participant.joined")) void refresh(); },
+      onEvents: (events) => { if (events.some((e) => e.type === "order.status" || e.type === "bill.updated" || e.type.startsWith("service_request.") || e.type.startsWith("participant.") || e.type === "session.updated")) void refresh(); },
       onResync: () => { void refresh(); }, onStatus: setStatus,
     });
     const onOnline = () => { void refresh(); };

@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNotNull, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import * as s from "@/db/schema";
 import { isPlaceholderName } from "@/domain/guest-name";
@@ -117,11 +117,34 @@ export async function findOpenSession(run: Runner, tenantId: string, tableId: st
   return { session, people };
 }
 
+/**
+ * Whether this phone was removed from the session by the host (G7). Removal lasts for the rest of
+ * the session: the same phone must not come back as a fresh participant.
+ */
+export async function wasRemoved(run: Runner, tenantId: string, sessionId: string, deviceId: string | null) {
+  if (!deviceId) return false;
+  const [row] = await run
+    .select({ id: s.participants.id })
+    .from(s.participants)
+    .where(
+      and(
+        eq(s.participants.tenantId, tenantId),
+        eq(s.participants.sessionId, sessionId),
+        eq(s.participants.deviceId, deviceId),
+        isNotNull(s.participants.removedAt),
+      ),
+    )
+    .limit(1);
+  return !!row;
+}
+
 export type Landing =
   | { kind: "start" }
   /** `names` only when every person has given a real name; otherwise the page shows the count */
   | { kind: "join"; count: number; names: string[] | null; hostName: string | null }
   | { kind: "rejoin"; participantId: string }
+  /** The host removed this phone from the table's current session (G7) */
+  | { kind: "removed" }
   /** Bill requested: participants go to the bill, anyone new is kept out */
   | { kind: "settling"; isParticipant: boolean }
   | { kind: "preparing" }
@@ -163,6 +186,8 @@ export async function getTableLanding(outletCode: string, shortCode: string, dev
   if (isUnavailable(t)) return { outlet, table, landing: { kind: "unavailable" } as Landing };
 
   const open = await findOpenSession(db, t.outlet.tenantId, t.table.id);
+  const removed = !!open && !open.people.some((p) => p.deviceId === deviceId) && (await wasRemoved(db, t.outlet.tenantId, open.session.id, deviceId));
+  if (removed) return { outlet, table, landing: { kind: "removed" } as Landing };
   return { outlet, table, landing: decideLanding(t, open, deviceId, outlet.isOpen) };
 }
 

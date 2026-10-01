@@ -9,6 +9,8 @@ export type AppErrorCode =
   | "table_not_open"
   | "table_settling"
   | "verification_required"
+  /** The table host removed this phone from the current table session (G7) */
+  | "participant_removed"
   | "session_expired"
   | "ordering_locked"
   | "cart_empty"

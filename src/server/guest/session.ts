@@ -8,7 +8,7 @@ import { LOCK_THEN_READ } from "../db-types";
 import { AppError } from "../errors";
 import { publish } from "../realtime/publish";
 import { topics } from "../realtime/token";
-import { assertCanSeat, findOpenSession, findTableByQr } from "./table";
+import { assertCanSeat, findOpenSession, findTableByQr, wasRemoved } from "./table";
 import { findRecentVerification } from "./verify";
 
 // Start ordering / Join this table (PS 3.2, 3.6). One open session per table.
@@ -46,6 +46,10 @@ export async function startOrJoinTable(input: {
         isNew: false,
         changed: false,
       };
+    }
+    // Removed by the host: this phone stays out for the rest of the session (G7)
+    if (open && (await wasRemoved(tx, tenantId, open.session.id, input.deviceId))) {
+      throw new AppError("participant_removed", "You were removed from this table. Please ask staff if you need help.");
     }
     assertCanSeat(t, table.state, open, now);
 

@@ -12,6 +12,7 @@ import {
   SquareLock02Icon,
   Store01Icon,
   UserGroupIcon,
+  UserRemove01Icon,
   Wallet01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
@@ -85,6 +86,8 @@ function describe(data: TableLanding, c: G1Copy, lang: Lang): View {
       return { pill: { tone: "paid", icon: Clock01Icon, label: c.pill.awaitingStaff }, message: c.awaitingStaff };
     case "code_required":
       return { pill: { tone: "paid", icon: SquareLock02Icon, label: c.pill.codeRequired }, message: c.codeRequired };
+    case "removed":
+      return { pill: { tone: "blocked", icon: UserRemove01Icon, label: c.pill.removed }, message: c.removed };
     case "revoked":
       return { hideTable: true, pill: { tone: "blocked", icon: QrCodeIcon, label: c.pill.codeInactive }, message: c.revoked };
     case "unavailable":

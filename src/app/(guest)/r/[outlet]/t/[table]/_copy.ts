@@ -26,6 +26,7 @@ const en = {
     closed: "Closed",
     awaitingStaff: "Waiting for staff",
     codeRequired: "Table code needed",
+    removed: "Removed by host",
   },
 
   peopleCount: (n: number) => (n === 1 ? "1 person is at this table" : `${n} people are at this table`),
@@ -67,6 +68,7 @@ const en = {
     body: "Once they open it, you can order from this page.",
   },
   codeRequired: { title: "Please ask staff to continue", body: "They will help you join this table." },
+  removed: { title: "You were removed from this table", body: "Please ask staff if you need help." },
   revoked: { title: "This code is no longer active", body: "Please ask staff for help." },
   unavailable: { title: "Table ordering is not available right now", body: "Please ask staff." },
   notFound: { title: "We could not find this table", body: "Please ask staff for help." },
@@ -104,6 +106,7 @@ const hi: G1Copy = {
     closed: "बंद है",
     awaitingStaff: "स्टाफ का इंतज़ार",
     codeRequired: "टेबल कोड चाहिए",
+    removed: "होस्ट ने हटाया",
   },
 
   peopleCount: (n) => (n === 1 ? "इस टेबल पर 1 व्यक्ति है" : `इस टेबल पर ${n} लोग हैं`),
@@ -144,6 +147,7 @@ const hi: G1Copy = {
     body: "टेबल खुलने के बाद आप इसी पेज से ऑर्डर कर सकेंगे।",
   },
   codeRequired: { title: "आगे बढ़ने के लिए कृपया स्टाफ से पूछें", body: "वे इस टेबल से जुड़ने में आपकी मदद करेंगे।" },
+  removed: { title: "आपको इस टेबल से हटा दिया गया है", body: "मदद चाहिए तो कृपया स्टाफ से पूछें।" },
   revoked: { title: "यह कोड अब चालू नहीं है", body: "कृपया स्टाफ से मदद लें।" },
   unavailable: { title: "टेबल से ऑर्डर अभी उपलब्ध नहीं है", body: "कृपया स्टाफ से पूछें।" },
   notFound: { title: "हमें यह टेबल नहीं मिली", body: "कृपया स्टाफ से मदद लें।" },

@@ -4,9 +4,10 @@ import Link from "next/link";
 import { useEffect, useRef, type ReactNode } from "react";
 import type { Lang } from "@/lib/i18n";
 
-/** Only destinations that exist. No tracker implementation enters the menu's client bundle. */
+/** Only destinations that exist: Menu, Orders, Table (no Bill until G8). No tracker or table
+ * implementation enters the menu's client bundle; these are plain links. */
 export function DiningNav({ tablePath, active, lang, inProgress = 0, preview = false, above, onLeave }: {
-  tablePath: string; active: "menu" | "orders"; lang: Lang; inProgress?: number; preview?: boolean;
+  tablePath: string; active: "menu" | "orders" | "table"; lang: Lang; inProgress?: number; preview?: boolean;
   above?: ReactNode; onLeave?: () => void;
 }) {
   const dock = useRef<HTMLDivElement>(null);
@@ -24,15 +25,15 @@ export function DiningNav({ tablePath, active, lang, inProgress = 0, preview = f
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
-  const labels = lang === "hi" ? { menu: "मेन्यू", orders: "ऑर्डर", nav: "खाने के विकल्प" } : { menu: "Menu", orders: "Orders", nav: "Dining navigation" };
+  const labels = lang === "hi" ? { menu: "मेन्यू", orders: "ऑर्डर", table: "टेबल", nav: "खाने के विकल्प" } : { menu: "Menu", orders: "Orders", table: "Table", nav: "Dining navigation" };
   return (
     <>
     <div ref={space} aria-hidden className={above ? "h-44 shrink-0" : "h-20 shrink-0"} />
     <div ref={dock} className="pointer-events-none fixed inset-x-0 bottom-0 z-30 mx-auto max-w-[480px]">
       {above && <div className="px-4 pb-3 min-[360px]:px-5">{above}</div>}
     <nav aria-label={labels.nav} className="pointer-events-auto border-t border-line bg-paper px-4 pb-[env(safe-area-inset-bottom)] min-[360px]:px-5">
-      <div className="grid min-h-16 grid-cols-2 gap-4">
-        {(["menu", "orders"] as const).map((tab) => (
+      <div className="grid min-h-16 grid-cols-3 gap-2">
+        {(["menu", "orders", "table"] as const).map((tab) => (
           <Link key={tab} href={preview ? "#" : `${tablePath}/${tab}`} prefetch={false} aria-current={active === tab ? "page" : undefined}
             onNavigate={(event) => { if (preview || active === tab) event.preventDefault(); else onLeave?.(); }}
             className={`flex min-h-16 flex-wrap items-center justify-center gap-2 border-t-2 px-2 py-3 text-body font-semibold focus-visible:outline-2 focus-visible:outline-brand ${active === tab ? "border-brand text-brand" : "border-transparent text-muted hover:text-ink"}`}>
