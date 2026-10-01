@@ -24,7 +24,8 @@ const person = (id: string, name: string | null, amount: number, extra: Partial<
 });
 const paid = (p: Person, by: string | null = null): Person => ({ ...p, paidPaise: p.amountPaise, duePaise: 0, status: "paid", paidBy: by });
 
-const line = (id: string, nameEn: string, nameHi: string, rupees: number, assignees: string[]) => ({ id, nameEn, nameHi, qty: 1, amountPaise: rupees * 100, assignees, settled: false });
+const line = (id: string, nameEn: string, nameHi: string, rupees: number, assignees: string[], qty = 1) => ({ id, nameEn, nameHi, qty, amountPaise: rupees * 100, assignees, settled: false });
+const ids = ["A", "B", "C", "D"];
 
 export const g8Base: BillScreenData = {
   renderedAt: NOW,
@@ -33,11 +34,15 @@ export const g8Base: BillScreenData = {
   session: { key: "dev-g8", status: "bill_requested", requested: true, isHost: true, hostName: "Aarav", hostIsMe: true, people: 4 },
   bill: {
     mode: "my_items",
+    requestedAt: NOW,
+    rounds: 3,
+    itemCount: 11,
     locked: false,
     canEdit: true,
     reopened: false,
     totals: { subtotalPaise: 199000, discountPaise: 0, serviceChargePaise: 0, serviceChargeBp: 0, serviceChargeWaived: false, taxPaise: 9950, taxBreakup: { "500": 9950 }, roundOffPaise: 50, totalPaise: 209000 },
     paidCount: 0,
+    custom: { ids, targetPaise: 209000, amounts: null, valid: false },
   },
   people: [
     person("A", "Aarav", 541, { isMe: true, isHost: true }),
@@ -66,10 +71,12 @@ export const g8Base: BillScreenData = {
     line("l2", "Masala Lassi", "मसाला लस्सी", 110, ["A"]),
     line("l3", "Paneer Tikka", "पनीर टिक्का", 320, ["A", "B", "C", "D"]),
     line("l4", "Masala Papad", "मसाला पापड़", 90, ["A", "B"]),
-    line("l5", "Dal Makhani", "दाल मखनी", 260, ["B"]),
+    line("l5", "Dal Makhani", "दाल मखनी", 320, ["B"]),
     line("l6", "Butter Chicken", "बटर चिकन", 380, ["C"]),
     line("l7", "Cola", "कोला", 70, ["C"]),
-    line("l8", "Paneer Butter Masala", "पनीर बटर मसाला", 300, ["D"]),
+    line("l8", "Garlic Naan", "गार्लिक नान", 60, ["C"]),
+    line("l9", "Paneer Butter Masala", "पनीर बटर मसाला", 300, ["D"]),
+    line("l10", "Tandoori Roti", "तंदूरी रोटी", 60, ["D"], 2),
   ],
   eligibleIds: ["A", "B", "C", "D"],
   tipPresetsBp: [500, 1000],
@@ -89,24 +96,23 @@ export function g8Cases(): G8Case[] {
     people: b.people.map((p, i) => ({ ...p, amountPaise: [52300, 52300, 52200, 52200][i], duePaise: [52300, 52300, 52200, 52200][i], basis: "equal" as const })),
     mine: { ...b.mine!, amountPaise: 52300, duePaise: 52300, basis: "equal", detail: null, equalBetween: 4 },
   });
-  const custom = withBill({ mode: "custom" }, {
-    lines: b.lines.map((l) => (l.id === "l3" ? { ...l, assignees: ["A"] } : l.id === "l7" ? { ...l, assignees: ["C", "D"] } : l)),
-    people: [person("A", "Aarav", 793, { isMe: true, isHost: true }), person("B", "Bhavna", 383), person("C", "Chirag", 499), person("D", "Divya", 415)],
-    mine: {
-      ...b.mine!,
-      amountPaise: 79300,
-      duePaise: 79300,
-      detail: { ownItemsPaise: 71000, sharedItemsPaise: 4500, subtotalPaise: 75500, discountPaise: 0, serviceChargePaise: 0, taxPaise: 3775, roundOffPaise: 25 },
-      ownItems: [b.mine!.ownItems[0], b.mine!.ownItems[1], b.mine!.sharedItems[0]],
-      sharedItems: [b.mine!.sharedItems[1]],
-    },
+  // Custom is amount based: the host's figures, adding up exactly to the ₹2,090 bill
+  const customAmounts = { A: 60000, B: 45000, C: 60000, D: 44000 };
+  const custom = withBill({ mode: "custom", custom: { ids, targetPaise: 209000, amounts: customAmounts, valid: true } }, {
+    people: [person("A", "Aarav", 600, { isMe: true, isHost: true, basis: "custom" }), person("B", "Bhavna", 450, { basis: "custom" }), person("C", "Chirag", 600, { basis: "custom" }), person("D", "Divya", 440, { basis: "custom" })],
+    mine: { ...b.mine!, amountPaise: 60000, duePaise: 60000, basis: "custom", detail: null },
+  });
+  // Just switched to Custom: it starts from each person's My items amount
+  const customFresh = withBill({ mode: "custom", custom: { ids, targetPaise: 209000, amounts: { A: 54100, B: 46700, C: 62000, D: 46200 }, valid: true } }, {
+    people: b.people.map((p) => ({ ...p, basis: "custom" as const })),
+    mine: { ...b.mine!, basis: "custom", detail: null },
   });
   const asGuest = (d: BillScreenData): BillScreenData => ({
     ...d,
     session: { ...d.session, isHost: false, hostIsMe: false },
     bill: { ...d.bill, canEdit: false },
     people: d.people.map((p) => ({ ...p, isMe: p.id === "B", isHost: p.id === "A" })),
-    mine: { ...b.mine!, amountPaise: d.people[1].amountPaise, duePaise: d.people[1].duePaise },
+    mine: { ...d.mine!, amountPaise: d.people[1].amountPaise, duePaise: d.people[1].duePaise },
   });
   const sc = withBill({ totals: { ...b.bill.totals, serviceChargeBp: 1000, serviceChargePaise: 19900, roundOffPaise: 50, totalPaise: 228900 } }, {
     people: [person("A", "Aarav", 593, { isMe: true, isHost: true }), person("B", "Bhavna", 512), person("C", "Chirag", 679), person("D", "Divya", 505)],
@@ -116,13 +122,23 @@ export function g8Cases(): G8Case[] {
     {
       id: "before",
       label: "1 · Before bill requested",
-      data: withBill({ canEdit: false }, { session: { ...b.session, status: "open", requested: false } }),
+      data: withBill({ canEdit: false, requestedAt: null }, { session: { ...b.session, status: "open", requested: false } }),
       preview: {},
     },
+    { id: "before-all", label: "1b · Before: all ordered items", data: withBill({ canEdit: false, requestedAt: null }, { session: { ...b.session, status: "open", requested: false } }), preview: { allItems: true } },
     { id: "my-items", label: "2 · My items split", data: b, preview: {} },
     { id: "equal", label: "3 · Equal split", data: equal, preview: {} },
-    { id: "custom-host", label: "4 · Custom split (host)", data: custom, preview: {} },
-    { id: "custom-guest", label: "5 · Custom split (non-host)", data: asGuest(custom), preview: {} },
+    { id: "custom-edit", label: "4 · Custom: host editing amounts", data: customFresh, preview: { custom: { A: "600", B: "450", C: "600", D: "440" } } },
+    { id: "custom-remaining", label: "4b · Custom: Remaining > ₹0 (Save disabled)", data: customFresh, preview: { custom: { A: "600", B: "450", C: "600", D: "430" } } },
+    { id: "custom-over", label: "4c · Custom: over the total", data: customFresh, preview: { custom: { A: "600", B: "450", C: "620", D: "440" } } },
+    { id: "custom-host", label: "4d · Custom: saved, Remaining ₹0", data: custom, preview: {} },
+    { id: "custom-guest", label: "5 · Custom split (non-host, read-only)", data: asGuest(custom), preview: {} },
+    {
+      id: "custom-locked",
+      label: "5b · Custom locked after payment starts",
+      data: { ...custom, bill: { ...custom.bill, locked: true, canEdit: false, paidCount: 1 }, people: [custom.people[0], { ...custom.people[1], status: "paying" as const }, paid(custom.people[2]), custom.people[3]] },
+      preview: {},
+    },
     { id: "some-paid", label: "6 · Some people paid (split locked)", data: somePaid, preview: {} },
     { id: "others", label: "7 · Pay for others picker", data: b, preview: { sheet: "others", payFor: ["A", "C"] }, solo: true },
     { id: "tip", label: "8 · Tip selected (10%)", data: b, preview: { tip: { kind: "bp", bp: 1000 } } },

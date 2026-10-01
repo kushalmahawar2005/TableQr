@@ -29,6 +29,13 @@
       "when": 1790861257212,
       "tag": "0003_g8_g9_billing",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1790864430017,
+      "tag": "0004_g8_custom_amounts",
+      "breakpoints": true
     }
   ]
 }

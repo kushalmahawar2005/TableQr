@@ -12,7 +12,7 @@ import { gatewayByName, gatewayFor, type GatewayStatus } from "../payments/gatew
 import { publish, type RealtimeEvent } from "../realtime/publish";
 import { topics } from "../realtime/token";
 import type { StaffContext } from "../staff/context";
-import { ATTEMPT_WINDOW_MS, isBillLocked, loadBillInputs, lockSession, lockShares, syncBill, type BillScope, type CreatedRefund, type SplitMode } from "./bill";
+import { ATTEMPT_WINDOW_MS, computeDraft, isBillLocked, loadBillInputs, lockSession, lockShares, syncBill, type BillScope, type CreatedRefund, type SplitMode } from "./bill";
 import { nextInvoiceNumber } from "./invoice-number";
 
 // Paying the bill (PS 3.6, 3.8, 6.2, 6.4). Rules that keep money right:
@@ -86,50 +86,47 @@ export async function setSplitMode(ctx: GuestContext, mode: SplitMode, now = new
   if (!["my_items", "equal", "custom"].includes(mode)) throw new AppError("invalid_state", "Choose a split.");
   const shares = await db.transaction(async (tx) => {
     const inputs = await lockForSplitChange(tx, ctx, now);
-    // Custom starts from who ordered or shares each line; the host then moves lines around
-    const assignments = mode === "custom" && !inputs.bill?.assignments ? defaultAssignments(inputs) : undefined;
-    const res = await syncBill(tx, scopeOf(ctx), now, { mode, ...(assignments ? { assignments } : {}) });
+    // Custom starts from what My items would charge each person, so it already adds up; the
+    // host then moves rupees between people
+    let customAmounts: Record<string, number> | undefined;
+    if (mode === "custom") {
+      const current = computeDraft(inputs, { mode: "custom" });
+      if (!current.custom.valid) {
+        const items = computeDraft(inputs, { mode: "my_items" });
+        customAmounts = Object.fromEntries(current.custom.ids.map((id) => [id, items.shares.find((sh) => sh.participantId === id)?.amountPaise ?? 0]));
+      }
+    }
+    const res = await syncBill(tx, scopeOf(ctx), now, { mode, ...(customAmounts ? { customAmounts } : {}) });
     return res.draft.shares;
   }, LOCK_THEN_READ);
   announceBill(scopeOf(ctx));
   return shares;
 }
 
-function defaultAssignments(inputs: Awaited<ReturnType<typeof loadBillInputs>>) {
-  const known = new Set(inputs.people.map((p) => p.id));
-  const out: Record<string, string[]> = {};
-  for (const l of inputs.lines) {
-    const sharers = (l.sharedWith ?? []).filter((id) => known.has(id));
-    if (sharers.length > 1) out[l.id] = sharers;
-    else if (l.participantId && known.has(l.participantId)) out[l.id] = [l.participantId];
-  }
-  return out;
-}
-
 /**
- * Custom split: the host assigns one placed line to one or more people still at the table; the
- * line is divided equally between them. Lines of people who paid and left stay theirs.
+ * Custom split (PS 3.6): the host sets how much each person still at the table pays, in whole
+ * rupees. Saved only when the amounts add up exactly to what is left to split; people who paid
+ * and left keep their frozen share and removed people keep their own items.
  */
-export async function setLineAssignment(ctx: GuestContext, lineId: string, participantIds: string[], now = new Date()) {
-  const ids = [...new Set((Array.isArray(participantIds) ? participantIds : []).map(String))];
-  if (ids.length === 0) throw new AppError("invalid_state", "Choose at least one person for this item.", { reason: "empty" });
-  await db.transaction(async (tx) => {
+export async function setCustomAmounts(ctx: GuestContext, amounts: Record<string, number>, now = new Date()) {
+  const clean = Object.fromEntries(Object.entries(amounts && typeof amounts === "object" ? amounts : {}).map(([id, v]) => [String(id), Number(v)]));
+  const shares = await db.transaction(async (tx) => {
     const inputs = await lockForSplitChange(tx, ctx, now);
     if (inputs.bill?.splitMode !== "custom") throw new AppError("invalid_state", "Switch to Custom first.", { reason: "not_custom" });
-    const line = inputs.lines.find((l) => l.id === lineId);
-    if (!line) throw new AppError("not_found", "This item is not on the bill.");
-    const frozen = new Set(inputs.shares.filter((sh) => sh.frozenAt).map((sh) => sh.participantId));
-    const current = inputs.bill.assignments?.[lineId] ?? (line.participantId ? [line.participantId] : []);
-    if (current.some((id) => frozen.has(id))) {
-      throw new AppError("invalid_state", "This item was settled by someone who has left.", { reason: "settled" });
+    const { custom } = computeDraft(inputs, { mode: "custom", customAmounts: clean });
+    const keys = Object.keys(clean);
+    if (keys.length !== custom.ids.length || custom.ids.some((id) => !(id in clean))) {
+      throw new AppError("invalid_state", "Enter an amount for everyone still at the table.", { reason: "people" });
     }
-    const eligible = new Set(inputs.people.filter((p) => !p.removedAt && !p.paidOutAt).map((p) => p.id));
-    if (ids.some((id) => !eligible.has(id))) {
-      throw new AppError("invalid_state", "Choose people who are still at the table.", { reason: "not_eligible" });
+    if (Object.values(clean).some((v) => !Number.isInteger(v) || v < 0 || v % 100 !== 0)) {
+      throw new AppError("invalid_state", "Enter whole rupee amounts.", { reason: "amount" });
     }
-    await syncBill(tx, scopeOf(ctx), now, { assignments: { ...(inputs.bill.assignments ?? {}), [lineId]: ids } });
+    const leftPaise = custom.targetPaise - Object.values(clean).reduce((a, b) => a + b, 0);
+    if (!custom.valid) throw new AppError("invalid_state", "The amounts must add up to the bill.", { reason: "total", leftPaise });
+    return (await syncBill(tx, scopeOf(ctx), now, { customAmounts: clean })).draft.shares;
   }, LOCK_THEN_READ);
   announceBill(scopeOf(ctx));
+  return shares;
 }
 
 /** The host removes (or restores) the optional service charge before anyone pays (PS 6.1) */

@@ -4,7 +4,7 @@ import { db as appDb } from "@/db";
 import * as s from "@/db/schema";
 import { financialYear } from "@/domain/invoice";
 import { computeDraft, loadBillInputs } from "@/server/billing/bill";
-import { confirmPayment, requestBill, setLineAssignment, setSplitMode, settleAtCounter, startPayment } from "@/server/billing/payments";
+import { confirmPayment, requestBill, setCustomAmounts, setSplitMode, settleAtCounter, startPayment } from "@/server/billing/payments";
 import { AppError } from "@/server/errors";
 import { addCartLine } from "@/server/guest/cart";
 import { getBillScreen } from "@/server/guest/bill-screen";
@@ -123,25 +123,32 @@ describe("the bill (G8)", () => {
     expect(await amounts()).toEqual([541, 467, 620, 462]);
   });
 
-  it("custom split is item based: the host assigns lines; tax and round-off stay server-derived", async () => {
+  it("custom split is amount based: the host sets each share; the server checks the exact total", async () => {
     await setSplitMode(g.A, "custom");
-    // Starts from who ordered or shares each line, so nothing moves until the host moves it
+    // Starts from what My items would charge, so it already adds up
     expect(await amounts()).toEqual([541, 467, 620, 462]);
-    const lines = (await view("A")).lines;
-    const tikka = lines.find((l) => l.nameEn === "Paneer Tikka")!;
-    const cola = lines.find((l) => l.nameEn === "Cola")!;
-    await setLineAssignment(g.A, tikka.id, [g.A.participantId]);
-    await setLineAssignment(g.A, cola.id, [g.C.participantId, g.D.participantId]);
-    const after = await view("A");
+    const v = await view("A");
+    expect(v.bill.custom).toMatchObject({ targetPaise: 209000, valid: true });
+    const [A, B, C, D] = v.people.map((p) => p.id);
+    // Short by ₹10, paise, someone missing, a stranger, or not the host: nothing is saved
+    await failsWith(setCustomAmounts(g.A, { [A]: 60000, [B]: 45000, [C]: 60000, [D]: 43000 }), "invalid_state");
+    await failsWith(setCustomAmounts(g.A, { [A]: 59950, [B]: 45050, [C]: 60000, [D]: 44000 }), "invalid_state");
+    await failsWith(setCustomAmounts(g.A, { [A]: 104000, [B]: 45000, [C]: 60000 }), "invalid_state");
+    await failsWith(setCustomAmounts(g.A, { [A]: 60000, [B]: 45000, [C]: 60000, [D]: 34000, x: 10000 }), "invalid_state");
+    await failsWith(setCustomAmounts(g.B, { [A]: 60000, [B]: 45000, [C]: 60000, [D]: 44000 }), "invalid_state");
+    expect(await amounts()).toEqual([541, 467, 620, 462]);
+    await setCustomAmounts(g.A, { [A]: 60000, [B]: 45000, [C]: 60000, [D]: 44000 });
+    const after = await view("B");
     expect(after.bill.totals.totalPaise).toBe(209000);
-    expect(after.people.reduce((n, p) => n + p.amountPaise, 0)).toBe(209000);
-    // Aarav 390 + 320 + 45 = 755 +5% = 792.75 -> 793; Chirag 440 + 35 (half Cola) = 475 -> 498.75 -> 499; Divya 395 -> 415
-    expect(after.people.map((p) => p.amountPaise / 100)).toEqual([793, 383, 499, 415]);
-    await failsWith(setLineAssignment(g.A, cola.id, []), "invalid_state");
-    await failsWith(setLineAssignment(g.A, cola.id, ["not-a-person"]), "invalid_state");
-    await failsWith(setLineAssignment(g.B, cola.id, [g.B.participantId]), "invalid_state");
+    expect(after.people.map((p) => p.amountPaise / 100)).toEqual([600, 450, 600, 440]);
+    expect(after.people.every((p) => p.basis === "custom")).toBe(true);
+    expect(after.bill.canEdit).toBe(false); // read-only for everyone but the host
     await setSplitMode(g.A, "my_items");
     expect(await amounts()).toEqual([541, 467, 620, 462]);
+    // Back to Custom keeps the amounts the host saved
+    await setSplitMode(g.A, "custom");
+    expect(await amounts()).toEqual([600, 450, 600, 440]);
+    await setSplitMode(g.A, "my_items");
   });
 });
 
@@ -153,6 +160,7 @@ describe("paying", () => {
     const bhavna = (await view("A")).people.find((p) => p.name === "Bhavna")!;
     expect(bhavna).toMatchObject({ status: "paid", duePaise: 0 });
     await failsWith(setSplitMode(g.A, "equal"), "invalid_state");
+    await failsWith(setCustomAmounts(g.A, Object.fromEntries((await view("A")).people.map((p) => [p.id, p.amountPaise]))), "invalid_state");
     expect((await view("A")).bill).toMatchObject({ locked: true, canEdit: false });
   });
 

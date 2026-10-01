@@ -7,7 +7,7 @@ import {
   markPaidAndLeft,
   reconcilePayment,
   reopenBill,
-  setLineAssignment,
+  setCustomAmounts,
   setServiceChargeWaived,
   setSplitMode,
   startPayment,
@@ -21,7 +21,7 @@ import { guestRealtimeToken } from "@/server/realtime/token";
 
 // G8 actions. The phone sends ids, a mode, a tip and a method; every amount comes from the server.
 
-export type BillError = "gone" | "host_only" | "locked" | "being_paid" | "nothing_due" | "no_gateway" | "gateway_down" | "payment_in_flight" | "changed" | "failed";
+export type BillError = "gone" | "host_only" | "locked" | "being_paid" | "nothing_due" | "no_gateway" | "gateway_down" | "payment_in_flight" | "total" | "changed" | "failed";
 
 async function device() {
   return (await cookies()).get(DEVICE_COOKIE)?.value ?? null;
@@ -31,7 +31,7 @@ function errorOf(err: unknown): BillError {
   if (!(err instanceof AppError)) return "failed";
   if (["session_expired", "qr_revoked", "outlet_unavailable", "participant_removed"].includes(err.code)) return "gone";
   const reason = err.details?.reason;
-  if (typeof reason === "string" && ["host_only", "locked", "being_paid", "nothing_due", "no_gateway", "gateway_down", "payment_in_flight"].includes(reason)) return reason as BillError;
+  if (typeof reason === "string" && ["host_only", "locked", "being_paid", "nothing_due", "no_gateway", "gateway_down", "payment_in_flight", "total"].includes(reason)) return reason as BillError;
   if (err.code === "invalid_state" || err.code === "not_found" || err.code === "table_settling") return "changed";
   return "failed";
 }
@@ -65,8 +65,8 @@ export async function billTokenAction(outlet: string, table: string) {
 }
 
 export const splitModeAction = async (outlet: string, table: string, mode: SplitMode) => run(outlet, table, (ctx) => setSplitMode(ctx, mode));
-export const assignLineAction = async (outlet: string, table: string, lineId: string, ids: string[]) =>
-  run(outlet, table, (ctx) => setLineAssignment(ctx, String(lineId), Array.isArray(ids) ? ids.map(String) : []));
+export const customAmountsAction = async (outlet: string, table: string, amounts: Record<string, number>) =>
+  run(outlet, table, (ctx) => setCustomAmounts(ctx, amounts));
 export const serviceChargeAction = async (outlet: string, table: string, waived: boolean) => run(outlet, table, (ctx) => setServiceChargeWaived(ctx, waived === true));
 export const reopenAction = async (outlet: string, table: string) => run(outlet, table, (ctx) => reopenBill({ kind: "guest", ctx }));
 export const paidAndLeftAction = async (outlet: string, table: string, participantId: string) =>

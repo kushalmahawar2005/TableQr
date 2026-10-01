@@ -32,8 +32,9 @@ export function DiningNav({ tablePath, active, lang, inProgress = 0, preview = f
     <div ref={dock} className="pointer-events-none fixed inset-x-0 bottom-0 z-30 mx-auto max-w-[480px]">
       {above && <div className="px-4 pb-3 min-[360px]:px-5">{above}</div>}
     <nav aria-label={labels.nav} className="pointer-events-auto border-t border-line bg-paper px-4 pb-[env(safe-area-inset-bottom)] min-[360px]:px-5">
-      {/* Four tabs fit a 320px phone; with very large text they wrap to two rows instead of breaking words */}
-      <div className="grid min-h-16 grid-cols-[repeat(auto-fit,minmax(4.25em,1fr))] gap-x-1 text-body">
+      {/* Always one row of four: each tab is at least as wide as its label, so 200% text and Hindi
+          share out the width instead of wrapping to a second row or breaking words */}
+      <div className="grid min-h-16 grid-cols-[repeat(4,minmax(min-content,1fr))] text-body">
         {(["menu", "orders", "table", "bill"] as const).map((tab) => (
           <Link key={tab} href={preview ? "#" : `${tablePath}/${tab}`} prefetch={false} aria-current={active === tab ? "page" : undefined}
             onNavigate={(event) => { if (preview || active === tab) event.preventDefault(); else onLeave?.(); }}

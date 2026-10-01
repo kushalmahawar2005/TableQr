@@ -57,6 +57,7 @@ describe("G8 bill", () => {
       expect(buttonWith(html, "Pay ₹541")).toContain(' disabled=""');
     }
     expect(bill(g8Base, { pay: "failed" })).toContain("Payment did not go through");
+    expect(bill(g8Base, { pay: "failed" })).not.toContain("No money was taken");
     expect(bill(g8Base, { pay: "cancelled" })).toContain("No money was taken.");
   });
 
@@ -72,12 +73,29 @@ describe("G8 bill", () => {
     const locked = bill(caseOf("some-paid").data);
     expect(locked).toContain("The split is fixed now that someone has started paying.");
     expect(buttonWith(locked, ">Equal<")).toContain(' disabled=""');
+  });
+
+  it("custom is amount based: live allocated and remaining, Save only at exactly ₹0, read-only for guests", () => {
+    const short = bill(caseOf("custom-remaining").data, caseOf("custom-remaining").preview);
+    expect(short).toContain("Custom amounts");
+    expect(short).toContain("₹2,080");
+    expect(short).toMatch(/Remaining<\/dt><dd[^>]*>₹10</);
+    expect(buttonWith(short, "Save amounts")).toContain(' disabled=""');
+    const exactly = bill(caseOf("custom-edit").data, caseOf("custom-edit").preview);
+    expect(exactly).toMatch(/Remaining<\/dt><dd[^>]*>₹0</);
+    expect(buttonWith(exactly, "Save amounts")).not.toContain(' disabled=""');
+    expect(bill(caseOf("custom-over").data, caseOf("custom-over").preview)).toMatch(/Over by<\/dt><dd[^>]*>₹20</);
+    // No item assignment anywhere in Custom
+    expect(exactly).not.toMatch(/Who had what|assign/i);
+
     const guest = bill(caseOf("custom-guest").data);
-    expect(guest).toContain("Items as the host assigned them");
-    expect(guest).not.toContain("Tap names to assign each item");
-    const items = guest.slice(guest.indexOf('id="g8-custom"'), guest.indexOf('id="g8-mine"'));
-    expect(items).not.toContain("<button");
-    expect(items).toContain("Chirag, Divya");
+    expect(guest).toContain("Amounts set by Aarav.");
+    expect(guest).not.toContain("Save amounts");
+    expect(guest).not.toContain('inputMode="numeric" aria-label="Amount for');
+    for (const amount of ["₹600", "₹450", "₹440"]) expect(guest).toContain(amount);
+    const locked = bill(caseOf("custom-locked").data);
+    expect(locked).toContain("The split is fixed now that someone has started paying.");
+    expect(locked).not.toContain("Save amounts");
   });
 
   it("shows refund pending only from a real pending amount, and never says refunded", () => {

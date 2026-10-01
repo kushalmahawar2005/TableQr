@@ -40,8 +40,10 @@ export const bills = mysqlTable(
     serviceChargeBp: int("service_charge_bp").notNull().default(0),
     /** The host removed the optional service charge before anyone paid */
     serviceChargeWaived: boolean("service_charge_waived").notNull().default(false),
-    /** Custom split: order line id to the people it is assigned to, set by the host */
+    /** Unused: an early item-based Custom split draft. Custom is amount-based (customAmounts). */
     assignments: json("assignments").$type<Record<string, string[]>>(),
+    /** Custom split: participant id to the paise the host set for them (whole rupees) */
+    customAmounts: json("custom_amounts").$type<Record<string, number>>(),
     /** Set each time the bill is reopened for more ordering; shown to guests as "Your bill changed" */
     reopenedAt: at("reopened_at"),
     status: mysqlEnum("status", ["open", "locked", "paid", "cancelled"])

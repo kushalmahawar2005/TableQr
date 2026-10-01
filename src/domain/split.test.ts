@@ -139,9 +139,30 @@ describe("splitBill: the whole table (G8)", () => {
     expect(sum(res)).toBe(res.totals.totalPaise);
   });
 
-  it("custom assigns whole lines; a line given to several people is divided equally", () => {
-    const res = splitBill({ people: people(), hostId: "A", lines: example.lines, mode: "custom", assignments: { tikka: ["A"], cola: ["C", "D"] } });
-    expect(amounts(res)).toEqual([793, 383, 499, 415]);
+  it("custom uses the host's amounts only while they add up exactly to the bill", () => {
+    const amountsOf = (a: number, b: number, c: number, d: number) => ({ A: a * 100, B: b * 100, C: c * 100, D: d * 100 });
+    const res = splitBill({ people: people(), hostId: "A", lines: example.lines, mode: "custom", customAmounts: amountsOf(600, 450, 600, 440) });
+    expect(amounts(res)).toEqual([600, 450, 600, 440]);
+    expect(res.shares.every((x) => x.basis === "custom" && x.detail === null)).toBe(true);
+    expect(res.custom).toEqual({ ids: ["A", "B", "C", "D"], targetPaise: 209000, valid: true });
+    // Short by ₹10, a paisa amount, or someone missing: the amounts do not stand; My items applies
+    for (const bad of [amountsOf(600, 450, 600, 430), { ...amountsOf(600, 450, 600, 440), A: 59950, D: 44050 }, { A: 60000, B: 45000, C: 104000 }]) {
+      const r = splitBill({ people: people(), hostId: "A", lines: example.lines, mode: "custom", customAmounts: bad });
+      expect(r.custom.valid).toBe(false);
+      expect(amounts(r)).toEqual([541, 467, 620, 462]);
+    }
+  });
+
+  it("custom leaves frozen shares and removed people's own items out of the amount to enter", () => {
+    const res = splitBill({
+      people: people({ B: { frozenAmountPaise: 46700 }, C: { removed: true } }),
+      hostId: "A",
+      lines: example.lines,
+      mode: "custom",
+      customAmounts: { A: 50000, D: 50300 },
+    });
+    expect(res.custom).toMatchObject({ ids: ["A", "D"], targetPaise: 209000 - 46700 - 62000, valid: true });
+    expect(amounts(res)).toEqual([500, 467, 620, 503]);
     expect(sum(res)).toBe(209000);
   });
 

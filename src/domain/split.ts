@@ -196,7 +196,7 @@ export type BillPerson = {
   frozenAmountPaise: number | null;
 };
 
-export type ShareBasis = "items" | "equal" | "frozen";
+export type ShareBasis = "items" | "equal" | "custom" | "frozen";
 
 export type TableShare = {
   participantId: string;
@@ -215,35 +215,47 @@ export type BillSplitInput = {
   billDiscountPaise?: number;
   serviceChargeBp?: number;
   mode: SplitMode;
-  /** Custom split: line id to the people the host assigned it to */
-  assignments?: Record<string, string[]> | null;
+  /** Custom split: participant id to the paise the host set for them (whole rupees) */
+  customAmounts?: Record<string, number> | null;
 };
+
+/** What a Custom split must add up to, and who it is entered for */
+export type CustomSplit = {
+  /** People the host sets an amount for: still at the table and not paid-and-left */
+  ids: string[];
+  /** The rounded bill minus frozen shares and what removed people owe for their own items */
+  targetPaise: number;
+  /** The saved amounts stand: one whole-rupee amount per person, adding up exactly to the target */
+  valid: boolean;
+};
+
+/** Checks custom amounts against a target: whole rupees, only these people, exact total */
+export function customAmountsValid(ids: string[], targetPaise: number, amounts: Record<string, number> | null | undefined): boolean {
+  if (!amounts) return false;
+  const keys = Object.keys(amounts);
+  if (keys.length !== ids.length || ids.some((id) => !(id in amounts))) return false;
+  const values = ids.map((id) => amounts[id]);
+  if (values.some((v) => !Number.isInteger(v) || v < 0 || v % 100 !== 0)) return false;
+  return values.reduce((a, b) => a + b, 0) === targetPaise;
+}
 
 /**
  * Splits the table bill. Frozen shares stay exactly as they were; everything else (the rounded
  * bill minus frozen shares) is divided by the chosen mode:
  * - My items: own lines plus an equal part of shared lines (PS 3.6 calculation rules)
- * - Custom: the same, after the host's per-line assignments
+ * - Custom: the host sets a whole-rupee amount per person still at the table; removed people keep
+ *   their own items. Amounts stand only while they add up exactly; otherwise My items applies.
  * - Equal: removed people keep their own items; the rest is divided equally among people still at the table
  * Shares always add up exactly to the rounded bill.
  */
-export function splitBill(input: BillSplitInput): { totals: BillTotals; shares: TableShare[] } {
+export function splitBill(input: BillSplitInput): { totals: BillTotals; shares: TableShare[]; custom: CustomSplit } {
   const totals = billTotals({ lines: input.lines, billDiscountPaise: input.billDiscountPaise, serviceChargeBp: input.serviceChargeBp });
   const known = new Set(input.people.map((p) => p.id));
   const frozen = new Set(input.people.filter((p) => p.frozenAmountPaise !== null).map((p) => p.id));
   const open = input.people.filter((p) => !frozen.has(p.id));
   const eligible = open.filter((p) => !p.removed);
 
-  const lines =
-    input.mode === "custom" && input.assignments
-      ? input.lines.map((l) => {
-          const to = input.assignments?.[l.id];
-          if (!to?.length) return l;
-          return to.length === 1 ? { ...l, ownerId: to[0], sharedWith: null } : { ...l, sharedWith: to };
-        })
-      : input.lines;
-
-  const portions = lines.flatMap(portionsOf);
+  const portions = input.lines.flatMap(portionsOf);
   for (const p of portions) {
     if (!known.has(p.participantId)) throw new Error(`Line assigned to unknown participant ${p.participantId}`);
   }
@@ -283,7 +295,18 @@ export function splitBill(input: BillSplitInput): { totals: BillTotals; shares: 
     if (p.frozenAmountPaise !== null) shares.set(p.id, { participantId: p.id, basis: "frozen", amountPaise: p.frozenAmountPaise, detail: null });
   }
 
-  if (input.mode === "equal" && eligible.length > 0) {
+  const removedOpen = open.filter((x) => x.removed);
+  const removedItems = removedOpen.reduce((n, p) => n + itemized.get(p.id)!.amountPaise, 0);
+  const custom: CustomSplit = { ids: eligible.map((p) => p.id), targetPaise: remainder - removedItems, valid: false };
+  custom.valid = eligible.length > 0 && customAmountsValid(custom.ids, custom.targetPaise, input.customAmounts);
+
+  if (input.mode === "custom" && custom.valid) {
+    for (const p of removedOpen) {
+      const d = itemized.get(p.id)!;
+      shares.set(p.id, { participantId: p.id, basis: "items", amountPaise: d.amountPaise, detail: { ...d } });
+    }
+    for (const p of eligible) shares.set(p.id, { participantId: p.id, basis: "custom", amountPaise: input.customAmounts![p.id], detail: null });
+  } else if (input.mode === "equal" && eligible.length > 0) {
     let rest = remainder;
     for (const p of open.filter((x) => x.removed)) {
       const d = itemized.get(p.id)!;
@@ -307,5 +330,5 @@ export function splitBill(input: BillSplitInput): { totals: BillTotals; shares: 
       if (share.detail) share.detail = { ...share.detail, amountPaise: share.amountPaise, roundOffPaise: share.detail.roundOffPaise + diff };
     }
   }
-  return { totals, shares: input.people.map((p) => shares.get(p.id)!) };
+  return { totals, shares: input.people.map((p) => shares.get(p.id)!), custom };
 }

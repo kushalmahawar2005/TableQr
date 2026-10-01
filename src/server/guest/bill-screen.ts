@@ -62,8 +62,7 @@ export async function getBillScreen(outletCode: string, shortCode: string, devic
   const myRow = people.find((p) => p.isMe);
   const myLines = draft.splitLines
     .map((l) => {
-      const assigned = draft.mode === "custom" ? draft.assignments?.[l.id] : null;
-      const owners = assigned?.length ? assigned : l.sharedWith?.length ? l.sharedWith : [l.ownerId];
+      const owners = l.sharedWith?.length ? l.sharedWith : [l.ownerId];
       return { id: l.id, owners };
     })
     .filter((l) => l.owners.includes(me));
@@ -74,7 +73,7 @@ export async function getBillScreen(outletCode: string, shortCode: string, devic
   const eligible = inputs.people.filter((p) => !p.removedAt && !p.paidOutAt).map((p) => p.id);
   const lines = inputs.lines.map((l) => {
     const sharers = (l.sharedWith ?? []).filter((id) => person.has(id));
-    const owners = draft.assignments?.[l.id]?.length ? draft.assignments[l.id] : sharers.length > 1 ? sharers : l.participantId ? [l.participantId] : [];
+    const owners = sharers.length > 1 ? sharers : l.participantId ? [l.participantId] : [];
     return {
       id: l.id,
       nameEn: l.nameEn,
@@ -123,6 +122,9 @@ export async function getBillScreen(outletCode: string, shortCode: string, devic
     },
     bill: {
       mode: draft.mode,
+      requestedAt: requested ? (inputs.bill?.requestedAt?.getTime() ?? null) : null,
+      rounds: new Set(inputs.lines.map((l) => l.orderId)).size,
+      itemCount: inputs.lines.reduce((n, l) => n + l.qty, 0),
       locked,
       canEdit: imHost && requested && !locked,
       reopened: !!inputs.bill?.reopenedAt,
@@ -138,6 +140,13 @@ export async function getBillScreen(outletCode: string, shortCode: string, devic
         totalPaise: draft.totals.totalPaise,
       },
       paidCount: people.filter((p) => p.status === "paid").length,
+      // Custom split: who the host enters amounts for, what they must add up to, and what is saved
+      custom: {
+        ids: draft.custom.ids,
+        targetPaise: draft.custom.targetPaise,
+        amounts: draft.customAmounts ?? null,
+        valid: draft.custom.valid,
+      },
     },
     people,
     mine:

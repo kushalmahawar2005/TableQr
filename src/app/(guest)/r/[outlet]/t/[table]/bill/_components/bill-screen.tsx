@@ -4,6 +4,7 @@ import {
   AlertCircleIcon,
   ArrowRight01Icon,
   CheckmarkCircle02Icon,
+  CircleIcon,
   Clock01Icon,
   CreditCardIcon,
   CrownIcon,
@@ -32,7 +33,7 @@ import { OutletLogo } from "../../_components/outlet-logo";
 import { focusRing, Sheet } from "../../_components/sheet";
 import { serviceRequestAction } from "../../orders/actions";
 import {
-  assignLineAction,
+  customAmountsAction,
   paidAndLeftAction,
   payAtCounterAction,
   paymentStatusAction,
@@ -61,6 +62,10 @@ export type BillPreview = {
   tip?: Tip;
   payFor?: string[];
   notice?: Notice;
+  /** Custom amounts being typed by the host, in rupees, before saving */
+  custom?: Record<string, string>;
+  /** The ordered-items list opened in full */
+  allItems?: boolean;
 };
 
 const button = `inline-flex min-h-12 items-center justify-center gap-2 rounded-cta px-4 py-2.5 text-button font-semibold transition-colors duration-150 ease-natural disabled:cursor-not-allowed disabled:opacity-55 ${focusRing}`;
@@ -192,7 +197,9 @@ export function BillScreen({
             ? c.reopenBlocked
             : error === "no_gateway"
               ? c.noOnline
-              : error === "changed" || error === "nothing_due"
+              : error === "total"
+                ? c.customTotalError
+                : error === "changed" || error === "nothing_due"
                 ? c.changed
                 : c.failed;
   }
@@ -210,7 +217,7 @@ export function BillScreen({
       const res = await call();
       if (!res.ok) {
         if (res.error === "gone") return router.replace(`${base}/paid`);
-        setNotice({ text: errorText(res.error), error: res.error === "failed" });
+        setNotice({ text: errorText(res.error), error: res.error === "failed" || res.error === "total" });
       } else if (success) setNotice({ text: success });
       await refresh();
     } catch {
@@ -271,25 +278,37 @@ export function BillScreen({
       return res.ok ? { ok: true as const } : { ok: false as const, error: (res.error === "gone" ? "gone" : res.error === "host_only" ? "host_only" : "failed") as BillError };
     });
 
+
   const total = bill.totals.totalPaise;
   const taxRates = Object.keys(bill.totals.taxBreakup);
   const gstLabel = taxRates.length === 1 ? c.gst(pct(Number(taxRates[0]))) : c.gstMixed;
+  const host = data.people.find((p) => p.isHost);
+  const requestedMins = bill.requestedAt === null ? null : Math.max(0, Math.floor((data.renderedAt - bill.requestedAt) / 60_000));
+  const customEditing = bill.mode === "custom" && bill.canEdit;
+  const scToggle = (w: boolean) => void act("sc", () => serviceChargeAction(data.outlet.code, shortCode, w));
+  const openOthers = (id?: string) => {
+    if (id) setPayFor((ids) => (ids.includes(id) ? ids : [...ids, id]));
+    setSheet("others");
+  };
 
   return (
     <div lang={lang} style={brandStyle(deriveBrandTokens(data.outlet.accentColor)) as CSSProperties} className={`relative flex flex-1 flex-col ${preview ? "min-h-full" : "min-h-dvh"}`}>
       <header className="flex items-center gap-3 pt-4">
         <OutletLogo name={data.outlet.name} logoUrl={data.outlet.logoUrl} size={40} />
         <div className="min-w-0 flex-1">
-          <p className="font-display text-section font-bold break-words text-ink">{data.outlet.name}</p>
-          <p className="text-caption text-muted">{c.tableLine(data.table.code)}</p>
+          <h1 className="font-display text-title leading-tight font-bold text-ink">{c.title}</h1>
+          <p className="text-caption break-words text-muted">
+            {data.outlet.name} · {c.tableLine(data.table.code)}
+          </p>
         </div>
         <LanguageToggle lang={lang} label={c.language} preview={!!preview} />
       </header>
 
       <main className="pb-6">
-        <h1 className="mt-5 font-display text-title font-bold text-ink">{c.title}</h1>
-
         {!online && <Banner icon={WifiOff01Icon} tone="offline" title={c.offline} body={c.offlineBody} />}
+        {session.requested && !bill.reopened && (
+          <Banner icon={CheckmarkCircle02Icon} tone="done" title={c.requested} meta={c.requestedBy(session.hostName, session.hostIsMe, requestedMins)} body={c.requestedBody} />
+        )}
         {bill.reopened && <Banner icon={RefreshIcon} tone="info" title={c.changedTitle} body={session.requested ? c.changedBody : c.reopenedOpenBody} />}
         {data.refundPendingPaise > 0 && <Banner icon={Clock01Icon} tone="info" title={c.refundTitle} body={c.refundBody(formatRupees(data.refundPendingPaise))} />}
         {(failed || preview?.failed) && (
@@ -311,45 +330,57 @@ export function BillScreen({
           state={pay.state}
           c={c}
           dueText={formatRupees(myDue)}
+          amountText={pay.state === "starting" ? formatRupees(payBase + tipPaise) : null}
           online={online}
           onRetry={() => setSheet("method")}
           onCounter={() => void counter()}
           onDismiss={() => setPay({ state: "ready", paymentId: null })}
         />
 
-        {/* Table total */}
-        <section aria-label={c.tableTotal} className="mt-4 rounded-guest border border-line bg-surface p-4">
-          <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-            <p className="text-body font-semibold text-ink">{session.requested ? c.tableTotal : c.currentBill}</p>
-            <p className="font-display text-title font-bold text-ink tabular">{formatRupees(total)}</p>
-          </div>
-          {session.requested ? (
-            <p className="mt-1 text-caption text-muted">
-              {lang === "hi" ? `${bill.paidCount} / ${data.people.length} ने चुकाया` : `${bill.paidCount} of ${data.people.length} paid`}
-            </p>
-          ) : (
-            <>
-              <p className="mt-1 text-caption text-muted">{c.previewNote}</p>
-              {session.isHost ? (
-                <button type="button" onClick={() => setSheet("request")} disabled={!online || !!busy || data.people.length === 0} className={`${primary} mt-3 w-full`}>
-                  <HugeiconsIcon icon={Invoice01Icon} size={18} aria-hidden />
-                  {c.requestBill}
-                </button>
+        {!session.requested ? (
+          <BeforeRequest
+            data={data}
+            c={c}
+            base={base}
+            preview={!!preview}
+            lineName={lineName}
+            allItems={!!preview?.allItems}
+            action={
+              session.isHost ? (
+                <>
+                  <button type="button" onClick={() => setSheet("request")} disabled={!online || !!busy || data.people.length === 0} className={`${primary} mt-4 w-full`}>
+                    <HugeiconsIcon icon={Invoice01Icon} size={18} aria-hidden />
+                    {c.requestBill}
+                  </button>
+                  <p className="mt-2 text-center text-caption text-muted">{c.requestBillHelp}</p>
+                </>
               ) : (
-                <p className="mt-3 text-caption font-semibold text-ink">{c.hostRequests(session.hostName)}</p>
-              )}
-            </>
-          )}
-        </section>
-
-        {session.requested && (
+                <p className="mt-4 rounded-guest bg-ink/[0.04] px-4 py-3 text-caption text-ink">
+                  {c.hostRequests(session.hostName)} {c.previewNote}
+                </p>
+              )
+            }
+          />
+        ) : (
           <>
+            {/* Table total */}
+            <section aria-label={c.tableTotal} className="mt-4 flex flex-wrap items-end justify-between gap-x-4 gap-y-1 rounded-guest border border-line bg-surface px-4 py-3.5">
+              <div className="min-w-0">
+                <p className="text-body font-semibold text-ink">{c.tableTotal}</p>
+                <p className="text-caption text-muted">{c.includingTax}</p>
+              </div>
+              <div className="text-right">
+                <p className="font-display text-title leading-tight font-bold text-ink tabular">{formatRupees(total)}</p>
+                <p className="text-caption text-muted">{c.paidOf(bill.paidCount, data.people.length)}</p>
+              </div>
+            </section>
+
             {/* Split mode */}
             <section aria-labelledby="g8-split" className="mt-6">
               <h2 id="g8-split" className="font-display text-section font-bold text-ink">
                 {c.split}
               </h2>
-              <div role="radiogroup" aria-labelledby="g8-split" className="mt-2 grid grid-cols-3 gap-1 rounded-cta border border-line bg-surface p-1">
+              <div role="radiogroup" aria-labelledby="g8-split" className="mt-2 grid grid-cols-[repeat(3,minmax(min-content,1fr))] gap-1 rounded-cta bg-ink/[0.06] p-1">
                 {(["my_items", "equal", "custom"] as Mode[]).map((m) => (
                   <button
                     key={m}
@@ -358,7 +389,7 @@ export function BillScreen({
                     aria-checked={bill.mode === m}
                     disabled={!bill.canEdit || !online || !!busy}
                     onClick={() => bill.mode !== m && void act(`mode-${m}`, () => splitModeAction(data.outlet.code, shortCode, m))}
-                    className={`min-h-11 rounded-input px-1 text-caption font-semibold break-words transition-colors ${focusRing} ${bill.mode === m ? "bg-ink text-white" : "text-ink disabled:text-muted"}`}
+                    className={`min-h-11 rounded-input px-1.5 text-caption font-semibold transition-colors ${focusRing} ${bill.mode === m ? "bg-surface text-ink shadow-[0_1px_2px_rgb(31_41_55/0.12)]" : "text-muted enabled:hover:text-ink"}`}
                   >
                     {c.modes[m]}
                   </button>
@@ -367,163 +398,187 @@ export function BillScreen({
               {(bill.locked || !session.isHost) && (
                 <p className="mt-2 flex items-start gap-1.5 text-caption text-muted">
                   <HugeiconsIcon icon={bill.locked ? LockIcon : CrownIcon} size={14} className="mt-px shrink-0" aria-hidden />
-                  {bill.locked ? c.splitLocked : c.splitHostOnly(session.hostName)}
+                  {bill.locked ? c.splitLocked : bill.mode === "custom" && bill.custom.valid ? c.customReadOnly(session.hostName) : c.splitHostOnly(session.hostName)}
                 </p>
               )}
+              {bill.mode === "custom" && !bill.custom.valid && !customEditing && <p className="mt-2 rounded-guest bg-[var(--state-held-soft)] px-3.5 py-2.5 text-caption text-[var(--state-held-text)]">{c.customStale(session.hostName)}</p>}
             </section>
 
-            {/* Everyone */}
-            <section aria-labelledby="g8-people" className="mt-6">
-              <h2 id="g8-people" className="font-display text-section font-bold text-ink">
-                {c.people}
-              </h2>
-              <ul className="mt-1 divide-y divide-line/70">
-                {data.people.map((p) => (
-                  <li key={p.id} className="flex min-h-14 flex-wrap items-center gap-x-3 gap-y-1 py-2">
-                    <div className="min-w-0 flex-1">
-                      <p className={`text-body font-semibold break-words ${p.removed || p.paidAndLeft ? "text-muted" : "text-ink"}`}>
-                        {nameOf(p)}
-                        {p.isHost && (
-                          <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-[var(--state-held-soft)] px-2 py-0.5 align-middle text-label font-semibold text-[var(--state-held-text)]">
-                            <HugeiconsIcon icon={CrownIcon} size={12} aria-hidden />
-                            {c.host}
-                          </span>
-                        )}
-                      </p>
-                      {(p.removed || p.paidAndLeft || p.paidBy || p.paidByMe) && (
-                        <p className="text-caption text-muted">
-                          {[p.removed ? c.removed : null, p.paidAndLeft ? c.paidAndLeft : null, p.paidByMe ? c.paidByYou : p.paidBy ? c.paidBy(p.paidBy) : null].filter(Boolean).join(" · ")}
-                        </p>
-                      )}
-                    </div>
-                    <span className="font-semibold text-ink tabular">{formatRupees(p.amountPaise)}</span>
-                    <StatusChip status={p.status} c={c} />
-                    {session.isHost && !p.isHost && p.status === "paid" && !p.paidAndLeft && !p.removed && (
-                      <button type="button" onClick={() => setLeaving(p)} aria-label={c.moreFor(shortName(p))} className={`-mr-2 grid size-11 place-items-center rounded-full text-muted hover:bg-ink/5 ${focusRing}`}>
-                        <HugeiconsIcon icon={MoreHorizontalIcon} size={20} aria-hidden />
-                      </button>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </section>
-
-            {bill.mode === "custom" && (
-              <CustomItems
+            {customEditing ? (
+              <CustomAmounts
+                key={`${JSON.stringify(bill.custom.amounts)}-${bill.custom.targetPaise}`}
                 data={data}
                 c={c}
-                lineName={lineName}
-                shortName={shortName}
-                disabled={!bill.canEdit || !online || !!busy}
-                onAssign={(lineId, ids) =>
-                  ids.length === 0 ? setNotice({ text: c.atLeastOne, error: true }) : void act(`line-${lineId}`, () => assignLineAction(data.outlet.code, shortCode, lineId, ids))
-                }
+                nameOf={nameOf}
+                draft={preview?.custom}
+                disabled={!online || !!busy}
+                busy={busy === "custom"}
+                onSave={(amounts) => void act("custom", () => customAmountsAction(data.outlet.code, shortCode, amounts), c.customSaved)}
               />
-            )}
-          </>
-        )}
-
-        {/* Your share */}
-        {data.mine && (
-          <section aria-labelledby="g8-mine" className="mt-6 rounded-guest border border-line bg-surface p-4">
-            <h2 id="g8-mine" className="font-display text-section font-bold text-ink">
-              {c.yourShare}
-            </h2>
-            <dl className="mt-2 space-y-1.5 text-body">
-              {data.mine.detail ? (
-                <>
-                  <Row label={c.yourDishes} hint={data.mine.ownItems.map(itemName).join(", ")} value={exact(data.mine.detail.ownItemsPaise)} />
-                  {data.mine.detail.sharedItemsPaise > 0 && <Row label={c.shared} hint={data.mine.sharedItems.map(itemName).join(", ")} value={exact(data.mine.detail.sharedItemsPaise)} />}
-                  {data.mine.detail.discountPaise > 0 && <Row label={c.discount} value={exact(-data.mine.detail.discountPaise)} />}
-                  <Row label={c.subtotal} value={exact(data.mine.detail.subtotalPaise - data.mine.detail.discountPaise)} strong />
-                  {bill.totals.serviceChargeBp > 0 && (
-                    <ServiceChargeRow c={c} bill={bill} value={exact(data.mine.detail.serviceChargePaise)} canEdit={bill.canEdit && online && !busy} onToggle={(w) => void act("sc", () => serviceChargeAction(data.outlet.code, shortCode, w))} />
-                  )}
-                  <Row label={gstLabel} value={exact(data.mine.detail.taxPaise)} />
-                  <Row label={c.roundOff} value={exact(data.mine.detail.roundOffPaise)} />
-                </>
-              ) : (
-                <>
-                  <Row label={c.subtotal} value={exact(bill.totals.subtotalPaise - bill.totals.discountPaise)} />
-                  {bill.totals.serviceChargeBp > 0 && (
-                    <ServiceChargeRow c={c} bill={bill} value={exact(bill.totals.serviceChargePaise)} canEdit={bill.canEdit && online && !busy} onToggle={(w) => void act("sc", () => serviceChargeAction(data.outlet.code, shortCode, w))} />
-                  )}
-                  <Row label={gstLabel} value={exact(bill.totals.taxPaise)} />
-                  <Row label={c.roundOff} value={exact(bill.totals.roundOffPaise)} />
-                  <Row label={c.tableTotal} value={exact(total)} strong />
-                  <Row label={c.equalShare(data.mine.equalBetween)} value="" />
-                </>
-              )}
-              {data.mine.paidPaise > 0 && data.mine.duePaise > 0 && <Row label={c.alreadyPaid} value={exact(-data.mine.paidPaise)} />}
-              <div className="flex items-baseline justify-between gap-3 border-t border-line pt-2">
-                <dt className="font-semibold text-ink">{data.mine.duePaise === 0 && data.mine.amountPaise > 0 ? c.settledShare : c.amountDue}</dt>
-                <dd className="font-display text-section font-bold text-ink tabular">{formatRupees(data.mine.duePaise || data.mine.amountPaise)}</dd>
-              </div>
-            </dl>
-          </section>
-        )}
-
-        {/* Tip and pay */}
-        {session.requested && (selected.length > 0 || others.length > 0) && (
-          <section aria-label={c.pay("")} className="mt-6">
-            {selected.length > 0 && (
-              <>
-                <h2 className="font-display text-section font-bold text-ink">{c.tip}</h2>
-                <div className="mt-2 grid grid-cols-[repeat(auto-fit,minmax(max(64px,5.5em),1fr))] gap-2 text-caption">
-                  {([{ kind: "none" }, ...data.tipPresetsBp.map((bp) => ({ kind: "bp" as const, bp })), { kind: "custom", rupees: "" }] as Tip[]).map((t) => {
-                    const active = t.kind === tip.kind && (t.kind !== "bp" || (tip.kind === "bp" && tip.bp === t.bp));
+            ) : (
+              <section aria-labelledby="g8-people" className="mt-6">
+                <h2 id="g8-people" className="font-display text-section font-bold text-ink">
+                  {c.people} <span className="font-normal text-muted">({data.people.length})</span>
+                </h2>
+                <ul className="mt-2 divide-y divide-line/70 rounded-guest border border-line bg-surface">
+                  {data.people.map((p) => {
+                    const hostMenu = session.isHost && !p.isHost && p.status === "paid" && !p.paidAndLeft && !p.removed;
+                    const payable = !p.isMe && p.status === "unpaid" && p.duePaise > 0 && canPay;
+                    const body = (
+                      <>
+                        <Avatar name={p.name} muted={p.removed || p.paidAndLeft} />
+                        <span className="min-w-[min(100%,6em)] flex-1 text-body">
+                          <span className={`block text-body font-semibold break-words ${p.removed || p.paidAndLeft ? "text-muted" : "text-ink"}`}>
+                            {nameOf(p)}
+                            {p.isHost && (
+                              <span className="ml-1.5 inline-flex items-center gap-1 rounded-full bg-[var(--state-held-soft)] px-1.5 py-px align-middle text-label font-semibold text-[var(--state-held-text)]">
+                                <HugeiconsIcon icon={CrownIcon} size={11} aria-hidden />
+                                {c.host}
+                              </span>
+                            )}
+                          </span>
+                          {(p.removed || p.paidAndLeft || p.paidBy || p.paidByMe) && (
+                            <span className="block text-caption text-muted">
+                              {[p.removed ? c.removed : null, p.paidAndLeft ? c.paidAndLeft : null, p.paidByMe ? c.paidByYou : p.paidBy ? c.paidBy(p.paidBy) : null].filter(Boolean).join(" · ")}
+                            </span>
+                          )}
+                        </span>
+                        <span className="ml-auto flex shrink-0 flex-col items-end gap-1">
+                          <span className="text-body font-semibold text-ink tabular">{formatRupees(p.amountPaise)}</span>
+                          <StatusChip status={p.status} c={c} />
+                        </span>
+                      </>
+                    );
                     return (
-                      <button
-                        key={t.kind === "bp" ? t.bp : t.kind}
-                        type="button"
-                        aria-pressed={active}
-                        onClick={() => setTip(t.kind === "custom" && tip.kind === "custom" ? tip : t)}
-                        className={`min-h-11 rounded-cta border px-2 text-caption font-semibold break-words ${focusRing} ${active ? "border-ink bg-ink text-white" : "border-line bg-surface text-ink"}`}
-                      >
-                        {t.kind === "none" ? c.noTip : t.kind === "bp" ? pct(t.bp) : c.customTip}
-                      </button>
+                      <li key={p.id} className="flex items-center">
+                        {payable ? (
+                          <button type="button" onClick={() => openOthers(p.id)} aria-label={`${c.payFor(shortName(p))}, ${formatRupees(p.duePaise)}`} className={`flex min-h-16 w-full flex-wrap items-center gap-x-3 gap-y-1 px-3.5 py-2.5 text-left ${focusRing}`}>
+                            {body}
+                            <HugeiconsIcon icon={ArrowRight01Icon} size={16} className="shrink-0 text-muted" aria-hidden />
+                          </button>
+                        ) : (
+                          <div className="flex min-h-16 w-full flex-wrap items-center gap-x-3 gap-y-1 px-3.5 py-2.5">
+                            {body}
+                            {/* Keeps amounts lined up with the rows that end in a chevron */}
+                            {!hostMenu && canPay && <span aria-hidden className="w-4 shrink-0" />}
+                            {hostMenu && (
+                              <button type="button" onClick={() => setLeaving(p)} aria-label={c.moreFor(shortName(p))} className={`-mr-2 grid size-11 shrink-0 place-items-center rounded-full text-muted hover:bg-ink/5 ${focusRing}`}>
+                                <HugeiconsIcon icon={MoreHorizontalIcon} size={20} aria-hidden />
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </li>
                     );
                   })}
-                </div>
-                {tip.kind === "custom" && (
-                  <label className="mt-2 flex items-center gap-2 rounded-input border border-line bg-surface px-3 focus-within:border-brand">
-                    <span className="text-body text-muted">₹</span>
-                    <input
-                      inputMode="numeric"
-                      aria-label={c.tipAmount}
-                      value={tip.rupees}
-                      onChange={(e) => setTip({ kind: "custom", rupees: e.target.value.replace(/\D/g, "").slice(0, 5) })}
-                      className="h-12 min-w-0 flex-1 bg-transparent text-body text-ink outline-none"
-                    />
-                  </label>
-                )}
-                {tipPaise > 0 && <p className={`mt-1.5 text-caption ${tipValid ? "text-muted" : "text-danger"}`}>{c.tipLine}: {formatRupees(tipPaise)}</p>}
-
-                {selected.some((id) => id !== me?.id) && (
-                  <p className="mt-3 text-caption text-muted">
-                    {c.payingFor} <span className="font-semibold text-ink">{data.people.filter((p) => selected.includes(p.id)).map(shortName).join(", ")}</span>
-                  </p>
-                )}
-                <button type="button" onClick={() => setSheet("method")} disabled={!canPay || !tipValid} className={`${primary} mt-3 min-h-14 w-full text-section`}>
-                  {pay.state === "starting" && <HugeiconsIcon icon={Loading03Icon} size={20} className="animate-spin" aria-hidden />}
-                  {pay.state === "starting" ? c.starting : c.pay(formatRupees(payBase + tipPaise))}
-                </button>
-              </>
+                </ul>
+              </section>
             )}
-            {others.length > 0 && (
-              <button type="button" onClick={() => setSheet("others")} disabled={!canPay} className={`${outline} mt-2.5 w-full`}>
-                {c.payForOthers}
+
+            {/* Your share */}
+            {data.mine && (
+              <section aria-labelledby="g8-mine" className="mt-6 rounded-guest border border-line bg-surface p-4">
+                <h2 id="g8-mine" className="font-display text-section font-bold text-ink">
+                  {c.yourShare}
+                </h2>
+                <dl className="mt-3 space-y-2 text-body">
+                  {data.mine.detail ? (
+                    <>
+                      <Row label={c.yourDishes} hint={data.mine.ownItems.map(itemName).join(", ")} value={exact(data.mine.detail.ownItemsPaise)} />
+                      {data.mine.detail.sharedItemsPaise > 0 && <Row label={c.shared} hint={data.mine.sharedItems.map(itemName).join(", ")} value={exact(data.mine.detail.sharedItemsPaise)} />}
+                      {data.mine.detail.discountPaise > 0 && <Row label={c.discount} value={exact(-data.mine.detail.discountPaise)} />}
+                      <Row label={c.subtotal} value={exact(data.mine.detail.subtotalPaise - data.mine.detail.discountPaise)} strong />
+                      {bill.totals.serviceChargeBp > 0 && <ServiceChargeRow c={c} bill={bill} value={exact(data.mine.detail.serviceChargePaise)} canEdit={bill.canEdit && online && !busy} onToggle={scToggle} />}
+                      <Row label={gstLabel} value={exact(data.mine.detail.taxPaise)} />
+                      <Row label={c.roundOff} value={exact(data.mine.detail.roundOffPaise)} />
+                    </>
+                  ) : (
+                    <>
+                      <Row label={c.subtotal} value={exact(bill.totals.subtotalPaise - bill.totals.discountPaise)} />
+                      {bill.totals.discountPaise > 0 && <Row label={c.discount} value={exact(-bill.totals.discountPaise)} />}
+                      {bill.totals.serviceChargeBp > 0 && <ServiceChargeRow c={c} bill={bill} value={exact(bill.totals.serviceChargePaise)} canEdit={bill.canEdit && online && !busy} onToggle={scToggle} />}
+                      <Row label={gstLabel} value={exact(bill.totals.taxPaise)} />
+                      <Row label={c.roundOff} value={exact(bill.totals.roundOffPaise)} />
+                      <Row label={c.tableTotal} hint={c.includingTax} value={exact(total)} strong />
+                      <Row label={data.mine.basis === "custom" ? c.customBy(host?.name ?? session.hostName) : c.equalShare(data.mine.equalBetween)} value="" />
+                    </>
+                  )}
+                  {data.mine.paidPaise > 0 && data.mine.duePaise > 0 && <Row label={c.alreadyPaid} value={exact(-data.mine.paidPaise)} />}
+                  <div className="!mt-3 flex items-baseline justify-between gap-3 border-t border-line pt-3">
+                    <dt className="font-semibold text-ink">{data.mine.duePaise === 0 && data.mine.amountPaise > 0 ? c.settledShare : c.amountDue}</dt>
+                    <dd className="font-display text-title leading-tight font-bold text-ink tabular">{formatRupees(data.mine.duePaise || data.mine.amountPaise)}</dd>
+                  </div>
+                </dl>
+              </section>
+            )}
+
+            {/* Tip and pay */}
+            {(selected.length > 0 || others.length > 0) && (
+              <section aria-label={c.pay("")} className="mt-6">
+                {selected.length > 0 && (
+                  <>
+                    <h2 className="font-display text-section font-bold text-ink">{c.tip}</h2>
+                    <div className="mt-2 grid grid-cols-[repeat(auto-fit,minmax(max(64px,5.5em),1fr))] gap-2 text-caption">
+                      {([{ kind: "none" }, ...data.tipPresetsBp.map((bp) => ({ kind: "bp" as const, bp })), { kind: "custom", rupees: "" }] as Tip[]).map((t) => {
+                        const active = t.kind === tip.kind && (t.kind !== "bp" || (tip.kind === "bp" && tip.bp === t.bp));
+                        return (
+                          <button
+                            key={t.kind === "bp" ? t.bp : t.kind}
+                            type="button"
+                            aria-pressed={active}
+                            onClick={() => setTip(t.kind === "custom" && tip.kind === "custom" ? tip : t)}
+                            className={`min-h-11 rounded-cta border px-2 text-caption font-semibold break-words ${focusRing} ${active ? "border-ink bg-ink text-white" : "border-line bg-surface text-ink"}`}
+                          >
+                            {t.kind === "none" ? c.noTip : t.kind === "bp" ? pct(t.bp) : c.customTip}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {tip.kind === "custom" && (
+                      <label className="mt-2 flex items-center gap-2 rounded-input border border-line bg-surface px-3 focus-within:border-brand">
+                        <span className="text-body text-muted">₹</span>
+                        <input
+                          inputMode="numeric"
+                          aria-label={c.tipAmount}
+                          value={tip.rupees}
+                          onChange={(e) => setTip({ kind: "custom", rupees: e.target.value.replace(/\D/g, "").slice(0, 5) })}
+                          className="h-12 min-w-0 flex-1 bg-transparent text-body text-ink outline-none"
+                        />
+                      </label>
+                    )}
+                    {tipPaise > 0 && (
+                      <p className={`mt-1.5 text-caption ${tipValid ? "text-muted" : "text-danger"}`}>
+                        {c.tipLine}: {formatRupees(tipPaise)}
+                      </p>
+                    )}
+
+                    {selected.some((id) => id !== me?.id) && (
+                      <p className="mt-3 text-caption text-muted">
+                        {c.payingFor} <span className="font-semibold text-ink">{data.people.filter((p) => selected.includes(p.id)).map(shortName).join(", ")}</span>
+                      </p>
+                    )}
+                    <button type="button" onClick={() => setSheet("method")} disabled={!canPay || !tipValid} className={`${primary} mt-4 min-h-14 w-full text-section`}>
+                      {pay.state === "starting" && <HugeiconsIcon icon={Loading03Icon} size={20} className="animate-spin" aria-hidden />}
+                      {pay.state === "starting" ? c.starting : c.pay(formatRupees(payBase + tipPaise))}
+                    </button>
+                  </>
+                )}
+                {others.length > 0 && (
+                  <button type="button" onClick={() => openOthers()} disabled={!canPay} className={`${outline} mt-2.5 w-full`}>
+                    {c.payForOthers}
+                  </button>
+                )}
+                {data.payAtCounter && <p className="mt-2 text-center text-caption text-muted">{c.counterDone}</p>}
+              </section>
+            )}
+
+            {session.isHost && (
+              <button type="button" onClick={() => setSheet("reopen")} disabled={!online || !!busy} className={`mt-6 inline-flex min-h-11 items-center gap-1.5 text-body font-semibold text-brand-strong underline underline-offset-4 disabled:opacity-55 ${focusRing}`}>
+                <HugeiconsIcon icon={RefreshIcon} size={16} aria-hidden />
+                {c.reopen}
               </button>
             )}
-            {data.payAtCounter && <p className="mt-2 text-center text-caption text-muted">{c.counterDone}</p>}
-          </section>
-        )}
-
-        {session.requested && session.isHost && (
-          <button type="button" onClick={() => setSheet("reopen")} disabled={!online || !!busy} className={`mt-6 inline-flex min-h-11 items-center gap-1.5 text-body font-semibold text-brand-strong underline underline-offset-4 disabled:opacity-55 ${focusRing}`}>
-            <HugeiconsIcon icon={RefreshIcon} size={16} aria-hidden />
-            {c.reopen}
-          </button>
+          </>
         )}
       </main>
 
@@ -549,18 +604,30 @@ export function BillScreen({
 
       {sheet === "method" && (
         <Sheet title={c.methodTitle} closeLabel={c.close} onClose={() => setSheet(null)}>
-          <p className="mt-1 text-body text-muted">{c.pay(formatRupees(payBase + tipPaise))}</p>
+          <p className="mt-1 flex items-baseline justify-between gap-3 text-body">
+            <span className="text-muted">{c.totalToPay}</span>
+            <span className="font-display text-section font-bold text-ink tabular">{formatRupees(payBase + tipPaise)}</span>
+          </p>
           <div className="mt-4 grid gap-2.5">
             {data.onlinePayment ? (
               (["upi", "card", "wallet"] as Method[]).map((m) => (
-                <MethodButton key={m} icon={m === "upi" ? SmartPhone01Icon : m === "card" ? CreditCardIcon : Wallet01Icon} title={c.methods[m]} help={c.methodHelp[m]} disabled={!online} value={m} onPick={begin} />
+                <MethodButton
+                  key={m}
+                  icon={m === "upi" ? SmartPhone01Icon : m === "card" ? CreditCardIcon : Wallet01Icon}
+                  title={c.methods[m]}
+                  badge={m === "upi" ? c.recommended : undefined}
+                  help={c.methodHelp[m]}
+                  disabled={!online}
+                  value={m}
+                  onPick={begin}
+                />
               ))
             ) : (
               <p className="rounded-guest bg-[var(--state-cleaning-soft)] p-3.5 text-caption text-[var(--state-cleaning-text)]">{c.noOnline}</p>
             )}
             <MethodButton icon={Store01Icon} title={c.counter} help={c.counterHelp} disabled={!online || !!data.payAtCounter} value="counter" onPick={counter} />
           </div>
-          <p className="mt-3 flex items-start gap-1.5 text-caption text-muted">
+          <p className="mt-4 flex items-start gap-1.5 text-caption text-muted">
             <HugeiconsIcon icon={LockIcon} size={14} className="mt-px shrink-0" aria-hidden />
             {c.secureNote}
           </p>
@@ -569,6 +636,7 @@ export function BillScreen({
 
       {sheet === "others" && (
         <Sheet title={c.selectShares} closeLabel={c.close} onClose={() => setSheet(null)}>
+          <p className="mt-1 text-body text-muted">{c.selectHelp}</p>
           <ul className="mt-3 divide-y divide-line/70">
             {data.people
               .filter((p) => p.duePaise > 0)
@@ -577,14 +645,15 @@ export function BillScreen({
                 const blocked = p.status === "paying";
                 return (
                   <li key={p.id}>
-                    <label className={`flex min-h-14 items-center gap-3 py-2 ${blocked ? "opacity-55" : ""}`}>
+                    <label className={`flex min-h-14 cursor-pointer items-center gap-3 py-2 ${blocked ? "cursor-not-allowed opacity-55" : ""}`}>
                       <input
                         type="checkbox"
                         checked={checked}
                         disabled={blocked}
                         onChange={() => setPayFor((ids) => (checked ? ids.filter((x) => x !== p.id) : [...ids, p.id]))}
-                        className="size-5 accent-[var(--brand-main)]"
+                        className="size-5 shrink-0 accent-[var(--brand-main)]"
                       />
+                      <Avatar name={p.name} />
                       <span className="min-w-0 flex-1 text-body font-semibold break-words">
                         {nameOf(p)}
                         {(p.removed || blocked) && <span className="block text-caption font-normal text-muted">{blocked ? c.paying : c.removed}</span>}
@@ -596,12 +665,190 @@ export function BillScreen({
               })}
           </ul>
           {others.length === 0 && <p className="mt-3 text-body text-muted">{c.nobodyElse}</p>}
-          <button type="button" onClick={() => setSheet(null)} disabled={selected.length === 0} className={`${primary} mt-4 w-full`}>
-            {c.payingSelected(formatRupees(payBase))}
+          <div className="mt-3 flex items-baseline justify-between gap-3 border-t border-line pt-3">
+            <span className="text-body font-semibold text-ink">{c.totalToPay}</span>
+            <span className="font-display text-title leading-tight font-bold text-ink tabular">{formatRupees(payBase)}</span>
+          </div>
+          <button type="button" onClick={() => setSheet("method")} disabled={selected.length === 0 || !canPay} className={`${primary} mt-4 w-full`}>
+            {c.continuePay}
           </button>
         </Sheet>
       )}
     </div>
+  );
+}
+
+function BeforeRequest({
+  data,
+  c,
+  base,
+  preview,
+  lineName,
+  allItems,
+  action,
+}: {
+  data: BillScreenData;
+  c: G8Copy;
+  base: string;
+  preview: boolean;
+  lineName: (l: { nameEn: string; nameHi: string | null }) => string;
+  allItems: boolean;
+  action: ReactNode;
+}) {
+  const [all, setAll] = useState(allItems);
+  const shown = all ? data.lines : data.lines.slice(0, 4);
+  const hidden = data.lines.length - shown.length;
+  return (
+    <>
+      <section aria-labelledby="g8-live" className="mt-5">
+        <h2 id="g8-live" className="font-display text-section font-bold text-ink">
+          {c.liveBill}
+        </h2>
+        <p className="text-caption text-muted">{c.liveBillNote}</p>
+        <a href={preview ? "#" : `${base}/orders`} aria-label={`${c.seeOrders}: ${c.roundsItems(data.bill.rounds, data.bill.itemCount)}, ${formatRupees(data.bill.totals.subtotalPaise)}`} className={`mt-3 flex min-h-16 items-center gap-3 rounded-guest border border-line bg-surface px-4 py-3 hover:border-ink/30 ${focusRing}`}>
+          <span className="min-w-0 flex-1">
+            <span className="block text-body font-semibold text-ink">{c.roundsItems(data.bill.rounds, data.bill.itemCount)}</span>
+            <span className="block text-caption text-muted">{c.beforeGst}</span>
+          </span>
+          <span className="font-display text-title leading-tight font-bold text-ink tabular">{formatRupees(data.bill.totals.subtotalPaise)}</span>
+          <HugeiconsIcon icon={ArrowRight01Icon} size={18} className="shrink-0 text-muted" aria-hidden />
+        </a>
+        {action}
+      </section>
+      {data.lines.length > 0 && (
+        <section aria-labelledby="g8-items" className="mt-6">
+          <h2 id="g8-items" className="font-display text-section font-bold text-ink">
+            {c.orderedItems}
+          </h2>
+          <ul className="mt-2 divide-y divide-line/70 rounded-guest border border-line bg-surface px-4">
+            {shown.map((l) => (
+              <li key={l.id} className="flex items-start justify-between gap-3 py-3">
+                <span className="min-w-0">
+                  <span className="block text-body font-semibold break-words text-ink">{lineName(l)}</span>
+                  <span className="block text-caption text-muted tabular">
+                    {l.qty} × {formatRupees(Math.round(l.amountPaise / l.qty))}
+                  </span>
+                </span>
+                <span className="shrink-0 text-body text-ink tabular">{formatRupees(l.amountPaise)}</span>
+              </li>
+            ))}
+          </ul>
+          {data.lines.length > 4 && (
+            <button type="button" onClick={() => setAll(!all)} aria-expanded={all} className={`mt-1 inline-flex min-h-11 items-center text-body font-semibold text-brand-strong underline underline-offset-4 ${focusRing}`}>
+              {all ? c.fewerItems : c.moreItems(hidden)}
+            </button>
+          )}
+        </section>
+      )}
+    </>
+  );
+}
+
+/** Host-only Custom split: one whole-rupee amount per person, saved only when it adds up exactly */
+function CustomAmounts({
+  data,
+  c,
+  nameOf,
+  draft: previewDraft,
+  disabled,
+  busy,
+  onSave,
+}: {
+  data: BillScreenData;
+  c: G8Copy;
+  nameOf: (p: Person) => string;
+  draft?: Record<string, string>;
+  disabled: boolean;
+  busy: boolean;
+  onSave: (amounts: Record<string, number>) => void;
+}) {
+  const { custom } = data.bill;
+  const byId = new Map(data.people.map((p) => [p.id, p]));
+  const start = () =>
+    Object.fromEntries(custom.ids.map((id) => [id, String(Math.round((custom.valid && custom.amounts ? (custom.amounts[id] ?? 0) : (byId.get(id)?.amountPaise ?? 0)) / 100))]));
+  const [draft, setDraft] = useState<Record<string, string>>(() => ({ ...start(), ...previewDraft }));
+  const fixed = data.people.filter((p) => !custom.ids.includes(p.id));
+  const fixedPaise = fixed.reduce((n, p) => n + p.amountPaise, 0);
+  const allocated = custom.ids.reduce((n, id) => n + Number(draft[id] || 0) * 100, 0) + fixedPaise;
+  const total = data.bill.totals.totalPaise;
+  const left = total - allocated;
+  const saved = custom.valid && !!custom.amounts && custom.ids.every((id) => Number(draft[id] || 0) * 100 === custom.amounts![id]);
+  return (
+    <section aria-labelledby="g8-custom" className="mt-6">
+      <h2 id="g8-custom" className="font-display text-section font-bold text-ink">
+        {c.customTitle}
+      </h2>
+      <p className="mt-0.5 text-caption text-muted">{custom.valid ? c.customHelp : c.customStaleHost}</p>
+      <ul className="mt-3 divide-y divide-line/70 rounded-guest border border-line bg-surface">
+        {custom.ids.map((id) => {
+          const p = byId.get(id);
+          const name = p ? nameOf(p) : c.anotherGuest;
+          return (
+            <li key={id} className="flex min-h-16 flex-wrap items-center gap-x-3 gap-y-2 px-3.5 py-2.5">
+              <Avatar name={p?.name ?? null} />
+              <span className="min-w-[6em] flex-1 text-body font-semibold break-words text-ink">{name}</span>
+              <label className="flex h-12 w-[7.5em] items-center gap-1 rounded-input border border-line bg-paper px-3 focus-within:border-brand focus-within:bg-surface">
+                <span className="text-body text-muted">₹</span>
+                <input
+                  inputMode="numeric"
+                  aria-label={c.amountFor(p?.name ?? name)}
+                  value={draft[id] ?? ""}
+                  disabled={disabled}
+                  onChange={(e) => setDraft((d) => ({ ...d, [id]: e.target.value.replace(/\D/g, "").replace(/^0+(?=\d)/, "").slice(0, 6) }))}
+                  className="min-w-0 flex-1 bg-transparent text-right text-body font-semibold text-ink tabular outline-none disabled:opacity-60"
+                />
+              </label>
+            </li>
+          );
+        })}
+        {fixed.map((p) => (
+          <li key={p.id} className="flex min-h-14 items-center gap-3 px-3.5 py-2.5">
+            <Avatar name={p.name} muted />
+            <span className="min-w-0 flex-1">
+              <span className="block text-body font-semibold break-words text-muted">{nameOf(p)}</span>
+              <span className="block text-caption text-muted">{p.paidAndLeft ? c.fixedLeft : c.fixedRemoved}</span>
+            </span>
+            <span className="shrink-0 text-body text-muted tabular">{formatRupees(p.amountPaise)}</span>
+          </li>
+        ))}
+      </ul>
+      <dl aria-live="polite" className="mt-3 space-y-1.5 rounded-guest bg-ink/[0.04] px-4 py-3 text-body">
+        <div className="flex items-baseline justify-between gap-3">
+          <dt className="text-muted">{c.tableTotal}</dt>
+          <dd className="text-ink tabular">{formatRupees(total)}</dd>
+        </div>
+        <div className="flex items-baseline justify-between gap-3">
+          <dt className="text-muted">{c.allocated}</dt>
+          <dd className="text-ink tabular">{formatRupees(allocated)}</dd>
+        </div>
+        <div className={`flex items-baseline justify-between gap-3 font-semibold ${left === 0 ? "text-[var(--state-available-text)]" : left > 0 ? "text-[var(--state-held-text)]" : "text-danger"}`}>
+          <dt className="flex items-center gap-1.5">
+            {left === 0 && <HugeiconsIcon icon={CheckmarkCircle02Icon} size={16} aria-hidden />}
+            {left < 0 ? c.overBy : c.remaining}
+          </dt>
+          <dd className="tabular">{formatRupees(Math.abs(left))}</dd>
+        </div>
+      </dl>
+      <button
+        type="button"
+        onClick={() => onSave(Object.fromEntries(custom.ids.map((id) => [id, Number(draft[id] || 0) * 100])))}
+        disabled={disabled || left !== 0 || saved}
+        aria-busy={busy || undefined}
+        className={`${saved ? outline : primary} mt-3 w-full`}
+      >
+        {busy ? <HugeiconsIcon icon={Loading03Icon} size={18} className="animate-spin" aria-hidden /> : saved ? <HugeiconsIcon icon={CheckmarkCircle02Icon} size={18} aria-hidden /> : null}
+        {saved ? c.savedAmounts : c.saveAmounts}
+      </button>
+    </section>
+  );
+}
+
+function Avatar({ name, muted = false }: { name: string | null; muted?: boolean }) {
+  const letter = name?.trim().charAt(0).toLocaleUpperCase();
+  return (
+    <span aria-hidden className={`grid size-9 shrink-0 place-items-center rounded-full text-body font-bold ${muted ? "bg-ink/[0.05] text-muted" : "bg-brand-soft text-brand-strong"}`}>
+      {letter || "·"}
+    </span>
   );
 }
 
@@ -622,12 +869,12 @@ function StatusChip({ status, c }: { status: Person["status"]; c: G8Copy }) {
 
 function Row({ label, hint, value, strong }: { label: string; hint?: string; value: string; strong?: boolean }) {
   return (
-    <div className="flex items-start justify-between gap-3">
-      <dt className={`min-w-0 ${strong ? "font-semibold text-ink" : "text-muted"}`}>
+    <div className="flex flex-wrap items-start justify-between gap-x-3">
+      <dt className={`min-w-[min(100%,9em)] flex-1 ${strong ? "font-semibold text-ink" : "text-muted"}`}>
         {label}
-        {hint && <span className="block text-caption break-words text-muted">{hint}</span>}
+        {hint && <span className="block text-caption font-normal break-words text-muted">{hint}</span>}
       </dt>
-      <dd className={`shrink-0 tabular ${strong ? "font-semibold text-ink" : "text-ink"}`}>{value}</dd>
+      <dd className={`ml-auto shrink-0 tabular ${strong ? "font-semibold text-ink" : "text-ink"}`}>{value}</dd>
     </div>
   );
 }
@@ -655,79 +902,33 @@ function ServiceChargeRow({ c, bill, value, canEdit, onToggle }: { c: G8Copy; bi
   );
 }
 
-function CustomItems({
-  data,
-  c,
-  lineName,
-  shortName,
+function MethodButton<T extends string>({
+  icon,
+  title,
+  badge,
+  help,
   disabled,
-  onAssign,
+  value,
+  onPick,
 }: {
-  data: BillScreenData;
-  c: G8Copy;
-  lineName: (l: { nameEn: string; nameHi: string | null }) => string;
-  shortName: (p: Person) => string;
-  disabled: boolean;
-  onAssign: (lineId: string, ids: string[]) => void;
+  icon: IconSvgElement;
+  title: string;
+  badge?: string;
+  help: string;
+  disabled?: boolean;
+  value: T;
+  onPick: (v: T) => unknown;
 }) {
-  const eligible = data.people.filter((p) => data.eligibleIds.includes(p.id));
-  const byId = new Map(data.people.map((p) => [p.id, p]));
-  const editing = data.bill.canEdit;
-  return (
-    <section aria-labelledby="g8-custom" className="mt-6">
-      <h2 id="g8-custom" className="font-display text-section font-bold text-ink">
-        {c.customTitle}
-      </h2>
-      <p className="mt-1 text-caption text-muted">{editing ? c.customHelp : c.customReadOnly}</p>
-      <ul className="mt-2 space-y-2.5">
-        {data.lines.map((l) => (
-          <li key={l.id} className="rounded-guest border border-line bg-surface p-3">
-            <div className="flex items-start justify-between gap-3">
-              <p className="min-w-0 text-body font-semibold break-words">
-                {lineName(l)} <span className="font-normal text-muted">× {l.qty}</span>
-              </p>
-              <span className="shrink-0 tabular text-ink">{formatRupees(l.amountPaise)}</span>
-            </div>
-            {editing && !l.settled ? (
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {eligible.map((p) => {
-                  const on = l.assignees.includes(p.id);
-                  return (
-                    <button
-                      key={p.id}
-                      type="button"
-                      aria-pressed={on}
-                      disabled={disabled}
-                      onClick={() => onAssign(l.id, on ? l.assignees.filter((x) => x !== p.id) : [...l.assignees.filter((x) => data.eligibleIds.includes(x)), p.id])}
-                      className={`min-h-11 rounded-full border px-3 text-caption font-semibold ${focusRing} ${on ? "border-ink bg-ink text-white" : "border-line bg-paper text-ink"} disabled:opacity-60`}
-                    >
-                      {on && <HugeiconsIcon icon={CheckmarkCircle02Icon} size={12} className="mr-1 inline" aria-hidden />}
-                      {shortName(p)}
-                    </button>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="mt-1 text-caption text-muted">
-                {l.settled ? `${c.settledBy} · ` : ""}
-                {l.assignees.map((id) => (byId.get(id) ? shortName(byId.get(id)!) : c.anotherGuest)).join(", ")}
-              </p>
-            )}
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
-function MethodButton<T extends string>({ icon, title, help, disabled, value, onPick }: { icon: IconSvgElement; title: string; help: string; disabled?: boolean; value: T; onPick: (v: T) => unknown }) {
   return (
     <button type="button" onClick={() => void onPick(value)} disabled={disabled} className={`flex min-h-16 w-full items-center gap-3 rounded-guest border border-line bg-surface px-4 py-3 text-left hover:border-ink/40 disabled:opacity-55 ${focusRing}`}>
       <span className="grid size-10 shrink-0 place-items-center rounded-input bg-brand-soft text-brand-strong" aria-hidden>
         <HugeiconsIcon icon={icon} size={20} />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block text-body font-semibold text-ink">{title}</span>
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-body font-semibold text-ink">
+          {title}
+          {badge && <span className="rounded-full bg-[var(--state-available-soft)] px-2 py-px text-label font-semibold text-[var(--state-available-text)]">{badge}</span>}
+        </span>
         <span className="block text-caption text-muted">{help}</span>
       </span>
       <HugeiconsIcon icon={ArrowRight01Icon} size={18} className="shrink-0 text-muted" aria-hidden />
@@ -739,6 +940,7 @@ function PaymentPanel({
   state,
   c,
   dueText,
+  amountText,
   online,
   onRetry,
   onCounter,
@@ -747,31 +949,53 @@ function PaymentPanel({
   state: PayState;
   c: G8Copy;
   dueText: string;
+  amountText: string | null;
   online: boolean;
   onRetry: () => void;
   onCounter: () => void;
   onDismiss: () => void;
 }) {
-  if (state === "ready" || state === "starting") return null;
-  if (state === "verifying" || state === "unknown") {
+  if (state === "ready") return null;
+  if (state === "starting" || state === "verifying" || state === "unknown") {
+    // Steps say only what is known: started, back from the gateway, then waiting on its answer
+    const reached = state === "starting" ? 0 : 2;
     return (
-      <div role="status" aria-live="polite" className="mt-4 flex items-start gap-3 rounded-guest border border-[var(--state-held)]/25 bg-[var(--state-held-soft)] p-4 text-[var(--state-held-text)]">
-        <HugeiconsIcon icon={Loading03Icon} size={22} className="mt-px shrink-0 animate-spin" aria-hidden />
-        <div>
-          <p className="text-body font-semibold">{c.checkingTitle}</p>
-          <p className="mt-0.5 text-caption text-ink/80">{c.checkingBody}</p>
+      <div role="status" aria-live="polite" className="mt-4 rounded-guest border border-line bg-surface px-4 py-5">
+        <div className="flex flex-col items-center text-center">
+          <span className="grid size-14 place-items-center rounded-full bg-brand-soft text-brand-strong" aria-hidden>
+            <HugeiconsIcon icon={Loading03Icon} size={28} className="animate-spin" />
+          </span>
+          <p className="mt-3 font-display text-section font-bold text-ink">{state === "starting" ? c.startingTitle : c.checkingTitle}</p>
+          {amountText && <p className="font-display text-title font-bold text-ink tabular">{amountText}</p>}
+          <p className="mt-1 text-body font-semibold text-ink">{state === "starting" ? c.dontClose : c.checkingBody}</p>
+          {state !== "starting" && <p className="mt-1 text-caption text-muted">{state === "unknown" ? c.slowNote : c.checkingNote}</p>}
         </div>
+        <ol className="mx-auto mt-4 max-w-xs space-y-2.5 text-body">
+          {c.steps.map((step, i) => {
+            const done = i < reached;
+            const active = i === reached;
+            return (
+              <li key={step} className={`flex items-center gap-2.5 ${done ? "text-ink" : active ? "font-semibold text-ink" : "text-muted"}`}>
+                <HugeiconsIcon
+                  icon={done ? CheckmarkCircle02Icon : active ? Loading03Icon : CircleIcon}
+                  size={18}
+                  className={`shrink-0 ${done ? "text-success" : active ? "animate-spin text-brand-strong" : "text-line"}`}
+                  aria-hidden
+                />
+                {step}
+              </li>
+            );
+          })}
+        </ol>
       </div>
     );
   }
   if (state === "success") {
     return (
-      <div role="status" className="mt-4 flex items-start gap-3 rounded-guest border border-success/25 bg-[var(--state-available-soft)] p-4 text-[var(--state-available-text)]">
-        <HugeiconsIcon icon={CheckmarkCircle02Icon} size={22} className="mt-px shrink-0" aria-hidden />
-        <div>
-          <p className="text-body font-semibold">{c.successTitle}</p>
-          <p className="mt-0.5 text-caption text-ink/80">{c.successBody}</p>
-        </div>
+      <div role="status" className="mt-4 flex flex-col items-center rounded-guest border border-success/25 bg-[var(--state-available-soft)] px-4 py-5 text-center text-[var(--state-available-text)]">
+        <HugeiconsIcon icon={CheckmarkCircle02Icon} size={36} aria-hidden />
+        <p className="mt-2 font-display text-section font-bold">{c.successTitle}</p>
+        <p className="mt-0.5 text-caption text-ink/80">{c.successBody}</p>
       </div>
     );
   }
@@ -809,15 +1033,19 @@ function PaymentPanel({
 
 const BANNER_TONE = {
   info: "border-[var(--state-cleaning)]/20 bg-[var(--state-cleaning-soft)] text-[var(--state-cleaning-text)]",
+  done: "border-success/20 bg-[var(--state-available-soft)] text-[var(--state-available-text)]",
   offline: "border-line bg-surface text-ink",
 } as const;
 
-function Banner({ icon, tone, title, body }: { icon: IconSvgElement; tone: keyof typeof BANNER_TONE; title: string; body: string }) {
+function Banner({ icon, tone, title, meta, body }: { icon: IconSvgElement; tone: keyof typeof BANNER_TONE; title: string; meta?: string; body: string }) {
   return (
     <div role="status" className={`mt-4 flex items-start gap-3 rounded-guest border px-4 py-3 ${BANNER_TONE[tone]}`}>
       <HugeiconsIcon icon={icon} size={20} className="mt-px shrink-0" aria-hidden />
       <div className="min-w-0">
-        <p className="text-body font-semibold">{title}</p>
+        <p className="text-body font-semibold">
+          {title}
+          {meta && <span className="font-normal"> · {meta}</span>}
+        </p>
         <p className="mt-0.5 text-caption text-ink/75">{body}</p>
       </div>
     </div>

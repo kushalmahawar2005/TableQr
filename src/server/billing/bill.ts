@@ -38,6 +38,7 @@ export async function loadBillInputs(run: Runner, scope: BillScope) {
       .select({
         id: s.orderLines.id,
         participantId: s.orderLines.participantId,
+        orderId: s.orderLines.orderId,
         nameEn: s.orderLines.nameEn,
         nameHi: s.orderLines.nameHi,
         unitPricePaise: s.orderLines.unitPricePaise,
@@ -84,7 +85,7 @@ export type BillInputs = Awaited<ReturnType<typeof loadBillInputs>>;
 export type DraftShare = { participantId: string; amountPaise: number; basis: ShareBasis; detail: PersonShare | null };
 
 /**
- * The bill is locked (split mode, assignments, service charge) from the first payment attempt
+ * The bill is locked (split mode, custom amounts, service charge) from the first payment attempt
  * that is in flight or succeeded, so nobody is charged against numbers that then move.
  */
 export function isBillLocked(inputs: Pick<BillInputs, "payments">, now = Date.now()) {
@@ -94,7 +95,7 @@ export function isBillLocked(inputs: Pick<BillInputs, "payments">, now = Date.no
 }
 
 /** Pure: turns inputs into totals and one amount per person for the chosen split mode */
-export function computeDraft(inputs: BillInputs, opts: { mode?: SplitMode; assignments?: Record<string, string[]> | null; serviceChargeWaived?: boolean } = {}) {
+export function computeDraft(inputs: BillInputs, opts: { mode?: SplitMode; customAmounts?: Record<string, number> | null; serviceChargeWaived?: boolean } = {}) {
   const { session, people, lines, discounts, bill } = inputs;
   const known = new Set(people.map((p) => p.id));
   const frozenAmount = new Map(inputs.shares.filter((sh) => sh.frozenAt && sh.participantId).map((sh) => [sh.participantId!, sh.amountPaise]));
@@ -123,25 +124,26 @@ export function computeDraft(inputs: BillInputs, opts: { mode?: SplitMode; assig
   const mode: SplitMode = opts.mode ?? bill?.splitMode ?? "my_items";
   const waived = opts.serviceChargeWaived ?? bill?.serviceChargeWaived ?? false;
   const serviceChargeBp = bill ? bill.serviceChargeBp : inputs.outlet.serviceChargeBp;
-  const assignments = opts.assignments !== undefined ? opts.assignments : (bill?.assignments ?? null);
+  const customAmounts = opts.customAmounts !== undefined ? opts.customAmounts : (bill?.customAmounts ?? null);
 
   if (people.length === 0 || !hostId) {
-    return { mode, totals: emptyTotals(), shares: [] as DraftShare[], hostId, splitLines, serviceChargeBp, serviceChargeWaived: waived, assignments };
+    const custom = { ids: [] as string[], targetPaise: 0, valid: false };
+    return { mode, totals: emptyTotals(), shares: [] as DraftShare[], hostId, splitLines, serviceChargeBp, serviceChargeWaived: waived, customAmounts, custom };
   }
-  const { totals, shares } = splitBill({
+  const { totals, shares, custom } = splitBill({
     people: people.map((p) => ({ id: p.id, removed: !!p.removedAt, frozenAmountPaise: frozenAmount.get(p.id) ?? null })),
     hostId,
     lines: splitLines,
     billDiscountPaise,
     serviceChargeBp: waived ? 0 : serviceChargeBp,
     mode,
-    assignments: mode === "custom" ? assignments : null,
+    customAmounts: mode === "custom" ? customAmounts : null,
   });
   // A removed person with nothing ordered and nothing paid has no place on the bill
   const paidBy = new Map(inputs.shares.map((sh) => [sh.participantId, sh.paidPaise]));
   const removed = new Set(people.filter((p) => p.removedAt).map((p) => p.id));
   const kept = shares.filter((sh) => !removed.has(sh.participantId) || sh.amountPaise > 0 || (paidBy.get(sh.participantId) ?? 0) > 0);
-  return { mode, totals, shares: kept as DraftShare[], hostId, splitLines, serviceChargeBp, serviceChargeWaived: waived, assignments };
+  return { mode, totals, shares: kept as DraftShare[], hostId, splitLines, serviceChargeBp, serviceChargeWaived: waived, customAmounts, custom };
 }
 
 function emptyTotals(): BillTotals {
@@ -160,7 +162,7 @@ export async function syncBill(
   tx: Tx,
   scope: BillScope,
   now: Date,
-  opts: { mode?: SplitMode; assignments?: Record<string, string[]> | null; serviceChargeWaived?: boolean; requestedAt?: Date } = {},
+  opts: { mode?: SplitMode; customAmounts?: Record<string, number> | null; serviceChargeWaived?: boolean; requestedAt?: Date } = {},
 ) {
   const inputs = await loadBillInputs(tx, scope);
   const draft = computeDraft(inputs, opts);
@@ -177,7 +179,7 @@ export async function syncBill(
     totalPaise: t.totalPaise,
     taxBreakup: t.taxBreakup,
     serviceChargeWaived: draft.serviceChargeWaived,
-    assignments: draft.assignments,
+    customAmounts: draft.customAmounts,
     ...(opts.requestedAt ? { requestedAt: opts.requestedAt } : {}),
   };
   if (inputs.bill) {
