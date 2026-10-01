@@ -33,6 +33,8 @@ async function sessionParticipantIds(ctx: GuestContext) {
         eq(s.participants.tenantId, ctx.tenantId),
         eq(s.participants.sessionId, ctx.sessionId),
         isNull(s.participants.removedAt),
+        // Paid and left: later orders exclude them, shared items included (PS 3.6)
+        isNull(s.participants.paidOutAt),
       ),
     );
   return rows.map((r) => r.id);

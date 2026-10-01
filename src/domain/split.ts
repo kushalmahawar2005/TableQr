@@ -183,3 +183,129 @@ export function splitEqually(totalPaise: number, participantIds: string[]): { pa
 export function customRemaining(totalPaise: number, amounts: { participantId: string; amountPaise: number }[]): number {
   return totalPaise - amounts.reduce((s, a) => s + a.amountPaise, 0);
 }
+
+// ---- The whole table bill (G8) ----
+
+export type SplitMode = "my_items" | "equal" | "custom";
+
+export type BillPerson = {
+  id: string;
+  /** Removed by the host: keeps what they ordered, never handed to someone else (G7/G8 decision) */
+  removed: boolean;
+  /** Paid and left: this amount is final; later changes never touch it */
+  frozenAmountPaise: number | null;
+};
+
+export type ShareBasis = "items" | "equal" | "frozen";
+
+export type TableShare = {
+  participantId: string;
+  basis: ShareBasis;
+  amountPaise: number;
+  /** Item breakdown when the share comes from items (My items, Custom, or a removed person) */
+  detail: PersonShare | null;
+};
+
+export type BillSplitInput = {
+  /** Everyone who ever sat at the table, in joining order */
+  people: BillPerson[];
+  /** Absorbs the difference between rounded shares and the rounded bill */
+  hostId: string | null;
+  lines: SplitLine[];
+  billDiscountPaise?: number;
+  serviceChargeBp?: number;
+  mode: SplitMode;
+  /** Custom split: line id to the people the host assigned it to */
+  assignments?: Record<string, string[]> | null;
+};
+
+/**
+ * Splits the table bill. Frozen shares stay exactly as they were; everything else (the rounded
+ * bill minus frozen shares) is divided by the chosen mode:
+ * - My items: own lines plus an equal part of shared lines (PS 3.6 calculation rules)
+ * - Custom: the same, after the host's per-line assignments
+ * - Equal: removed people keep their own items; the rest is divided equally among people still at the table
+ * Shares always add up exactly to the rounded bill.
+ */
+export function splitBill(input: BillSplitInput): { totals: BillTotals; shares: TableShare[] } {
+  const totals = billTotals({ lines: input.lines, billDiscountPaise: input.billDiscountPaise, serviceChargeBp: input.serviceChargeBp });
+  const known = new Set(input.people.map((p) => p.id));
+  const frozen = new Set(input.people.filter((p) => p.frozenAmountPaise !== null).map((p) => p.id));
+  const open = input.people.filter((p) => !frozen.has(p.id));
+  const eligible = open.filter((p) => !p.removed);
+
+  const lines =
+    input.mode === "custom" && input.assignments
+      ? input.lines.map((l) => {
+          const to = input.assignments?.[l.id];
+          if (!to?.length) return l;
+          return to.length === 1 ? { ...l, ownerId: to[0], sharedWith: null } : { ...l, sharedWith: to };
+        })
+      : input.lines;
+
+  const portions = lines.flatMap(portionsOf);
+  for (const p of portions) {
+    if (!known.has(p.participantId)) throw new Error(`Line assigned to unknown participant ${p.participantId}`);
+  }
+  const ids = input.people.map((p) => p.id);
+  const sum = (id: string, pred: (p: Portion) => boolean) =>
+    portions.filter((p) => p.participantId === id && pred(p)).reduce((s, p) => s + p.amountPaise, 0);
+  const subtotals = ids.map((id) => sum(id, () => true));
+  const discounts = proportional(totals.discountPaise, subtotals);
+  const serviceCharges = proportional(totals.serviceChargePaise, subtotals);
+  const factor = totals.subtotalPaise === 0 ? 0 : (totals.subtotalPaise - totals.discountPaise) / totals.subtotalPaise;
+
+  const itemized = new Map<string, PersonShare>();
+  ids.forEach((participantId, i) => {
+    const taxPaise = roundHalfUp(
+      portions.filter((p) => p.participantId === participantId).reduce((s, p) => s + (p.amountPaise * factor * p.taxRateBp) / 10000, 0),
+    );
+    const exactPaise = subtotals[i] - discounts[i] + serviceCharges[i] + taxPaise;
+    const amountPaise = roundToRupee(exactPaise);
+    itemized.set(participantId, {
+      participantId,
+      ownItemsPaise: sum(participantId, (p) => !p.shared),
+      sharedItemsPaise: sum(participantId, (p) => p.shared),
+      subtotalPaise: subtotals[i],
+      discountPaise: discounts[i],
+      serviceChargePaise: serviceCharges[i],
+      taxPaise,
+      exactPaise,
+      roundOffPaise: amountPaise - exactPaise,
+      amountPaise,
+    });
+  });
+
+  const frozenTotal = input.people.reduce((s, p) => s + (p.frozenAmountPaise ?? 0), 0);
+  const remainder = totals.totalPaise - frozenTotal;
+  const shares = new Map<string, TableShare>();
+  for (const p of input.people) {
+    if (p.frozenAmountPaise !== null) shares.set(p.id, { participantId: p.id, basis: "frozen", amountPaise: p.frozenAmountPaise, detail: null });
+  }
+
+  if (input.mode === "equal" && eligible.length > 0) {
+    let rest = remainder;
+    for (const p of open.filter((x) => x.removed)) {
+      const d = itemized.get(p.id)!;
+      shares.set(p.id, { participantId: p.id, basis: "items", amountPaise: d.amountPaise, detail: { ...d } });
+      rest -= d.amountPaise;
+    }
+    for (const e of splitEqually(Math.max(0, rest), eligible.map((p) => p.id))) {
+      shares.set(e.participantId, { participantId: e.participantId, basis: "equal", amountPaise: e.amountPaise, detail: null });
+    }
+  } else {
+    for (const p of open) {
+      const d = itemized.get(p.id)!;
+      shares.set(p.id, { participantId: p.id, basis: "items", amountPaise: d.amountPaise, detail: { ...d } });
+    }
+    // Rounded shares must add up to the rounded bill; the host carries any difference
+    const diff = remainder - open.reduce((s, p) => s + shares.get(p.id)!.amountPaise, 0);
+    const adjuster = eligible.find((p) => p.id === input.hostId) ?? eligible[0] ?? open[0];
+    if (diff !== 0 && adjuster) {
+      const share = shares.get(adjuster.id)!;
+      share.amountPaise += diff;
+      if (share.detail) share.detail = { ...share.detail, amountPaise: share.amountPaise, roundOffPaise: share.detail.roundOffPaise + diff };
+    }
+  }
+  return { totals, shares: input.people.map((p) => shares.get(p.id)!) };
+}

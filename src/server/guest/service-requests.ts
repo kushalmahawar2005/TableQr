@@ -15,6 +15,8 @@ import type { GuestContext } from "./context";
 export const SERVICE_COOLDOWN_MS = 2 * 60_000;
 export const SERVICE_ESCALATION_MS = 5 * 60_000;
 export type ServiceKind = typeof s.serviceRequestKinds[number];
+/** Also stored: the guest's choice on the bill to pay at the counter (G8) */
+export type StoredServiceKind = typeof s.storedServiceRequestKinds[number];
 
 /** One cooldown per table visit and kind, shared by every phone at the table. */
 export async function getServiceRequests(ctx: GuestContext) {
@@ -34,8 +36,8 @@ export async function getServiceRequests(ctx: GuestContext) {
   });
 }
 
-export async function createServiceRequest(ctx: GuestContext, kind: ServiceKind, requestId: string, now = new Date()) {
-  if (!s.serviceRequestKinds.includes(kind) || typeof requestId !== "string" || !/^[a-zA-Z0-9_-]{8,64}$/.test(requestId)) {
+export async function createServiceRequest(ctx: GuestContext, kind: StoredServiceKind, requestId: string, now = new Date()) {
+  if (!s.storedServiceRequestKinds.includes(kind) || typeof requestId !== "string" || !/^[a-zA-Z0-9_-]{8,64}$/.test(requestId)) {
     throw new AppError("invalid_state", "Choose a valid service request.");
   }
   const result = await db.transaction(async (tx) => {
@@ -45,6 +47,9 @@ export async function createServiceRequest(ctx: GuestContext, kind: ServiceKind,
       .where(and(eq(s.participants.tenantId, ctx.tenantId), eq(s.participants.sessionId, ctx.sessionId), eq(s.participants.id, ctx.participantId), isNull(s.participants.removedAt)))
       .for("update");
     if (!me || me.paidOutAt) throw new AppError("session_expired", "You have already left this table.");
+    if (kind === "pay_at_counter" && session.status !== "bill_requested") {
+      throw new AppError("invalid_state", "Request the bill first.", { reason: "not_requested" });
+    }
     if (kind === "request_bill" && session.hostParticipantId !== ctx.participantId) {
       throw new AppError("invalid_state", "Only the table host can request the bill.", { reason: "host_only" });
     }

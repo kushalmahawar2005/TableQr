@@ -31,15 +31,15 @@ const buttonWith = (html: string, text: string) => {
 };
 
 describe("dining navigation", () => {
-  it("shows exactly Menu, Orders and Table, with Table active on G7 and no Bill", () => {
+  it("shows exactly Menu, Orders, Table and Bill, with Table active on G7", () => {
     const html = renderToStaticMarkup(createElement(DiningNav, { tablePath: "/r/SRJ01/t/k7Qm", active: "table", lang: "en" }));
-    const links = [...html.matchAll(/<a([^>]*)>([^<]*)</g)].map((m) => [m[2], /aria-current="page"/.test(m[1]), /href="([^"]+)"/.exec(m[1])?.[1]]);
+    const links = [...html.matchAll(/<a([^>]*)>(.*?)<\/a>/g)].map((m) => [m[2].replace(/<[^>]+>/g, ""), /aria-current="page"/.test(m[1]), /href="([^"]+)"/.exec(m[1])?.[1]]);
     expect(links).toEqual([
       ["Menu", false, "/r/SRJ01/t/k7Qm/menu"],
       ["Orders", false, "/r/SRJ01/t/k7Qm/orders"],
       ["Table", true, "/r/SRJ01/t/k7Qm/table"],
+      ["Bill", false, "/r/SRJ01/t/k7Qm/bill"],
     ]);
-    expect(html).not.toMatch(/Bill/);
     const hi = renderToStaticMarkup(createElement(DiningNav, { tablePath: "/x", active: "menu", lang: "hi" }));
     expect(hi).toContain("टेबल");
   });

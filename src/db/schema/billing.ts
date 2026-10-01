@@ -1,4 +1,5 @@
 import {
+  boolean,
   index,
   int,
   json,
@@ -35,6 +36,14 @@ export const bills = mysqlTable(
     totalPaise: int("total_paise").notNull().default(0),
     /** Tax by rate, e.g. { "500": 9950 } */
     taxBreakup: json("tax_breakup").$type<Record<string, number>>(),
+    /** Service charge rate for this bill, copied from the outlet when the bill is first made */
+    serviceChargeBp: int("service_charge_bp").notNull().default(0),
+    /** The host removed the optional service charge before anyone paid */
+    serviceChargeWaived: boolean("service_charge_waived").notNull().default(false),
+    /** Custom split: order line id to the people it is assigned to, set by the host */
+    assignments: json("assignments").$type<Record<string, string[]>>(),
+    /** Set each time the bill is reopened for more ordering; shown to guests as "Your bill changed" */
+    reopenedAt: at("reopened_at"),
     status: mysqlEnum("status", ["open", "locked", "paid", "cancelled"])
       .notNull()
       .default("open"),
@@ -68,6 +77,8 @@ export const billShares = mysqlTable(
     status: mysqlEnum("status", ["unpaid", "paid"]).notNull().default("unpaid"),
     /** Pay for others: who actually paid this share */
     paidByParticipantId: ref("paid_by_participant_id"),
+    /** Paid and left: the amount is fixed from here on and later orders exclude this person */
+    frozenAt: at("frozen_at"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -107,6 +118,12 @@ export const payments = mysqlTable(
       .notNull()
       .default("initiated"),
     failureReason: varchar("failure_reason", { length: 200 }),
+    /** The phone's id for one Pay tap; a retry with it returns this same attempt */
+    clientRequestId: varchar("client_request_id", { length: 64 }),
+    /** Gateway's id for the captured payment (e.g. pay_...), needed for refunds */
+    gatewayPaymentId: varchar("gateway_payment_id", { length: 100 }),
+    /** Last time the gateway was asked for this attempt's status */
+    checkedAt: at("checked_at"),
     takenByUserId: ref("taken_by_user_id"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -115,6 +132,7 @@ export const payments = mysqlTable(
     index("payments_outlet_created_idx").on(t.outletId, t.createdAt),
     index("payments_status_idx").on(t.status, t.updatedAt),
     uniqueIndex("payments_gateway_ref_uq").on(t.channel, t.gatewayRef),
+    uniqueIndex("payments_request_uq").on(t.tenantId, t.billId, t.clientRequestId),
     tenantKey("payments", t),
     sameTenant("fk_payments_outlet", t, t.outletId, outlets),
     sameTenant("fk_payments_bill", t, t.billId, bills),
@@ -129,15 +147,21 @@ export const refunds = mysqlTable(
     id: id(),
     tenantId: tenantId(),
     paymentId: ref("payment_id").notNull(),
+    /** The share this money came back from, when a bill change made it overpaid */
+    shareId: ref("share_id"),
     amountPaise: int("amount_paise").notNull(),
     reason: varchar("reason", { length: 200 }).notNull(),
     byUserId: ref("by_user_id"),
     status: mysqlEnum("status", ["pending", "success", "failed"]).notNull().default("pending"),
     gatewayRef: varchar("gateway_ref", { length: 100 }),
     createdAt: createdAt(),
+    /** Set only when the gateway (or staff, for cash) confirms the money went back */
+    completedAt: at("completed_at"),
   },
   (t) => [
+    index("refunds_payment_idx").on(t.tenantId, t.paymentId),
     sameTenant("fk_refunds_payment", t, t.paymentId, payments),
+    sameTenant("fk_refunds_share", t, t.shareId, billShares),
     sameTenant("fk_refunds_by", t, t.byUserId, users),
   ],
 );
@@ -244,12 +268,43 @@ export const feedback = mysqlTable(
     participantId: ref("participant_id"),
     rating: tinyint("rating").notNull(),
     comment: varchar("comment", { length: 500 }),
+    /** Two stars or fewer: the manager should recover this guest now (PS 3.8) */
+    needsRecovery: boolean("needs_recovery").notNull().default(false),
+    recoveredAt: at("recovered_at"),
     createdAt: createdAt(),
   },
   (t) => [
     index("feedback_outlet_created_idx").on(t.outletId, t.createdAt),
+    uniqueIndex("feedback_session_participant_uq").on(t.sessionId, t.participantId),
     sameTenant("fk_feedback_outlet", t, t.outletId, outlets),
     sameTenant("fk_feedback_session", t, t.sessionId, tableSessions),
     sameTenant("fk_feedback_participant", t, t.participantId, participants),
+  ],
+);
+
+export const receiptChannels = ["whatsapp", "sms", "email"] as const;
+
+/** Every receipt we tried to send, so nobody is told a receipt went out when it did not */
+export const receiptDeliveries = mysqlTable(
+  "receipt_deliveries",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    outletId: ref("outlet_id").notNull(),
+    billId: ref("bill_id").notNull(),
+    participantId: ref("participant_id"),
+    channel: mysqlEnum("channel", receiptChannels).notNull(),
+    /** Masked, e.g. +91 98xxxxxx10 */
+    destination: varchar("destination", { length: 120 }).notNull(),
+    status: mysqlEnum("status", ["queued", "sent", "failed"]).notNull().default("queued"),
+    providerRef: varchar("provider_ref", { length: 100 }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index("receipt_deliveries_bill_idx").on(t.tenantId, t.billId),
+    sameTenant("fk_receipt_deliveries_outlet", t, t.outletId, outlets),
+    sameTenant("fk_receipt_deliveries_bill", t, t.billId, bills),
+    sameTenant("fk_receipt_deliveries_participant", t, t.participantId, participants),
   ],
 );

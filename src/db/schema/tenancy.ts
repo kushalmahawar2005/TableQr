@@ -107,6 +107,12 @@ export const outlets = mysqlTable(
     newSessionCapPaise: int("new_session_cap_paise").notNull().default(300000),
     soldOutDisplay: mysqlEnum("sold_out_display", ["hide", "grey"]).notNull().default("grey"),
     idleCloseMinutes: int("idle_close_minutes").notNull().default(240),
+    /** Optional service charge in basis points of the discounted subtotal; 0 means off (PS 6.1) */
+    serviceChargeBp: int("service_charge_bp").notNull().default(0),
+    /** Tip presets offered at payment, basis points; null means the TableQR default (5%, 10%) */
+    tipPresetsBp: json("tip_presets_bp").$type<number[]>(),
+    /** Public review page shown to every guest after paying; null hides the link (PS 3.8) */
+    reviewUrl: varchar("review_url", { length: 500 }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

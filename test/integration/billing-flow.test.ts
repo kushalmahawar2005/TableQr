@@ -3,10 +3,11 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db as appDb } from "@/db";
 import * as s from "@/db/schema";
 import { financialYear } from "@/domain/invoice";
-import { getBillView } from "@/server/billing/bill";
-import { confirmPayment, requestBill, setSplitMode, settleAtCounter, startPayment } from "@/server/billing/payments";
+import { computeDraft, loadBillInputs } from "@/server/billing/bill";
+import { confirmPayment, requestBill, setLineAssignment, setSplitMode, settleAtCounter, startPayment } from "@/server/billing/payments";
 import { AppError } from "@/server/errors";
 import { addCartLine } from "@/server/guest/cart";
+import { getBillScreen } from "@/server/guest/bill-screen";
 import { getGuestContext, type GuestContext } from "@/server/guest/context";
 import { placeOrder } from "@/server/guest/order";
 import { startOrJoinTable } from "@/server/guest/session";
@@ -29,16 +30,19 @@ async function failsWith(p: Promise<unknown>, code: AppError["code"]) {
 }
 
 const scope = () => ({ tenantId: g.A.tenantId, outletId: g.A.outletId, sessionId: g.A.sessionId });
-const view = (who: keyof typeof g) => getBillView({ ...scope(), participantId: g[who].participantId });
+const view = (who: keyof typeof g) => getBillScreen("SRJ01", "k7Qm", `bill-${who}`);
 const amounts = async () => (await view("A")).people.map((p) => p.amountPaise / 100);
+let n = 0;
+const rid = () => `bill-req-${++n}-${Date.now()}`;
+type PayOpts = Omit<Parameters<typeof startPayment>[1], "requestId">;
 
 /** Pays through the mock gateway the way the webhook would confirm it */
-async function payOnline(who: keyof typeof g, opts: Parameters<typeof startPayment>[1] = { method: "upi" }, outcome: "success" | "failed" = "success") {
-  const start = await startPayment(g[who], opts);
-  mockGateway.settle(start.checkout.orderRef, outcome);
-  const status = await mockGateway.fetchStatus(start.checkout.orderRef);
+async function payOnline(who: keyof typeof g, opts: PayOpts = { method: "upi" }, outcome: "success" | "failed" = "success") {
+  const start = await startPayment(g[who], { ...opts, requestId: rid() });
+  mockGateway.settle(start.gatewayRef!, outcome);
+  const status = await mockGateway.fetchStatus(start.gatewayRef!);
   const res = await confirmPayment(start.paymentId, {
-    gatewayRef: start.checkout.orderRef,
+    gatewayRef: start.gatewayRef!,
     status: status.status === "success" ? "success" : "failed",
     amountPaise: status.amountPaise,
   });
@@ -83,35 +87,21 @@ afterAll(async () => {
 });
 
 describe("the bill (G8)", () => {
-  it("matches the spec's worked example to the paise", async () => {
+  it("before the bill is requested: a read-only preview that matches the spec's worked example to the paise", async () => {
     const bill = await view("A");
-    expect(bill.totals).toMatchObject({ subtotalPaise: 199000, taxPaise: 9950, roundOffPaise: 50, totalPaise: 209000 });
+    expect(bill.bill.totals).toMatchObject({ subtotalPaise: 199000, taxPaise: 9950, roundOffPaise: 50, totalPaise: 209000 });
     expect(await amounts()).toEqual([541, 467, 620, 462]);
     expect(bill.mine).toMatchObject({
-      ownItems: ["Veg Biryani", "Masala Lassi"],
-      sharedItems: ["Paneer Tikka", "Masala Papad"],
-      detail: { ownItemsPaise: 39000, sharedItemsPaise: 12500, subtotalPaise: 51500, taxPaise: 2575, roundOffPaise: 25, amountPaise: 54100 },
+      ownItems: [{ en: "Veg Biryani" }, { en: "Masala Lassi" }],
+      sharedItems: [{ en: "Paneer Tikka" }, { en: "Masala Papad" }],
+      detail: { ownItemsPaise: 39000, sharedItemsPaise: 12500, subtotalPaise: 51500, taxPaise: 2575, roundOffPaise: 25 },
+      amountPaise: 54100,
     });
-    expect(bill.canChangeMode).toBe(true);
-    expect((await view("B")).canChangeMode).toBe(false); // only the host
-  });
-
-  it("lets the host switch to an equal split and back", async () => {
-    await setSplitMode(g.A, "equal");
-    expect(await amounts()).toEqual([523, 523, 522, 522]);
-    await failsWith(setSplitMode(g.B, "my_items"), "invalid_state");
-    await setSplitMode(g.A, "my_items");
-    expect(await amounts()).toEqual([541, 467, 620, 462]);
-  });
-
-  it("accepts custom amounts only when they add up to the bill", async () => {
-    const custom = (a: number, b: number, c: number, d: number) =>
-      [g.A, g.B, g.C, g.D].map((x, i) => ({ participantId: x.participantId, amountPaise: [a, b, c, d][i] * 100 }));
-    const err = await failsWith(setSplitMode(g.A, "custom", custom(1000, 500, 500, 0)), "invalid_state");
-    expect(err.message).toBe("The amounts must add up to the bill. Still to assign: INR 90.");
-    await setSplitMode(g.A, "custom", custom(1090, 500, 500, 0));
-    expect(await amounts()).toEqual([1090, 500, 500, 0]);
-    await setSplitMode(g.A, "my_items");
+    expect(bill.session.requested).toBe(false);
+    expect(bill.bill.canEdit).toBe(false);
+    // No paying and no split changes during normal ordering
+    await failsWith(startPayment(g.A, { method: "upi", requestId: rid() }), "invalid_state");
+    await failsWith(setSplitMode(g.A, "equal"), "invalid_state");
   });
 
   it("request bill pauses ordering and marks the table", async () => {
@@ -121,6 +111,37 @@ describe("the bill (G8)", () => {
     // Carts freeze too (G3 decision 4); browsing and viewing stay open
     await failsWith(addCartLine(g.D, { itemId: env.demo.itemIds["Cola"], qty: 1 }), "table_settling");
     await failsWith(placeOrder(g.D), "table_settling");
+    expect((await view("A")).bill.canEdit).toBe(true);
+    expect((await view("B")).bill.canEdit).toBe(false); // only the host
+  });
+
+  it("lets the host switch to an equal split and back; rounding adds up exactly", async () => {
+    await setSplitMode(g.A, "equal");
+    expect(await amounts()).toEqual([523, 523, 522, 522]);
+    await failsWith(setSplitMode(g.B, "my_items"), "invalid_state");
+    await setSplitMode(g.A, "my_items");
+    expect(await amounts()).toEqual([541, 467, 620, 462]);
+  });
+
+  it("custom split is item based: the host assigns lines; tax and round-off stay server-derived", async () => {
+    await setSplitMode(g.A, "custom");
+    // Starts from who ordered or shares each line, so nothing moves until the host moves it
+    expect(await amounts()).toEqual([541, 467, 620, 462]);
+    const lines = (await view("A")).lines;
+    const tikka = lines.find((l) => l.nameEn === "Paneer Tikka")!;
+    const cola = lines.find((l) => l.nameEn === "Cola")!;
+    await setLineAssignment(g.A, tikka.id, [g.A.participantId]);
+    await setLineAssignment(g.A, cola.id, [g.C.participantId, g.D.participantId]);
+    const after = await view("A");
+    expect(after.bill.totals.totalPaise).toBe(209000);
+    expect(after.people.reduce((n, p) => n + p.amountPaise, 0)).toBe(209000);
+    // Aarav 390 + 320 + 45 = 755 +5% = 792.75 -> 793; Chirag 440 + 35 (half Cola) = 475 -> 498.75 -> 499; Divya 395 -> 415
+    expect(after.people.map((p) => p.amountPaise / 100)).toEqual([793, 383, 499, 415]);
+    await failsWith(setLineAssignment(g.A, cola.id, []), "invalid_state");
+    await failsWith(setLineAssignment(g.A, cola.id, ["not-a-person"]), "invalid_state");
+    await failsWith(setLineAssignment(g.B, cola.id, [g.B.participantId]), "invalid_state");
+    await setSplitMode(g.A, "my_items");
+    expect(await amounts()).toEqual([541, 467, 620, 462]);
   });
 });
 
@@ -132,6 +153,7 @@ describe("paying", () => {
     const bhavna = (await view("A")).people.find((p) => p.name === "Bhavna")!;
     expect(bhavna).toMatchObject({ status: "paid", duePaise: 0 });
     await failsWith(setSplitMode(g.A, "equal"), "invalid_state");
+    expect((await view("A")).bill).toMatchObject({ locked: true, canEdit: false });
   });
 
   it("confirming the same payment twice changes nothing the second time", async () => {
@@ -146,7 +168,8 @@ describe("paying", () => {
     const { start } = await payOnline("A", { method: "upi", forParticipantIds: [g.A.participantId, g.D.participantId], tipPaise: 5000 });
     expect(start).toMatchObject({ amountPaise: 54100 + 46200, tipPaise: 5000, totalPaise: 105300 });
     const divya = (await view("D")).people.find((p) => p.isMe)!;
-    expect(divya).toMatchObject({ status: "paid", paidBy: "Aarav" });
+    // The tip is Aarav's own: Divya's share does not change
+    expect(divya).toMatchObject({ status: "paid", paidBy: "Aarav", amountPaise: 46200 });
   });
 
   it("a failed payment leaves the share unpaid and the table open", async () => {
@@ -156,15 +179,18 @@ describe("paying", () => {
   });
 
   it("rejects a gateway amount that does not match", async () => {
-    const start = await startPayment(g.C, { method: "upi" });
-    const res = await confirmPayment(start.paymentId, { gatewayRef: start.checkout.orderRef, status: "success", amountPaise: 100 });
+    const start = await startPayment(g.C, { method: "upi", requestId: rid() });
+    const res = await confirmPayment(start.paymentId, { gatewayRef: start.gatewayRef!, status: "success", amountPaise: 100 });
     expect(res.status).toBe("failed");
   });
 
   it("blocks a second person paying a share someone is already paying", async () => {
-    await startPayment(g.C, { method: "upi" }); // Chirag is mid-checkout
-    await failsWith(startPayment(g.B, { method: "upi", forParticipantIds: [g.C.participantId] }), "invalid_state");
-    await startPayment(g.C, { method: "upi" }); // Chirag retrying replaces his own attempt
+    const tap = rid();
+    const first = await startPayment(g.C, { method: "upi", requestId: tap }); // Chirag is mid-checkout
+    // A double tap or retry of the same request returns the same attempt
+    expect(await startPayment(g.C, { method: "upi", requestId: tap })).toMatchObject({ paymentId: first.paymentId, gatewayRef: first.gatewayRef, replayed: true });
+    await failsWith(startPayment(g.B, { method: "upi", forParticipantIds: [g.C.participantId], requestId: rid() }), "invalid_state");
+    await startPayment(g.C, { method: "upi", requestId: rid() }); // Chirag retrying replaces his own attempt
   });
 
   it("the cashier settles the last share in cash; the bill closes with a GST invoice and the table frees", async () => {
@@ -180,6 +206,7 @@ describe("paying", () => {
       table: "T12",
       totalPaise: 209000,
       totalInWords: "Rupees Two Thousand Ninety Only",
+      docType: "tax_invoice",
       seller: { gstin: "08AABCS1234F1Z5", fssai: "12225018000123" },
       paymentModes: { upi: 46700 + 100300, cash: 62000 },
     });
@@ -229,9 +256,10 @@ describe("simultaneous final payments", () => {
       await placeOrder(ctx);
       guests.push(ctx);
     }
-    const starts = await Promise.all(guests.map((ctx) => startPayment(ctx, { method: "upi" })));
+    await requestBill({ tenantId: guests[0].tenantId, outletId: guests[0].outletId, sessionId: guests[0].sessionId });
+    const starts = await Promise.all(guests.map((ctx) => startPayment(ctx, { method: "upi", requestId: rid() })));
     const results = await Promise.all(
-      starts.map((st) => confirmPayment(st.paymentId, { gatewayRef: st.checkout.orderRef, status: "success", amountPaise: st.totalPaise })),
+      starts.map((st) => confirmPayment(st.paymentId, { gatewayRef: st.gatewayRef!, status: "success", amountPaise: st.totalPaise })),
     );
     expect(results.filter((r) => r.billPaid)).toHaveLength(1);
     const [bill] = await env.db.select().from(s.bills).where(eq(s.bills.sessionId, guests[0].sessionId));
@@ -242,10 +270,10 @@ describe("simultaneous final payments", () => {
 });
 
 describe("speed", () => {
-  it("builds the G8 bill view fast enough to refresh on every event", async () => {
+  it("computes the bill fast enough to refresh on every event", async () => {
     const runs = 50;
     const t0 = performance.now();
-    for (let i = 0; i < runs; i++) await view("A");
+    for (let i = 0; i < runs; i++) computeDraft(await loadBillInputs(appDb, scope()));
     const avgMs = (performance.now() - t0) / runs;
     console.log(`getBillView average: ${avgMs.toFixed(2)} ms`);
     expect(avgMs).toBeLessThan(25);
@@ -256,6 +284,6 @@ describe("billing isolation", () => {
   it("another restaurant cannot see or settle this table's bill", async () => {
     const nukkad: StaffContext = { tenantId: env.other.tenantId, outletId: env.other.outletId, userId: null };
     await failsWith(settleAtCounter(nukkad, { sessionId: g.A.sessionId, method: "cash" }), "not_found");
-    await failsWith(getBillView({ tenantId: env.other.tenantId, outletId: env.other.outletId, sessionId: g.A.sessionId, participantId: g.A.participantId }), "not_found");
+    await failsWith(loadBillInputs(appDb, { tenantId: env.other.tenantId, outletId: env.other.outletId, sessionId: g.A.sessionId }), "not_found");
   });
 });
