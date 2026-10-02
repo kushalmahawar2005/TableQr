@@ -101,6 +101,7 @@ export async function getFloor(staff: Staff, now = new Date()) {
     startAt: r.startAt.getTime(),
     status: r.status,
     held: r.status === "requested" && !!r.holdExpiresAt,
+    holdUntil: r.status === "requested" ? (r.holdExpiresAt?.getTime() ?? null) : null,
     confirmed: r.status === "confirmed" || r.status === "arrived",
     noReply: r.status === "reminded",
     lateMinutes: r.status !== "arrived" && now > r.startAt ? Math.floor((now.getTime() - r.startAt.getTime()) / 60_000) : 0,

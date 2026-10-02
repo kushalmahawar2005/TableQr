@@ -15,7 +15,7 @@ import { onPublish, type RealtimeEvent } from "@/server/realtime/publish";
 import { resolveStaff, signInStaff, signOutStaff, type StaffSession } from "@/server/staff/auth";
 import { getOnlineAvailability, setOnlineBookingsPaused, setSlotCapacity } from "@/server/floor/pacing";
 import { getFloor, getTableDetail } from "@/server/floor/read";
-import { checkInReservation, createReservation, markNoShow, reassignReservation, seatReservation } from "@/server/floor/reservations";
+import { checkInReservation, confirmReservation, createReservation, markNoShow, reassignReservation, seatReservation } from "@/server/floor/reservations";
 import { reconcileFloor } from "@/server/floor/sync";
 import {
   blockTable,
@@ -293,6 +293,47 @@ describe("reservations, arrivals and extend", () => {
   });
 });
 
+describe("held vs reserved, and multi-table bookings", () => {
+  it("a held online booking cannot be checked in or seated until it is confirmed", async () => {
+    const now = new Date();
+    const [r] = await env.db
+      .insert(s.reservations)
+      .values({ tenantId: host.tenantId, outletId: host.outletId, name: "Online", partySize: 2, startAt: new Date(now.getTime() + 60 * MIN), expectedEndAt: new Date(now.getTime() + 135 * MIN), status: "requested", source: "online", holdExpiresAt: new Date(now.getTime() + 8 * MIN), createdAt: now })
+      .$returningId();
+    await env.db.insert(s.reservationTables).values({ tenantId: host.tenantId, reservationId: r.id, tableId: T("B4") });
+    await reconcileFloor({ tenantId: host.tenantId, outletId: host.outletId }, now);
+    expect(await stateOf("B4")).toBe("held");
+    const tile = (await getFloor(host, now)).tables.find((t) => t.code === "B4")!;
+    expect(tile.booking).toMatchObject({ held: true, holdUntil: now.getTime() + 8 * MIN });
+    await failsWith(checkInReservation(host, r.id, now), "conflict", "held");
+    await failsWith(seatReservation(host, { reservationId: r.id }, now), "conflict", "held");
+    await confirmReservation(host, r.id, now);
+    await checkInReservation(host, r.id, now);
+  });
+
+  it("seats a booking on all of its combined tables, never on one part", async () => {
+    const now = new Date();
+    const { reservationId } = await createReservation(host, { name: "Das", partySize: 6, startAt: now.getTime() + 10 * MIN, tableIds: [T("T11"), T("T12")] }, now).catch(async () => {
+      // T11/T12 may hold an earlier booking from this file; use the other pair
+      return createReservation(host, { name: "Das", partySize: 6, startAt: now.getTime() + 10 * MIN, tableIds: [T("T5"), T("T6")] }, now);
+    });
+    const tables = (await env.db.select().from(s.reservationTables).where(eq(s.reservationTables.reservationId, reservationId))).map((t) => t.tableId);
+    await failsWith(seatReservation(host, { reservationId, tableIds: [tables[0]] }, now), "conflict", "partial_tables");
+    const { sessionId } = await seatReservation(host, { reservationId }, now);
+    const live = await env.db.select().from(s.sessionTables).where(and(eq(s.sessionTables.sessionId, sessionId), isNotNull(s.sessionTables.activeKey)));
+    expect(live.map((l) => l.tableId).sort()).toEqual([...tables].sort());
+  });
+
+  it("lets a host pause and resume online bookings, but not open extra covers", async () => {
+    const now = new Date();
+    await setOnlineBookingsPaused(host, { paused: true }, now);
+    expect((await getFloor(host, now)).pacing.paused).toBe(true);
+    await setOnlineBookingsPaused(host, { paused: false }, now);
+    expect((await getFloor(host, now)).pacing.paused).toBe(false);
+    await failsWith(setSlotCapacity(host, { slotStartAt: Date.parse("2026-10-02T14:30:00Z"), extraCovers: 10 }), "forbidden");
+  });
+});
+
 describe("waitlist", () => {
   it("keeps queue order, reorders, notifies, skips and seats once even when two hosts race", async () => {
     const a = await addToWaitlist(host, { name: "Gupta", partySize: 2, quotedMinutes: 15 });
@@ -333,7 +374,7 @@ describe("pacing and online booking", () => {
     expect(await getOnlineAvailability(scope, { date, partySize: 2 }, now)).toEqual({ paused: true, slots: [] });
     expect((await getFloor(host, now)).pacing.paused).toBe(true);
     await setOnlineBookingsPaused(host, { paused: false }, now);
-    expect(await auditCount("booking.pause")).toBe(1);
+    expect(await auditCount("booking.pause")).toBe(2);
   });
 });
 

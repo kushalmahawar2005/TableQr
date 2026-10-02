@@ -105,6 +105,65 @@ describe("S1 arrivals, waitlist and tonight", () => {
   });
 });
 
+describe("S1 final polish", () => {
+  it("summarises all eight table states with counts from the floor", () => {
+    const html = floor("dinner");
+    const data = caseOf("dinner").data;
+    const n = (st: string) => data.tables.filter((t) => t.state === st).length;
+    const summary = html.slice(html.indexOf('aria-label="Legend"'), html.indexOf("</ul>", html.indexOf('aria-label="Legend"')));
+    for (const [st, label] of [["available", "Free"], ["held", "Held"], ["reserved", "Reserved"], ["seated", "Seated"], ["bill_requested", "Bill"], ["paid", "Paid"], ["needs_cleaning", "Cleaning"], ["blocked", "Blocked"]]) {
+      expect(summary).toContain(`${label} ${n(st)}`);
+    }
+    expect(n("held")).toBe(1);
+    expect(n("blocked")).toBe(2);
+  });
+
+  it("a held table shows the booking in progress and offers no check-in or seating", () => {
+    const held = floor("held");
+    expect(held).toContain("Booking in progress");
+    expect(held).toMatch(/Held until 8:22/);
+    expect(held).toContain("Expires in 7m");
+    expect(held).not.toContain(">Seat booking<");
+    expect(held).not.toContain(">Check in<");
+    const reserved = floor("reserved");
+    expect(reserved).toContain(">Seat booking<");
+    expect(reserved).toContain(">Check in<");
+  });
+
+  it("an already-combined party shows its tables and Manage tables, not Combine table", () => {
+    const html = floor("drawer");
+    expect(html).toContain(">T5 + T6<");
+    expect(html).toContain("Combined");
+    expect(html).toContain("4–8 seats");
+    expect(html).toContain(">Manage tables<");
+    expect(html).not.toContain(">Combine table<");
+    expect(html).not.toContain(">Move party<");
+    // A single table only offers Combine when a configured partner is free
+    expect(floor("seated")).not.toContain(">Combine table<");
+    expect(floor("combine")).toContain(">Combine table<");
+  });
+
+  it("names every table of a multi-table booking and refuses while one is taken", () => {
+    const ready = floor("das-ready");
+    expect(buttonWith(ready, "Seat on T11 + T12")).not.toContain('disabled=""');
+    const blocked = floor("das-blocked");
+    expect(buttonWith(blocked, "Seat on T11 + T12")).toContain('disabled=""');
+    expect(blocked).toContain("T12 is seated");
+  });
+
+  it("confirms success with a short contextual toast, never a bare Done.", () => {
+    const html = floor("toast");
+    expect(html).toMatch(/role="status" aria-live="polite"[^>]*>.*Khanna marked no-show/);
+    expect(html).not.toContain("Done.");
+  });
+
+  it("lets a host resume paused online bookings", () => {
+    expect(buttonWith(floor("paused"), "Resume")).not.toContain('disabled=""');
+    expect(caseOf("paused").data.may.pause).toBe(true);
+    expect(caseOf("paused").data.roles).toEqual(["host"]);
+  });
+});
+
 describe("staff shell", () => {
   const shell = (roles: StaffRole[]) =>
     renderToStaticMarkup(

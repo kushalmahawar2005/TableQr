@@ -1,9 +1,9 @@
 "use client";
 
-import { WifiOff01Icon } from "@hugeicons/core-free-icons";
+import { CheckmarkCircle02Icon, WifiOff01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { BlockReason } from "@/db/schema";
 import type { Lang } from "@/lib/i18n";
 import type { FloorData, FloorTable, TableDetail } from "@/server/floor/read";
@@ -35,6 +35,7 @@ import {
   type FloorResult,
 } from "../actions";
 import { s1Copy, type S1Copy } from "../_copy";
+import { combinableFree } from "./floor-logic";
 import { FloorMap } from "./floor-map";
 import { useFloorSync } from "./use-floor-sync";
 import { ArrivalsPanel, TablePanel, TonightPanel, WaitlistPanel, type TableAction } from "./panels";
@@ -46,10 +47,11 @@ export type FloorSheet =
   | { kind: "seat"; tableId: string; partySize?: number; error?: { message: string; latestEndAt?: number | null } }
   | { kind: "pick"; mode: PickMode; tableId?: string; reservationId?: string; entryId?: string; error?: string }
   | { kind: "block"; tableId: string; error?: string }
-  | { kind: "waitlist_add"; error?: string };
+  | { kind: "waitlist_add"; error?: string }
+  | { kind: "manage"; tableId: string; error?: string };
 
 /** A frozen state for the /dev/s1 review board */
-export type FloorPreview = { offline?: boolean; tab?: Tab; selected?: string; zone?: string; detail?: TableDetail; sheet?: FloorSheet; notice?: { text: string; error?: boolean }; dragging?: boolean; failed?: boolean };
+export type FloorPreview = { offline?: boolean; tab?: Tab; selected?: string; zone?: string; detail?: TableDetail; sheet?: FloorSheet; notice?: { text: string; error?: boolean }; toast?: string; dragging?: boolean; failed?: boolean };
 
 function subscribe(cb: () => void) {
   window.addEventListener("online", cb);
@@ -77,6 +79,13 @@ export function FloorScreen({ data: initial, lang, realtimeUrl, preview }: { dat
   const [tab, setTab] = useState<Tab>(preview?.tab ?? (preview?.selected ? "table" : "arrivals"));
   const [sheet, setSheet] = useState<FloorSheet | null>(preview?.sheet ?? null);
   const [notice, setNotice] = useState<{ text: string; error?: boolean } | null>(preview?.notice ?? null);
+  // Success is a short toast that leaves the layout alone; problems stay inline until the next action
+  const [toast, setToast] = useState<{ text: string; key: number } | null>(preview?.toast ? { text: preview.toast, key: 0 } : null);
+  useEffect(() => {
+    if (!toast || preview) return;
+    const t = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(t);
+  }, [toast, preview]);
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(!!preview?.dragging);
 
@@ -87,7 +96,7 @@ export function FloorScreen({ data: initial, lang, realtimeUrl, preview }: { dat
   }, [lang, tz]);
   const selected = data.tables.find((t) => t.id === selectedId) ?? null;
 
-  async function run(call: () => Promise<FloorResult>, onFail?: (r: Extract<FloorResult, { ok: false }>) => boolean) {
+  async function run(call: () => Promise<FloorResult>, ok: string, onFail?: (r: Extract<FloorResult, { ok: false }>) => boolean) {
     if (preview) {
       setSheet(null);
       return;
@@ -103,7 +112,7 @@ export function FloorScreen({ data: initial, lang, realtimeUrl, preview }: { dat
       const res = await call();
       if (res.ok) {
         setSheet(null);
-        setNotice({ text: c.done });
+        setToast({ text: ok, key: Date.now() });
       } else if (res.code === "staff_signed_out") {
         router.replace("/console/login");
       } else if (!onFail?.(res)) {
@@ -118,23 +127,31 @@ export function FloorScreen({ data: initial, lang, realtimeUrl, preview }: { dat
     }
   }
 
+  const codeOf = (tableId: string) => data.tables.find((t) => t.id === tableId)?.code ?? "";
+  const codesOf = (ids: string[]) => ids.map(codeOf).join(" + ");
+
   function onTableAction(a: TableAction) {
     if (!selected) return;
     const id = selected.id;
+    const code = selected.code;
+    const b = selected.booking;
     if (a === "seat") setSheet({ kind: "seat", tableId: id });
-    else if (a === "seat_booking" && selected.booking) void run(() => seatBookingAction(selected.booking!.id, [id]));
-    else if (a === "check_in" && selected.booking) void run(() => checkInAction(selected.booking!.id));
+    // A booking is always seated on every table it holds (the server checks again)
+    else if (a === "seat_booking" && b) void run(() => seatBookingAction(b.id, null), c.toast.bookingSeated(b.name, codesOf(b.tableIds)));
+    else if (a === "check_in" && b) void run(() => checkInAction(b.id), c.toast.checkedIn(b.name));
     else if (a === "move" || a === "swap" || a === "combine") setSheet({ kind: "pick", mode: a, tableId: id });
+    else if (a === "manage") setSheet({ kind: "manage", tableId: id });
     else if (a === "block") setSheet({ kind: "block", tableId: id });
-    else if (a === "extend") void run(() => extendAction(id));
-    else if (a === "uncombine") void run(() => uncombineAction(id));
-    else if (a === "cleaning") void run(() => needsCleaningAction(id));
-    else if (a === "ready") void run(() => readyAction(id));
-    else if (a === "clear") void run(() => clearEmptyAction(id));
-    else if (a === "unblock") void run(() => unblockAction(id));
+    else if (a === "extend") void run(() => extendAction(id), c.toast.extended(code));
+    else if (a === "cleaning") void run(() => needsCleaningAction(id), c.toast.cleaning(code));
+    else if (a === "ready") void run(() => readyAction(id), c.toast.ready(code));
+    else if (a === "clear") void run(() => clearEmptyAction(id), c.toast.cleared(code));
+    else if (a === "unblock") void run(() => unblockAction(id), c.toast.unblocked(code));
   }
 
   const disabled = !online || busy;
+  const nameOfBooking = (id: string) => data.arrivals.find((x) => x.id === id)?.name ?? "";
+  const nameOfParty = (id: string) => data.waitlist.find((x) => x.id === id)?.name ?? "";
   const counts = (state: string) => data.tables.filter((t) => t.state === state).length;
   const tabs: { id: Tab; label: string; badge?: number }[] = [
     { id: "table", label: selected ? `${c.tabs.table} ${selected.code}` : c.tabs.table },
@@ -165,9 +182,9 @@ export function FloorScreen({ data: initial, lang, realtimeUrl, preview }: { dat
             </button>
           ))}
         </nav>
-        <ul aria-label={c.legend} className="ml-auto hidden flex-wrap gap-1.5 xl:flex">
-          {(["available", "reserved", "seated", "bill_requested", "needs_cleaning"] as const).map((st) => (
-            <li key={st}>
+        <ul aria-label={c.legend} className="order-last flex w-full gap-1.5 overflow-x-auto pb-0.5 xl:order-none xl:ml-auto xl:w-auto">
+          {(["available", "held", "reserved", "seated", "bill_requested", "paid", "needs_cleaning", "blocked"] as const).map((st) => (
+            <li key={st} className="shrink-0">
               <StateChip state={st} label={`${c.states[st]} ${counts(st)}`} size="sm" />
             </li>
           ))}
@@ -211,7 +228,7 @@ export function FloorScreen({ data: initial, lang, realtimeUrl, preview }: { dat
             }}
             onDrop={(t, entryId) => {
               setDragging(false);
-              void run(() => seatWaitlistAction(entryId, [t.id]));
+              void run(() => seatWaitlistAction(entryId, [t.id]), c.toast.waitlistSeated(data.waitlist.find((w) => w.id === entryId)?.name ?? "", t.code));
             }}
           />
         </main>
@@ -240,11 +257,11 @@ export function FloorScreen({ data: initial, lang, realtimeUrl, preview }: { dat
                 clock={clock}
                 now={now}
                 disabled={disabled}
-                onCheckIn={(id) => void run(() => checkInAction(id))}
-                onNoShow={(id) => void run(() => noShowAction(id))}
+                onCheckIn={(id) => void run(() => checkInAction(id), c.toast.checkedIn(nameOfBooking(id)))}
+                onNoShow={(id) => void run(() => noShowAction(id), c.toast.noShow(nameOfBooking(id)))}
                 onSeat={(id) => {
                   const a = data.arrivals.find((x) => x.id === id);
-                  if (a?.tableIds.length) void run(() => seatBookingAction(id, null));
+                  if (a?.tableIds.length) void run(() => seatBookingAction(id, null), c.toast.bookingSeated(a.name, codesOf(a.tableIds)));
                   else setSheet({ kind: "pick", mode: "seat_booking", reservationId: id });
                 }}
                 onReassign={(id) => setSheet({ kind: "pick", mode: "reassign", reservationId: id })}
@@ -259,10 +276,10 @@ export function FloorScreen({ data: initial, lang, realtimeUrl, preview }: { dat
                 disabled={disabled}
                 onAdd={() => setSheet({ kind: "waitlist_add" })}
                 onSeat={(id) => setSheet({ kind: "pick", mode: "seat_waitlist", entryId: id })}
-                onNotify={(id) => void run(() => notifyAction(id))}
-                onSkip={(id) => void run(() => skipAction(id))}
-                onLeft={(id) => void run(() => leftAction(id))}
-                onMove={(id, to) => void run(() => reorderAction(id, to))}
+                onNotify={(id) => void run(() => notifyAction(id), c.toast.notified(nameOfParty(id)))}
+                onSkip={(id) => void run(() => skipAction(id), c.toast.skipped(nameOfParty(id)))}
+                onLeft={(id) => void run(() => leftAction(id), c.toast.left(nameOfParty(id)))}
+                onMove={(id, to) => void run(() => reorderAction(id, to), c.toast.reordered)}
                 onDragStart={() => setDragging(true)}
                 onDragEnd={() => setDragging(false)}
               />
@@ -274,8 +291,8 @@ export function FloorScreen({ data: initial, lang, realtimeUrl, preview }: { dat
                 clock={clock}
                 now={now}
                 disabled={disabled}
-                onPause={(p) => void run(() => pauseAction(p))}
-                onExtra={(at) => void run(() => capacityAction(at, (data.pacing.slots.find((x) => x.startAt === at)?.extraCovers ?? 0) + 10))}
+                onPause={(p) => void run(() => pauseAction(p), p ? c.toast.paused : c.toast.resumed)}
+                onExtra={(at) => void run(() => capacityAction(at, (data.pacing.slots.find((x) => x.startAt === at)?.extraCovers ?? 0) + 10), c.toast.capacity(clock(at)))}
               />
             )}
           </div>
@@ -285,12 +302,19 @@ export function FloorScreen({ data: initial, lang, realtimeUrl, preview }: { dat
       {sheet?.kind === "seat" && <SeatSheet sheet={sheet} data={data} c={c} clock={clock} busy={busy} disabled={disabled} onClose={() => setSheet(null)} run={run} setSheet={setSheet} />}
       {sheet?.kind === "pick" && <PickSheet sheet={sheet} data={data} c={c} busy={busy} disabled={disabled} onClose={() => setSheet(null)} run={run} setSheet={setSheet} />}
       {sheet?.kind === "block" && <BlockSheet sheet={sheet} data={data} c={c} disabled={disabled} now={now} onClose={() => setSheet(null)} run={run} setSheet={setSheet} />}
+      {sheet?.kind === "manage" && <ManageSheet sheet={sheet} data={data} c={c} disabled={disabled} onClose={() => setSheet(null)} run={run} setSheet={setSheet} />}
+      {toast && (
+        <p key={toast.key} role="status" aria-live="polite" className="pointer-events-none fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-input bg-ink px-4 py-2.5 text-body font-semibold text-white shadow-[var(--shadow-float)]">
+          <HugeiconsIcon icon={CheckmarkCircle02Icon} size={18} aria-hidden />
+          {toast.text}
+        </p>
+      )}
       {sheet?.kind === "waitlist_add" && <WaitlistSheet sheet={sheet} c={c} disabled={disabled} onClose={() => setSheet(null)} run={run} setSheet={setSheet} />}
     </div>
   );
 }
 
-type Run = (call: () => Promise<FloorResult>, onFail?: (r: Extract<FloorResult, { ok: false }>) => boolean) => Promise<void>;
+type Run = (call: () => Promise<FloorResult>, ok: string, onFail?: (r: Extract<FloorResult, { ok: false }>) => boolean) => Promise<void>;
 
 function SeatSheet({ sheet, data, c, clock, busy, disabled, onClose, run, setSheet }: { sheet: Extract<FloorSheet, { kind: "seat" }>; data: FloorData; c: S1Copy; clock: (ms: number) => string; busy: boolean; disabled: boolean; onClose: () => void; run: Run; setSheet: (s: FloorSheet) => void }) {
   const table = data.tables.find((t) => t.id === sheet.tableId)!;
@@ -299,6 +323,7 @@ function SeatSheet({ sheet, data, c, clock, busy, disabled, onClose, run, setShe
   const seat = (endBy: number | null) =>
     run(
       () => seatWalkInAction(table.id, size, name || null, endBy),
+      c.toast.seated(table.code),
       (r) => {
         if (r.code !== "conflict" && r.code !== "invalid_state") return false;
         setSheet({ ...sheet, partySize: size, error: { message: r.message, latestEndAt: (r.details?.latestEndAt as number | null) ?? null } });
@@ -360,12 +385,12 @@ function PickSheet({ sheet, data, c, busy, disabled, onClose, run, setSheet }: {
       setSheet({ ...sheet, error: r.message });
       return true;
     };
-    if (sheet.mode === "move") void run(() => moveAction(sheet.tableId!, t.id), fail);
-    else if (sheet.mode === "swap") void run(() => swapAction(sheet.tableId!, t.id), fail);
-    else if (sheet.mode === "combine") void run(() => combineAction(sheet.tableId!, t.id), fail);
-    else if (sheet.mode === "reassign") void run(() => reassignAction(sheet.reservationId!, [t.id]), fail);
-    else if (sheet.mode === "seat_booking") void run(() => seatBookingAction(sheet.reservationId!, [t.id]), fail);
-    else void run(() => seatWaitlistAction(sheet.entryId!, [t.id]), fail);
+    if (sheet.mode === "move") void run(() => moveAction(sheet.tableId!, t.id), c.toast.moved(t.code), fail);
+    else if (sheet.mode === "swap") void run(() => swapAction(sheet.tableId!, t.id), c.toast.swapped(from?.code ?? "", t.code), fail);
+    else if (sheet.mode === "combine") void run(() => combineAction(sheet.tableId!, t.id), c.toast.combined(from?.code ?? "", t.code), fail);
+    else if (sheet.mode === "reassign") void run(() => reassignAction(sheet.reservationId!, [t.id]), c.toast.reassigned(booking?.name ?? "", t.code), fail);
+    else if (sheet.mode === "seat_booking") void run(() => seatBookingAction(sheet.reservationId!, [t.id]), c.toast.bookingSeated(booking?.name ?? "", t.code), fail);
+    else void run(() => seatWaitlistAction(sheet.entryId!, [t.id]), c.toast.waitlistSeated(entry?.name ?? "", t.code), fail);
   }
   return (
     <Dialog title={title} onClose={onClose} closeLabel={c.close} wide>
@@ -442,6 +467,7 @@ function BlockSheet({ sheet, data, c, disabled, now, onClose, run, setSheet }: {
           onClick={() =>
             void run(
               () => blockAction(table.id, reason, note || null, untilAt),
+              c.toast.blocked(table.code),
               (r) => {
                 setSheet({ ...sheet, error: r.message });
                 return true;
@@ -503,6 +529,7 @@ function WaitlistSheet({ sheet, c, disabled, onClose, run, setSheet }: { sheet: 
           onClick={() =>
             void run(
               () => addWaitlistAction({ name, phone, partySize: size, quotedMinutes: quote ? Number(quote) : null, notes }),
+              c.toast.waitlistAdded,
               (r) => {
                 setSheet({ ...sheet, error: r.message });
                 return true;
@@ -514,6 +541,78 @@ function WaitlistSheet({ sheet, c, disabled, onClose, run, setSheet }: { sheet: 
           {c.add}
         </button>
       </div>
+    </Dialog>
+  );
+}
+
+/** The tables of a combined party: which is main, which can be taken off, which can be added */
+function ManageSheet({ sheet, data, c, disabled, onClose, run, setSheet }: { sheet: Extract<FloorSheet, { kind: "manage" }>; data: FloorData; c: S1Copy; disabled: boolean; onClose: () => void; run: Run; setSheet: (s: FloorSheet) => void }) {
+  const table = data.tables.find((t) => t.id === sheet.tableId)!;
+  const v = table.visit!;
+  const tables = v.tableIds.map((id) => data.tables.find((t) => t.id === id)!).filter(Boolean);
+  const addable = combinableFree(table, data);
+  const codes = tables.map((t) => t.code).join(" + ");
+  return (
+    <Dialog title={c.manageTitle(codes)} onClose={onClose} closeLabel={c.close}>
+      <p className="text-caption text-muted">
+        {c.combined} · {c.seats(tables.reduce((n, t) => n + t.minSeats, 0), tables.reduce((n, t) => n + t.maxSeats, 0))} · {c.guests(v.partySize)}
+      </p>
+      {sheet.error && (
+        <div className="mt-2">
+          <ErrorNote text={sheet.error} />
+        </div>
+      )}
+      <ul className="mt-3 divide-y divide-line rounded-card border border-line">
+        {tables.map((t, i) => (
+          <li key={t.id} className="flex items-center justify-between gap-3 px-3 py-2.5">
+            <span className="text-body font-semibold text-ink">
+              {t.code} <span className="font-normal text-muted">· {c.seats(t.minSeats, t.maxSeats)}</span>
+            </span>
+            {i === 0 ? (
+              <span className="text-caption font-semibold text-muted">{c.mainTable}</span>
+            ) : v.status === "open" ? (
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={() =>
+                  void run(() => uncombineAction(t.id), c.toast.uncombined(t.code), (r) => {
+                    setSheet({ ...sheet, error: r.message });
+                    return true;
+                  })
+                }
+                className={btnLine}
+              >
+                {c.uncombineOne(t.code)}
+              </button>
+            ) : (
+              <span className="text-caption text-muted">{c.cantUncombineBill}</span>
+            )}
+          </li>
+        ))}
+      </ul>
+      <p className="mt-4 text-body font-semibold">{c.addTable}</p>
+      {addable.length === 0 ? (
+        <p className="mt-1 text-body text-muted">{c.noMoreTables}</p>
+      ) : (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {addable.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              disabled={disabled}
+              onClick={() =>
+                void run(() => combineAction(table.id, t.id), c.toast.combined(tables[0].code, t.code), (r) => {
+                  setSheet({ ...sheet, error: r.message });
+                  return true;
+                })
+              }
+              className={btnLine}
+            >
+              + {t.code}
+            </button>
+          ))}
+        </div>
+      )}
     </Dialog>
   );
 }

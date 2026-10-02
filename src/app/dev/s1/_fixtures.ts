@@ -65,6 +65,7 @@ const booking = (rid: string, name: string, size: number, inMin: number, tables:
   canNoShow: inMin <= -15,
   occasion: null,
   notes: null,
+  holdUntil: null,
   tableIds: tables.map(id),
   ...over,
 });
@@ -73,7 +74,7 @@ const iyer = booking("r-iyer", "Iyer", 4, 15, ["T10"], { occasion: "Birthday", n
 const mehta = booking("r-mehta", "Mehta", 2, 40, ["T2"], { status: "reminded", confirmed: false, noReply: true });
 const das = booking("r-das", "Das", 6, 75, ["T11", "T12"]);
 const late = booking("r-khanna", "Khanna", 2, -22, ["T7"]);
-const held = booking("r-online", "Online guest", 2, 90, ["B3"], { status: "requested", held: true, confirmed: false });
+const held = booking("r-online", "Online guest", 2, 90, ["B3"], { status: "requested", held: true, confirmed: false, holdUntil: NOW + 7 * MIN });
 
 function table(spec: Spec, over: Partial<FloorTable> = {}): FloorTable {
   return {
@@ -201,7 +202,7 @@ export function s1Cases(): S1Case[] {
     { id: "extend-conflict", label: "18 · Extend refused (booking)", data: d, preview: { selected: "T3", detail: detail("T3"), notice: { text: "Booked for Iyer (4) at 8:30 pm.", error: true } } },
     { id: "arrivals", label: "19 · Arrivals", data: d, preview: { tab: "arrivals" } },
     { id: "late", label: "20 · Late arrival (no-show allowed)", data: d, preview: { tab: "arrivals", selected: "T7" } },
-    { id: "no-show", label: "21 · After no-show", data: floorData({ ...dinner, T7: {} }, { arrivals: [iyer, mehta, das] }), preview: { tab: "arrivals", notice: { text: "Done." } } },
+    { id: "no-show", label: "21 · After no-show", data: floorData({ ...dinner, T7: {} }, { arrivals: [iyer, mehta, das] }), preview: { tab: "arrivals", toast: "Khanna marked no-show" } },
     { id: "no-arrivals", label: "22 · Empty arrivals", data: floorData(dinner, { arrivals: [] }), preview: { tab: "arrivals" } },
     { id: "waitlist", label: "23 · Waitlist", data: d, preview: { tab: "waitlist" } },
     { id: "waitlist-drag", label: "24 · Waitlist drag / seat", data: d, preview: { tab: "waitlist", dragging: true, sheet: { kind: "pick", mode: "seat_waitlist", entryId: "w2" } } },
@@ -214,6 +215,14 @@ export function s1Cases(): S1Case[] {
     { id: "w768", label: "31 · 768 landscape", data: d, preview: { selected: "T3", detail: detail("T3") }, width: 1024, height: 768 },
     { id: "w1024", label: "32 · 1280 desktop", data: d, preview: { tab: "arrivals" }, width: 1280, height: 800 },
     { id: "hindi", label: "33 · Hindi", lang: "hi", data: d, preview: { selected: "T3", detail: detail("T3") } },
+    { id: "das-ready", label: "Multi-table booking: Seat on T11 + T12", data: d, preview: { selected: "T11" } },
+    {
+      id: "das-blocked",
+      label: "Multi-table booking: one table taken",
+      data: floorData({ ...dinner, T12: { state: "seated", booking: das, visit: visit("s12", ["T12"], { partySize: 2, joined: 2, openedAt: NOW - 30 * MIN, expectedEndAt: NOW + 45 * MIN }) } }),
+      preview: { selected: "T11" },
+    },
+    { id: "toast", label: "Contextual success toast", data: floorData({ ...dinner, T7: {} }, { arrivals: [iyer, mehta, das] }), preview: { tab: "arrivals", toast: "Khanna marked no-show" } },
     { id: "block", label: "Block sheet (manager)", data: manager, preview: { selected: "T12", sheet: { kind: "block", tableId: id("T12") } } },
     { id: "waitlist-add", label: "Add to waitlist", data: d, preview: { tab: "waitlist", sheet: { kind: "waitlist_add" } } },
     { id: "empty", label: "Empty floor", data: floorData({}, { tables: [], arrivals: [], waitlist: [] }), preview: {} },

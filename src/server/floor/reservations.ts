@@ -33,6 +33,10 @@ async function lockReservation(tx: Tx, scope: Scope, id: string) {
   return row;
 }
 
+/** An online slot hold that has not become a booking yet */
+const isInProgress = (r: { status: string; holdExpiresAt: Date | null }, now: Date) => r.status === "requested" && !!r.holdExpiresAt && r.holdExpiresAt > now;
+const inProgressError = () => new AppError("conflict", "This online booking is still in progress.", { reason: "held" });
+
 async function tablesOf(tx: Tx, scope: Scope, reservationId: string) {
   const rows = await tx
     .select({ tableId: s.reservationTables.tableId })
@@ -130,6 +134,8 @@ async function transition(staff: FloorActor, id: string, step: keyof typeof FROM
     const policy = await loadPolicy(tx, scope);
     const r = await lockReservation(tx, scope, id);
     if (!FROM[step].includes(r.status)) throw new AppError("invalid_state", `This booking is ${r.status.replace("_", " ")}.`, { status: r.status });
+    // An online guest still completing a booking holds the slot; it is not a booking to check in yet
+    if (step === "check_in" && isInProgress(r, now)) throw inProgressError();
     let to: ReservationStatus;
     const patch: Partial<typeof s.reservations.$inferInsert> = {};
     if (step === "confirm") {
@@ -192,8 +198,13 @@ export async function seatReservation(staff: FloorActor, input: { reservationId:
     const policy = await loadPolicy(tx, scope);
     const r = await lockReservation(tx, scope, input.reservationId);
     if (!["requested", "confirmed", "reminded", "arrived"].includes(r.status)) throw new AppError("invalid_state", `This booking is ${r.status.replace("_", " ")}.`, { status: r.status });
+    if (isInProgress(r, now)) throw inProgressError();
     const assigned = await tablesOf(tx, scope, r.id);
     const tableIds = input.tableIds?.length ? [...new Set(input.tableIds.map(String))] : assigned;
+    // A booking on combined tables is seated on all of them, never quietly on one part
+    if (assigned.length > 1 && tableIds.length < assigned.length && tableIds.every((t) => assigned.includes(t))) {
+      throw new AppError("conflict", "This booking needs all its tables. Seat it on all of them or reassign it first.", { reason: "partial_tables" });
+    }
     if (tableIds.length === 0) throw new AppError("invalid_state", "Choose a table for this booking.", { reason: "no_table" });
     const tables = await lockTables(tx, scope, tableIds);
     const list = tableIds.map((id) => tables.get(id)!);

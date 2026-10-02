@@ -5,9 +5,10 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { formatRupees } from "@/domain/menu-price";
 import type { FloorData, FloorTable, TableDetail } from "@/server/floor/read";
 import type { S1Copy } from "../_copy";
+import { bookingTablesReady, combinableFree, inProgress } from "./floor-logic";
 import { Pill, StateChip, btnDanger, btnLine, btnPrimary, btnQuiet, focus } from "./ui";
 
-export type TableAction = "seat" | "seat_booking" | "check_in" | "move" | "swap" | "combine" | "uncombine" | "extend" | "cleaning" | "ready" | "clear" | "block" | "unblock";
+export type TableAction = "seat" | "seat_booking" | "check_in" | "move" | "swap" | "combine" | "manage" | "extend" | "cleaning" | "ready" | "clear" | "block" | "unblock";
 
 type Shared = { c: S1Copy; clock: (ms: number) => string; now: number; disabled: boolean };
 
@@ -37,15 +38,29 @@ export function TablePanel({
   const codeOf = new Map(data.tables.map((t) => [t.id, t.code]));
   const minutes = v ? Math.max(0, Math.floor((now - v.openedAt) / 60_000)) : 0;
   const over = v ? Math.floor((now - v.expectedEndAt) / 60_000) : 0;
-  const buttons: { a: TableAction; label: string; kind?: "primary" | "danger"; show: boolean }[] = [
+  const b = table.booking;
+  // Held = an online guest is still booking: nothing to check in or seat until it is confirmed
+  const held = !!b && inProgress(b);
+  const live = b && !held && !v ? bookingTablesReady(b, data) : null;
+  const multi = !!b && b.tableIds.length > 1;
+  const combined = !!v && v.tableIds.length > 1;
+  const canAdd = !!v && combinableFree(table, data).length > 0;
+  const blocker = live && !live.ready ? (live.table ? c.notReady(live.table.code, c.stateLong[live.table.visit ? "seated" : live.table.state]) : c.noTables) : null;
+  const buttons: { a: TableAction; label: string; kind?: "primary" | "danger"; show: boolean; off?: boolean }[] = [
     { a: "seat", label: c.actions.seat, kind: "primary", show: may.seat && table.state === "available" },
-    { a: "seat_booking", label: c.actions.seatBooking, kind: "primary", show: may.seat && !!table.booking && (table.state === "reserved" || table.state === "held" || table.state === "available") },
-    { a: "check_in", label: c.actions.checkIn, show: may.bookings && !!table.booking && table.booking.status !== "arrived" && !v },
+    {
+      a: "seat_booking",
+      label: multi ? c.seatOn(b!.tableIds.map((id) => codeOf.get(id)).join(" + ")) : c.actions.seatBooking,
+      kind: "primary",
+      show: may.seat && !!b && !held && !v && (table.state === "reserved" || table.state === "available" || multi),
+      off: !!blocker,
+    },
+    { a: "check_in", label: c.actions.checkIn, show: may.bookings && !!b && !held && b.status !== "arrived" && !v },
     { a: "extend", label: c.actions.extend, show: may.seat && !!v },
-    { a: "move", label: c.actions.move, show: may.seat && !!v && v.tableIds.length === 1 },
-    { a: "swap", label: c.actions.swap, show: may.seat && !!v && v.tableIds.length === 1 },
-    { a: "combine", label: c.actions.combine, show: may.seat && !!v && table.combinableWith.length > 0 },
-    { a: "uncombine", label: c.actions.uncombine, show: may.seat && !!v && v.tableIds.length > 1 && !table.visit?.isPrimary && v.status === "open" },
+    { a: "move", label: c.actions.move, show: may.seat && !!v && !combined },
+    { a: "swap", label: c.actions.swap, show: may.seat && !!v && !combined },
+    { a: "manage", label: c.manageTables, show: may.seat && combined },
+    { a: "combine", label: c.actions.combine, show: may.seat && !!v && !combined && canAdd },
     { a: "clear", label: c.actions.clear, show: may.seat && !!v && v.rounds === 0 && v.joined === 0 },
     { a: "cleaning", label: c.actions.cleaning, kind: "primary", show: may.reset && table.state === "paid" },
     { a: "ready", label: c.actions.ready, kind: "primary", show: may.reset && table.state === "needs_cleaning" },
@@ -64,6 +79,27 @@ export function TablePanel({
         </div>
         <StateChip state={table.state} label={c.stateLong[table.state]} />
       </div>
+
+      {combined && (
+        <p className="mt-3 flex flex-wrap items-center gap-x-2 rounded-card border border-line bg-[#faf9f6] px-3 py-2 text-body">
+          <span className="font-bold text-ink">{v!.tableIds.map((id) => codeOf.get(id)).join(" + ")}</span>
+          <span className="text-muted">
+            · {c.combined} · {c.seats(...combinedSeats(v!.tableIds, data))}
+          </span>
+        </p>
+      )}
+
+      {held && b && (
+        <div className="mt-4 rounded-card border border-[var(--state-held)] bg-[var(--state-held-soft)] p-3 text-[var(--state-held-text)]">
+          <p className="text-body font-bold">{c.bookingInProgress}</p>
+          {b.holdUntil && (
+            <p className="text-body font-semibold">
+              {c.heldUntil(clock(b.holdUntil))} · <span className="tabular">{c.expiresIn(Math.max(0, Math.ceil((b.holdUntil - now) / 60_000)))}</span>
+            </p>
+          )}
+          <p className="mt-1 text-caption text-ink/75">{c.heldNote}</p>
+        </div>
+      )}
 
       {v && (
         <dl className="mt-4 grid grid-cols-2 gap-3 rounded-card border border-line bg-[#faf9f6] p-3">
@@ -98,7 +134,7 @@ export function TablePanel({
       )}
       {table.state === "blocked" && !may.block && <p className="mt-2 text-caption text-muted">{c.managerOnly}</p>}
 
-      {table.booking && !v && (
+      {table.booking && !v && !held && (
         <div className="mt-4 rounded-card border border-line p-3">
           <p className="flex items-center gap-1.5 text-caption font-semibold text-muted">
             <HugeiconsIcon icon={Calendar03Icon} size={14} aria-hidden />
@@ -106,6 +142,7 @@ export function TablePanel({
           </p>
           <p className="mt-1 text-body font-semibold text-ink">
             {table.booking.name} · {c.guests(table.booking.partySize)} · <span className="tabular">{clock(table.booking.startAt)}</span>
+            {multi && <span className="text-muted"> · {table.booking.tableIds.map((id) => codeOf.get(id)).join(" + ")}</span>}
           </p>
           <BookingChips b={table.booking} c={c} />
         </div>
@@ -113,13 +150,18 @@ export function TablePanel({
 
       <div className="mt-4 flex flex-wrap gap-2">
         {buttons
-          .filter((b) => b.show)
-          .map((b) => (
-            <button key={b.a} type="button" disabled={disabled} onClick={() => onAction(b.a)} className={b.kind === "primary" ? btnPrimary : b.kind === "danger" ? btnDanger : btnLine}>
-              {b.label}
+          .filter((btn) => btn.show)
+          .map((btn) => (
+            <button key={btn.a} type="button" disabled={disabled || btn.off} onClick={() => onAction(btn.a)} className={btn.kind === "primary" ? btnPrimary : btn.kind === "danger" ? btnDanger : btnLine}>
+              {btn.label}
             </button>
           ))}
       </div>
+      {blocker && !held && (
+        <p role="note" className="mt-2 text-caption font-semibold text-danger">
+          {blocker}
+        </p>
+      )}
 
       {v && (
         <div className="mt-5 space-y-4">
@@ -231,6 +273,12 @@ export function ArrivalsPanel({
 }: Shared & { data: FloorData; onCheckIn: (id: string) => void; onSeat: (id: string) => void; onNoShow: (id: string) => void; onReassign: (id: string) => void }) {
   const codeOf = new Map(data.tables.map((t) => [t.id, t.code]));
   const may = data.may;
+  // Only bookings with tables are checked here; one without tables opens the table picker
+  const arrivalBlocker = (a: FloorData["arrivals"][number]) => {
+    if (a.tableIds.length === 0) return null;
+    const r = bookingTablesReady(a, data);
+    return r.ready ? null : r.table ? c.notReady(r.table.code, c.stateLong[r.table.visit ? "seated" : r.table.state]) : c.noTables;
+  };
   return (
     <div className="p-4">
       <h2 className="text-caption font-bold tracking-wide text-muted uppercase">{c.arrivals}</h2>
@@ -250,6 +298,7 @@ export function ArrivalsPanel({
               <p className="mt-0.5 text-caption text-muted">{a.tableIds.length ? a.tableIds.map((id) => codeOf.get(id)).join(" + ") : c.noTable}</p>
               <BookingChips b={a} c={c} />
               {a.notes && <p className="mt-1 text-caption text-ink/80">{a.notes}</p>}
+              {may.seat && arrivalBlocker(a) && <p className="mt-1 text-caption font-semibold text-danger">{arrivalBlocker(a)}</p>}
               {may.bookings && (
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {a.status !== "arrived" && (
@@ -258,8 +307,8 @@ export function ArrivalsPanel({
                     </button>
                   )}
                   {may.seat && (
-                    <button type="button" disabled={disabled} onClick={() => onSeat(a.id)} className={btnPrimary}>
-                      {c.seatParty}
+                    <button type="button" disabled={disabled || !!arrivalBlocker(a)} onClick={() => onSeat(a.id)} className={btnPrimary}>
+                      {a.tableIds.length > 1 ? c.seatOn(a.tableIds.map((id) => codeOf.get(id)).join(" + ")) : c.seatParty}
                     </button>
                   )}
                   <button type="button" disabled={disabled} onClick={() => onReassign(a.id)} className={btnQuiet}>
@@ -441,4 +490,9 @@ export function TonightPanel({ data, c, clock, now, disabled, onPause, onExtra }
       )}
     </div>
   );
+}
+
+function combinedSeats(ids: string[], data: FloorData): [number, number] {
+  const ts = ids.map((id) => data.tables.find((t) => t.id === id)).filter((t): t is FloorTable => !!t);
+  return [ts.reduce((n, t) => n + t.minSeats, 0), ts.reduce((n, t) => n + t.maxSeats, 0)];
 }
