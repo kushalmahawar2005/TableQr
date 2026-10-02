@@ -1,0 +1,107 @@
+import "server-only";
+import { and, eq } from "drizzle-orm";
+import { db } from "@/db";
+import * as s from "@/db/schema";
+import { AppError } from "../errors";
+import { staffRealtimeToken, topics } from "../realtime/token";
+import type { StaffContext } from "../staff/context";
+import { acceptTicket, bumpLine, bumpTicket, recallTicket, setOutOfStock, startTicket } from "./actions";
+import { kitchenStations, type KdsDevice } from "./device";
+import { averageTicketMinutes, getKitchenDisplay, getUnavailableItems, searchKitchenItems } from "./display";
+
+// Everything a kitchen screen may do, decided from its device row on the server. The client never
+// says which station or role it is: a station screen sees and changes only its own station; the
+// All view and other stations need a screen a manager pinned as expeditor.
+
+/** Acting context for audit and scoping: no signed-in user, the screen is the actor */
+export function kdsActor(device: KdsDevice): StaffContext {
+  return {
+    tenantId: device.tenantId,
+    outletId: device.outletId,
+    userId: null,
+    actorLabel: `kds:${device.expeditor ? "expeditor" : device.station}:${device.deviceId.slice(-8)}`,
+  };
+}
+
+/** Which station this request may look at: its own pin, or any (null = All) for an expeditor */
+export function viewStation(device: KdsDevice, requested: string | null | undefined): string | null {
+  if (!device.expeditor) {
+    if (!device.station) throw new AppError("forbidden", "This screen has no station. Ask a manager to set it up.");
+    if (requested && requested !== device.station) throw new AppError("forbidden", "This screen shows its own station only.", { reason: "station" });
+    return device.station;
+  }
+  return requested ? String(requested).slice(0, 30) : null;
+}
+
+/** The ticket must belong to this outlet and, on a station screen, to its station */
+async function guardTicket(device: KdsDevice, ticketId: string) {
+  const [ticket] = await db
+    .select({ station: s.tickets.station })
+    .from(s.tickets)
+    .where(and(eq(s.tickets.tenantId, device.tenantId), eq(s.tickets.outletId, device.outletId), eq(s.tickets.id, String(ticketId))));
+  if (!ticket) throw new AppError("not_found", "This ticket no longer exists.");
+  if (!device.expeditor && ticket.station !== device.station) {
+    throw new AppError("forbidden", `This ticket belongs to ${ticket.station}.`, { reason: "station" });
+  }
+}
+
+export async function kdsBoard(device: KdsDevice, requested: string | null | undefined, now = new Date()) {
+  const station = viewStation(device, requested);
+  const ctx = kdsActor(device);
+  const [display, stations, unavailable, avgMinutes] = await Promise.all([
+    getKitchenDisplay(ctx, { station }, now),
+    kitchenStations(device),
+    getUnavailableItems(ctx, now),
+    averageTicketMinutes({ ...ctx, timezone: device.outlet.timezone }, now),
+  ]);
+  return {
+    station,
+    stations,
+    counts: display.counts,
+    cards: display.cards,
+    lastBumped: display.lastBumped,
+    unavailable: unavailable.map((u) => ({ ...u, until: u.until?.getTime() ?? null })),
+    avgMinutes,
+    renderedAt: now.getTime(),
+  };
+}
+
+export type KdsBoard = Awaited<ReturnType<typeof kdsBoard>>;
+
+export async function kdsAccept(device: KdsDevice, ticketId: string, now = new Date()) {
+  await guardTicket(device, ticketId);
+  return acceptTicket(kdsActor(device), String(ticketId), now);
+}
+
+export async function kdsStart(device: KdsDevice, ticketId: string, now = new Date()) {
+  await guardTicket(device, ticketId);
+  return startTicket(kdsActor(device), String(ticketId), now);
+}
+
+export async function kdsBumpTicket(device: KdsDevice, ticketId: string, now = new Date()) {
+  await guardTicket(device, ticketId);
+  return bumpTicket(kdsActor(device), String(ticketId), now);
+}
+
+export async function kdsRecall(device: KdsDevice, ticketId: string, now = new Date()) {
+  await guardTicket(device, ticketId);
+  return recallTicket(kdsActor(device), String(ticketId), now);
+}
+
+/** A station screen can only bump its own lines; bumpLine re-checks inside the transaction */
+export async function kdsBumpLine(device: KdsDevice, lineId: string, now = new Date()) {
+  return bumpLine(kdsActor(device), String(lineId), now, { station: device.expeditor ? null : device.station });
+}
+
+export async function kdsStock(device: KdsDevice, itemId: string, outOfStock: boolean, now = new Date()) {
+  return setOutOfStock(kdsActor(device), String(itemId), outOfStock === true, now);
+}
+
+export async function kdsSearch(device: KdsDevice, q: string) {
+  return searchKitchenItems({ ...kdsActor(device), brandId: device.outlet.brandId }, q);
+}
+
+/** Realtime for a kitchen screen: kitchen tickets and menu availability only */
+export function kdsRealtimeToken(device: KdsDevice) {
+  return staffRealtimeToken({ tenantId: device.tenantId, outletId: device.outletId, userId: device.deviceId }, [topics.kitchen, topics.menu]);
+}

@@ -26,17 +26,20 @@ export type StaffSession = StaffContext & {
   expiresAt: number;
 };
 
-const hashToken = (token: string) => createHash("sha256").update(token).digest("hex");
+export const hashToken = (token: string) => createHash("sha256").update(token).digest("hex");
 const normalPhone = (phone: string) => phone.replace(/\D/g, "").replace(/^91(?=\d{10}$)/, "").slice(-15);
 const failed = (message = "Phone number or PIN is not right.", details?: Record<string, unknown>) => new AppError("sign_in_failed", message, details);
 
-/** Signs in at an outlet; returns the cookie token (shown to nobody but the browser) */
-export async function signInStaff(input: { outletCode: string; phone: string; pin: string; now?: Date }) {
+/**
+ * Checks phone and PIN at an outlet, with the 5-tries lock-out, and records the attempt.
+ * Returns the user and their roles there; throws the same generic message for any failure.
+ */
+export async function verifyStaffPin(input: { outletCode: string; phone: string; pin: string; now?: Date }) {
   const { verifyPin } = await import("./pin");
   const now = input.now ?? new Date();
   const phone = normalPhone(String(input.phone ?? ""));
   // isolation-exempt: the tenant is resolved here, from the public outlet code typed at sign-in
-  const [outlet] = await db.select({ id: s.outlets.id, tenantId: s.outlets.tenantId }).from(s.outlets).where(eq(s.outlets.code, String(input.outletCode ?? "").trim().toUpperCase()));
+  const [outlet] = await db.select({ id: s.outlets.id, tenantId: s.outlets.tenantId, code: s.outlets.code }).from(s.outlets).where(eq(s.outlets.code, String(input.outletCode ?? "").trim().toUpperCase()));
   if (!outlet || phone.length < 10) throw failed();
   const scope = { tenantId: outlet.tenantId, outletId: outlet.id };
 
@@ -57,7 +60,13 @@ export async function signInStaff(input: { outletCode: string; phone: string; pi
     if (user && pinOk && user.isActive) throw failed("You don't have access to this outlet. Ask a manager.", { reason: "no_role" });
     throw failed();
   }
+  return { user: user!, roles, scope, outletCode: outlet.code };
+}
 
+/** Signs in at an outlet; returns the cookie token (shown to nobody but the browser) */
+export async function signInStaff(input: { outletCode: string; phone: string; pin: string; now?: Date }) {
+  const now = input.now ?? new Date();
+  const { user, scope } = await verifyStaffPin({ ...input, now });
   const token = randomBytes(32).toString("base64url");
   const expiresAt = new Date(now.getTime() + STAFF_SESSION_HOURS * 3600_000);
   await db.insert(s.staffSessions).values({ id: uuidv7(), tenantId: scope.tenantId, userId: user.id, outletId: scope.outletId, tokenHash: hashToken(token), createdAt: now, expiresAt, lastSeenAt: now });

@@ -1,0 +1,190 @@
+"use client";
+import {
+  Alert02Icon,
+  AlertDiamondIcon,
+  CheckmarkCircle02Icon,
+  CircleIcon,
+  Clock01Icon,
+  Loading03Icon,
+  Note01Icon,
+  UserGroupIcon,
+} from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
+import type { Lang } from "@/lib/i18n";
+import type { KdsCopy } from "../_copy";
+import { formatElapsed, isFresh, type KdsCard, type Urgency } from "./kds-logic";
+
+const HEAD: Record<Urgency, string> = {
+  new: "bg-kds-new text-kds-text",
+  on_time: "bg-kds-ok text-kds-text",
+  getting_late: "bg-kds-amber text-kds-bg",
+  late: "bg-kds-late text-kds-text",
+};
+const EDGE: Record<Urgency, string> = {
+  new: "border-kds-new",
+  on_time: "border-kds-ok",
+  getting_late: "border-kds-amber",
+  late: "border-kds-late",
+};
+const ICON = { new: Clock01Icon, on_time: Clock01Icon, getting_late: Alert02Icon, late: AlertDiamondIcon };
+
+export type CardAction = "accept" | "start" | "bump";
+
+type Props = {
+  card: KdsCard;
+  lang: Lang;
+  c: KdsCopy;
+  /** Expeditor screens tag each ticket with its station */
+  showStation: boolean;
+  /** False offline, or when this screen may not change this ticket */
+  canAct: boolean;
+  busy: CardAction | null;
+  busyLines: ReadonlySet<string>;
+  leaving: boolean;
+  onAction: (card: KdsCard, action: CardAction) => void;
+  onBumpLine: (card: KdsCard, lineId: string) => void;
+};
+
+export function TicketCard({ card, lang, c, showStation, canAct, busy, busyLines, leaving, onAction, onBumpLine }: Props) {
+  const name = (en: string, hi: string | null) => (lang === "hi" && hi ? hi : en);
+  const fresh = isFresh(card);
+  const sourceLabel = card.source === "walk_in" ? c.walkIn : card.source === "reservation" ? c.reservation : card.source === "waitlist" ? c.waitlist : null;
+  const linesActive = canAct && !card.awaitingStaff && card.stage !== "placed";
+  const action: CardAction | null = card.awaitingStaff ? null : card.stage === "placed" ? "accept" : card.stage === "accepted" ? "start" : "bump";
+
+  return (
+    <article
+      aria-label={`${card.tableCodes.join(" + ")} · ${c.round(card.roundNo)} · ${c.urgency[card.urgency]}`}
+      className={`flex flex-col overflow-hidden rounded-xl border-[3px] bg-kds-card transition-opacity duration-500 ${EDGE[card.urgency]} ${leaving ? "opacity-0" : "opacity-100"}`}
+    >
+      <header className={`px-4 py-3 ${HEAD[card.urgency]}`}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="flex items-center gap-3 font-display text-[34px] font-bold leading-[38px] tracking-tight">
+              {card.tableCodes.join(" + ")}
+              {fresh && <span className="rounded-md bg-kds-text px-2 py-0.5 font-sans text-[16px] font-bold leading-5 tracking-wide text-kds-bg">{c.newTag}</span>}
+            </h2>
+            <p className="text-[20px] font-semibold leading-7">
+              {c.round(card.roundNo)}
+              {showStation && <span> · {card.station}</span>}
+            </p>
+          </div>
+          <div className="shrink-0 text-right">
+            <p className="tabular font-display text-[34px] font-bold leading-[38px]" aria-label="elapsed">
+              {formatElapsed(card.elapsedMs)}
+            </p>
+            <p className="flex items-center justify-end gap-1.5 text-[18px] font-semibold leading-6">
+              <HugeiconsIcon icon={ICON[card.urgency]} size={20} strokeWidth={2.2} aria-hidden />
+              {c.urgency[card.urgency]}
+            </p>
+          </div>
+        </div>
+      </header>
+
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-kds-line px-4 py-2 text-[18px] leading-7 text-kds-muted">
+        <span className="tabular">{c.target(card.targetMinutes)}</span>
+        {card.guests ? (
+          <span className="flex items-center gap-1.5">
+            <HugeiconsIcon icon={UserGroupIcon} size={20} aria-hidden />
+            {c.guests(card.guests)}
+          </span>
+        ) : null}
+        {sourceLabel && <span>{sourceLabel}</span>}
+        {card.placedBy && <span className="truncate">{card.placedBy.kind === "staff" ? c.byStaff(card.placedBy.name) : c.byGuest(card.placedBy.name)}</span>}
+      </div>
+
+      {card.orderNote && (
+        <div className="mx-4 mt-3 flex gap-2 rounded-lg border-2 border-kds-amber px-3 py-2 text-[20px] font-semibold leading-7 text-kds-text">
+          <HugeiconsIcon icon={Note01Icon} size={22} className="mt-0.5 shrink-0 text-kds-amber" aria-hidden />
+          <span>
+            <span className="sr-only">{c.orderNote}: </span>
+            {card.orderNote}
+          </span>
+        </div>
+      )}
+
+      <ul className="flex flex-1 flex-col py-1">
+        {card.lines.map((line) => {
+          const mine = !line.otherStation;
+          const actionable = mine && linesActive && !line.done;
+          const working = busyLines.has(line.id);
+          return (
+            <li key={line.id} className={line.otherStation ? "opacity-45" : undefined}>
+              <button
+                type="button"
+                disabled={!actionable || working}
+                onClick={() => onBumpLine(card, line.id)}
+                aria-label={actionable ? `${name(line.nameEn, line.nameHi)} — ${c.tapReady}` : undefined}
+                className={`grid min-h-[60px] w-full grid-cols-[auto_1fr_auto] items-start gap-3 px-4 py-2.5 text-left ${actionable ? "cursor-pointer active:bg-kds-line" : "cursor-default"}`}
+              >
+                <span className={`tabular w-10 text-[24px] font-bold leading-8 ${line.done ? "text-kds-muted" : "text-kds-text"}`}>{line.qty}×</span>
+                <span className="min-w-0">
+                  <span className={`block text-kds font-semibold ${line.done ? "text-kds-muted line-through decoration-2" : "text-kds-text"}`}>{name(line.nameEn, line.nameHi)}</span>
+                  {line.modifiers.length > 0 && (
+                    <span className="block text-[19px] leading-7 text-kds-text/90">{line.modifiers.map((m) => `+ ${name(m.en, m.hi)}`).join("  ")}</span>
+                  )}
+                  {line.note && <span className="mt-1 block rounded-md bg-kds-amber/20 px-2 py-0.5 text-[19px] font-semibold italic leading-7 text-kds-text">“{line.note}”</span>}
+                  <Warnings line={line} c={c} />
+                  {line.otherStation && <span className="mt-1 inline-block rounded-md border border-kds-muted px-2 text-[16px] font-semibold leading-6 text-kds-muted">{c.otherStation(line.station)}</span>}
+                </span>
+                <span className="flex min-w-[44px] flex-col items-center pt-0.5">
+                  {working ? (
+                    <HugeiconsIcon icon={Loading03Icon} size={34} className="animate-spin text-kds-muted" aria-hidden />
+                  ) : line.done ? (
+                    <>
+                      <HugeiconsIcon icon={CheckmarkCircle02Icon} size={34} className="text-kds-ok" strokeWidth={2.2} aria-hidden />
+                      <span className="text-[16px] font-semibold leading-5 text-kds-muted">{line.status === "served" ? c.served : c.ready}</span>
+                    </>
+                  ) : actionable ? (
+                    <HugeiconsIcon icon={CircleIcon} size={34} className="text-kds-text" strokeWidth={2} aria-hidden />
+                  ) : null}
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+
+      <footer className="p-3 pt-1">
+        {card.awaitingStaff ? (
+          <div className="rounded-lg border-2 border-kds-muted px-3 py-3 text-center">
+            <p className="text-[22px] font-bold leading-7 text-kds-text">{c.awaiting}</p>
+            <p className="text-[18px] leading-6 text-kds-muted">{c.awaitingBody}</p>
+          </div>
+        ) : (
+          <>
+            {linesActive && <p className="mb-1.5 text-center text-[16px] leading-6 text-kds-muted">{c.tapReady}</p>}
+            <button
+              type="button"
+              disabled={!canAct || !!busy}
+              onClick={() => action && onAction(card, action)}
+              className={`h-16 w-full rounded-lg text-[22px] font-bold text-kds-text disabled:opacity-50 ${action === "bump" ? "bg-kds-ok" : "bg-kds-new"}`}
+            >
+              {busy ? c.working : action === "accept" ? c.accept : action === "start" ? c.start : c.bump}
+            </button>
+          </>
+        )}
+      </footer>
+    </article>
+  );
+}
+
+function Warnings({ line, c }: { line: KdsCard["lines"][number]; c: KdsCopy }) {
+  const known = line.allergens ?? [];
+  const pills = [
+    ...(line.jain ? [<span key="jain" className="rounded-md bg-kds-text px-2 text-[17px] font-bold leading-7 text-kds-bg">{c.jain}</span>] : []),
+    ...known.map((a) => (
+      <span key={a} className="rounded-md bg-kds-late px-2 text-[17px] font-bold leading-7 text-kds-text">
+        {c.allergen(a)}
+      </span>
+    )),
+    ...(line.spice && line.spice > 0 ? [<span key="spice" className="rounded-md border border-kds-amber px-2 text-[17px] font-semibold leading-7 text-kds-amber">{c.spice(line.spice)}</span>] : []),
+  ];
+  return (
+    <>
+      {pills.length > 0 && <span className="mt-1 flex flex-wrap gap-1.5">{pills}</span>}
+      {/* Unknown is never shown as "no allergens" */}
+      {line.allergens === null && !line.done && <span className="mt-1 block text-[16px] leading-6 text-kds-muted">{c.allergensUnknown}</span>}
+    </>
+  );
+}

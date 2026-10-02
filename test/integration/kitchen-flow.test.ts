@@ -51,14 +51,14 @@ afterAll(async () => {
 });
 
 describe("kitchen display (S2)", () => {
-  it("shows the expeditor one card per order with every line, oldest first", async () => {
+  it("shows the expeditor one card per station ticket, every line visible, oldest first", async () => {
     const kds = await getKitchenDisplay(kitchen, {}, later(2));
-    expect(kds.counts).toEqual({ All: 1, Main: 1, Tandoor: 1, Bar: 1 });
-    expect(kds.cards).toHaveLength(1);
-    const card = kds.cards[0];
-    expect(card).toMatchObject({ tableCode: "T12", roundNo: 1, guests: 1, placedBy: "Aarav", urgency: "new" });
+    expect(kds.counts).toEqual({ All: 3, Main: 1, Tandoor: 1, Bar: 1 });
+    expect(kds.cards).toHaveLength(3);
+    const card = kds.cards.find((c) => c.station === "Main")!;
+    expect(card).toMatchObject({ tableCodes: ["T12"], roundNo: 1, guests: 1, placedBy: { kind: "guest", name: "Aarav" }, urgency: "new" });
     expect(card.lines.map((l) => l.nameEn)).toEqual(["Butter Chicken", "Paneer Tikka", "Cola"]);
-    expect(card.lines[0]).toMatchObject({ modifiers: ["Butter naan"], note: "less spicy", allergens: ["dairy", "tree_nuts"] });
+    expect(card.lines[0]).toMatchObject({ modifiers: [{ en: "Butter naan" }], note: "less spicy", allergens: ["dairy", "tree_nuts"] });
   });
 
   it("gives a station its own ticket and dims other stations' lines", async () => {
@@ -69,9 +69,10 @@ describe("kitchen display (S2)", () => {
   });
 
   it("turns amber at the prep time and red at 1.5 times it", async () => {
-    // Longest dish on the card is Butter Chicken at 18 minutes
-    expect((await getKitchenDisplay(kitchen, {}, later(18))).cards[0].urgency).toBe("getting_late");
-    expect((await getKitchenDisplay(kitchen, {}, later(27))).cards[0].urgency).toBe("late");
+    // Main's only dish is Butter Chicken at 18 minutes
+    const main = async (m: number) => (await getKitchenDisplay(kitchen, { station: "Main" }, later(m))).cards[0].urgency;
+    expect(await main(18)).toBe("getting_late");
+    expect(await main(27)).toBe("late");
   });
 });
 
@@ -121,7 +122,7 @@ describe("order lifecycle", () => {
   it("recalls a ticket bumped by mistake within 10 minutes, and not after", async () => {
     const tandoor = await ticketOf("Tandoor");
     const kds = await getKitchenDisplay(kitchen, {}, later(17));
-    expect(kds.lastBumped?.id).toBe(tandoor.id);
+    expect(kds.lastBumped?.ticketId).toBe(tandoor.id);
 
     expect(await recallTicket(kitchen, tandoor.id, later(20))).toBe("preparing");
     const [order] = await env.db.select().from(s.orders).where(eq(s.orders.id, orderId));

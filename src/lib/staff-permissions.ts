@@ -35,3 +35,7 @@ export type FloorPermission = keyof typeof floorPermissions;
 export const canUse = (roles: readonly StaffRole[], allowed: readonly StaffRole[]) => roles.some((r) => allowed.includes(r));
 export const canSee = (roles: readonly StaffRole[], section: ConsoleSectionSlug) => canUse(roles, consoleSectionRoles[section]);
 export const can = (roles: readonly StaffRole[], permission: FloorPermission) => canUse(roles, floorPermissions[permission]);
+
+/** Kitchen display (S2): who may set up, repin or revoke a wall screen, and who works on one */
+export const kdsSetupRoles = ["manager", "owner"] as const satisfies readonly StaffRole[];
+export const kdsWorkRoles = ["kitchen", "manager", "owner"] as const satisfies readonly StaffRole[];
