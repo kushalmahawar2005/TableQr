@@ -5,6 +5,9 @@ import {
   CheckmarkCircle02Icon,
   CircleIcon,
   Clock01Icon,
+  Fire03Icon,
+  PauseCircleIcon,
+  Tick02Icon,
   Loading03Icon,
   Note01Icon,
   UserGroupIcon,
@@ -30,6 +33,14 @@ const ICON = { new: Clock01Icon, on_time: Clock01Icon, getting_late: Alert02Icon
 
 export type CardAction = "accept" | "start" | "bump";
 
+// Three different colours, icons and words, so the next step reads from across the kitchen
+const ACTION_STYLE: Record<CardAction, string> = {
+  accept: "bg-kds-new text-kds-text",
+  start: "bg-kds-text text-kds-bg",
+  bump: "bg-kds-ok text-kds-text",
+};
+const ACTION_ICON = { accept: Tick02Icon, start: Fire03Icon, bump: CheckmarkCircle02Icon };
+
 type Props = {
   card: KdsCard;
   lang: Lang;
@@ -48,16 +59,17 @@ type Props = {
 export function TicketCard({ card, lang, c, showStation, canAct, busy, busyLines, leaving, onAction, onBumpLine }: Props) {
   const name = (en: string, hi: string | null) => (lang === "hi" && hi ? hi : en);
   const fresh = isFresh(card);
+  const waiting = !!card.awaitingStaff;
   const sourceLabel = card.source === "walk_in" ? c.walkIn : card.source === "reservation" ? c.reservation : card.source === "waitlist" ? c.waitlist : null;
-  const linesActive = canAct && !card.awaitingStaff && card.stage !== "placed";
+  const linesActive = canAct && !card.awaitingStaff && card.stage === "preparing";
   const action: CardAction | null = card.awaitingStaff ? null : card.stage === "placed" ? "accept" : card.stage === "accepted" ? "start" : "bump";
 
   return (
     <article
-      aria-label={`${card.tableCodes.join(" + ")} · ${c.round(card.roundNo)} · ${c.urgency[card.urgency]}`}
-      className={`flex flex-col overflow-hidden rounded-xl border-[3px] bg-kds-card transition-opacity duration-500 ${EDGE[card.urgency]} ${leaving ? "opacity-0" : "opacity-100"}`}
+      aria-label={`${card.tableCodes.join(" + ")} · ${c.round(card.roundNo)} · ${waiting ? c.awaiting : c.urgency[card.urgency]}`}
+      className={`flex flex-col overflow-hidden rounded-xl border-[3px] bg-kds-card transition-opacity duration-500 ${waiting ? "border-dashed border-kds-muted" : EDGE[card.urgency]} ${leaving ? "opacity-0" : "opacity-100"}`}
     >
-      <header className={`px-4 py-3 ${HEAD[card.urgency]}`}>
+      <header className={`px-4 py-3 ${waiting ? "bg-kds-line text-kds-text" : HEAD[card.urgency]}`}>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h2 className="flex items-center gap-3 font-display text-[34px] font-bold leading-[38px] tracking-tight">
@@ -69,6 +81,12 @@ export function TicketCard({ card, lang, c, showStation, canAct, busy, busyLines
               {showStation && <span> · {card.station}</span>}
             </p>
           </div>
+          {waiting ? (
+            <p className="flex shrink-0 items-center gap-2 pt-1 text-[20px] font-bold leading-7">
+              <HugeiconsIcon icon={PauseCircleIcon} size={26} strokeWidth={2.2} aria-hidden />
+              {c.awaiting}
+            </p>
+          ) : (
           <div className="shrink-0 text-right">
             <p className="tabular font-display text-[34px] font-bold leading-[38px]" aria-label="elapsed">
               {formatElapsed(card.elapsedMs)}
@@ -78,11 +96,12 @@ export function TicketCard({ card, lang, c, showStation, canAct, busy, busyLines
               {c.urgency[card.urgency]}
             </p>
           </div>
+          )}
         </div>
       </header>
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-kds-line px-4 py-2 text-[18px] leading-7 text-kds-muted">
-        <span className="tabular">{c.target(card.targetMinutes)}</span>
+        {!waiting && <span className="tabular">{c.target(card.targetMinutes)}</span>}
         {card.guests ? (
           <span className="flex items-center gap-1.5">
             <HugeiconsIcon icon={UserGroupIcon} size={20} aria-hidden />
@@ -158,8 +177,9 @@ export function TicketCard({ card, lang, c, showStation, canAct, busy, busyLines
               type="button"
               disabled={!canAct || !!busy}
               onClick={() => action && onAction(card, action)}
-              className={`h-16 w-full rounded-lg text-[22px] font-bold text-kds-text disabled:opacity-50 ${action === "bump" ? "bg-kds-ok" : "bg-kds-new"}`}
+              className={`flex h-16 w-full items-center justify-center gap-3 rounded-lg text-[24px] font-bold disabled:opacity-50 ${ACTION_STYLE[action ?? "bump"]}`}
             >
+              {!busy && <HugeiconsIcon icon={ACTION_ICON[action ?? "bump"]} size={28} strokeWidth={2.4} aria-hidden />}
               {busy ? c.working : action === "accept" ? c.accept : action === "start" ? c.start : c.bump}
             </button>
           </>

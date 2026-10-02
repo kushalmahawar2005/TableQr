@@ -10,13 +10,20 @@ export type KdsCard = KitchenCard & { awaitingStaff?: boolean };
 /** Elapsed since the order was placed, and urgency from the ticket's target */
 export function liveCard(card: KdsCard, now: number): KdsCard {
   const elapsedMs = Math.max(0, now - card.placedAt);
+  // Not cookable yet: no clock pressure, no urgency until staff confirm it
+  if (card.awaitingStaff) return { ...card, elapsedMs, urgency: "new" };
   return { ...card, elapsedMs, urgency: ticketUrgency(elapsedMs, card.targetMinutes, card.stage !== "placed") };
 }
 
-/** Most urgent first; inside the same urgency, the oldest */
+/** Cookable tickets, most urgent first, then the oldest; tickets awaiting confirmation go last */
 export function sortCards(cards: KdsCard[]): KdsCard[] {
-  return [...cards].sort((a, b) => urgencyRank(b.urgency) - urgencyRank(a.urgency) || a.placedAt - b.placedAt);
+  return [...cards].sort(
+    (a, b) => Number(!!a.awaitingStaff) - Number(!!b.awaitingStaff) || urgencyRank(b.urgency) - urgencyRank(a.urgency) || a.placedAt - b.placedAt,
+  );
 }
+
+/** Only cookable tickets count, chime or turn late */
+export const cookable = (cards: KdsCard[]) => cards.filter((c) => !c.awaitingStaff);
 
 /** 7:05, 12:40, 1:02:05 */
 export function formatElapsed(ms: number): string {
@@ -30,7 +37,7 @@ export function formatElapsed(ms: number): string {
 
 /** A card is "NEW" for its first three minutes until a cook starts it */
 export const NEW_FOR_MS = 3 * 60_000;
-export const isFresh = (card: KdsCard) => card.stage !== "preparing" && card.elapsedMs < NEW_FOR_MS;
+export const isFresh = (card: KdsCard) => !card.awaitingStaff && card.stage !== "preparing" && card.elapsedMs < NEW_FOR_MS;
 
 /**
  * Decides which tickets deserve a sound. The first load only primes (nothing already on screen

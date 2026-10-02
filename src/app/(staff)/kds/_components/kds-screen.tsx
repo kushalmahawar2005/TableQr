@@ -17,7 +17,7 @@ import type { Lang } from "@/lib/i18n";
 import type { KdsBoard } from "@/server/kitchen/kds";
 import { acceptAction, bumpLineAction, bumpTicketAction, logoutAction, recallAction, searchAction, settingsAction, startAction, stockAction, type KdsResult } from "../actions";
 import { kdsCopy, type KdsCopy } from "../_copy";
-import { createAnnouncer, liveCard, sortCards, type Announcer, type Connection, type KdsCard } from "./kds-logic";
+import { cookable, createAnnouncer, liveCard, sortCards, type Announcer, type Connection, type KdsCard } from "./kds-logic";
 import { playLate, playNewTicket, rememberedAnnouncements, saveAnnouncements, setSoundPref, soundPreference, subscribeSoundPref, unlockAudio } from "./sound";
 import { TicketCard, type CardAction } from "./ticket-card";
 import { useKdsSync } from "./use-kds-sync";
@@ -81,10 +81,10 @@ export function KdsScreen(props: { initial: KdsBoard; device: KdsDeviceView; rea
     if (!announcer.current) announcer.current = createAnnouncer(rememberedAnnouncements());
     if (lastStation.current !== board.station) {
       lastStation.current = board.station;
-      announcer.current.prime(cards);
+      announcer.current.prime(cookable(cards));
       return;
     }
-    const heard = announcer.current.next(cards);
+    const heard = announcer.current.next(cookable(cards));
     if (heard.arrived.length || heard.late.length) {
       saveAnnouncements(announcer.current.snapshot());
       if (sound === "on") {
@@ -215,7 +215,7 @@ export function KdsScreen(props: { initial: KdsBoard; device: KdsDeviceView; rea
         </div>
       )}
 
-      <main className="min-h-0 flex-1 overflow-y-auto p-4">
+      <main className="min-h-0 flex-1 overflow-y-auto p-4 pb-10">
         {cards.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center text-center">
             <p className="font-display text-[34px] font-bold">{c.emptyTitle}</p>
