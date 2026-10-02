@@ -1,5 +1,7 @@
 import {
+  boolean,
   index,
+  tinyint,
   int,
   json,
   mysqlEnum,
@@ -42,6 +44,8 @@ export const orders = mysqlTable(
     // Timestamp per state so kitchen speed can be measured
     placedAt: createdAt("placed_at"),
     acceptedAt: at("accepted_at"),
+    /** First time any line started cooking (S2) */
+    preparingAt: at("preparing_at"),
     readyAt: at("ready_at"),
     servedAt: at("served_at"),
     cancelledAt: at("cancelled_at"),
@@ -82,10 +86,16 @@ export const orderLines = mysqlTable(
     /** Target at placement: later menu edits must not move an existing order's late threshold. */
     prepMinutes: int("prep_minutes").notNull().default(15),
     note: varchar("note", { length: 140 }),
+    // Food-safety snapshots taken when the order is placed (S2). NULL on rows placed before they
+    // existed means unknown, never "none": [] is only ever a restaurant's own declaration.
+    allergensSnapshot: json("allergens_snapshot").$type<string[]>(),
+    isJainSnapshot: boolean("is_jain_snapshot"),
+    spiceLevelSnapshot: tinyint("spice_level_snapshot"),
     sharedWith: json("shared_with").$type<string[]>(),
     status: mysqlEnum("status", [...orderStatuses, "voided"]).notNull().default("placed"),
     voidReason: varchar("void_reason", { length: 200 }),
     voidedByUserId: ref("voided_by_user_id"),
+    preparingAt: at("preparing_at"),
     readyAt: at("ready_at"),
     servedAt: at("served_at"),
     voidedAt: at("voided_at"),
@@ -117,6 +127,8 @@ export const tickets = mysqlTable(
   },
   (t) => [
     index("tickets_outlet_station_idx").on(t.outletId, t.station, t.status),
+    // One ticket per station per order; adding this fails loudly if duplicates exist
+    uniqueIndex("tickets_order_station_uq").on(t.orderId, t.station),
     sameTenant("fk_tickets_outlet", t, t.outletId, outlets),
     sameTenant("fk_tickets_order", t, t.orderId, orders),
   ],
@@ -159,5 +171,37 @@ export const serviceRequests = mysqlTable(
     sameTenant("fk_service_requests_table", t, t.tableId, diningTables),
     sameTenant("fk_service_requests_participant", t, t.participantId, participants),
     sameTenant("fk_service_requests_done_by", t, t.doneByUserId, users),
+  ],
+);
+
+/**
+ * A wall-mounted kitchen screen (S2). Set up by a manager or owner with their PIN; the screen
+ * then keeps a 30-day device token (only its hash is stored), pinned to one station or to the
+ * expeditor's All view. Revoking it signs the screen out at once.
+ */
+export const kdsDevices = mysqlTable(
+  "kds_devices",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    outletId: ref("outlet_id").notNull(),
+    tokenHash: varchar("token_hash", { length: 64 }).notNull(),
+    /** Null only for an expeditor screen */
+    station: varchar("station", { length: 30 }),
+    expeditor: boolean("expeditor").notNull().default(false),
+    lang: mysqlEnum("lang", ["en", "hi"]).notNull().default("en"),
+    createdByUserId: ref("created_by_user_id").notNull(),
+    updatedByUserId: ref("updated_by_user_id"),
+    createdAt: createdAt(),
+    expiresAt: at("expires_at").notNull(),
+    lastSeenAt: at("last_seen_at"),
+    revokedAt: at("revoked_at"),
+  },
+  (t) => [
+    uniqueIndex("kds_devices_token_uq").on(t.tokenHash),
+    index("kds_devices_outlet_idx").on(t.tenantId, t.outletId),
+    sameTenant("fk_kds_devices_outlet", t, t.outletId, outlets),
+    sameTenant("fk_kds_devices_created_by", t, t.createdByUserId, users),
+    sameTenant("fk_kds_devices_updated_by", t, t.updatedByUserId, users),
   ],
 );

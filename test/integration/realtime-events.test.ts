@@ -69,7 +69,7 @@ describe("realtime events", () => {
 
   it("out of stock reaches every guest menu and the kitchen", async () => {
     await setOutOfStock(staff, env.demo.itemIds["Gulab Jamun"], true);
-    expect(flat()).toEqual(["menu item.availability", "kitchen item.availability"]);
+    expect(flat()).toEqual(["menu item.availability", "kitchen item.availability", "kitchen item.out_of_stock"]);
   });
 
   it("request bill and settling recolour the table on the floor map", async () => {

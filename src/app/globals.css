@@ -51,6 +51,12 @@
   --kds-card: #1f2740;
   --kds-text: #f8fafc;
   --kds-muted: #b8c0cc;
+  /* S2 urgency: new/info, on time/ready, getting late, late */
+  --kds-new: #315e9e;
+  --kds-ok: #237a68;
+  --kds-amber: #c18400;
+  --kds-late: #b83a3a;
+  --kds-line: #34405f;
 
   /*
    * Adaptive brand layer. These are the tokens derived from the TableQR default accent;
@@ -88,6 +94,11 @@
   --color-kds-card: var(--kds-card);
   --color-kds-text: var(--kds-text);
   --color-kds-muted: var(--kds-muted);
+  --color-kds-new: var(--kds-new);
+  --color-kds-ok: var(--kds-ok);
+  --color-kds-amber: var(--kds-amber);
+  --color-kds-late: var(--kds-late);
+  --color-kds-line: var(--kds-line);
 
   --color-brand: var(--brand-main);
   --color-brand-strong: var(--brand-strong);

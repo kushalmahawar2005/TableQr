@@ -6,4 +6,6 @@ export type StaffContext = {
   tenantId: string;
   outletId: string;
   userId: string | null;
+  /** Who acted, for the audit log when it is not a signed-in user (e.g. "kds:Tandoor") */
+  actorLabel?: string;
 };

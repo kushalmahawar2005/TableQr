@@ -53,3 +53,6 @@ export const GUEST_STATUS_TEXT: Record<OrderStatus, string> = {
   served: "Served",
   cancelled: "Cancelled",
 };
+
+/** Sort weight: late first, then getting late, then everything on time */
+export const urgencyRank = (u: Urgency) => (u === "late" ? 3 : u === "getting_late" ? 2 : 0);

@@ -206,6 +206,10 @@ function placeOrderTx(ctx: GuestContext, input: PlaceInput, now: Date) {
         taxRateBp: item.item.taxRateBp,
         station: item.item.station,
         prepMinutes: Math.max(1, item.item.prepMinutes),
+        // Kitchen safety snapshots (S2): copied as stated, null stays null (unknown)
+        allergensSnapshot: item.item.allergens ?? null,
+        isJainSnapshot: item.item.isJain,
+        spiceLevelSnapshot: item.item.spiceLevel ?? null,
         note: line.note,
         sharedWith: line.sharedWith,
         status: outlet.autoAccept ? ("accepted" as const) : ("placed" as const),

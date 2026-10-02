@@ -36,6 +36,7 @@ export async function syncOrderStatus(tx: Tx, tenantId: string, orderId: string,
     .set({
       status,
       acceptedAt: order.acceptedAt ?? (reached("accepted") ? now : null),
+      preparingAt: order.preparingAt ?? (reached("preparing") ? now : null),
       // Ready and served times follow recalls: cleared if the order goes back to the pass
       readyAt: reached("ready") ? (order.readyAt ?? now) : null,
       servedAt: reached("served") ? (order.servedAt ?? now) : null,

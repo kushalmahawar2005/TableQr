@@ -43,6 +43,13 @@
       "when": 1790878525631,
       "tag": "0005_s1_floor_booking",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1790934968934,
+      "tag": "0006_s2_kds",
+      "breakpoints": true
     }
   ]
 }
