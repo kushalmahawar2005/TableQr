@@ -1,13 +1,11 @@
 import type { Metadata } from "next";
-
-export const metadata: Metadata = { title: "My floor" };
-
-// S3 Waiter phone. Tasks first, bottom tabs.
-export default function WaiterPage() {
-  return (
-    <main className="mx-auto w-full max-w-[480px] px-5 py-10">
-      <h1 className="font-display text-title font-medium">My floor</h1>
-      <p className="mt-2 text-muted">Placeholder for screen S3.</p>
-    </main>
-  );
+import { redirect } from "next/navigation";
+import { currentStaff } from "@/server/staff/request";
+import { waiterBoard } from "@/server/staff/waiter-read";
+import { WaiterScreen } from "./_components/waiter-screen";
+export const metadata: Metadata={title:"My floor"};
+export default async function WaiterPage(){
+ const staff=await currentStaff();if(!staff) redirect("/console/login");
+ if(!staff.roles.some(r=>["waiter","manager","owner"].includes(r))) return <main className="p-6">Permission denied. Ask a manager.</main>;
+ return <WaiterScreen initial={await waiterBoard(staff)} realtimeUrl={process.env.NEXT_PUBLIC_REALTIME_URL??null}/>;
 }

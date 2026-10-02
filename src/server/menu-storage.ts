@@ -1,0 +1,10 @@
+import "server-only";
+import { randomUUID } from "node:crypto";
+import { mkdir, writeFile, unlink } from "node:fs/promises";
+import path from "node:path";
+import sharp from "sharp";
+import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { AppError } from "./errors";
+export type MenuImageUpload={tenantId:string;brandId:string;filename:string;contentType:string;bytes:Buffer};
+export async function storeMenuImage(input:MenuImageUpload){if(!/^image\/(jpeg|png|webp|avif)$/.test(input.contentType))throw new AppError("invalid_state","Upload a JPG, PNG, WebP, or AVIF image.");if(input.bytes.byteLength>5*1024*1024)throw new AppError("invalid_state","Images must be 5 MB or smaller.");const key=`menus/${input.tenantId}/${input.brandId}/${randomUUID()}.webp`;const webp=await sharp(input.bytes).rotate().resize({width:1600,height:1600,fit:"inside",withoutEnlargement:true}).webp({quality:82}).toBuffer();if(process.env.MENU_STORAGE_DRIVER==="local"){const file=path.join(process.cwd(),"public","uploads",key);await mkdir(path.dirname(file),{recursive:true});await writeFile(file,webp);return{key,url:`/uploads/${key}`}}const bucket=process.env.MENU_STORAGE_BUCKET;if(!bucket||!process.env.MENU_STORAGE_ENDPOINT)throw new AppError("invalid_state","Menu image storage is not configured for this environment.");const client=new S3Client({endpoint:process.env.MENU_STORAGE_ENDPOINT,region:process.env.MENU_STORAGE_REGION??"auto",forcePathStyle:process.env.MENU_STORAGE_FORCE_PATH_STYLE==="1"});await client.send(new PutObjectCommand({Bucket:bucket,Key:key,Body:webp,ContentType:"image/webp",CacheControl:"public,max-age=31536000,immutable"}));return{key,url:`${process.env.MENU_STORAGE_PUBLIC_URL?.replace(/\/$/,"")??`${process.env.MENU_STORAGE_ENDPOINT.replace(/\/$/,"")}/${bucket}`}/${key}`}}
+export async function removeLocalMenuImage(url:string|null|undefined){if(!url?.startsWith("/uploads/"))return;try{await unlink(path.join(process.cwd(),"public",url.replace(/^\//,"")))}catch{/* old image may already be gone */}}

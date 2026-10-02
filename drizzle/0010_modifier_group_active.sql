@@ -1,0 +1,1 @@
+ALTER TABLE `modifier_groups` ADD `is_active` boolean DEFAULT true NOT NULL;

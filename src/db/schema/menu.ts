@@ -27,6 +27,7 @@ export const menuCategories = mysqlTable(
     availableTo: time("available_to"),
     imageUrl: varchar("image_url", { length: 500 }),
     sortOrder: int("sort_order").notNull().default(0),
+    isActive: boolean("is_active").notNull().default(true),
     createdAt: createdAt(),
   },
   (t) => [tenantKey("menu_categories", t), sameTenant("fk_menu_categories_brand", t, t.brandId, brands)],
@@ -106,6 +107,7 @@ export const modifierGroups = mysqlTable(
     minSelect: int("min_select").notNull().default(0),
     maxSelect: int("max_select").notNull().default(1),
     sortOrder: int("sort_order").notNull().default(0),
+    isActive: boolean("is_active").notNull().default(true),
   },
   (t) => [tenantKey("modifier_groups", t), sameTenant("fk_modifier_groups_item", t, t.itemId, menuItems)],
 );
@@ -123,4 +125,22 @@ export const modifiers = mysqlTable(
     sortOrder: int("sort_order").notNull().default(0),
   },
   (t) => [sameTenant("fk_modifiers_group", t, t.groupId, modifierGroups)],
+);
+
+/** Directional, brand-shared recommendations managed with the menu. */
+export const menuItemPairings = mysqlTable(
+  "menu_item_pairings",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    sourceItemId: ref("source_item_id").notNull(),
+    pairedItemId: ref("paired_item_id").notNull(),
+    sortOrder: int("sort_order").notNull().default(0),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex("menu_item_pairings_uq").on(t.tenantId, t.sourceItemId, t.pairedItemId),
+    sameTenant("fk_pairings_source", t, t.sourceItemId, menuItems),
+    sameTenant("fk_pairings_paired", t, t.pairedItemId, menuItems),
+  ],
 );

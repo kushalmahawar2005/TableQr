@@ -22,6 +22,7 @@ export type ConsoleSectionSlug = keyof typeof consoleSectionRoles;
 export const floorPermissions = {
   "floor.view": ["host", "manager", "owner"],
   "floor.seat": ["host", "manager", "owner"],
+  "floor.clean": ["waiter", "host", "manager", "owner"],
   "floor.reset": ["host", "manager", "owner"],
   "floor.block": ["manager", "owner"],
   "booking.manage": ["host", "manager", "owner"],

@@ -38,7 +38,12 @@ export async function placeOrder(ctx: GuestContext, input: PlaceInput = {}, now 
   return placed;
 }
 
-function placeOrderTx(ctx: GuestContext, input: PlaceInput, now: Date) {
+export type StaffDraftLine = { itemId: string; qty: number; modifierIds: string[]; note?: string };
+
+type StaffOrder = { userId: string; lines: StaffDraftLine[] };
+
+/** Internal shared transaction; staff caller authenticates before providing staffDraft. */
+export function placeOrderTx(ctx: GuestContext, input: PlaceInput, now: Date, staffDraft?: StaffOrder) {
   return db.transaction(async (tx) => {
     // Lock the session so two phones at the table cannot take the same round number
     const [session] = await tx
@@ -46,6 +51,13 @@ function placeOrderTx(ctx: GuestContext, input: PlaceInput, now: Date) {
       .from(s.tableSessions)
       .where(and(eq(s.tableSessions.tenantId, ctx.tenantId), eq(s.tableSessions.outletId, ctx.outletId), eq(s.tableSessions.tableId, ctx.tableId), eq(s.tableSessions.id, ctx.sessionId)))
       .for("update");
+    if (session && staffDraft && input.requestId) {
+      const [done] = await tx.select().from(s.orders).where(and(eq(s.orders.tenantId,ctx.tenantId),eq(s.orders.sessionId,ctx.sessionId),eq(s.orders.clientRequestId,input.requestId)));
+      if(done) {
+        if(done.placedByUserId !== staffDraft.userId || done.placedByParticipantId !== ctx.participantId) throw new AppError("conflict", "This request id was used by another diner or staff member.");
+        return {orderId:done.id,roundNo:done.roundNo,status:done.status,subtotalPaise:0,stations:[] as string[],itemCount:0,soldOutItemIds:[] as string[],replayed:true};
+      }
+    }
     if (!session || session.status === "closed") {
       throw new AppError("session_expired", "Your table session has ended. Scan the table QR again to continue.");
     }
@@ -71,7 +83,7 @@ function placeOrderTx(ctx: GuestContext, input: PlaceInput, now: Date) {
     if (session.status === "bill_requested") {
       throw new AppError("table_settling", "The bill has been requested, so new orders are paused. Ask staff to reopen the bill.");
     }
-    if (session.orderingLocked) {
+    if (session.orderingLocked && !staffDraft) {
       const [host] = session.hostParticipantId
         ? await tx
             .select({ name: s.participants.displayName })
@@ -82,7 +94,7 @@ function placeOrderTx(ctx: GuestContext, input: PlaceInput, now: Date) {
     }
 
     // Open mode takes the first name at the first order (G1 decision N3); saved with the order
-    if (session.mode === "open" && isPlaceholderName(me.displayName)) {
+    if (!staffDraft && session.mode === "open" && isPlaceholderName(me.displayName)) {
       const name = checkFirstName(input.name ?? "");
       if (!name.ok) {
         throw new AppError(name.reason === "empty" ? "name_required" : "invalid_name", "Add your first name to order.");
@@ -93,7 +105,7 @@ function placeOrderTx(ctx: GuestContext, input: PlaceInput, now: Date) {
         .where(and(eq(s.participants.tenantId, ctx.tenantId), eq(s.participants.id, ctx.participantId)));
     }
 
-    const cart = await tx
+    const cart = staffDraft ? staffDraft.lines.map((line, i) => ({ id: String(i), itemId: line.itemId, qty: line.qty, modifiers: line.modifierIds.map(modifierId => ({ modifierId })), note: line.note?.trim().slice(0, 140) || null, sharedWith: null })) : await tx
       .select()
       .from(s.cartLines)
       .where(
@@ -169,7 +181,7 @@ function placeOrderTx(ctx: GuestContext, input: PlaceInput, now: Date) {
       .where(and(eq(s.outlets.tenantId, ctx.tenantId), eq(s.outlets.id, ctx.outletId)));
 
     // Open mode: a big first order on a fresh table waits for staff (PS 3.3)
-    if (session.mode === "open" && roundNo === 1 && subtotalPaise > outlet.cap) {
+    if (!staffDraft && session.mode === "open" && roundNo === 1 && subtotalPaise > outlet.cap) {
       throw new AppError("needs_staff_confirmation", "This is a large first order, so a staff member will confirm it. Please ask your waiter.", {
         subtotalPaise,
         capPaise: outlet.cap,
@@ -184,6 +196,7 @@ function placeOrderTx(ctx: GuestContext, input: PlaceInput, now: Date) {
       sessionId: ctx.sessionId,
       roundNo,
       placedByParticipantId: ctx.participantId,
+      placedByUserId: staffDraft?.userId ?? null,
       clientRequestId: requestId,
       status: outlet.autoAccept ? "accepted" : "placed",
       note: input.note?.trim().slice(0, 140) || null,
@@ -237,7 +250,8 @@ function placeOrderTx(ctx: GuestContext, input: PlaceInput, now: Date) {
       }
     }
 
-    await tx
+    if (staffDraft) await tx.insert(s.auditLog).values({ tenantId: ctx.tenantId, outletId: ctx.outletId, actorLabel: "staff", actorUserId: staffDraft.userId, action: "waiter.order_placed", entity: "order", entityId: orderId, after: { sessionId: ctx.sessionId, tableId: ctx.tableId, participantId: ctx.participantId, requestId, pauseBypassed: session.orderingLocked, capBypassed: session.mode === "open" && roundNo === 1 && subtotalPaise > outlet.cap }, createdAt: now });
+    if (!staffDraft) await tx
       .delete(s.cartLines)
       .where(and(eq(s.cartLines.tenantId, ctx.tenantId), inArray(s.cartLines.id, cart.map((l) => l.id))));
     await tx

@@ -89,7 +89,7 @@ export async function markNeedsCleaning(staff: FloorActor, tableId: string, now 
 
 /** Needs cleaning → Available (or Held/Reserved if a booking is due), once nothing holds the table */
 export async function markReady(staff: FloorActor, tableId: string, now = new Date()) {
-  assertMay(staff, "floor.reset");
+  assertMay(staff, "floor.clean");
   const scope = scopeOf(staff);
   return run(staff, async (tx) => {
     const table = (await lockTables(tx, scope, [tableId])).get(tableId)!;

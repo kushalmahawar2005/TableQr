@@ -110,6 +110,7 @@ export async function completeServiceRequest(ctx: StaffContext, requestId: strin
     if (row.status === "done") return null;
     await tx.update(s.serviceRequests).set({ status: "done", doneAt: now, doneByUserId: ctx.userId })
       .where(and(eq(s.serviceRequests.tenantId, ctx.tenantId), eq(s.serviceRequests.id, requestId)));
+    await tx.insert(s.auditLog).values({tenantId:ctx.tenantId,outletId:ctx.outletId,actorLabel:"staff",actorUserId:ctx.userId,action:"waiter.request_done",entity:"service_request",entityId:requestId,after:{sessionId:row.sessionId},createdAt:now});
     return row;
   }, LOCK_THEN_READ);
   if (request) await publish(ctx, [

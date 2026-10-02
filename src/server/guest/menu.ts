@@ -71,6 +71,7 @@ export async function loadItems(
       .where(
         and(
           eq(s.menuCategories.tenantId, ctx.tenantId),
+          eq(s.menuCategories.isActive, true),
           inArray(s.menuCategories.id, [...new Set(items.map((i) => i.categoryId))]),
         ),
       ),
@@ -125,7 +126,7 @@ export async function getGuestMenu(
     db
       .select()
       .from(s.menuCategories)
-      .where(and(eq(s.menuCategories.tenantId, ctx.tenantId), eq(s.menuCategories.brandId, ctx.brandId)))
+      .where(and(eq(s.menuCategories.tenantId, ctx.tenantId), eq(s.menuCategories.brandId, ctx.brandId), eq(s.menuCategories.isActive, true)))
       .orderBy(asc(s.menuCategories.sortOrder)),
     loadItems(db, ctx, now),
   ]);

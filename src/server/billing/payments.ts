@@ -11,7 +11,11 @@ import type { GuestContext } from "../guest/context";
 import { gatewayByName, gatewayFor, type GatewayStatus } from "../payments/gateway";
 import { publish, type RealtimeEvent } from "../realtime/publish";
 import { topics } from "../realtime/token";
+import { requireStaffRole } from "../staff/waiter";
+import { audit } from "../staff/audit";
+import type { StaffSession } from "../staff/auth";
 import type { StaffContext } from "../staff/context";
+import type { StaffRole } from "@/lib/staff-permissions";
 import { ATTEMPT_WINDOW_MS, computeDraft, isBillLocked, loadBillInputs, lockSession, lockShares, syncBill, type BillScope, type CreatedRefund, type SplitMode } from "./bill";
 import { nextInvoiceNumber } from "./invoice-number";
 import { releaseVisitTables, setVisitTablesState, tableStateEvents, visitChanged } from "../floor/assignments";
@@ -416,12 +420,27 @@ export async function reconcilePendingPayments(scope: { tenantId: string; outlet
 /** Cashier or waiter settles shares in cash, card or counter UPI (S4) */
 export async function settleAtCounter(
   ctx: StaffContext,
-  input: { sessionId: string; forParticipantIds?: string[]; method: "cash" | "card" | "upi"; receivedPaise?: number },
+  input: { sessionId: string; forParticipantIds?: string[]; method: "cash" | "card" | "upi"; receivedPaise?: number; clientRequestId?: string; externalReference?: string },
   now = new Date(),
+  allowedRoles: readonly StaffRole[] = ["waiter", "manager", "owner"],
 ) {
+  if (input.clientRequestId) {
+    await requireStaffRole(ctx, allowedRoles);
+    if (!/^[a-zA-Z0-9_-]{8,64}$/.test(input.clientRequestId) || !["cash", "card"].includes(input.method)) throw new AppError("invalid_state", "Invalid settlement request.");
+    if (input.method === "cash" && (!Number.isSafeInteger(input.receivedPaise) || input.receivedPaise! < 0)) throw new AppError("invalid_state", "Enter the cash received.");
+  }
   const scope = { tenantId: ctx.tenantId, outletId: ctx.outletId, sessionId: input.sessionId };
   const res = await db.transaction(async (tx) => {
     const session = await lockSession(tx, scope);
+    if (input.clientRequestId) {
+      const [old] = await tx.select({ payment: s.payments }).from(s.payments).innerJoin(s.bills, and(eq(s.bills.tenantId, s.payments.tenantId), eq(s.bills.id, s.payments.billId))).where(and(eq(s.payments.tenantId, ctx.tenantId), eq(s.payments.outletId, ctx.outletId), eq(s.bills.sessionId, input.sessionId), eq(s.payments.clientRequestId, input.clientRequestId)));
+      if (old) {
+        if(old.payment.takenByUserId !== ctx.userId || old.payment.method !== input.method) throw new AppError("conflict", "This request id belongs to another settlement.");
+        const [entry] = await tx.select({after:s.auditLog.after}).from(s.auditLog).where(and(eq(s.auditLog.tenantId,ctx.tenantId),eq(s.auditLog.entityId,old.payment.id),eq(s.auditLog.action,"waiter.settled")));
+        const stored=entry?.after as {changePaise?:number}|null;
+        return {paymentId:old.payment.id,amountPaise:old.payment.amountPaise,changePaise:stored?.changePaise??0,billPaid:session.status === "closed",closedTableIds:undefined};
+      }
+    }
     if (session.status === "closed") throw new AppError("session_expired", "This table has already been settled.");
     const { billId } = await syncBill(tx, scope, now);
 
@@ -435,6 +454,11 @@ export async function settleAtCounter(
           input.forParticipantIds?.length ? inArray(s.billShares.participantId, input.forParticipantIds) : undefined,
         ),
       );
+    if(input.forParticipantIds?.length && shares.length !== new Set(input.forParticipantIds).size) throw new AppError("not_found", "A selected share is not part of this bill.");
+    if (input.clientRequestId) {
+      const pending=await tx.select({allocations:s.payments.allocations}).from(s.payments).where(and(eq(s.payments.tenantId,ctx.tenantId),eq(s.payments.billId,billId),inArray(s.payments.status,["initiated","pending"])));
+      if(pending.some(p=>p.allocations.some(a=>shares.some(sh=>sh.id===a.shareId)))) throw new AppError("invalid_state", "An online payment is still pending or being checked.", {reason:"payment_in_flight"});
+    }
     const allocations = shares.map((sh) => ({ shareId: sh.id, amountPaise: sh.amountPaise - sh.paidPaise })).filter((a) => a.amountPaise > 0);
     if (allocations.length === 0) throw new AppError("invalid_state", "Nothing left to settle.");
     const amountPaise = allocations.reduce((sum, a) => sum + a.amountPaise, 0);
@@ -457,7 +481,7 @@ export async function settleAtCounter(
       tipPaise: 0,
       status: "initiated" as const,
       failureReason: null,
-      clientRequestId: null,
+      clientRequestId: input.clientRequestId ?? null,
       gatewayPaymentId: null,
       checkedAt: null,
       takenByUserId: ctx.userId,
@@ -466,6 +490,7 @@ export async function settleAtCounter(
     };
     await tx.insert(s.payments).values({ ...payment, tenantId: ctx.tenantId });
     const applied = await applyPayment(tx, payment, now);
+    if(input.clientRequestId) await tx.insert(s.auditLog).values({tenantId:ctx.tenantId,outletId:ctx.outletId,actorLabel:"staff",actorUserId:ctx.userId,action:"waiter.settled",entity:"payment",entityId:payment.id,after:{clientRequestId:input.clientRequestId,sessionId:input.sessionId,receivedPaise:input.receivedPaise,changePaise:input.method === "cash" ? input.receivedPaise!-amountPaise:0,externalReference:input.externalReference?.trim().slice(0,120) || null},createdAt:now});
     return {
       paymentId: payment.id,
       amountPaise,
@@ -701,14 +726,14 @@ export async function markPaidAndLeft(actor: Actor, participantId: string, now =
  * online payment is still in flight, so nobody pays against numbers that are about to change.
  * Payments made so far stay; frozen shares stay; the rest recalculates when the bill is requested again.
  */
-export async function reopenBill(actor: Actor, now = new Date()) {
+export async function reopenBill(actor: Actor, now = new Date(), approval?: {initiator:StaffSession; approverUserId:string}) {
   const scope = actorScope(actor);
   const tableIds = await db.transaction(async (tx) => {
     const session = await lockSession(tx, scope);
     if (session.status !== "bill_requested") throw new AppError("invalid_state", "The bill is not requested.", { reason: "not_requested" });
     await assertActorMayManage(tx, actor, session);
     const inputs = await loadBillInputs(tx, scope);
-    if (inputs.payments.some((p) => p.status === "pending" || (p.status === "initiated" && now.getTime() - p.createdAt.getTime() < ATTEMPT_WINDOW_MS))) {
+    if (inputs.payments.some((p) => p.status === "pending" || p.status === "initiated")) {
       throw new AppError("invalid_state", "A payment is still being checked. Try again once it finishes.", { reason: "payment_in_flight" });
     }
     await tx
@@ -717,6 +742,7 @@ export async function reopenBill(actor: Actor, now = new Date()) {
       .where(and(eq(s.tableSessions.tenantId, scope.tenantId), eq(s.tableSessions.id, scope.sessionId)));
     const ids = await setVisitTablesState(tx, scope.tenantId, scope.sessionId, "seated", now);
     if (inputs.bill) await tx.update(s.bills).set({ reopenedAt: now }).where(and(eq(s.bills.tenantId, scope.tenantId), eq(s.bills.id, inputs.bill.id)));
+    if(approval) await audit(tx,approval.initiator,{action:"waiter.bill_reopened",entity:"session",entityId:scope.sessionId,after:{approverUserId:approval.approverUserId},now});
     return ids;
   }, LOCK_THEN_READ);
   announceBill(scope, { tableIds, state: "seated" }, [{ topic: topics.session(scope.sessionId), type: "session.updated", data: { change: "bill_reopened" } }]);

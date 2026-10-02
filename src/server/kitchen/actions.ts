@@ -9,6 +9,7 @@ import { AppError } from "../errors";
 import { publish } from "../realtime/publish";
 import { topics } from "../realtime/token";
 import type { StaffContext } from "../staff/context";
+import { requireStaffRole } from "../staff/waiter";
 import { lockOrder, syncOrderStatus, syncTickets } from "./order-state";
 
 // Kitchen actions from the KDS (PS 5.1, 5.2). Each locks the order, changes lines, then
@@ -207,15 +208,22 @@ export async function recallTicket(ctx: StaffContext, ticketId: string, now = ne
 /** Waiter marks plates as served at the table */
 export async function markServed(ctx: StaffContext, lineIds: string[], now = new Date()) {
   if (lineIds.length === 0) return;
+  const actor = ctx.userId ? await requireStaffRole(ctx) : null;
   const changes = await db.transaction(async (tx): Promise<Changed[]> => {
     const lines = await tx
-      .select({ orderId: s.orderLines.orderId })
+      .select({ id: s.orderLines.id, orderId: s.orderLines.orderId, status: s.orderLines.status, nameEn: s.orderLines.nameEn })
       .from(s.orderLines)
       .where(and(eq(s.orderLines.tenantId, ctx.tenantId), inArray(s.orderLines.id, lineIds)));
+    if (lines.length !== new Set(lineIds).size) throw new AppError("not_found", "One or more ready items no longer exist.");
+
     const orders = [];
     for (const orderId of [...new Set(lines.map((l) => l.orderId))]) {
       orders.push(await lockOrder(tx, ctx.tenantId, ctx.outletId, orderId));
     }
+    const locked = await tx.select().from(s.orderLines).where(and(eq(s.orderLines.tenantId,ctx.tenantId),inArray(s.orderLines.id,lineIds))).for("update");
+    const invalid = ctx.userId ? locked.find(line=>!["ready","served"].includes(line.status)) : null;
+    if(invalid) throw new AppError("invalid_state", `${invalid.nameEn} is ${invalid.status}, not ready to serve.`);
+    if(locked.every(line=>line.status === "served")) return [];
     await tx
       .update(s.orderLines)
       .set({ status: "served", servedAt: now })
@@ -226,9 +234,22 @@ export async function markServed(ctx: StaffContext, lineIds: string[], now = new
     for (const order of orders) {
       out.push({ orderId: order.id, sessionId: order.sessionId, status: await syncOrderStatus(tx, ctx.tenantId, order.id, now) });
     }
+    if (orders.length > 0) {
+      await tx.insert(s.auditLog).values({
+        tenantId: ctx.tenantId,
+        outletId: ctx.outletId,
+        actorUserId: ctx.userId,
+        actorLabel: actor?.name ?? "staff",
+        action: "order_lines_served",
+        entity: "order",
+        entityId: orders[0].id,
+        after: { lineIds: lines.map((line) => line.id) },
+      });
+    }
     return out;
   }, LOCK_THEN_READ);
   announce(ctx, changes);
+  if(changes.length) await publish(ctx,[{topic:topics.floor,type:"visit.updated"}]);
 }
 
 /**

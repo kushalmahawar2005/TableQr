@@ -9,3 +9,5 @@ export * from "./orders";
 export * from "./billing";
 export * from "./audit";
 export * from "./booking";
+
+export * from "./waiter";

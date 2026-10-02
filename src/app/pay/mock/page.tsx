@@ -12,15 +12,19 @@ export default async function MockCheckout(props: { searchParams: Promise<Record
   const q = await props.searchParams;
   const ref = q.ref ?? "";
   const callback = q.callback ?? "";
-  if (!mockGateway.orderOf(ref) || !callback.startsWith("/api/payments/return")) notFound();
+  let callbackPath = callback;
+  if (callback.startsWith("http://localhost:3000") || callback.startsWith("http://127.0.0.1:3000")) {
+    try { const parsed = new URL(callback); callbackPath = `${parsed.pathname}${parsed.search}`; } catch { notFound(); }
+  }
+  if (!mockGateway.orderOf(ref) || !callbackPath.startsWith("/api/payments/return")) notFound();
 
   async function finish(form: FormData) {
     "use server";
     const outcome = String(form.get("outcome")) as GatewayStatus | "cancel";
-    if (outcome === "cancel") redirect(`${callback}&cancelled=1`);
+    if (outcome === "cancel") redirect(`${callbackPath}&cancelled=1`);
     mockGateway.settle(ref, outcome);
     if (form.get("close") === "1") redirect("/");
-    redirect(callback);
+    redirect(callbackPath);
   }
 
   const button = "w-full min-h-12 rounded-cta px-4 font-semibold";
