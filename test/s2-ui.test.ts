@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { KdsScreen } from "@/app/(staff)/kds/_components/kds-screen";
 import { KdsSetup } from "@/app/(staff)/kds/_components/kds-setup";
-import { createAnnouncer, formatElapsed, liveCard, sortCards } from "@/app/(staff)/kds/_components/kds-logic";
+import { cookable, createAnnouncer, formatElapsed, liveCard, sortCards } from "@/app/(staff)/kds/_components/kds-logic";
 import { isKitchenHint } from "@/app/(staff)/kds/_components/use-kds-sync";
 import { NOW, s2Cases } from "@/app/dev/s2/_fixtures";
 
@@ -82,7 +82,14 @@ describe("ticket cards", () => {
 
   it("a ticket awaiting staff confirmation is read-only", () => {
     const html = render("30-awaiting");
-    expect(html).toContain("Awaiting staff confirmation");
+    expect(html).toContain("Awaiting confirmation");
+    expect(html).toContain("A waiter or manager must confirm this order. Do not start yet.");
+    // Neutral: no NEW tag, no timer, no urgency words, no lifecycle buttons
+    expect(html).not.toContain(">NEW<");
+    expect(html).not.toContain('aria-label="elapsed"');
+    for (const w of [">New<", ">On time<", ">Getting late<", ">Late<", ">Start preparing<", ">Bump ticket<"]) expect(html).not.toContain(w);
+    // Not counted as an open cookable ticket on the station header
+    expect(html).toMatch(/Main<span[^>]*>0<\/span>/);
     expect(html).not.toContain(">Accept<");
   });
 });
@@ -141,6 +148,37 @@ describe("timer rules", () => {
     const older = { ...card, ticketId: "old", placedAt: NOW - 60_000, urgency: "on_time" as const };
     const late = { ...card, ticketId: "late", urgency: "late" as const };
     expect(sortCards([{ ...card, urgency: "on_time" }, older, late]).map((c) => c.ticketId)).toEqual(["late", "old", base.ticketId]);
+  });
+});
+
+describe("awaiting confirmation", () => {
+  const waiting = () => caseOf("30-awaiting").board!.cards[0];
+  it("never turns late however long it waits, and sorts after cookable tickets", () => {
+    const card = liveCard(waiting(), NOW + 3 * 3600_000);
+    expect(card.urgency).toBe("new");
+    const late = { ...caseOf("08-red").board!.cards[0], urgency: "late" as const };
+    expect(sortCards([card, late]).map((c) => c.ticketId)).toEqual([late.ticketId, card.ticketId]);
+  });
+
+  it("never chimes, on arrival or later; it chimes once it becomes cookable", () => {
+    const a = createAnnouncer();
+    a.next([]);
+    const w = liveCard(waiting(), NOW + 3 * 3600_000);
+    expect(a.next(cookable([w]))).toEqual({ arrived: [], late: [] });
+    expect(a.next(cookable([{ ...w, awaitingStaff: false }]))).toEqual({ arrived: [w.ticketId], late: [] });
+  });
+});
+
+describe("station-scoped recall on the board", () => {
+  it("a station screen's footer only ever names its own station", () => {
+    for (const c of s2Cases().filter((x) => x.device && !x.device.expeditor && x.board?.lastBumped)) {
+      expect(c.board!.lastBumped!.station, c.id).toBe(c.device!.station);
+    }
+    expect(render("11-main")).toContain("T2 · Round 1 · Main");
+  });
+
+  it("solo states count only their own tickets", () => {
+    expect(render("05-preparing")).toMatch(/Main<span[^>]*>1<\/span>/);
   });
 });
 

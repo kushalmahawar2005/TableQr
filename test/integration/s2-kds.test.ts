@@ -327,3 +327,42 @@ describe("tenant isolation", () => {
     expect((await getKitchenDisplay(kdsActor(nukkad), {})).cards).toEqual([]);
   });
 });
+
+describe("recall is scoped to the screen's station (server-side)", () => {
+  let order: string;
+  const nukkadOf = (d: KdsDevice): KdsDevice => ({ ...d, tenantId: env.other.tenantId, outletId: env.other.outletId, deviceId: "x" });
+
+  beforeAll(async () => {
+    await addCartLine(guest, { itemId: env.demo.itemIds["Paneer Tikka"], qty: 1 });
+    await addCartLine(guest, { itemId: env.demo.itemIds["Dal Makhani"], qty: 1 });
+    ({ orderId: order } = await placeOrder(guest, {}, later(40)));
+    await kdsBumpTicket(main, (await ticketOf("Main", order)).id, later(41));
+    await kdsBumpTicket(tandoor, (await ticketOf("Tandoor", order)).id, later(42));
+  });
+
+  it("each station screen is offered only its own last bump; the expeditor the latest of all", async () => {
+    expect((await kdsBoard(main, null, later(43))).lastBumped).toMatchObject({ station: "Main", ticketId: (await ticketOf("Main", order)).id });
+    expect((await kdsBoard(tandoor, null, later(43))).lastBumped).toMatchObject({ station: "Tandoor", ticketId: (await ticketOf("Tandoor", order)).id });
+    expect((await kdsBoard(expo, null, later(43))).lastBumped?.station).toBe("Tandoor");
+  });
+
+  it("Main cannot recall Tandoor and Tandoor cannot recall Main, even by sending the id", async () => {
+    await failsWith(kdsRecall(main, (await ticketOf("Tandoor", order)).id, later(43)), "forbidden", "station");
+    await failsWith(kdsRecall(tandoor, (await ticketOf("Main", order)).id, later(43)), "forbidden", "station");
+    expect((await ticketOf("Main", order)).status).toBe("done");
+    expect((await ticketOf("Tandoor", order)).status).toBe("done");
+  });
+
+  it("another restaurant or outlet cannot recall it", async () => {
+    await failsWith(kdsRecall(nukkadOf(expo), (await ticketOf("Main", order)).id, later(43)), "not_found");
+    await failsWith(kdsRecall({ ...main, outletId: env.other.outletId }, (await ticketOf("Main", order)).id, later(43)), "not_found");
+  });
+
+  it("a station recalls its own ticket, and the expeditor recalls any station's", async () => {
+    await kdsRecall(tandoor, (await ticketOf("Tandoor", order)).id, later(43));
+    expect((await ticketOf("Tandoor", order)).status).toBe("in_progress");
+    await kdsRecall(expo, (await ticketOf("Main", order)).id, later(43));
+    expect((await ticketOf("Main", order)).status).toBe("in_progress");
+    expect((await lineOf("Dal Makhani", order)).status).toBe("preparing");
+  });
+});

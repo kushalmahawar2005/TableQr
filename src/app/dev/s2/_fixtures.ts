@@ -64,13 +64,19 @@ const C = {
 };
 
 function board(cards: KdsCard[], over: Partial<KdsBoard> = {}): KdsBoard {
-  const counts: Record<string, number> = { All: 14, Bar: 2, Cold: 1, Dessert: 2, Main: 5, Tandoor: 4 };
+  // Counts come from this state's own tickets (awaiting confirmation is not a cookable ticket),
+  // exactly as the live board counts open tickets
+  const live = cards.filter((c) => !c.awaitingStaff);
+  const counts: Record<string, number> = { All: live.length };
+  for (const c of live) counts[c.station] = (counts[c.station] ?? 0) + 1;
+  // A station screen's last bump is always its own station's, as the server scopes it
+  const station = over.station ?? null;
   return {
-    station: null,
+    station,
     stations: STATIONS,
     counts,
     cards,
-    lastBumped: { ticketId: "tk-old", station: "Tandoor", tableCode: "T2", roundNo: 1, bumpedAt: NOW - 3 * MIN, recallUntil: NOW + 7 * MIN, blocked: null },
+    lastBumped: { ticketId: "tk-old", station: station ?? "Tandoor", tableCode: "T2", roundNo: 1, bumpedAt: NOW - 3 * MIN, recallUntil: NOW + 7 * MIN, blocked: null },
     unavailable: [{ id: "i-1", nameEn: "Mutton Rogan Josh", nameHi: "मटन रोगन जोश", station: "Main", until: NOW + 6 * 60 * MIN }],
     avgMinutes: 17,
     renderedAt: NOW,
