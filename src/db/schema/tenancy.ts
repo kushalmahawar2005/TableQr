@@ -1,5 +1,6 @@
 import {
   boolean,
+  char,
   index,
   int,
   json,
@@ -107,6 +108,12 @@ export const outlets = mysqlTable(
     newSessionCapPaise: int("new_session_cap_paise").notNull().default(300000),
     soldOutDisplay: mysqlEnum("sold_out_display", ["hide", "grey"]).notNull().default("grey"),
     idleCloseMinutes: int("idle_close_minutes").notNull().default(240),
+    /** Optional service charge in basis points of the discounted subtotal; 0 means off (PS 6.1) */
+    serviceChargeBp: int("service_charge_bp").notNull().default(0),
+    /** Tip presets offered at payment, basis points; null means the TableQR default (5%, 10%) */
+    tipPresetsBp: json("tip_presets_bp").$type<number[]>(),
+    /** Public review page shown to every guest after paying; null hides the link (PS 3.8) */
+    reviewUrl: varchar("review_url", { length: 500 }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -158,4 +165,44 @@ export const staffRoles = mysqlTable(
     sameTenant("fk_staff_roles_user", t, t.userId, users),
     sameTenant("fk_staff_roles_outlet", t, t.outletId, outlets),
   ],
+);
+
+/**
+ * Signed-in staff devices (S1). The cookie holds a random token; only its SHA-256 is stored.
+ * Role is never stored here: it is read from staff_roles on every request, so a change of role
+ * or a deactivated user takes effect at once. outlet_id is the outlet this device works in.
+ */
+export const staffSessions = mysqlTable(
+  "staff_sessions",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    userId: ref("user_id").notNull(),
+    outletId: ref("outlet_id").notNull(),
+    tokenHash: char("token_hash", { length: 64 }).notNull(),
+    createdAt: createdAt(),
+    expiresAt: at("expires_at").notNull(),
+    lastSeenAt: at("last_seen_at"),
+    revokedAt: at("revoked_at"),
+  },
+  (t) => [
+    uniqueIndex("staff_sessions_token_uq").on(t.tokenHash),
+    index("staff_sessions_user_idx").on(t.tenantId, t.userId),
+    sameTenant("fk_staff_sessions_user", t, t.userId, users),
+    sameTenant("fk_staff_sessions_outlet", t, t.outletId, outlets),
+  ],
+);
+
+/** Staff PIN attempts, for lock-out after repeated wrong PINs. The PIN itself is never stored. */
+export const staffLoginAttempts = mysqlTable(
+  "staff_login_attempts",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    outletId: ref("outlet_id").notNull(),
+    phone: varchar("phone", { length: 15 }).notNull(),
+    ok: boolean("ok").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("staff_login_attempts_phone_idx").on(t.tenantId, t.outletId, t.phone, t.createdAt)],
 );

@@ -15,6 +15,34 @@
       "when": 1790851048918,
       "tag": "0001_g6_tracker_tasks",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1790859458817,
+      "tag": "0002_g7_join_code_attempts",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1790861257212,
+      "tag": "0003_g8_g9_billing",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1790864430017,
+      "tag": "0004_g8_custom_amounts",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1790878525631,
+      "tag": "0005_s1_floor_booking",
+      "breakpoints": true
     }
   ]
 }

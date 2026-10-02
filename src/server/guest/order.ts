@@ -9,6 +9,7 @@ import { LOCK_THEN_READ } from "../db-types";
 import { AppError } from "../errors";
 import { publish } from "../realtime/publish";
 import { topics } from "../realtime/token";
+import { visitChanged } from "../floor/assignments";
 import type { GuestContext } from "./context";
 import { isWithinCategoryWindow, loadItems } from "./menu";
 
@@ -30,6 +31,7 @@ export async function placeOrder(ctx: GuestContext, input: PlaceInput = {}, now 
     { topic: topics.kitchen, type: "ticket.created", data: { orderId: placed.orderId, stations: placed.stations } },
     { topic: topics.session(ctx.sessionId), type: "order.status", data: { orderId: placed.orderId, status: placed.status } },
     { topic: topics.session(ctx.sessionId), type: "cart.updated" },
+    visitChanged(ctx.sessionId, "order"),
     // Portion counters that reached zero take the dish off every phone's menu
     ...placed.soldOutItemIds.map((itemId) => ({ topic: topics.menu, type: "item.availability", data: { itemId, available: false } })),
   ]);

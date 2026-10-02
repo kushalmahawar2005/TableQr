@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { CSSProperties } from "react";
 import { brandStyle, deriveBrandTokens } from "@/domain/brand";
 import type { Lang } from "@/lib/i18n";
@@ -32,7 +33,14 @@ export function MenuScreen({
         <OutletLogo name={data.outlet.name} logoUrl={data.outlet.logoUrl} size={40} />
         <div className="min-w-0 flex-1">
           <p className="font-display text-section font-bold break-words text-ink">{data.outlet.name}</p>
-          <p className="text-caption text-muted">{c.tableLine(data.table.code, data.session.people)}</p>
+          {/* The table badge opens G7 Table & People: a plain link, no G7 code in this bundle */}
+          <Link
+            href={preview ? "#" : `/r/${encodeURIComponent(data.outlet.code)}/t/${encodeURIComponent(shortCode)}/table`}
+            prefetch={false}
+            className="relative text-caption text-muted underline-offset-2 before:absolute before:-inset-y-3.5 before:inset-x-0 hover:text-ink hover:underline focus-visible:outline-2 focus-visible:outline-brand"
+          >
+            {c.tableLine(data.table.code, data.session.people)} <span aria-hidden>›</span>
+          </Link>
         </div>
         <LanguageToggle lang={lang} label={c.language} preview={!!preview} />
       </header>

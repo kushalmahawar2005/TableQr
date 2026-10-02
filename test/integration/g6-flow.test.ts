@@ -147,7 +147,7 @@ describe("G6 service requests", () => {
     expect((await requestRow(requested.id)).kind).toBe("request_bill");
     expect(await env.db.select().from(s.bills)).toHaveLength(1);
     expect(events.map((e) => e.type)).toEqual([
-      "service_request.created", "service_request.created", "bill.updated", "table.state_changed",
+      "service_request.created", "service_request.created", "floor.session_updated", "bill.updated", "table.state_changed", "floor.session_updated",
     ]);
     await failsWith(order(friend), "table_settling");
     const screen = await getTrackerScreen("SRJ01", "k7Qm", "g6-friend", T0);

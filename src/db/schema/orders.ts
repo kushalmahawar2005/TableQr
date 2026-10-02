@@ -130,6 +130,9 @@ export const serviceRequestKinds = [
   "request_bill",
 ] as const;
 
+/** Not a grid button: the guest chose to pay at the counter on the bill (G8) */
+export const storedServiceRequestKinds = [...serviceRequestKinds, "pay_at_counter"] as const;
+
 export const serviceRequests = mysqlTable(
   "service_requests",
   {
@@ -139,7 +142,7 @@ export const serviceRequests = mysqlTable(
     sessionId: ref("session_id").notNull(),
     tableId: ref("table_id").notNull(),
     participantId: ref("participant_id"),
-    kind: mysqlEnum("kind", serviceRequestKinds).notNull(),
+    kind: mysqlEnum("kind", storedServiceRequestKinds).notNull(),
     clientRequestId: varchar("client_request_id", { length: 64 }),
     status: mysqlEnum("status", ["open", "done"]).notNull().default("open"),
     escalatedAt: at("escalated_at"),

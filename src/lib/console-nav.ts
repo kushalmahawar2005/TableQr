@@ -1,15 +1,15 @@
-// Staff and owner sidebar (UI spec 3.5). Items a role cannot use are hidden,
-// not disabled; role filtering is added once auth exists.
+// Staff and owner sidebar (UI spec 3.5). Items a role cannot use are hidden, not disabled;
+// the roles for each live in staff-permissions.ts and are checked on the server.
 export const consoleSections = [
-  { slug: "floor", label: "Floor" },
-  { slug: "reservations", label: "Reservations" },
-  { slug: "waitlist", label: "Waitlist" },
-  { slug: "orders", label: "Orders" },
-  { slug: "billing", label: "Billing" },
-  { slug: "menu", label: "Menu" },
-  { slug: "pricing", label: "Pricing" },
-  { slug: "reports", label: "Reports" },
-  { slug: "settings", label: "Settings" },
+  { slug: "floor", label: "Floor", hi: "फ़्लोर" },
+  { slug: "reservations", label: "Reservations", hi: "बुकिंग" },
+  { slug: "waitlist", label: "Waitlist", hi: "वेटलिस्ट" },
+  { slug: "orders", label: "Orders", hi: "ऑर्डर" },
+  { slug: "billing", label: "Billing", hi: "बिलिंग" },
+  { slug: "menu", label: "Menu", hi: "मेन्यू" },
+  { slug: "pricing", label: "Pricing", hi: "प्राइसिंग" },
+  { slug: "reports", label: "Reports", hi: "रिपोर्ट" },
+  { slug: "settings", label: "Settings", hi: "सेटिंग्स" },
 ] as const;
 
 export type ConsoleSection = (typeof consoleSections)[number]["slug"];

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { billTotals, customRemaining, splitByItems, splitEqually, type SplitLine } from "./split";
+import { billTotals, customRemaining, splitBill, splitByItems, splitEqually, type BillPerson, type SplitLine } from "./split";
 
 const r = (rupees: number) => Math.round(rupees * 100);
 const line = (id: string, ownerId: string, rupees: number, sharedWith?: string[]): SplitLine => ({
@@ -118,5 +118,83 @@ describe("splitByItems: calculation rules", () => {
 describe("custom amounts", () => {
   it("reports what is left to assign", () => {
     expect(customRemaining(r(2090), [{ participantId: "A", amountPaise: r(1000) }])).toBe(r(1090));
+  });
+});
+
+describe("splitBill: the whole table (G8)", () => {
+  const people = (over: Partial<Record<string, Partial<BillPerson>>> = {}): BillPerson[] =>
+    ["A", "B", "C", "D"].map((id) => ({ id, removed: false, frozenAmountPaise: null, ...over[id] }));
+  const amounts = (res: ReturnType<typeof splitBill>) => res.shares.map((x) => x.amountPaise / 100);
+  const sum = (res: ReturnType<typeof splitBill>) => res.shares.reduce((n, x) => n + x.amountPaise, 0);
+
+  it("my items matches the worked example and splitByItems exactly", () => {
+    const res = splitBill({ people: people(), hostId: "A", lines: example.lines, mode: "my_items" });
+    expect(amounts(res)).toEqual([541, 467, 620, 462]);
+    expect(res.shares.map((x) => x.detail?.amountPaise)).toEqual(splitByItems(example).shares.map((x) => x.amountPaise));
+  });
+
+  it("equal rounds to whole rupees and adds up to the rounded bill", () => {
+    const res = splitBill({ people: people(), hostId: "A", lines: example.lines, mode: "equal" });
+    expect(amounts(res)).toEqual([523, 523, 522, 522]);
+    expect(sum(res)).toBe(res.totals.totalPaise);
+  });
+
+  it("custom uses the host's amounts only while they add up exactly to the bill", () => {
+    const amountsOf = (a: number, b: number, c: number, d: number) => ({ A: a * 100, B: b * 100, C: c * 100, D: d * 100 });
+    const res = splitBill({ people: people(), hostId: "A", lines: example.lines, mode: "custom", customAmounts: amountsOf(600, 450, 600, 440) });
+    expect(amounts(res)).toEqual([600, 450, 600, 440]);
+    expect(res.shares.every((x) => x.basis === "custom" && x.detail === null)).toBe(true);
+    expect(res.custom).toEqual({ ids: ["A", "B", "C", "D"], targetPaise: 209000, valid: true });
+    // Short by ₹10, a paisa amount, or someone missing: the amounts do not stand; My items applies
+    for (const bad of [amountsOf(600, 450, 600, 430), { ...amountsOf(600, 450, 600, 440), A: 59950, D: 44050 }, { A: 60000, B: 45000, C: 104000 }]) {
+      const r = splitBill({ people: people(), hostId: "A", lines: example.lines, mode: "custom", customAmounts: bad });
+      expect(r.custom.valid).toBe(false);
+      expect(amounts(r)).toEqual([541, 467, 620, 462]);
+    }
+  });
+
+  it("custom leaves frozen shares and removed people's own items out of the amount to enter", () => {
+    const res = splitBill({
+      people: people({ B: { frozenAmountPaise: 46700 }, C: { removed: true } }),
+      hostId: "A",
+      lines: example.lines,
+      mode: "custom",
+      customAmounts: { A: 50000, D: 50300 },
+    });
+    expect(res.custom).toMatchObject({ ids: ["A", "D"], targetPaise: 209000 - 46700 - 62000, valid: true });
+    expect(amounts(res)).toEqual([500, 467, 620, 503]);
+    expect(sum(res)).toBe(209000);
+  });
+
+  it("a removed person keeps their own items in every mode; nothing moves to the host", () => {
+    const mine = splitBill({ people: people({ C: { removed: true } }), hostId: "A", lines: example.lines, mode: "my_items" });
+    expect(amounts(mine)).toEqual([541, 467, 620, 462]);
+    const equal = splitBill({ people: people({ C: { removed: true } }), hostId: "A", lines: example.lines, mode: "equal" });
+    expect(amounts(equal)).toEqual([490, 490, 620, 490]);
+    expect(sum(equal)).toBe(209000);
+  });
+
+  it("a frozen share never moves; only the rest is divided again", () => {
+    const more = [...example.lines, line("cola-2", "A", 70)];
+    const res = splitBill({ people: people({ B: { frozenAmountPaise: 52300 } }), hostId: "A", lines: more, mode: "equal" });
+    expect(amounts(res)).toEqual([547, 523, 547, 546]);
+    expect(res.shares[1]).toMatchObject({ basis: "frozen", detail: null });
+    const items = splitBill({ people: people({ B: { frozenAmountPaise: 46700 } }), hostId: "A", lines: more, mode: "my_items" });
+    expect(amounts(items)).toEqual([614, 467, 620, 462]);
+    expect(sum(items)).toBe(items.totals.totalPaise);
+  });
+
+  it("puts the rounding difference on the host, or the first person still here if the host left", () => {
+    const lines = [line("x", "A", 100, ["A", "B", "C"])];
+    const res = splitBill({ people: people(), hostId: "B", lines, mode: "my_items" });
+    expect(sum(res)).toBe(res.totals.totalPaise);
+    const gone = splitBill({ people: people({ A: { removed: true } }), hostId: "A", lines, mode: "my_items" });
+    expect(sum(gone)).toBe(gone.totals.totalPaise);
+  });
+
+  it("service charge is its own line, proportional, and tax stays on food", () => {
+    const res = splitBill({ people: people(), hostId: "A", lines: example.lines, mode: "my_items", serviceChargeBp: 1000 });
+    expect(res.totals).toMatchObject({ serviceChargePaise: 19900, taxPaise: 9950, totalPaise: 228900 });
+    expect(sum(res)).toBe(228900);
   });
 });

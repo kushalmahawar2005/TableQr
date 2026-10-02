@@ -1,0 +1,1 @@
+ALTER TABLE `bills` ADD `custom_amounts` json;

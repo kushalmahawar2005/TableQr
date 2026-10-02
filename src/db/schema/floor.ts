@@ -9,7 +9,7 @@ import {
   varchar,
 } from "drizzle-orm/mysql-core";
 import { at, createdAt, id, ref, sameTenant, tenantId, tenantKey, updatedAt } from "./_columns";
-import { outlets } from "./tenancy";
+import { outlets, users } from "./tenancy";
 
 // Zones, tables and QR codes (PS 4.1, 4.2, 3.1).
 
@@ -38,6 +38,10 @@ export const tableStates = [
 ] as const;
 export type TableState = (typeof tableStates)[number];
 
+/** Why a manager took a table out of service (S1). "other" needs a note. */
+export const blockReasons = ["maintenance", "private_event", "out_of_service", "other"] as const;
+export type BlockReason = (typeof blockReasons)[number];
+
 export const diningTables = mysqlTable(
   "dining_tables",
   {
@@ -62,6 +66,13 @@ export const diningTables = mysqlTable(
     /** 4-digit code guests type in Host-confirmed mode or when a camera fails */
     joinCode: char("join_code", { length: 4 }).notNull(),
     isBookableOnline: boolean("is_bookable_online").notNull().default(true),
+    /** When `state` last changed, for "free for 12 min" and "cleaning since" on the floor */
+    stateChangedAt: at("state_changed_at"),
+    blockedReason: mysqlEnum("blocked_reason", blockReasons),
+    blockedNote: varchar("blocked_note", { length: 120 }),
+    /** Null means until someone unblocks it */
+    blockedUntil: at("blocked_until"),
+    blockedByUserId: ref("blocked_by_user_id"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -70,6 +81,7 @@ export const diningTables = mysqlTable(
     tenantKey("dining_tables", t),
     sameTenant("fk_dining_tables_outlet", t, t.outletId, outlets),
     sameTenant("fk_dining_tables_zone", t, t.zoneId, zones),
+    sameTenant("fk_dining_tables_blocked_by", t, t.blockedByUserId, users),
   ],
 );
 

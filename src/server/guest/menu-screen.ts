@@ -8,16 +8,26 @@ import { AppError } from "../errors";
 import { getCart } from "./cart";
 import type { GuestContext } from "./context";
 import { getGuestMenu } from "./menu";
-import { findOpenSession, findTableByQr } from "./table";
+import { findMovedSession, findOpenSession, findTableById, findTableByQr } from "./table";
 
 // Everything G3 Menu shows, in one server call: who and where the guest is, the menu as rows,
 // and the guest's own cart. Option trees stay out of it; the item sheet (G4) loads those.
 
 /** The guest at this table, found from their phone's device id. Throws session_expired if they are not in it. */
 export async function guestContextForDevice(outletCode: string, shortCode: string, deviceId: string | null) {
-  const t = await findTableByQr(db, outletCode, shortCode);
-  const open = deviceId ? await findOpenSession(db, t.outlet.tenantId, t.table.id) : null;
-  const me = open?.people.find((p) => p.deviceId === deviceId);
+  let t = await findTableByQr(db, outletCode, shortCode);
+  let open = deviceId ? await findOpenSession(db, t.outlet.tenantId, t.table.id) : null;
+  let me = open?.people.find((p) => p.deviceId === deviceId);
+  if (!me && deviceId) {
+    // The host moved this party to another table (S1): the phone keeps its visit, shown at the new table
+    const moved = await findMovedSession(db, t.outlet.tenantId, t.table.id, deviceId);
+    const mine = moved?.people.find((p) => p.deviceId === deviceId);
+    if (moved && mine) {
+      open = moved;
+      me = mine;
+      t = (await findTableById(db, t.outlet.tenantId, outletCode, moved.session.tableId)) ?? t;
+    }
+  }
   if (!open || !me) throw new AppError("session_expired", "Your table session has ended. Scan the table QR again to continue.");
   const ctx: GuestContext = {
     tenantId: t.outlet.tenantId,
@@ -25,7 +35,8 @@ export async function guestContextForDevice(outletCode: string, shortCode: strin
     brandId: t.outlet.brandId,
     timezone: t.outlet.timezone,
     sessionId: open.session.id,
-    tableId: t.table.id,
+    // The visit's primary table: orders, requests and the bill are recorded against it
+    tableId: open.session.tableId,
     participantId: me.id,
   };
   return { t, open, ctx };

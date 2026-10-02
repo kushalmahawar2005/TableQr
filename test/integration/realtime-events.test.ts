@@ -39,7 +39,7 @@ describe("realtime events", () => {
   it("seating a new table tells the floor map and the table", async () => {
     const { participantId } = await startOrJoinTable({ outletCode: "SRJ01", shortCode: "k7Qm", deviceId: "rt-a", displayName: "Kiran" });
     guest = await getGuestContext("SRJ01", "k7Qm", participantId, "rt-a");
-    expect(flat()).toEqual(["session participant.joined", "floor table.state_changed"]);
+    expect(flat()).toEqual(["session participant.joined", "floor table.state_changed", "floor floor.session_updated"]);
     expect(sent[0].outletId).toBe(env.demo.outletId);
   });
 
@@ -53,7 +53,7 @@ describe("realtime events", () => {
     expect(flat()).toEqual(["session cart.updated"]);
     sent = [];
     await placeOrder(guest);
-    expect(flat()).toEqual(["kitchen ticket.created", "session order.status", "session cart.updated"]);
+    expect(flat()).toEqual(["kitchen ticket.created", "session order.status", "session cart.updated", "floor floor.session_updated"]);
   });
 
   it("a failed action announces nothing", async () => {
@@ -75,11 +75,12 @@ describe("realtime events", () => {
   it("request bill and settling recolour the table on the floor map", async () => {
     const scope = { tenantId: guest.tenantId, outletId: guest.outletId, sessionId: guest.sessionId };
     await requestBill(scope);
-    expect(flat()).toEqual(["session bill.updated", "floor table.state_changed"]);
+    expect(flat()).toEqual(["session bill.updated", "floor table.state_changed", "floor floor.session_updated"]);
     sent = [];
     await settleAtCounter(staff, { sessionId: guest.sessionId, method: "cash" });
-    expect(flat()).toEqual(["session bill.updated", "floor table.state_changed"]);
-    expect(sent[0].events[1].data).toMatchObject({ state: "paid" });
+    // G8/G9 phones also hear that a payment landed and that the table closed
+    expect(flat()).toEqual(["session bill.updated", "session payment.updated", "session session.closed", "floor table.state_changed", "floor floor.session_updated"]);
+    expect(sent[0].events[3].data).toMatchObject({ state: "paid" });
   });
 });
 

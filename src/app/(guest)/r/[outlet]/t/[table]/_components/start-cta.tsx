@@ -64,6 +64,7 @@ export function PrimaryButton({
   disabled,
   type = "submit",
   arrow,
+  onClick,
 }: {
   label: string;
   ariaLabel?: string;
@@ -72,10 +73,12 @@ export function PrimaryButton({
   type?: "submit" | "button";
   /** Trailing arrow: this button moves the guest forward */
   arrow?: boolean;
+  onClick?: () => void;
 }) {
   return (
     <button
       type={type}
+      onClick={onClick}
       aria-label={ariaLabel}
       aria-busy={busy || undefined}
       disabled={busy || disabled}
