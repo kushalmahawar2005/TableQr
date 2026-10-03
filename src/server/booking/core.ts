@@ -189,7 +189,7 @@ export async function createBookingHold(outletCode: string, input: { date: strin
 
 export async function bookingByToken(outletCode: string, token: string) {
   const scope = await outletScope(db, outletCode);
-  const [row] = await db.select().from(s.reservations).where(and(eq(s.reservations.tenantId, scope.tenantId), eq(s.reservations.manageTokenHash, hash(token))));
+  const [row] = await db.select().from(s.reservations).where(and(eq(s.reservations.tenantId, scope.tenantId), eq(s.reservations.outletId, scope.outletId), eq(s.reservations.manageTokenHash, hash(token))));
   if (!row) throw new AppError("not_found", "This booking link is not valid.");
   return { row, scope };
 }
@@ -197,7 +197,7 @@ export async function bookingByToken(outletCode: string, token: string) {
 export async function confirmBooking(outletCode: string, token: string, input: { name: string; phone: string; guestId?: string | null; marketingConsent?: boolean }, now = new Date()) {
   const scope = await outletScope(db, outletCode);
   const result = await db.transaction(async (tx) => {
-    const [row] = await tx.select().from(s.reservations).where(and(eq(s.reservations.tenantId, scope.tenantId), eq(s.reservations.manageTokenHash, hash(token)))).for("update");
+    const [row] = await tx.select().from(s.reservations).where(and(eq(s.reservations.tenantId, scope.tenantId), eq(s.reservations.outletId, scope.outletId), eq(s.reservations.manageTokenHash, hash(token)))).for("update");
     if (!row) throw new AppError("not_found", "This booking link is not valid.");
     if (row.status === "cancelled" || row.status === "no_show") throw new AppError("invalid_state", "This booking is no longer active.");
     if (row.status === "confirmed") return row.id;
@@ -247,7 +247,7 @@ export async function lateBookingPublic(outletCode: string, token: string, now =
 export async function rescheduleBookingPublic(outletCode: string, token: string, input: { date: string; startAt: number }, now = new Date()) {
   const scope = await outletScope(db, outletCode);
   const result = await db.transaction(async (tx) => {
-    const [row] = await tx.select().from(s.reservations).where(and(eq(s.reservations.tenantId, scope.tenantId), eq(s.reservations.manageTokenHash, hash(token)))).for("update");
+    const [row] = await tx.select().from(s.reservations).where(and(eq(s.reservations.tenantId, scope.tenantId), eq(s.reservations.outletId, scope.outletId), eq(s.reservations.manageTokenHash, hash(token)))).for("update");
     if (!row || ["cancelled", "no_show", "completed", "seated"].includes(row.status)) throw new AppError("invalid_state", "This booking cannot be rescheduled now.");
     const policy = policyWithFallback(await loadPolicy(tx, scope));
     await validateZone(tx, scope, row.requestedZoneId);

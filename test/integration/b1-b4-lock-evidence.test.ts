@@ -75,7 +75,7 @@ describe("B1-B4 final credit and security evidence", () => {
   });
 
   it("rejects guessed/reference/token/cross-outlet access and stale confirmation", async () => {
-    const h = await hold("security", 18); await fails(bookingByToken("SRJ01", String(h.publicReference))); await fails(bookingByToken("SRJ01", "bad-token")); await fails(bookingByToken("CNJ01", h.manageToken)); await fails(confirmBooking("SRJ01", h.manageToken, { name: "Late", phone: "9876543218" }, new Date(now.getTime() + 6 * 60_000)));
+    const h = await hold("security", 18); await fails(bookingByToken("SRJ01", String(h.publicReference))); await fails(bookingByToken("SRJ01", "bad-token")); await fails(bookingByToken("CNJ01", h.manageToken)); const [brand] = await env.db.select({ id: s.brands.id }).from(s.brands).where(eq(s.brands.tenantId, env.demo.tenantId)); await env.db.insert(s.outlets).values({ id: uuidv7(), tenantId: env.demo.tenantId, brandId: brand.id, code: "SRJ02", name: "Spice Route Annex", city: "Jaipur", address: "Annex", timezone: "Asia/Kolkata" }); await fails(bookingByToken("SRJ02", h.manageToken)); await fails(confirmBooking("SRJ01", h.manageToken, { name: "Late", phone: "9876543218" }, new Date(now.getTime() + 6 * 60_000)));
   });
 
   it("keeps duplicate confirmation/cancellation and waitlist tampering safe", async () => {
