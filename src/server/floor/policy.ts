@@ -23,5 +23,13 @@ export async function loadPolicy(run: Runner, scope: { tenantId: string; outletI
     graceMinutes: row.graceMinutes,
     reserveAheadMinutes: row.reserveAheadMinutes,
     pacingCoversPerSlot: row.pacingCoversPerSlot,
+    freeCancellationMinutes: row.freeCancellationMinutes,
+    lateExtensionMinutes: row.lateExtensionMinutes,
+    readyWindowMinutes: row.readyWindowMinutes,
+    fallbackWaitMinutes: row.fallbackWaitMinutes,
+    minimumHistoryParties: row.minimumHistoryParties,
+    peakCreditPaise: row.peakCreditPaise,
+    repeatNoShowCreditPaise: row.repeatNoShowCreditPaise,
+    repeatNoShowThreshold: row.repeatNoShowThreshold,
   };
 }

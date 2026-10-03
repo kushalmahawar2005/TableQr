@@ -28,6 +28,13 @@ export type AppErrorCode =
   | "forbidden"
   /** Staff: wrong phone or PIN, or locked after too many tries */
   | "sign_in_failed"
+  | "invalid_phone"
+  | "rate_limited"
+  | "sms_failed"
+  | "expired"
+  | "locked"
+  | "wrong"
+  | "payment_required"
   /** Floor: the table, booking or party changed since the screen loaded; reload and retry */
   | "conflict";
 

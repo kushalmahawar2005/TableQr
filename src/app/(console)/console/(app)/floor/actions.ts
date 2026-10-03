@@ -16,7 +16,7 @@ import {
   uncombineTable,
   unblockTable,
 } from "@/server/floor/table-actions";
-import { addToWaitlist, notifyWaitlist, removeFromWaitlist, reorderWaitlist, seatWaitlist, skipWaitlist } from "@/server/floor/waitlist";
+import { addToWaitlist, notifyWaitlist, removeFromWaitlist, reorderWaitlist, restoreWaitlist, seatWaitlist, skipWaitlist } from "@/server/floor/waitlist";
 import { staffRealtimeToken, topics } from "@/server/realtime/token";
 import type { StaffSession } from "@/server/staff/auth";
 import { staffFor } from "@/server/staff/request";
@@ -95,6 +95,7 @@ export const addWaitlistAction = async (input: { name: string; phone: string; pa
 export const notifyAction = async (id: string) => act((s) => notifyWaitlist(s, String(id)));
 export const skipAction = async (id: string) => act((s) => skipWaitlist(s, String(id)));
 export const leftAction = async (id: string) => act((s) => removeFromWaitlist(s, String(id)));
+export const restoreWaitlistAction = async (id: string) => act((s) => restoreWaitlist(s, String(id)));
 export const reorderAction = async (id: string, toIndex: number) => act((s) => reorderWaitlist(s, { entryId: String(id), toIndex: Number(toIndex) }));
 export const seatWaitlistAction = async (id: string, tableIds: string[]) => act((s) => seatWaitlist(s, { entryId: String(id), tableIds: (tableIds ?? []).map(String) }));
 

@@ -286,7 +286,7 @@ describe("reservations, arrivals and extend", () => {
     const [before] = await env.db.select().from(s.tableSessions).where(eq(s.tableSessions.id, sessionId));
     const res = await extendTime(host, { tableId: T("T8") }, now);
     expect(res.expectedEndAt - before.expectedEndAt!.getTime()).toBe(15 * MIN);
-    await createReservation(host, { name: "Menon", partySize: 6, startAt: res.expectedEndAt + 25 * MIN, tableIds: [T("T8")] }, now);
+    await createReservation(host, { name: "Menon", partySize: 6, startAt: res.expectedEndAt + 20 * MIN, tableIds: [T("T8")] }, now);
     const err = await failsWith(extendTime(host, { tableId: T("T8") }, now), "conflict", "booking");
     expect(err.message).toContain("Menon");
     await failsWith(extendTime(host, { tableId: T("T8"), minutes: 10 }, now), "invalid_state");

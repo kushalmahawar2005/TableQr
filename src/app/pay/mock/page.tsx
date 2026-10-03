@@ -16,7 +16,7 @@ export default async function MockCheckout(props: { searchParams: Promise<Record
   if (callback.startsWith("http://localhost:3000") || callback.startsWith("http://127.0.0.1:3000")) {
     try { const parsed = new URL(callback); callbackPath = `${parsed.pathname}${parsed.search}`; } catch { notFound(); }
   }
-  if (!mockGateway.orderOf(ref) || !callbackPath.startsWith("/api/payments/return")) notFound();
+  if (!mockGateway.orderOf(ref) || !(callbackPath.startsWith("/api/payments/return") || callbackPath.startsWith("/api/booking-credit/return"))) notFound();
 
   async function finish(form: FormData) {
     "use server";

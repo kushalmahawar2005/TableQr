@@ -38,5 +38,5 @@ class NotConfigured implements SmsSender {
 export const mockSms = new MockSms();
 
 export function smsSender(): SmsSender {
-  return process.env.NODE_ENV === "production" ? new NotConfigured() : mockSms;
+  return process.env.NODE_ENV === "production" && process.env.SMS_MOCK !== "1" ? new NotConfigured() : mockSms;
 }

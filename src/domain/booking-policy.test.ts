@@ -3,7 +3,7 @@ import { diningMinutesFor, localTime, overlaps, pacingState, serviceDate } from 
 
 describe("booking policy maths", () => {
   it("picks dining time by party size", () => {
-    expect([1, 2, 3, 4, 5, 6, 7, 20].map((n) => diningMinutesFor(n))).toEqual([75, 75, 90, 90, 105, 105, 120, 120]);
+    expect([1, 2, 3, 4, 5, 6, 7, 20].map((n) => diningMinutesFor(n))).toEqual([60, 60, 90, 90, 105, 105, 120, 120]);
   });
 
   it("converts outlet-local wall time to UTC and back to the service day", () => {

@@ -15,25 +15,41 @@ export type BookingPolicy = {
   graceMinutes: number;
   reserveAheadMinutes: number;
   pacingCoversPerSlot: number;
+  freeCancellationMinutes: number;
+  lateExtensionMinutes: number;
+  readyWindowMinutes: number;
+  fallbackWaitMinutes: number;
+  minimumHistoryParties: number;
+  peakCreditPaise: number;
+  repeatNoShowCreditPaise: number;
+  repeatNoShowThreshold: number;
 };
 
 export const DEFAULT_POLICY: BookingPolicy = {
   bookingWindowDays: 30,
   onlineCutoffMinutes: 60,
   minPartySize: 1,
-  maxPartySize: 8,
+  maxPartySize: 12,
   slotIntervalMinutes: 30,
-  holdMinutes: 10,
+  holdMinutes: 5,
   diningMinutes: [
-    [2, 75],
+    [2, 60],
     [4, 90],
     [6, 105],
     [99, 120],
   ],
-  turnoverBufferMinutes: 15,
+  turnoverBufferMinutes: 10,
   graceMinutes: 15,
   reserveAheadMinutes: 30,
   pacingCoversPerSlot: 40,
+  freeCancellationMinutes: 120,
+  lateExtensionMinutes: 10,
+  readyWindowMinutes: 10,
+  fallbackWaitMinutes: 30,
+  minimumHistoryParties: 30,
+  peakCreditPaise: 0,
+  repeatNoShowCreditPaise: 0,
+  repeatNoShowThreshold: 2,
 };
 
 /** Arrivals shows bookings this far ahead (S1) */

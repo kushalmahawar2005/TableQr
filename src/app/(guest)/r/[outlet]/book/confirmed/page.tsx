@@ -1,0 +1,10 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import { bookingByToken } from "@/server/booking/core";
+
+export const metadata: Metadata = { title: "Booking confirmed", robots: { index: false, follow: false } };
+export default async function BookingConfirmedPage(props: { params: Promise<{ outlet: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const { outlet } = await props.params; const q = await props.searchParams; const token = typeof q.token === "string" ? q.token : "";
+  let row; try { row = (await bookingByToken(outlet, token)).row; } catch { return <main className="mx-auto max-w-[520px] px-5 py-10"><h1 className="font-display text-3xl font-bold">Booking not found</h1><p className="mt-3 text-muted">This booking link has expired or is invalid.</p></main>; }
+  return <main className="mx-auto min-h-dvh max-w-[520px] px-5 py-10 text-ink"><p className="text-xs font-semibold uppercase tracking-[.18em] text-muted">TableQR</p><h1 className="mt-2 font-display text-3xl font-bold">Booking confirmed</h1><div className="mt-6 rounded-2xl border border-line bg-surface p-5"><p className="text-sm text-muted">Booking reference</p><p className="text-2xl font-bold">{row.publicReference}</p><p className="mt-4">{new Date(row.startAt).toLocaleString("en-IN", { dateStyle: "full", timeStyle: "short" })}</p><p className="mt-1">{row.partySize} guests · {row.name}</p></div><div className="mt-5 grid gap-3"><Link href={`/r/${encodeURIComponent(outlet)}/book/manage/${encodeURIComponent(token)}`} className="min-h-12 rounded-xl bg-brand px-4 py-3 text-center font-semibold text-brand-on">Manage booking</Link><a href={`data:text/calendar;charset=utf-8,BEGIN:VCALENDAR%0AVERSION:2.0%0ASUMMARY:TableQR booking ${row.publicReference}%0ADTSTART:${new Date(row.startAt).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "")}%0AEND:VCALENDAR`} download="tableqr-booking.ics" className="min-h-12 rounded-xl border border-line px-4 py-3 text-center font-semibold">Add to calendar</a></div><p className="mt-5 text-xs text-muted">Share this secure manage link only with the booking holder.</p></main>;
+}

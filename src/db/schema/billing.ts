@@ -14,6 +14,7 @@ import { at, createdAt, id, ref, sameTenant, tenantId, tenantKey, updatedAt } fr
 import { orderLines } from "./orders";
 import { participants, tableSessions } from "./sessions";
 import { outlets, users } from "./tenancy";
+import { reservations } from "./booking";
 
 // Bills, split shares, payments, GST invoices and credit notes (PS 3.6, 6).
 
@@ -32,6 +33,9 @@ export const bills = mysqlTable(
     taxPaise: int("tax_paise").notNull().default(0),
     serviceChargePaise: int("service_charge_paise").notNull().default(0),
     tipPaise: int("tip_paise").notNull().default(0),
+    /** Reservation credit shown as a separate bill adjustment. */
+    bookingCreditPaise: int("booking_credit_paise").notNull().default(0),
+    bookingCreditReservationId: ref("booking_credit_reservation_id"),
     roundOffPaise: int("round_off_paise").notNull().default(0),
     totalPaise: int("total_paise").notNull().default(0),
     /** Tax by rate, e.g. { "500": 9950 } */
@@ -60,6 +64,7 @@ export const bills = mysqlTable(
     tenantKey("bills", t),
     sameTenant("fk_bills_outlet", t, t.outletId, outlets),
     sameTenant("fk_bills_session", t, t.sessionId, tableSessions),
+    sameTenant("fk_bills_booking_credit_reservation", t, t.bookingCreditReservationId, reservations),
   ],
 );
 

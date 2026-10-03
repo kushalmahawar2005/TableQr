@@ -17,7 +17,7 @@ import { findTableByQr } from "./table";
 
 export const AFTER_VISIT_HOURS = 24;
 /** "Book your next visit" links only to a real booking flow; B1 is still a placeholder */
-export const BOOKING_AVAILABLE = false;
+export const BOOKING_AVAILABLE = true;
 
 export type Visit = {
   tenantId: string;

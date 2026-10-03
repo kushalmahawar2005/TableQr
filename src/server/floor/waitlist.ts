@@ -12,6 +12,7 @@ import { assertMay } from "../staff/auth";
 import { audit } from "../staff/audit";
 import { tableStateEvents, visitChanged } from "./assignments";
 import { loadPolicy } from "./policy";
+import { queueBookingNotification } from "../booking/notifications";
 import type { FloorActor } from "./table-actions";
 import { assertCombinable, assertFreeForSeating, assertSeats, bookingConflictError, bookingConflicts, lockTables, openVisit, type Scope } from "./visits";
 
@@ -41,7 +42,7 @@ async function lockEntry(tx: Tx, scope: Scope, id: string) {
   return row;
 }
 
-export async function addToWaitlist(staff: FloorActor, input: { name: string; phone?: string | null; partySize: number; quotedMinutes?: number | null; notes?: string | null }, now = new Date()) {
+export async function addToWaitlist(staff: FloorActor, input: { name: string; phone?: string | null; partySize: number; quotedMinutes?: number | null; notes?: string | null; seatingPreference?: string | null }, now = new Date()) {
   assertMay(staff, "waitlist.manage");
   const scope = scopeOf(staff);
   const name = String(input.name ?? "").trim().slice(0, 80);
@@ -64,8 +65,11 @@ export async function addToWaitlist(staff: FloorActor, input: { name: string; ph
       name,
       phone: input.phone?.replace(/[^\d+]/g, "").slice(0, 15) || null,
       partySize,
+      seatingPreference: input.seatingPreference?.trim().slice(0, 40) || null,
       joinedAt: now,
       quotedMinutes: quoted,
+      estimateMinutes: quoted,
+      estimateSource: quoted == null ? "fallback" : "staff",
       notes: input.notes?.trim().slice(0, 200) || null,
       sortOrder: (last ?? 0) + 1,
       createdByUserId: staff.userId,
@@ -84,18 +88,36 @@ async function close(staff: FloorActor, id: string, to: "notified" | "skipped" |
     const e = await lockEntry(tx, scope, id);
     const allowed = to === "notified" ? ["waiting"] : [...QUEUED];
     if (!allowed.includes(e.status)) throw new AppError("conflict", `${e.name} is already ${e.status}.`, { status: e.status });
+    const policy = await loadPolicy(tx, scope);
     await tx
       .update(s.waitlistEntries)
-      .set(to === "notified" ? { status: to, notifiedAt: now } : { status: to, closedAt: now })
+      .set(to === "notified" ? { status: to, notifiedAt: now, readyDeadline: new Date(now.getTime() + policy.readyWindowMinutes * 60_000), updatedAt: now } : { status: to, closedAt: now, updatedAt: now })
       .where(and(eq(s.waitlistEntries.tenantId, scope.tenantId), eq(s.waitlistEntries.id, e.id)));
     await audit(tx, staff, { action: `waitlist.${to}`, entity: "waitlist", entityId: e.id, before: { status: e.status }, after: { status: to }, now });
   }, LOCK_THEN_READ);
   await publish(scope, [changed(id)]);
+  if (to === "notified") {
+    const [entry] = await db.select({ phone: s.waitlistEntries.phone }).from(s.waitlistEntries).where(and(eq(s.waitlistEntries.tenantId, scope.tenantId), eq(s.waitlistEntries.outletId, scope.outletId), eq(s.waitlistEntries.id, id)));
+    if (entry?.phone) await queueBookingNotification({ tenantId: scope.tenantId, outletId: scope.outletId, waitlistEntryId: id, type: "waitlist_ready", recipient: entry.phone, channel: "sms", idempotencyKey: `waitlist-ready:${id}` });
+  }
 }
 
 export const notifyWaitlist = (staff: FloorActor, id: string, now = new Date()) => close(staff, id, "notified", now);
 export const skipWaitlist = (staff: FloorActor, id: string, now = new Date()) => close(staff, id, "skipped", now);
 export const removeFromWaitlist = (staff: FloorActor, id: string, now = new Date()) => close(staff, id, "left", now);
+
+export async function restoreWaitlist(staff: FloorActor, id: string, now = new Date()) {
+  assertMay(staff, "waitlist.manage");
+  const scope = scopeOf(staff);
+  await db.transaction(async (tx) => {
+    const e = await lockEntry(tx, scope, id);
+    if (!["skipped", "expired", "left"].includes(e.status)) throw new AppError("conflict", `${e.name} cannot be restored from ${e.status}.`);
+    const [{ last }] = await tx.select({ last: max(s.waitlistEntries.sortOrder) }).from(s.waitlistEntries).where(and(eq(s.waitlistEntries.tenantId, scope.tenantId), eq(s.waitlistEntries.outletId, scope.outletId)));
+    await tx.update(s.waitlistEntries).set({ status: "waiting", sortOrder: (last ?? 0) + 1, closedAt: null, readyDeadline: null, updatedAt: now }).where(and(eq(s.waitlistEntries.tenantId, scope.tenantId), eq(s.waitlistEntries.id, id)));
+    await audit(tx, staff, { action: "waitlist.restore", entity: "waitlist", entityId: id, before: { status: e.status }, after: { status: "waiting" }, now });
+  }, LOCK_THEN_READ);
+  await publish(scope, [changed(id)]);
+}
 
 /** Move a party to a new place in the queue (0 = next) */
 export async function reorderWaitlist(staff: FloorActor, input: { entryId: string; toIndex: number }, now = new Date()) {

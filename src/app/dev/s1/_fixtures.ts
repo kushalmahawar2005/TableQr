@@ -136,9 +136,9 @@ export function floorData(over: Record<string, Partial<FloorTable>> = dinner, ex
     tables: FLOOR.map((sp) => table(sp, over[sp.code] ?? {})),
     arrivals: [late, iyer, mehta, das],
     waitlist: [
-      { id: "w1", name: "Gupta", phone: null, partySize: 2, joinedAt: NOW - 18 * MIN, waitedMinutes: 18, quotedMinutes: 15, status: "notified", notes: null },
-      { id: "w2", name: "Bose", phone: "98xxxxxx22", partySize: 4, joinedAt: NOW - 9 * MIN, waitedMinutes: 9, quotedMinutes: 25, status: "waiting", notes: "High chair" },
-      { id: "w3", name: "Khan", phone: null, partySize: 3, joinedAt: NOW - 2 * MIN, waitedMinutes: 2, quotedMinutes: 30, status: "waiting", notes: null },
+      { id: "w1", name: "Gupta", phone: null, partySize: 2, joinedAt: NOW - 18 * MIN, waitedMinutes: 18, quotedMinutes: 15, estimateMinutes: 15, estimateSource: "staff", seatingPreference: null, readyDeadline: NOW + 5 * MIN, status: "notified", notes: null },
+      { id: "w2", name: "Bose", phone: "98xxxxxx22", partySize: 4, joinedAt: NOW - 9 * MIN, waitedMinutes: 9, quotedMinutes: 25, estimateMinutes: 25, estimateSource: "fallback", seatingPreference: "Indoor", readyDeadline: null, status: "waiting", notes: "High chair" },
+      { id: "w3", name: "Khan", phone: null, partySize: 3, joinedAt: NOW - 2 * MIN, waitedMinutes: 2, quotedMinutes: 30, estimateMinutes: 30, estimateSource: "fallback", seatingPreference: null, readyDeadline: null, status: "waiting", notes: null },
     ],
     pacing: { date: "2026-10-02", slots, paused: false, pausedAt: null },
     policy: { graceMinutes: 15, turnoverBufferMinutes: 15 },

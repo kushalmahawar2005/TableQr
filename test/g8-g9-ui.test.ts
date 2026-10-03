@@ -172,8 +172,8 @@ describe("G9 paid", () => {
     expect(expired).not.toMatch(/₹|receipt|invoice/i);
   });
 
-  it("does not offer booking until the booking flow is real, and ends access after 24 hours", () => {
-    expect(paid(g9Base)).not.toContain("Book your next visit");
+  it("offers the real booking route and ends access after 24 hours", () => {
+    expect(paid(g9Base)).toContain('href="/r/SRJ01/book"');
     expect(paid(g9Cases().find((c) => c.id === "expired")!.data)).toContain("This visit has ended.");
   });
 });

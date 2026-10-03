@@ -27,7 +27,7 @@ export const g9Base: Live = {
   channels: [],
   rating: null,
   reviewUrl: "https://g.page/r/spice-route/review",
-  bookingUrl: null,
+  bookingUrl: "/r/SRJ01/book",
 };
 
 export type G9Case = { id: string; label: string; data: AfterVisitData; preview: PaidPreview; lang?: "en" | "hi"; width?: number; height?: number; loading?: boolean; solo?: boolean };
