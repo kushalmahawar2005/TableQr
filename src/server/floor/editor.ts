@@ -117,6 +117,10 @@ export async function publishDraft(staff: Scope, versionId: string, expectedRevi
     if (!v || v.revision !== expectedRevision) throw new AppError("conflict", "This floor draft changed in another window. Reload the latest draft.", { reason: "STALE_DRAFT" });
     const { zones, tables } = await validateDraft(tx, staff, versionId);
     const oldPublished = await tx.select().from(s.floorLayoutVersions).where(and(eq(s.floorLayoutVersions.tenantId, staff.tenantId), eq(s.floorLayoutVersions.outletId, staff.outletId), eq(s.floorLayoutVersions.status, "published"))).orderBy(desc(s.floorLayoutVersions.versionNumber)).limit(1);
+    for (const z of zones.filter((x) => x.archived && x.logicalZoneId)) {
+      const [future] = await tx.select({ id: s.reservations.id }).from(s.reservations).where(and(eq(s.reservations.tenantId, staff.tenantId), eq(s.reservations.outletId, staff.outletId), eq(s.reservations.requestedZoneId, z.logicalZoneId!), gte(s.reservations.startAt, new Date()), inArray(s.reservations.status, ["requested", "confirmed", "reminded", "arrived"]))).limit(1);
+      if (future) throw new AppError("conflict", `Zone ${z.name} has a future reservation preference and cannot be archived.`);
+    }
     for (const z of zones) {
       if (z.logicalZoneId) await tx.update(s.zones).set({ name: z.name, sortOrder: z.sortOrder, isActive: !z.archived }).where(and(eq(s.zones.tenantId, staff.tenantId), eq(s.zones.id, z.logicalZoneId), eq(s.zones.outletId, staff.outletId)));
       else { const id = uuidv7(); await tx.insert(s.zones).values({ id, tenantId: staff.tenantId, outletId: staff.outletId, name: z.name, sortOrder: z.sortOrder, isActive: !z.archived, createdAt: new Date() }); await tx.update(s.floorLayoutZones).set({ logicalZoneId: id }).where(and(eq(s.floorLayoutZones.tenantId, staff.tenantId), eq(s.floorLayoutZones.id, z.id))); }
@@ -137,6 +141,12 @@ export async function publishDraft(staff: Scope, versionId: string, expectedRevi
       if (!zone?.id) throw new AppError("invalid_state", "Every table must belong to a published zone.");
       if (t.logicalTableId) {
         const [old] = await tx.select().from(s.diningTables).where(and(eq(s.diningTables.tenantId, staff.tenantId), eq(s.diningTables.id, t.logicalTableId)));
+        if (old && t.maxSeats < old.maxSeats) {
+          const [active] = await tx.select({ partySize: s.tableSessions.partySize }).from(s.sessionTables).innerJoin(s.tableSessions, and(eq(s.tableSessions.tenantId, s.sessionTables.tenantId), eq(s.tableSessions.id, s.sessionTables.sessionId), ne(s.tableSessions.status, "closed"))).where(and(eq(s.sessionTables.tenantId, staff.tenantId), eq(s.sessionTables.tableId, t.logicalTableId), isNotNull(s.sessionTables.activeKey))).limit(1);
+          if (active?.partySize && active.partySize > t.maxSeats) throw new AppError("conflict", `Table ${old.code} cannot be reduced below its seated party.`);
+          const [future] = await tx.select({ partySize: s.reservations.partySize }).from(s.reservationTables).innerJoin(s.reservations, and(eq(s.reservations.tenantId, s.reservationTables.tenantId), eq(s.reservations.id, s.reservationTables.reservationId))).where(and(eq(s.reservationTables.tenantId, staff.tenantId), eq(s.reservationTables.tableId, t.logicalTableId), gte(s.reservations.startAt, new Date()), inArray(s.reservations.status, ["requested", "confirmed", "reminded", "arrived"]))).limit(1);
+          if (future?.partySize && future.partySize > t.maxSeats) throw new AppError("conflict", `Table ${old.code} cannot be reduced below its future reservation.`);
+        }
         if (old && old.code !== t.code) {
           const active = await tx.select({ id: s.sessionTables.id }).from(s.sessionTables).where(and(eq(s.sessionTables.tenantId, staff.tenantId), eq(s.sessionTables.tableId, t.logicalTableId), isNotNull(s.sessionTables.activeKey))).limit(1);
           if (active.length) throw new AppError("conflict", `Table ${old.code} has an active session and cannot be renamed.`);
@@ -150,6 +160,13 @@ export async function publishDraft(staff: Scope, versionId: string, expectedRevi
     const combined = new Map<string, string[]>();
     for (const pair of draftPairs) { const a = byDraft.get(pair.tableId); const b = byDraft.get(pair.combinedTableId); if (a && b) combined.set(a, [...(combined.get(a) ?? []), b]); }
     const currentCanon = await tx.select().from(s.diningTables).where(and(eq(s.diningTables.tenantId, staff.tenantId), eq(s.diningTables.outletId, staff.outletId)));
+    for (const c of currentCanon) for (const oldOther of c.combinableWith ?? []) if (!(combined.get(c.id) ?? []).includes(oldOther)) {
+      const activePair = await tx.select({ id: s.sessionTables.id }).from(s.sessionTables).innerJoin(s.tableSessions, and(eq(s.tableSessions.tenantId, s.sessionTables.tenantId), eq(s.tableSessions.id, s.sessionTables.sessionId), ne(s.tableSessions.status, "closed"))).where(and(eq(s.sessionTables.tenantId, staff.tenantId), eq(s.sessionTables.tableId, c.id), isNotNull(s.sessionTables.activeKey))).limit(1);
+      const activeOther = await tx.select({ id: s.sessionTables.id }).from(s.sessionTables).innerJoin(s.tableSessions, and(eq(s.tableSessions.tenantId, s.sessionTables.tenantId), eq(s.tableSessions.id, s.sessionTables.sessionId), ne(s.tableSessions.status, "closed"))).where(and(eq(s.sessionTables.tenantId, staff.tenantId), eq(s.sessionTables.tableId, oldOther), isNotNull(s.sessionTables.activeKey))).limit(1);
+      if (activePair.length && activeOther.length) throw new AppError("conflict", `Combination ${c.code} cannot be removed while in use.`);
+      const reservationsUsing = await tx.select({ id: s.reservationTables.reservationId }).from(s.reservationTables).innerJoin(s.reservations, and(eq(s.reservations.tenantId, s.reservationTables.tenantId), eq(s.reservations.id, s.reservationTables.reservationId))).where(and(eq(s.reservationTables.tenantId, staff.tenantId), inArray(s.reservationTables.tableId, [c.id, oldOther]), gte(s.reservations.startAt, new Date()), inArray(s.reservations.status, ["requested", "confirmed", "reminded", "arrived"]))).groupBy(s.reservationTables.reservationId).having(sql`count(*) = 2`).limit(1);
+      if (reservationsUsing.length) throw new AppError("conflict", `Combination ${c.code} cannot be removed while reserved.`);
+    }
     for (const c of currentCanon) if (c.isActive) await tx.update(s.diningTables).set({ combinableWith: combined.get(c.id) ?? [] }).where(and(eq(s.diningTables.tenantId, staff.tenantId), eq(s.diningTables.id, c.id)));
     for (const c of currentCanon) if (c.isActive) {
       const [qr] = await tx.select({ id: s.qrCodes.id }).from(s.qrCodes).where(and(eq(s.qrCodes.tenantId, staff.tenantId), eq(s.qrCodes.outletId, staff.outletId), eq(s.qrCodes.tableId, c.id), eq(s.qrCodes.type, "table"), isNull(s.qrCodes.revokedAt))).limit(1);
