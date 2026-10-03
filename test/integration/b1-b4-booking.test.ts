@@ -1,12 +1,13 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db as appDb } from "@/db";
+import { uuidv7 } from "@/db/id";
 import * as s from "@/db/schema";
 import { serviceDate } from "@/domain/booking-policy";
 import { AppError } from "@/server/errors";
-import { bookingByToken, cancelBookingPublic, createBookingHold, getBookingAvailability } from "@/server/booking/core";
+import { bookingByToken, cancelBookingPublic, createBookingHold, createGroupRequest, getBookingAvailability, getBookingZones } from "@/server/booking/core";
 import { sendBookingOtp, verifyBookingOtp } from "@/server/booking/otp";
-import { joinPublicWaitlist, leavePublicWaitlist, publicWaitlistStatus } from "@/server/booking/waitlist";
+import { estimateWait, joinPublicWaitlist, leavePublicWaitlist, publicWaitlistStatus } from "@/server/booking/waitlist";
 import { resetTestDb } from "./setup-db";
 
 let env: Awaited<ReturnType<typeof resetTestDb>>;
@@ -26,6 +27,25 @@ describe("B1-B4 booking domain", () => {
     expect(hold.holdExpiresAt - (now.getTime() - 2 * 3600_000)).toBe(5 * 60_000);
     const [tables] = await env.db.select({ n: s.reservationTables.id }).from(s.reservationTables).where(eq(s.reservationTables.reservationId, hold.reservationId));
     expect(tables).toBeDefined();
+  });
+
+  it("accepts only tenant-scoped configured zones", async () => {
+    const zones = await getBookingZones("SRJ01");
+    expect(zones.length).toBeGreaterThan(0);
+    const availability = await getBookingAvailability("SRJ01", { date, partySize: 2, preference: { zoneId: zones[0].id } }, now);
+    expect(availability.slots.length).toBeGreaterThan(0);
+    await expect(getBookingAvailability("SRJ01", { date, partySize: 2, preference: { zoneId: "not-a-zone" } }, now)).rejects.toBeInstanceOf(AppError);
+    const [otherZone] = await env.db.select({ id: s.zones.id }).from(s.zones).where(eq(s.zones.tenantId, env.other.tenantId)).limit(1);
+    await expect(getBookingAvailability("SRJ01", { date, partySize: 2, preference: { zoneId: otherZone.id } }, now)).rejects.toBeInstanceOf(AppError);
+  });
+
+  it("persists group requests above twelve without creating a reservation", async () => {
+    const request = await createGroupRequest("SRJ01", { requestId: "group-req-1", name: "Large Party", phone: "9876543212", partySize: 15, desiredDate: date, desiredStartAt: now.getTime(), notes: "Private room if possible" });
+    expect(request.publicReference).toMatch(/^TQ-/);
+    const [reservation] = await env.db.select().from(s.reservations).where(eq(s.reservations.bookingRequestId, "group-req-1"));
+    expect(reservation).toBeUndefined();
+    const [stored] = await env.db.select().from(s.groupRequests).where(eq(s.groupRequests.requestId, "group-req-1"));
+    expect(stored.partySize).toBe(15);
   });
 
   it("prevents simultaneous holds for the only twelve-top", async () => {
@@ -65,5 +85,19 @@ describe("B1-B4 booking domain", () => {
     expect(status.seatingPreference).toBe("Indoor");
     await leavePublicWaitlist("SRJ01", joined.token);
     expect((await publicWaitlistStatus("SRJ01", joined.token)).status).toBe("left");
+  });
+
+  it("uses historical wait time after thirty useful completed parties", async () => {
+    const tableId = env.demo.tableIds.T1;
+    for (let i = 0; i < 30; i++) {
+      const sessionId = uuidv7();
+      const opened = new Date(now.getTime() - (i + 1) * 3600_000);
+      const closed = new Date(opened.getTime() + 40 * 60_000);
+      await env.db.insert(s.tableSessions).values({ id: sessionId, tenantId: env.demo.tenantId, outletId: env.demo.outletId, tableId, mode: "open", status: "closed", source: "walk_in", partySize: 2, openedAt: opened, lastActivityAt: closed, closedAt: closed, openKey: null });
+      await env.db.insert(s.sessionTables).values({ id: uuidv7(), tenantId: env.demo.tenantId, outletId: env.demo.outletId, sessionId, tableId, isPrimary: true, activeKey: null, assignedAt: opened, releasedAt: closed });
+    }
+    const estimate = await estimateWait(appDb, { tenantId: env.demo.tenantId, outletId: env.demo.outletId }, 2, null, now);
+    expect(estimate.source).toBe("historical");
+    expect(estimate.minutes).toBeGreaterThan(0);
   });
 });

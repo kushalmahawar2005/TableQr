@@ -3,7 +3,7 @@
 import { cookies } from "next/headers";
 import { DEVICE_COOKIE } from "@/lib/guest-device";
 import { AppError } from "@/server/errors";
-import { arriveBookingPublic, bookingByToken, cancelBookingPublic, createBookingHold, getBookingAvailability, confirmBooking, lateBookingPublic, rescheduleBookingPublic } from "@/server/booking/core";
+import { arriveBookingPublic, bookingByToken, cancelBookingPublic, createBookingHold, createGroupRequest, getBookingAvailability, confirmBooking, lateBookingPublic, rescheduleBookingPublic } from "@/server/booking/core";
 import { sendBookingOtp, verifyBookingOtp } from "@/server/booking/otp";
 import { startReservationCredit } from "@/server/booking/credit";
 
@@ -48,6 +48,10 @@ export async function rescheduleBookingAction(outletCode: string, token: string,
 
 export async function arriveBookingAction(outletCode: string, token: string) {
   try { return { ok: true as const, data: await arriveBookingPublic(outletCode, token) }; } catch (e) { return fail(e); }
+}
+
+export async function groupRequestAction(outletCode: string, input: { requestId: string; name: string; phone: string; partySize: number; desiredDate: string; desiredStartAt: number; notes?: string }) {
+  try { return { ok: true as const, data: await createGroupRequest(outletCode, input) }; } catch (e) { return fail(e); }
 }
 
 export async function startBookingCreditAction(outletCode: string, token: string, requestId: string, origin: string) {

@@ -42,6 +42,17 @@ async function outletScope(run: Runner, outletCode: string): Promise<OutletScope
   return o;
 }
 
+export async function getBookingZones(outletCode: string) {
+  const scope = await outletScope(db, outletCode);
+  return db.select({ id: s.zones.id, name: s.zones.name }).from(s.zones).where(and(eq(s.zones.tenantId, scope.tenantId), eq(s.zones.outletId, scope.outletId))).orderBy(asc(s.zones.sortOrder), asc(s.zones.name));
+}
+
+async function validateZone(run: Runner, scope: OutletScope, zoneId?: string | null) {
+  if (!zoneId) return;
+  const [zone] = await run.select({ id: s.zones.id }).from(s.zones).where(and(eq(s.zones.tenantId, scope.tenantId), eq(s.zones.outletId, scope.outletId), eq(s.zones.id, zoneId)));
+  if (!zone) throw new AppError("invalid_state", "Choose a seating preference from this restaurant.");
+}
+
 const policyWithFallback = (row: BookingPolicy): BookingPolicy => ({ ...row, holdMinutes: BOOKING_HOLD_MINUTES });
 
 async function exceptionFor(run: Runner, scope: OutletScope, date: string) {
@@ -125,6 +136,7 @@ async function slotCredit(run: Runner, scope: OutletScope, policy: BookingPolicy
 
 export async function getBookingAvailability(outletCode: string, input: { date: string; partySize: number; preference?: BookingPreference }, now = new Date()) {
   const scope = await outletScope(db, outletCode);
+  await validateZone(db, scope, input.preference?.zoneId);
   const policy = policyWithFallback(await loadPolicy(db, scope));
   const date = String(input.date);
   const party = Number(input.partySize);
@@ -150,6 +162,7 @@ export async function getBookingAvailability(outletCode: string, input: { date: 
 
 export async function createBookingHold(outletCode: string, input: { date: string; startAt: number; partySize: number; preference?: BookingPreference; requestId: string; holdToken: string }, now = new Date()) {
   const scope = await outletScope(db, outletCode);
+  await validateZone(db, scope, input.preference?.zoneId);
   const policy = policyWithFallback(await loadPolicy(db, scope));
   const startAt = new Date(Number(input.startAt));
   const endAt = new Date(startAt.getTime() + diningMinutesFor(Number(input.partySize), policy) * 60_000);
@@ -234,6 +247,7 @@ export async function rescheduleBookingPublic(outletCode: string, token: string,
     const [row] = await tx.select().from(s.reservations).where(and(eq(s.reservations.tenantId, scope.tenantId), eq(s.reservations.manageTokenHash, hash(token)))).for("update");
     if (!row || ["cancelled", "no_show", "completed", "seated"].includes(row.status)) throw new AppError("invalid_state", "This booking cannot be rescheduled now.");
     const policy = policyWithFallback(await loadPolicy(tx, scope));
+    await validateZone(tx, scope, row.requestedZoneId);
     const startAt = new Date(Number(input.startAt)); const endAt = new Date(startAt.getTime() + diningMinutesFor(row.partySize, policy) * 60_000);
     const chosen = await chooseTables(tx, scope, startAt, endAt, row.partySize, { seatingPreference: row.seatingPreference, tableClass: row.requestedTableClass, zoneId: row.requestedZoneId }, now, true, row.id);
     if (!chosen) throw new AppError("conflict", "That new time is no longer available.", { reason: "full" });
@@ -255,6 +269,18 @@ export async function arriveBookingPublic(outletCode: string, token: string, now
   await db.insert(s.reservationHistory).values({ tenantId: scope.tenantId, reservationId: row.id, kind: "arrived", before: { status: row.status }, after: { status: "arrived" }, createdAt: now });
   await publish(scope, [{ topic: topics.floor, type: "booking.updated", data: { reservationId: row.id } }]);
   return { status: "arrived" as const };
+}
+
+export async function createGroupRequest(outletCode: string, input: { requestId: string; name: string; phone: string; partySize: number; desiredDate: string; desiredStartAt: number; notes?: string | null }) {
+  const scope = await outletScope(db, outletCode); const partySize = Number(input.partySize);
+  if (partySize <= 12 || partySize > 100 || !input.name.trim() || !input.phone.trim()) throw new AppError("invalid_state", "Group requests are for parties above 12 guests.");
+  const existing = await db.select({ id: s.groupRequests.id, publicReference: s.groupRequests.publicReference }).from(s.groupRequests).where(and(eq(s.groupRequests.tenantId, scope.tenantId), eq(s.groupRequests.requestId, input.requestId))).limit(1);
+  if (existing[0]) return existing[0];
+  const id = uuidv7(); const reference = publicRef();
+  await db.insert(s.groupRequests).values({ id, tenantId: scope.tenantId, outletId: scope.outletId, publicReference: reference, requestId: input.requestId, name: input.name.trim().slice(0, 80), phone: input.phone.trim().slice(0, 15), partySize, desiredDate: input.desiredDate, desiredStartAt: new Date(Number(input.desiredStartAt)), notes: input.notes?.trim().slice(0, 500) || null, status: "requested" });
+  await queueBookingNotification({ tenantId: scope.tenantId, outletId: scope.outletId, type: "booking_confirmation", recipient: input.phone, channel: "sms", idempotencyKey: `group-request:${id}` });
+  await publish(scope, [{ topic: topics.floor, type: "booking.group_request", data: { groupRequestId: id } }]);
+  return { id, publicReference: reference };
 }
 
 export type BookingCore = typeof s.reservations.$inferSelect;

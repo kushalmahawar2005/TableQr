@@ -51,6 +51,8 @@ export const reservationStatuses = ["requested", "confirmed", "reminded", "arriv
 export type ReservationStatus = (typeof reservationStatuses)[number];
 export const reservationSources = ["online", "phone", "walk_in", "staff"] as const;
 
+export const groupRequestStatuses = ["requested", "contacted", "converted", "cancelled"] as const;
+
 export const reservations = mysqlTable(
   "reservations",
   {
@@ -109,6 +111,33 @@ export const reservations = mysqlTable(
     sameTenant("fk_reservations_guest", t, t.guestId, guests),
     sameTenant("fk_reservations_session", t, t.sessionId, tableSessions),
     sameTenant("fk_reservations_created_by", t, t.createdByUserId, users),
+  ],
+);
+
+export const groupRequests = mysqlTable(
+  "group_requests",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    outletId: ref("outlet_id").notNull(),
+    publicReference: varchar("public_reference", { length: 20 }).notNull(),
+    requestId: varchar("request_id", { length: 64 }).notNull(),
+    name: varchar("name", { length: 80 }).notNull(),
+    phone: varchar("phone", { length: 15 }).notNull(),
+    partySize: int("party_size").notNull(),
+    desiredDate: date("desired_date", { mode: "string" }).notNull(),
+    desiredStartAt: at("desired_start_at").notNull(),
+    notes: varchar("notes", { length: 500 }),
+    status: mysqlEnum("status", groupRequestStatuses).notNull().default("requested"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex("group_requests_reference_uq").on(t.tenantId, t.publicReference),
+    uniqueIndex("group_requests_request_uq").on(t.tenantId, t.requestId),
+    index("group_requests_outlet_date_idx").on(t.tenantId, t.outletId, t.desiredDate, t.status),
+    tenantKey("group_requests", t),
+    sameTenant("fk_group_requests_outlet", t, t.outletId, outlets),
   ],
 );
 
