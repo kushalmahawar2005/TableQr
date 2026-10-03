@@ -21,8 +21,8 @@ type Staff = { tenantId: string; outletId: string; roles: StaffRole[]; outlet: {
 /** The published floor layout S1 draws. O2 owns drafts and versions; S1 only reads. */
 export async function getActiveLayout(scope: { tenantId: string; outletId: string }) {
   const [zones, tables] = await Promise.all([
-    db.select({ id: s.zones.id, name: s.zones.name }).from(s.zones).where(and(eq(s.zones.tenantId, scope.tenantId), eq(s.zones.outletId, scope.outletId))).orderBy(s.zones.sortOrder, s.zones.name),
-    db.select().from(s.diningTables).where(and(eq(s.diningTables.tenantId, scope.tenantId), eq(s.diningTables.outletId, scope.outletId))).orderBy(s.diningTables.code),
+    db.select({ id: s.zones.id, name: s.zones.name }).from(s.zones).where(and(eq(s.zones.tenantId, scope.tenantId), eq(s.zones.outletId, scope.outletId), eq(s.zones.isActive, true))).orderBy(s.zones.sortOrder, s.zones.name),
+    db.select().from(s.diningTables).where(and(eq(s.diningTables.tenantId, scope.tenantId), eq(s.diningTables.outletId, scope.outletId), eq(s.diningTables.isActive, true))).orderBy(s.diningTables.code),
   ]);
   return { version: "live" as const, zones, tables };
 }

@@ -130,7 +130,7 @@ export async function getOnlineAvailability(scope: Scope, input: { date: string;
   const tables = await db
     .select({ id: s.diningTables.id, maxSeats: s.diningTables.maxSeats, state: s.diningTables.state })
     .from(s.diningTables)
-    .where(and(eq(s.diningTables.tenantId, scope.tenantId), eq(s.diningTables.outletId, scope.outletId), eq(s.diningTables.isBookableOnline, true)));
+    .where(and(eq(s.diningTables.tenantId, scope.tenantId), eq(s.diningTables.outletId, scope.outletId), eq(s.diningTables.isActive, true), eq(s.diningTables.isBookableOnline, true)));
   const fits = tables.filter((t) => t.maxSeats >= party && t.state !== "blocked");
   const claims = fits.length
     ? await db

@@ -3,6 +3,7 @@
 import { CheckmarkCircle02Icon, WifiOff01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { BlockReason } from "@/db/schema";
 import type { Lang } from "@/lib/i18n";
@@ -196,6 +197,7 @@ export function FloorScreen({ data: initial, lang, realtimeUrl, preview }: { dat
             </button>
           ))}
         </div>
+        {data.roles.some((r) => r === "owner" || r === "manager") && !preview && <Link href="/console/floor/editor" className="min-h-10 rounded-input border border-line px-3 py-2 text-body font-semibold">Edit floor plan</Link>}
       </header>
 
       {(failed || notice) && (

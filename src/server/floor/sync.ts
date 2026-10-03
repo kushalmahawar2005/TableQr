@@ -48,6 +48,7 @@ export async function syncTableHolds(tx: Tx, scope: Scope, now: Date, onlyTableI
       and(
         eq(s.diningTables.tenantId, scope.tenantId),
         eq(s.diningTables.outletId, scope.outletId),
+        eq(s.diningTables.isActive, true),
         onlyTableIds ? inArray(s.diningTables.id, onlyTableIds.length ? onlyTableIds : ["-"]) : undefined,
         or(inArray(s.diningTables.state, ["available", "held", "reserved"]), and(eq(s.diningTables.state, "blocked"), lte(s.diningTables.blockedUntil, now))),
       ),

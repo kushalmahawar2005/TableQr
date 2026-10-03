@@ -42,6 +42,7 @@ async function resolveQr(run: Runner, outletCode: string, shortCode: string) {
         code: s.diningTables.code,
         maxSeats: s.diningTables.maxSeats,
         state: s.diningTables.state,
+        active: s.diningTables.isActive,
       },
       zoneName: s.zones.name,
       qrRevokedAt: s.qrCodes.revokedAt,
@@ -68,6 +69,7 @@ export async function findTableByQr(run: Runner, outletCode: string, shortCode: 
   const row = await resolveQr(run, outletCode, shortCode);
   if (!row) throw new AppError("not_found", "We could not find this table. Please ask staff for help.");
   if (row.qrRevokedAt) throw new AppError("qr_revoked", "This code is no longer active. Please ask staff for help.");
+  if (!row.table.active) throw new AppError("not_found", "This table is no longer available. Please ask staff for help.");
   if (isUnavailable(row)) {
     throw new AppError("outlet_unavailable", "Ordering from the table is not available right now. Please ask staff.");
   }

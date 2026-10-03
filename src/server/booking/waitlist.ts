@@ -14,7 +14,7 @@ import { queueBookingNotification } from "./notifications";
 
 export async function estimateWait(run: Runner, scope: { tenantId: string; outletId: string }, partySize: number, seatingPreference?: string | null, now = new Date()) {
   const [policy] = await run.select({ fallback: s.bookingPolicies.fallbackWaitMinutes, minimum: s.bookingPolicies.minimumHistoryParties }).from(s.bookingPolicies).where(and(eq(s.bookingPolicies.tenantId, scope.tenantId), eq(s.bookingPolicies.outletId, scope.outletId)));
-  const tables = await run.select({ id: s.diningTables.id, maxSeats: s.diningTables.maxSeats, zoneId: s.diningTables.zoneId }).from(s.diningTables).where(and(eq(s.diningTables.tenantId, scope.tenantId), eq(s.diningTables.outletId, scope.outletId), eq(s.diningTables.isBookableOnline, true)));
+  const tables = await run.select({ id: s.diningTables.id, maxSeats: s.diningTables.maxSeats, zoneId: s.diningTables.zoneId }).from(s.diningTables).where(and(eq(s.diningTables.tenantId, scope.tenantId), eq(s.diningTables.outletId, scope.outletId), eq(s.diningTables.isActive, true), eq(s.diningTables.isBookableOnline, true)));
   const suitable = seatingPreference && seatingPreference !== "No preference" ? tables.filter((t) => t.maxSeats >= partySize && String(t.zoneId) === seatingPreference) : tables.filter((t) => t.maxSeats >= partySize);
   const since = new Date(now.getTime() - 14 * 86_400_000);
   const history = await run.select({ openedAt: s.tableSessions.openedAt, closedAt: s.tableSessions.closedAt, partySize: s.tableSessions.partySize })

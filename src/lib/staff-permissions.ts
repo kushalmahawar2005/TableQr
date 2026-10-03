@@ -29,6 +29,10 @@ export const floorPermissions = {
   "booking.pause": ["host", "manager", "owner"],
   "booking.capacity": ["manager", "owner"],
   "waitlist.manage": ["host", "manager", "owner"],
+  "floor_plan.view": ["manager", "owner"],
+  "floor_plan.edit": ["manager", "owner"],
+  "floor_plan.publish": ["manager", "owner"],
+  "floor_plan.qr": ["manager", "owner"],
 } as const satisfies Record<string, readonly StaffRole[]>;
 
 export type FloorPermission = keyof typeof floorPermissions;

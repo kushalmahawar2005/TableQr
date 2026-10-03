@@ -44,12 +44,12 @@ async function outletScope(run: Runner, outletCode: string): Promise<OutletScope
 
 export async function getBookingZones(outletCode: string) {
   const scope = await outletScope(db, outletCode);
-  return db.select({ id: s.zones.id, name: s.zones.name }).from(s.zones).where(and(eq(s.zones.tenantId, scope.tenantId), eq(s.zones.outletId, scope.outletId))).orderBy(asc(s.zones.sortOrder), asc(s.zones.name));
+  return db.select({ id: s.zones.id, name: s.zones.name }).from(s.zones).where(and(eq(s.zones.tenantId, scope.tenantId), eq(s.zones.outletId, scope.outletId), eq(s.zones.isActive, true))).orderBy(asc(s.zones.sortOrder), asc(s.zones.name));
 }
 
 async function validateZone(run: Runner, scope: OutletScope, zoneId?: string | null) {
   if (!zoneId) return;
-  const [zone] = await run.select({ id: s.zones.id }).from(s.zones).where(and(eq(s.zones.tenantId, scope.tenantId), eq(s.zones.outletId, scope.outletId), eq(s.zones.id, zoneId)));
+  const [zone] = await run.select({ id: s.zones.id }).from(s.zones).where(and(eq(s.zones.tenantId, scope.tenantId), eq(s.zones.outletId, scope.outletId), eq(s.zones.id, zoneId), eq(s.zones.isActive, true)));
   if (!zone) throw new AppError("invalid_state", "Choose a seating preference from this restaurant.");
 }
 
@@ -111,7 +111,7 @@ function preferenceRank(group: Table[], pref: BookingPreference) {
 }
 
 async function chooseTables(run: Runner, scope: OutletScope, startAt: Date, endAt: Date, party: number, pref: BookingPreference, now: Date, lock = false, exceptReservationId?: string) {
-  const q = run.select().from(s.diningTables).where(and(eq(s.diningTables.tenantId, scope.tenantId), eq(s.diningTables.outletId, scope.outletId), eq(s.diningTables.isBookableOnline, true), ne(s.diningTables.state, "blocked"))).orderBy(asc(s.diningTables.id));
+  const q = run.select().from(s.diningTables).where(and(eq(s.diningTables.tenantId, scope.tenantId), eq(s.diningTables.outletId, scope.outletId), eq(s.diningTables.isActive, true), eq(s.diningTables.isBookableOnline, true), ne(s.diningTables.state, "blocked"))).orderBy(asc(s.diningTables.id));
   const tables = lock ? await q.for("update") : await q;
   const claims = await liveClaims(run, scope, exceptReservationId);
   const sessions = await activeSessions(run, scope, now);
