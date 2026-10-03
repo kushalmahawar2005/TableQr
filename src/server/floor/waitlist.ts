@@ -95,9 +95,9 @@ async function close(staff: FloorActor, id: string, to: "notified" | "skipped" |
       .where(and(eq(s.waitlistEntries.tenantId, scope.tenantId), eq(s.waitlistEntries.id, e.id)));
     await audit(tx, staff, { action: `waitlist.${to}`, entity: "waitlist", entityId: e.id, before: { status: e.status }, after: { status: to }, now });
   }, LOCK_THEN_READ);
-  await publish(scope, [changed(id)]);
+  const [entry] = await db.select({ phone: s.waitlistEntries.phone, manageTokenHash: s.waitlistEntries.manageTokenHash }).from(s.waitlistEntries).where(and(eq(s.waitlistEntries.tenantId, scope.tenantId), eq(s.waitlistEntries.outletId, scope.outletId), eq(s.waitlistEntries.id, id)));
+  await publish(scope, [changed(id), ...(entry?.manageTokenHash ? [{ topic: topics.waitlist(entry.manageTokenHash), type: to === "notified" ? "waitlist.ready" : `waitlist.${to}`, data: { entryId: id } }] : [])]);
   if (to === "notified") {
-    const [entry] = await db.select({ phone: s.waitlistEntries.phone }).from(s.waitlistEntries).where(and(eq(s.waitlistEntries.tenantId, scope.tenantId), eq(s.waitlistEntries.outletId, scope.outletId), eq(s.waitlistEntries.id, id)));
     if (entry?.phone) await queueBookingNotification({ tenantId: scope.tenantId, outletId: scope.outletId, waitlistEntryId: id, type: "waitlist_ready", recipient: entry.phone, channel: "sms", idempotencyKey: `waitlist-ready:${id}` });
   }
 }
@@ -116,7 +116,8 @@ export async function restoreWaitlist(staff: FloorActor, id: string, now = new D
     await tx.update(s.waitlistEntries).set({ status: "waiting", sortOrder: (last ?? 0) + 1, closedAt: null, readyDeadline: null, updatedAt: now }).where(and(eq(s.waitlistEntries.tenantId, scope.tenantId), eq(s.waitlistEntries.id, id)));
     await audit(tx, staff, { action: "waitlist.restore", entity: "waitlist", entityId: id, before: { status: e.status }, after: { status: "waiting" }, now });
   }, LOCK_THEN_READ);
-  await publish(scope, [changed(id)]);
+  const [entry] = await db.select({ manageTokenHash: s.waitlistEntries.manageTokenHash }).from(s.waitlistEntries).where(and(eq(s.waitlistEntries.tenantId, scope.tenantId), eq(s.waitlistEntries.outletId, scope.outletId), eq(s.waitlistEntries.id, id)));
+  await publish(scope, [changed(id), ...(entry?.manageTokenHash ? [{ topic: topics.waitlist(entry.manageTokenHash), type: "waitlist.restored", data: { entryId: id } }] : [])]);
 }
 
 /** Move a party to a new place in the queue (0 = next) */
@@ -137,7 +138,8 @@ export async function reorderWaitlist(staff: FloorActor, input: { entryId: strin
     }
     await audit(tx, staff, { action: "waitlist.reorder", entity: "waitlist", entityId: moved.id, before: { position: from + 1 }, after: { position: to + 1 }, now });
   }, LOCK_THEN_READ);
-  await publish(scope, [changed(input.entryId)]);
+  const [entry] = await db.select({ manageTokenHash: s.waitlistEntries.manageTokenHash }).from(s.waitlistEntries).where(and(eq(s.waitlistEntries.tenantId, scope.tenantId), eq(s.waitlistEntries.outletId, scope.outletId), eq(s.waitlistEntries.id, input.entryId)));
+  await publish(scope, [changed(input.entryId), ...(entry?.manageTokenHash ? [{ topic: topics.waitlist(entry.manageTokenHash), type: "waitlist.position_changed", data: { entryId: input.entryId } }] : [])]);
 }
 
 /** Seat a waiting party at a free table (button or drag onto a table: the same mutation) */
@@ -145,7 +147,7 @@ export async function seatWaitlist(staff: FloorActor, input: { entryId: string; 
   assertMay(staff, "floor.seat");
   const scope = scopeOf(staff);
   const tableIds = [...new Set((input.tableIds ?? []).map(String))];
-  const { sessionId } = await db.transaction(async (tx) => {
+  const { sessionId, manageTokenHash } = await db.transaction(async (tx) => {
     const policy = await loadPolicy(tx, scope);
     const e = await lockEntry(tx, scope, input.entryId);
     if (!QUEUED.includes(e.status as (typeof QUEUED)[number])) throw new AppError("conflict", `${e.name} is already ${e.status}.`, { status: e.status });
@@ -163,8 +165,8 @@ export async function seatWaitlist(staff: FloorActor, input: { entryId: string; 
       .set({ status: "seated", seatedAt: now, closedAt: now, sessionId })
       .where(and(eq(s.waitlistEntries.tenantId, scope.tenantId), eq(s.waitlistEntries.id, e.id)));
     await audit(tx, staff, { action: "waitlist.seat", entity: "waitlist", entityId: e.id, before: { status: e.status }, after: { status: "seated", sessionId, tableIds }, now });
-    return { sessionId };
+    return { sessionId, manageTokenHash: e.manageTokenHash };
   }, LOCK_THEN_READ);
-  await publish(scope, [changed(input.entryId), ...tableStateEvents(tableIds, "seated"), visitChanged(sessionId, "seated")]);
+  await publish(scope, [changed(input.entryId), ...(manageTokenHash ? [{ topic: topics.waitlist(manageTokenHash), type: "waitlist.seated", data: { entryId: input.entryId, sessionId } }] : []), ...tableStateEvents(tableIds, "seated"), visitChanged(sessionId, "seated")]);
   return { sessionId };
 }

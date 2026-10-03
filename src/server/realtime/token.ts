@@ -10,6 +10,7 @@ export const topics = {
   tasks: "tasks",
   menu: "menu",
   session: (sessionId: string) => `session:${sessionId}`,
+  waitlist: (tokenHash: string) => `waitlist:${tokenHash}`,
 };
 
 export function signRealtimeToken(
@@ -46,4 +47,8 @@ export function staffRealtimeToken(ctx: { tenantId: string; outletId: string; us
     { tenantId: ctx.tenantId, outletId: ctx.outletId, topics: screenTopics, sub: ctx.userId ?? undefined },
     12 * 60 * 60,
   );
+}
+
+export function waitlistRealtimeToken(ctx: { tenantId: string; outletId: string; tokenHash: string }) {
+  return signRealtimeToken({ tenantId: ctx.tenantId, outletId: ctx.outletId, topics: [topics.waitlist(ctx.tokenHash)], sub: ctx.tokenHash }, 24 * 60 * 60);
 }

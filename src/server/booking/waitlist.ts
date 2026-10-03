@@ -8,7 +8,7 @@ import { uuidv7 } from "@/db/id";
 import * as s from "@/db/schema";
 import { AppError } from "../errors";
 import { publish } from "../realtime/publish";
-import { topics } from "../realtime/token";
+import { topics, waitlistRealtimeToken } from "../realtime/token";
 import { outletScope } from "./waitlist-internal";
 import { queueBookingNotification } from "./notifications";
 
@@ -42,7 +42,7 @@ export async function joinPublicWaitlist(outletCode: string, input: { name: stri
   const estimate = await estimateWait(db, scope, partySize, input.seatingPreference, now);
   const plain = token(); const id = uuidv7();
   await db.insert(s.waitlistEntries).values({ id, tenantId: scope.tenantId, outletId: scope.outletId, name, phone: input.phone, partySize, seatingPreference: input.seatingPreference ?? null, joinedAt: now, quotedMinutes: estimate.minutes, estimateMinutes: estimate.minutes, estimateSource: estimate.source, status: "waiting", sortOrder: (last?.sortOrder ?? 0) + 1, manageTokenHash: hash(plain), manageTokenExpiresAt: new Date(now.getTime() + 24 * 3600_000), updatedAt: now });
-  await publish(scope, [{ topic: topics.floor, type: "waitlist.updated", data: { entryId: id } }]);
+  await publish(scope, [{ topic: topics.floor, type: "waitlist.updated", data: { entryId: id } }, { topic: topics.waitlist(hash(plain)), type: "waitlist.position_changed", data: { entryId: id } }]);
   await queueBookingNotification({ tenantId: scope.tenantId, outletId: scope.outletId, waitlistEntryId: id, type: "waitlist_joined", recipient: input.phone, channel: "sms", idempotencyKey: `waitlist-joined:${id}` });
   return { entryId: id, token: plain };
 }
@@ -55,10 +55,16 @@ export async function publicWaitlistStatus(outletCode: string, plainToken: strin
   return { id: row.id, name: row.name, phone: row.phone, partySize: row.partySize, seatingPreference: row.seatingPreference, status: row.status, position: index < 0 ? null : index + 1, partiesAhead: ahead, estimateMinutes: row.estimateMinutes ?? row.quotedMinutes ?? 30, joinedAt: row.joinedAt.getTime(), updatedAt: row.updatedAt.getTime(), readyDeadline: row.readyDeadline?.getTime() ?? null };
 }
 
+export async function publicWaitlistRealtimeToken(outletCode: string, plainToken: string) {
+  const scope = await outletScope(db, outletCode); const [row] = await db.select({ manageTokenHash: s.waitlistEntries.manageTokenHash }).from(s.waitlistEntries).where(and(eq(s.waitlistEntries.tenantId, scope.tenantId), eq(s.waitlistEntries.manageTokenHash, hash(plainToken))));
+  if (!row?.manageTokenHash) throw new AppError("not_found", "This waitlist link is invalid.");
+  return waitlistRealtimeToken({ tenantId: scope.tenantId, outletId: scope.outletId, tokenHash: row.manageTokenHash });
+}
+
 export async function leavePublicWaitlist(outletCode: string, plainToken: string) {
   const scope = await outletScope(db, outletCode); const [row] = await db.select({ id: s.waitlistEntries.id, status: s.waitlistEntries.status }).from(s.waitlistEntries).where(and(eq(s.waitlistEntries.tenantId, scope.tenantId), eq(s.waitlistEntries.manageTokenHash, hash(plainToken))));
   if (!row) throw new AppError("not_found", "This waitlist link is invalid.");
   if (["left", "skipped", "expired", "seated"].includes(row.status)) return { status: row.status };
   await db.update(s.waitlistEntries).set({ status: "left", closedAt: new Date(), updatedAt: new Date() }).where(and(eq(s.waitlistEntries.tenantId, scope.tenantId), eq(s.waitlistEntries.id, row.id)));
-  await publish(scope, [{ topic: topics.floor, type: "waitlist.updated", data: { entryId: row.id } }]); return { status: "left" };
+  await publish(scope, [{ topic: topics.floor, type: "waitlist.updated", data: { entryId: row.id } }, { topic: topics.waitlist(hash(plainToken)), type: "waitlist.position_changed", data: { entryId: row.id } }]); return { status: "left" };
 }

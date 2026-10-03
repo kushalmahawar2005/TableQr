@@ -23,7 +23,7 @@ export async function processBookingNotifications(now = new Date()) {
 
 export async function expireReadyWaitlists(now = new Date()) {
   // isolation-exempt: the authenticated service task intentionally scans all outlets for expiry.
-  const rows = await db.select({ id: s.waitlistEntries.id, tenantId: s.waitlistEntries.tenantId, outletId: s.waitlistEntries.outletId }).from(s.waitlistEntries).where(and(eq(s.waitlistEntries.status, "notified"), lte(s.waitlistEntries.readyDeadline, now)));
-  for (const row of rows) { await db.update(s.waitlistEntries).set({ status: "expired", closedAt: now, updatedAt: now }).where(and(eq(s.waitlistEntries.tenantId, row.tenantId), eq(s.waitlistEntries.id, row.id))); await publish({ tenantId: row.tenantId, outletId: row.outletId }, [{ topic: topics.floor, type: "waitlist.skipped", data: { entryId: row.id, reason: "ready_window_expired" } }]); }
+  const rows = await db.select({ id: s.waitlistEntries.id, tenantId: s.waitlistEntries.tenantId, outletId: s.waitlistEntries.outletId, manageTokenHash: s.waitlistEntries.manageTokenHash }).from(s.waitlistEntries).where(and(eq(s.waitlistEntries.status, "notified"), lte(s.waitlistEntries.readyDeadline, now)));
+  for (const row of rows) { await db.update(s.waitlistEntries).set({ status: "expired", closedAt: now, updatedAt: now }).where(and(eq(s.waitlistEntries.tenantId, row.tenantId), eq(s.waitlistEntries.id, row.id))); await publish({ tenantId: row.tenantId, outletId: row.outletId }, [{ topic: topics.floor, type: "waitlist.skipped", data: { entryId: row.id, reason: "ready_window_expired" } }, ...(row.manageTokenHash ? [{ topic: topics.waitlist(row.manageTokenHash), type: "waitlist.expired", data: { entryId: row.id } }] : [])]); }
   return rows.length;
 }
