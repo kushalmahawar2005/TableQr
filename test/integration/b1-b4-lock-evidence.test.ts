@@ -17,16 +17,17 @@ import { sendBookingOtp, verifyBookingOtp } from "@/server/booking/otp";
 import { recordReservationRefundResult, refundReservationCredit, reconcileReservationCredit, startReservationCredit } from "@/server/booking/credit";
 import { joinPublicWaitlist, publicWaitlistStatus } from "@/server/booking/waitlist";
 import { resetTestDb } from "./setup-db";
+import type { StaffSession } from "@/server/staff/auth";
 
 let env: Awaited<ReturnType<typeof resetTestDb>>;
 const now = new Date(Date.now() + 24 * 3600_000);
 const date = serviceDate(now, "Asia/Kolkata");
-const host: any = { roles: ["host"], name: "Anil Kumar" };
+let host: StaffSession;
 const fails = async (p: Promise<unknown>) => { const e = await p.then(() => null, (x) => x); expect(e).toBeInstanceOf(AppError); };
 
 beforeAll(async () => {
   env = await resetTestDb();
-  Object.assign(host, { tenantId: env.demo.tenantId, outletId: env.demo.outletId, userId: env.demo.staffIds.host, outlet: { code: "SRJ01", name: "Spice Route", timezone: "Asia/Kolkata" } });
+  host = { tenantId: env.demo.tenantId, outletId: env.demo.outletId, userId: env.demo.staffIds.host, sessionId: uuidv7(), name: "Anil Kumar", roles: ["host"], expiresAt: Date.now() + 3600_000, outlet: { code: "SRJ01", name: "Spice Route", timezone: "Asia/Kolkata" } };
   await env.db.insert(s.bookingPolicies).values({ id: uuidv7(), tenantId: env.demo.tenantId, outletId: env.demo.outletId, pacingCoversPerSlot: 1, peakCreditPaise: 800, updatedAt: now });
 });
 afterAll(async () => { await env.conn.end(); await appDb.$client.end(); });
@@ -57,7 +58,7 @@ describe("B1-B4 final credit and security evidence", () => {
   });
 
   it("ignores a client-forged credit amount", async () => {
-    const h = await hold("forged", 6, true); const checkout = await (startReservationCredit as any)("SRJ01", h.manageToken, "forged-payment", "http://localhost:3000/api/booking-credit/return?provider=mock&p=PLACEHOLDER", { amountPaise: 1 });
+    const h = await hold("forged", 6, true); const forgedStart = startReservationCredit as unknown as (outlet: string, token: string, request: string, callback: string, extra: { amountPaise: number }) => Promise<{ paid: false; creditId: string; checkout: { fields: Record<string, string> } }>; const checkout = await forgedStart("SRJ01", h.manageToken, "forged-payment", "http://localhost:3000/api/booking-credit/return?provider=mock&p=PLACEHOLDER", { amountPaise: 1 });
     const [c] = await env.db.select().from(s.reservationCredits).where(eq(s.reservationCredits.id, checkout.creditId!));
     expect(c.amountPaise).toBe(800); expect(Number(checkout.checkout.fields.amount)).toBe(800);
   });
