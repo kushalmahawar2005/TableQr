@@ -31,3 +31,14 @@ export async function reconcileReservationCredit(provider: string, creditId: str
   } else if (status.status === "failed") await db.update(s.reservationCredits).set({ status: "failed", failureReason: status.reason ?? "Payment failed", updatedAt: new Date() }).where(and(eq(s.reservationCredits.tenantId, credit.tenantId), eq(s.reservationCredits.id, credit.id)));
   return true;
 }
+
+export async function refundReservationCredit(tenantId: string, reservationId: string) {
+  const [credit] = await db.select().from(s.reservationCredits).where(and(eq(s.reservationCredits.tenantId, tenantId), eq(s.reservationCredits.reservationId, reservationId), eq(s.reservationCredits.status, "paid")));
+  if (!credit) return { status: "none" as const };
+  if (credit.refundStatus !== "none") return { status: credit.refundStatus };
+  const gateway = gatewayByName(credit.provider ?? "");
+  if (!gateway || !credit.gatewayPaymentId) return { status: "failed" as const };
+  const result = await gateway.refund({ gatewayPaymentId: credit.gatewayPaymentId, amountPaise: credit.paidPaise, refundId: credit.id });
+  await db.update(s.reservationCredits).set({ refundGatewayRef: result.gatewayRefundId, refundStatus: result.status, status: result.status === "success" ? "refunded" : "paid", updatedAt: new Date() }).where(and(eq(s.reservationCredits.tenantId, tenantId), eq(s.reservationCredits.id, credit.id)));
+  return { status: result.status };
+}

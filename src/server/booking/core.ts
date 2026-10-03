@@ -228,6 +228,7 @@ export async function cancelBookingPublic(outletCode: string, token: string, rea
     await tx.insert(s.reservationHistory).values({ tenantId: scope.tenantId, reservationId: row.id, kind: "cancelled", before: { status: locked.status }, after: { status: "cancelled", free, reason }, reason, createdAt: now });
   }, LOCK_THEN_READ);
   await publish(scope, [{ topic: topics.floor, type: "booking.cancelled", data: { reservationId: row.id } }]);
+  if (free && row.creditPaidPaise > 0) await (await import("./credit")).refundReservationCredit(scope.tenantId, row.id);
   return { status: "cancelled", freeCancellation: free };
 }
 
