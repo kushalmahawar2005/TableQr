@@ -1,6 +1,7 @@
 import { AppError } from "@/server/errors";
 import { confirmByGatewayRef, recordRefundResult } from "@/server/billing/payments";
 import { gatewayByName } from "@/server/payments/gateway";
+import { recordReservationRefundResult } from "@/server/booking/credit";
 
 /**
  * Gateway webhook (PS 6.4, 10.1). The signature over the exact raw body is checked before
@@ -33,7 +34,8 @@ export async function POST(request: Request, ctx: { params: Promise<{ provider: 
       return Response.json({ ok: true, known: !!res });
     }
     if (event.kind === "refund") {
-      return Response.json({ ok: true, known: await recordRefundResult(gateway.name, event) });
+      const known = await recordRefundResult(gateway.name, event);
+      return Response.json({ ok: true, known: known || await recordReservationRefundResult(gateway.name, event.gatewayRefundId, event.status) });
     }
     return Response.json({ ok: true, ignored: true });
   } catch (err) {

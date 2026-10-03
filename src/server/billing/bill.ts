@@ -168,15 +168,20 @@ export async function syncBill(
   let draft = computeDraft(inputs, opts);
   let bookingCreditPaise = inputs.bill?.bookingCreditPaise ?? 0;
   let bookingCreditReservationId = inputs.bill?.bookingCreditReservationId ?? null;
-  if (inputs.session.reservationId && !bookingCreditPaise) {
+  const subtractCredit = (amount: number) => {
+    let remain = Math.min(amount, draft.totals.totalPaise);
+    const shares = draft.shares.map((share) => { const take = Math.min(remain, share.amountPaise); remain -= take; return { ...share, amountPaise: share.amountPaise - take }; });
+    draft = { ...draft, shares, totals: { ...draft.totals, discountPaise: draft.totals.discountPaise + amount, totalPaise: draft.totals.totalPaise - amount, exactPaise: draft.totals.exactPaise - amount } };
+  };
+  if (bookingCreditPaise > 0) subtractCredit(bookingCreditPaise);
+  const linkedReservationId = inputs.session.reservationId ?? (await tx.select({ id: s.reservations.id }).from(s.reservations).where(and(eq(s.reservations.tenantId, scope.tenantId), eq(s.reservations.sessionId, scope.sessionId))).then((rows) => rows[0]?.id ?? null));
+  if (linkedReservationId && !bookingCreditPaise) {
     const [reservation] = await tx.select({ id: s.reservations.id, creditPaidPaise: s.reservations.creditPaidPaise, creditAppliedPaise: s.reservations.creditAppliedPaise })
-      .from(s.reservations).where(and(eq(s.reservations.tenantId, scope.tenantId), eq(s.reservations.id, inputs.session.reservationId)));
+      .from(s.reservations).where(and(eq(s.reservations.tenantId, scope.tenantId), eq(s.reservations.id, linkedReservationId)));
     const available = Math.max(0, (reservation?.creditPaidPaise ?? 0) - (reservation?.creditAppliedPaise ?? 0));
     if (available > 0) {
       const applied = Math.min(available, draft.totals.totalPaise);
-      let remain = applied;
-      const shares = draft.shares.map((share) => { const take = Math.min(remain, share.amountPaise); remain -= take; return { ...share, amountPaise: share.amountPaise - take }; });
-      draft = { ...draft, shares, totals: { ...draft.totals, discountPaise: draft.totals.discountPaise + applied, totalPaise: draft.totals.totalPaise - applied, exactPaise: draft.totals.exactPaise - applied } };
+      subtractCredit(applied);
       bookingCreditPaise = applied;
       bookingCreditReservationId = reservation?.id ?? null;
       await tx.update(s.reservations).set({ creditAppliedPaise: (reservation?.creditAppliedPaise ?? 0) + applied, creditStatus: "applied", updatedAt: now }).where(and(eq(s.reservations.tenantId, scope.tenantId), eq(s.reservations.id, reservation!.id)));

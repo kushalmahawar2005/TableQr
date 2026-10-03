@@ -42,3 +42,11 @@ export async function refundReservationCredit(tenantId: string, reservationId: s
   await db.update(s.reservationCredits).set({ refundGatewayRef: result.gatewayRefundId, refundStatus: result.status, status: result.status === "success" ? "refunded" : "paid", updatedAt: new Date() }).where(and(eq(s.reservationCredits.tenantId, tenantId), eq(s.reservationCredits.id, credit.id)));
   return { status: result.status };
 }
+
+export async function recordReservationRefundResult(provider: string, refundGatewayRef: string, status: "success" | "failed") {
+  const [credit] = await db.select().from(s.reservationCredits).where(and(eq(s.reservationCredits.provider, provider), eq(s.reservationCredits.refundGatewayRef, refundGatewayRef)));
+  if (!credit) return false;
+  if (credit.refundStatus === "success" || credit.refundStatus === "failed") return true;
+  await db.update(s.reservationCredits).set({ refundStatus: status, status: status === "success" ? "refunded" : "paid", updatedAt: new Date() }).where(and(eq(s.reservationCredits.tenantId, credit.tenantId), eq(s.reservationCredits.id, credit.id)));
+  return true;
+}

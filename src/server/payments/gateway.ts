@@ -191,6 +191,9 @@ class MockGateway implements PaymentGateway {
     return { gatewayRefundId: id, status: "pending" as const };
   }
 
+  settleRefund(ref: string, status: "success" | "failed") { if (this.refunds.has(ref)) this.refunds.set(ref, status); }
+  refundStatus(ref: string) { return this.refunds.get(ref) ?? null; }
+
   verifyWebhook(rawBody: string, signature: string | null) {
     return !!signature && safeEqualHex(createHmac("sha256", this.webhookSecret).update(rawBody).digest("hex"), signature);
   }
