@@ -165,6 +165,7 @@ export async function createBookingHold(outletCode: string, input: { date: strin
   await validateZone(db, scope, input.preference?.zoneId);
   const policy = policyWithFallback(await loadPolicy(db, scope));
   const startAt = new Date(Number(input.startAt));
+  if (Number.isNaN(startAt.getTime()) || startAt.getTime() < now.getTime() + policy.onlineCutoffMinutes * 60_000) throw new AppError("conflict", "Choose a later online booking time.", { reason: "cutoff" });
   const endAt = new Date(startAt.getTime() + diningMinutesFor(Number(input.partySize), policy) * 60_000);
   const holdExpiresAt = new Date(now.getTime() + BOOKING_HOLD_MINUTES * 60_000);
   const tokenHash = hash(input.holdToken);
@@ -248,7 +249,9 @@ export async function rescheduleBookingPublic(outletCode: string, token: string,
     if (!row || ["cancelled", "no_show", "completed", "seated"].includes(row.status)) throw new AppError("invalid_state", "This booking cannot be rescheduled now.");
     const policy = policyWithFallback(await loadPolicy(tx, scope));
     await validateZone(tx, scope, row.requestedZoneId);
-    const startAt = new Date(Number(input.startAt)); const endAt = new Date(startAt.getTime() + diningMinutesFor(row.partySize, policy) * 60_000);
+    const startAt = new Date(Number(input.startAt));
+    if (Number.isNaN(startAt.getTime()) || startAt.getTime() < now.getTime() + policy.onlineCutoffMinutes * 60_000) throw new AppError("conflict", "Choose a later online booking time.", { reason: "cutoff" });
+    const endAt = new Date(startAt.getTime() + diningMinutesFor(row.partySize, policy) * 60_000);
     const chosen = await chooseTables(tx, scope, startAt, endAt, row.partySize, { seatingPreference: row.seatingPreference, tableClass: row.requestedTableClass, zoneId: row.requestedZoneId }, now, true, row.id);
     if (!chosen) throw new AppError("conflict", "That new time is no longer available.", { reason: "full" });
     await tx.delete(s.reservationTables).where(and(eq(s.reservationTables.tenantId, scope.tenantId), eq(s.reservationTables.reservationId, row.id)));
