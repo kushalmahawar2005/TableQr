@@ -1,11 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db as appDb } from "@/db";
 import { uuidv7 } from "@/db/id";
 import * as s from "@/db/schema";
 import { serviceDate } from "@/domain/booking-policy";
 import { AppError } from "@/server/errors";
-import { bookingByToken, cancelBookingPublic, createBookingHold, createGroupRequest, getBookingAvailability, getBookingZones } from "@/server/booking/core";
+import { bookingByToken, cancelBookingPublic, confirmBooking, createBookingHold, createGroupRequest, getBookingAvailability, getBookingZones } from "@/server/booking/core";
 import { sendBookingOtp, verifyBookingOtp } from "@/server/booking/otp";
 import { estimateWait, joinPublicWaitlist, leavePublicWaitlist, publicWaitlistStatus } from "@/server/booking/waitlist";
 import { resetTestDb } from "./setup-db";
@@ -65,6 +65,9 @@ describe("B1-B4 booking domain", () => {
     expect(sent.devCode).toMatch(/^\d{4}$/);
     const verified = await verifyBookingOtp("SRJ01", hold.manageToken, "booking-device", sent.challengeId, sent.devCode!, "Booking Guest", false, now);
     expect(verified.guestId).toBeTruthy();
+    await confirmBooking("SRJ01", hold.manageToken, { name: "Booking Guest", phone: "9876543210", guestId: verified.guestId }, now);
+    await confirmBooking("SRJ01", hold.manageToken, { name: "Booking Guest", phone: "9876543210", guestId: verified.guestId }, now);
+    expect((await env.db.select().from(s.reservationHistory).where(and(eq(s.reservationHistory.reservationId, hold.reservationId), eq(s.reservationHistory.kind, "confirmed")))).length).toBe(1);
     const [r] = await env.db.select().from(s.reservations).where(eq(s.reservations.id, hold.reservationId));
     expect(r?.guestId).toBe(verified.guestId);
   });

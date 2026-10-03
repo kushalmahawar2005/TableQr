@@ -200,6 +200,7 @@ export async function confirmBooking(outletCode: string, token: string, input: {
     const [row] = await tx.select().from(s.reservations).where(and(eq(s.reservations.tenantId, scope.tenantId), eq(s.reservations.manageTokenHash, hash(token)))).for("update");
     if (!row) throw new AppError("not_found", "This booking link is not valid.");
     if (row.status === "cancelled" || row.status === "no_show") throw new AppError("invalid_state", "This booking is no longer active.");
+    if (row.status === "confirmed") return row.id;
     if (row.status === "requested" && (!row.holdExpiresAt || row.holdExpiresAt <= now)) throw new AppError("conflict", "Your booking hold expired. Please choose another time.", { reason: "hold_expired" });
     if (row.creditRequiredPaise > row.creditPaidPaise) throw new AppError("payment_required", "Booking credit payment is required before confirmation.");
     const guestId = input.guestId ?? null;
