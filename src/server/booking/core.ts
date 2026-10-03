@@ -13,6 +13,7 @@ import { loadPolicy } from "../floor/policy";
 import { publish } from "../realtime/publish";
 import { topics } from "../realtime/token";
 import { queueBookingNotification } from "./notifications";
+import type { StaffSession } from "../staff/auth";
 
 export const BOOKING_HOLD_MINUTES = 5;
 const LIVE = ["requested", "confirmed", "reminded", "arrived"] as const;
@@ -264,6 +265,28 @@ export async function rescheduleBookingPublic(outletCode: string, token: string,
   }, LOCK_THEN_READ);
   await publish(scope, [{ topic: topics.floor, type: "booking.updated", data: { reservationId: result } }]);
   return bookingByToken(outletCode, token);
+}
+
+/** Staff calendar wrapper around the same transactional allocation rules as public rescheduling. */
+export async function rescheduleReservationStaff(staff: Pick<StaffSession, "tenantId" | "outletId" | "outlet" | "roles" | "userId" | "name">, reservationId: string, input: { localDateTime: string; partySize?: number }, now = new Date()) {
+  if (!staff.roles.some((r) => r === "owner" || r === "manager")) throw new AppError("forbidden", "Only managers and owners can reschedule reservations.");
+  const scope = { tenantId: staff.tenantId, outletId: staff.outletId, outletCode: staff.outlet.code, timezone: staff.outlet.timezone, openingHours: null as WeeklyHours | null, name: staff.outlet.name, address: "", city: "" };
+  const result = await db.transaction(async (tx) => {
+    const [row] = await tx.select().from(s.reservations).where(and(eq(s.reservations.tenantId, scope.tenantId), eq(s.reservations.outletId, scope.outletId), eq(s.reservations.id, reservationId))).for("update");
+    if (!row || ["cancelled", "no_show", "completed", "seated"].includes(row.status)) throw new AppError("invalid_state", "This booking cannot be rescheduled now.");
+    const policy = policyWithFallback(await loadPolicy(tx, scope)); const [date, clock] = String(input.localDateTime).split("T"); const [hour, minute] = (clock ?? "").split(":").map(Number); const startAt = localTime(date, hour * 60 + minute, staff.outlet.timezone);
+    if (Number.isNaN(startAt.getTime()) || startAt.getTime() < now.getTime() + policy.onlineCutoffMinutes * 60_000) throw new AppError("conflict", "Choose a later reservation time.", { reason: "cutoff" });
+    const partySize = input.partySize ?? row.partySize; const endAt = new Date(startAt.getTime() + diningMinutesFor(partySize, policy) * 60_000);
+    const chosen = await chooseTables(tx, scope, startAt, endAt, partySize, { seatingPreference: row.seatingPreference, tableClass: row.requestedTableClass, zoneId: row.requestedZoneId }, now, true, row.id);
+    if (!chosen) throw new AppError("conflict", "That time is no longer available.", { reason: "full" });
+    await tx.delete(s.reservationTables).where(and(eq(s.reservationTables.tenantId, scope.tenantId), eq(s.reservationTables.reservationId, row.id)));
+    await tx.insert(s.reservationTables).values(chosen.map((t) => ({ id: uuidv7(), tenantId: scope.tenantId, reservationId: row.id, tableId: t.id })));
+    await tx.update(s.reservations).set({ startAt, expectedEndAt: endAt, partySize, status: "confirmed", updatedAt: now }).where(and(eq(s.reservations.tenantId, scope.tenantId), eq(s.reservations.id, row.id)));
+    await tx.insert(s.reservationHistory).values({ tenantId: scope.tenantId, reservationId: row.id, kind: "rescheduled", before: { startAt: row.startAt, endAt: row.expectedEndAt, partySize: row.partySize }, after: { startAt, endAt, partySize, tableIds: chosen.map((t) => t.id) }, actorUserId: staff.userId, createdAt: now });
+    return row.id;
+  }, LOCK_THEN_READ);
+  await publish({ tenantId: staff.tenantId, outletId: staff.outletId }, [{ topic: topics.floor, type: "reservation.updated", data: { reservationId: result } }]);
+  return result;
 }
 
 export async function arriveBookingPublic(outletCode: string, token: string, now = new Date()) {
