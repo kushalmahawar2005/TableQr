@@ -44,6 +44,7 @@ export async function refundReservationCredit(tenantId: string, reservationId: s
 }
 
 export async function recordReservationRefundResult(provider: string, refundGatewayRef: string, status: "success" | "failed") {
+  // isolation-exempt: the verified gateway refund reference names the credit row; tenant is read before mutation.
   const [credit] = await db.select().from(s.reservationCredits).where(and(eq(s.reservationCredits.provider, provider), eq(s.reservationCredits.refundGatewayRef, refundGatewayRef)));
   if (!credit) return false;
   if (credit.refundStatus === "success" || credit.refundStatus === "failed") return true;
