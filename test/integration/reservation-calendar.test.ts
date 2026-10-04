@@ -4,7 +4,7 @@ import { uuidv7 } from "@/db/id";
 import * as s from "@/db/schema";
 import { localTime, serviceDate } from "@/domain/booking-policy";
 import { canSee, staffRoles } from "@/lib/staff-permissions";
-import { rescheduleReservationStaff } from "@/server/booking/core";
+import { createBookingHold, rescheduleBookingPublic, rescheduleReservationStaff } from "@/server/booking/core";
 import { cancelReservation, createReservation } from "@/server/floor/reservations";
 import { resolveStaff, signInStaff, type StaffSession } from "@/server/staff/auth";
 import { createCalendarReservation, editReservationDetails, getReservationCalendar } from "@/server/staff/reservations";
@@ -12,6 +12,7 @@ import { resetTestDb } from "./setup-db";
 
 let env: Awaited<ReturnType<typeof resetTestDb>>;
 let owner: StaffSession;
+let manager: StaffSession;
 let host: StaffSession;
 let waiter: StaffSession;
 const realTz = process.env.TZ;
@@ -33,6 +34,7 @@ const historyFor = (id: string) => env.db.select().from(s.reservationHistory).wh
 beforeAll(async () => {
   env = await resetTestDb();
   owner = await signIn("9000000001", "1111");
+  manager = await signIn("9000000002", "2222");
   host = await signIn("9000000004", "4444");
   waiter = await signIn("9000000005", "5555");
 });
@@ -264,6 +266,60 @@ describe("reschedule lifecycle safety", () => {
     const [entry] = await auditFor(id, "reservation.reschedule");
     expect(entry.actorUserId).toBe(owner.userId);
     expect((entry.after as { tableIds: string[] }).tableIds.length).toBeGreaterThan(0);
+  });
+});
+
+describe("staff reschedule time window", () => {
+  // The outlet clock is fixed at 19:00 on a quiet day, with the online cutoff saved at 60 minutes
+  let date: string;
+  let now: Date;
+  const local = (hh: number, mm: number) => `${date}T${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
+  const make = async (name: string) => (await createReservation(owner, { name, partySize: 2, startAt: at(date, 13).getTime() })).reservationId;
+  beforeAll(async () => {
+    date = dayAhead(30);
+    now = at(date, 19);
+    await env.db.insert(s.bookingPolicies).values({ id: uuidv7(), tenantId: owner.tenantId, outletId: owner.outletId, onlineCutoffMinutes: 60, updatedAt: new Date() });
+  });
+  afterAll(() => env.db.delete(s.bookingPolicies).where(and(eq(s.bookingPolicies.tenantId, owner.tenantId), eq(s.bookingPolicies.outletId, owner.outletId))));
+
+  it("Owner and Manager can move a booking to 30 minutes from now, inside the 60-minute online cutoff", async () => {
+    for (const staff of [owner, manager]) {
+      const id = await make(`Soon ${staff.roles.join()}`);
+      await rescheduleReservationStaff(staff, id, { localDateTime: local(19, 30) }, now);
+      expect((await row(id)).startAt.getTime()).toBe(at(date, 19, 30).getTime());
+    }
+  });
+
+  it("a guest moving their own booking to 30 minutes from now is still refused by the online cutoff", async () => {
+    const hold = await createBookingHold("SRJ01", { date, startAt: at(date, 21).getTime(), partySize: 2, requestId: "staff-window-public", holdToken: "staff-window-public-token" }, at(date, 12));
+    await expect(rescheduleBookingPublic("SRJ01", hold.manageToken, { date, startAt: at(date, 19, 30).getTime() }, now)).rejects.toMatchObject({ code: "conflict", details: { reason: "cutoff" } });
+    expect((await row(hold.reservationId)).startAt.getTime()).toBe(at(date, 21).getTime());
+    // The cutoff itself is unchanged: 60 minutes ahead is accepted
+    await rescheduleBookingPublic("SRJ01", hold.manageToken, { date, startAt: at(date, 20).getTime() }, now);
+    expect((await row(hold.reservationId)).startAt.getTime()).toBe(at(date, 20).getTime());
+  });
+
+  it("staff cannot move a booking more than 15 minutes into the past", async () => {
+    for (const staff of [owner, manager]) {
+      const id = await make(`Too early ${staff.roles.join()}`);
+      await expect(rescheduleReservationStaff(staff, id, { localDateTime: local(18, 44) }, now)).rejects.toMatchObject({ code: "conflict", details: { reason: "cutoff" } });
+      expect((await row(id)).startAt.getTime()).toBe(at(date, 13).getTime());
+    }
+  });
+
+  it("staff can correct a booking to exactly 15 minutes ago or anything since", async () => {
+    const exact = await make("Exactly 15 back");
+    await rescheduleReservationStaff(manager, exact, { localDateTime: local(18, 45) }, now);
+    expect((await row(exact)).startAt.getTime()).toBe(at(date, 18, 45).getTime());
+    const within = await make("5 back");
+    await rescheduleReservationStaff(owner, within, { localDateTime: local(18, 55) }, now);
+    expect((await row(within)).startAt.getTime()).toBe(at(date, 18, 55).getTime());
+  });
+
+  it("Host is still refused, even inside the staff window", async () => {
+    const id = await make("Host window");
+    await expect(rescheduleReservationStaff(host, id, { localDateTime: local(19, 30) }, now)).rejects.toMatchObject({ code: "forbidden" });
+    expect((await row(id)).startAt.getTime()).toBe(at(date, 13).getTime());
   });
 });
 

@@ -21,6 +21,8 @@ export const BOOKING_HOLD_MINUTES = 5;
 const LIVE = ["requested", "confirmed", "reminded", "arrived"] as const;
 /** Staff may move these to a new time; see rescheduleReservationStaff */
 const RESCHEDULABLE: string[] = ["requested", "confirmed", "reminded"];
+/** Staff reschedule ignores the online cutoff; it may go back this far to correct a time just past */
+const STAFF_RESCHEDULE_PAST_MINUTES = 15;
 
 export type BookingPreference = { seatingPreference?: string | null; tableClass?: string | null; zoneId?: string | null };
 export type BookingSlot = {
@@ -272,8 +274,9 @@ export async function rescheduleBookingPublic(outletCode: string, token: string,
 }
 
 /**
- * Staff reschedule from the calendar: same allocation rules as the public reschedule. The new
- * time is the outlet's wall clock, converted here on the server. The lifecycle never moves
+ * Staff reschedule from the calendar: same allocation rules as the public reschedule, but not the
+ * online cutoff. Any time from 15 minutes ago onward is allowed, the same window as a booking
+ * staff create. The new time is the outlet's wall clock, converted here on the server. The lifecycle never moves
  * forward or back by accident: requested stays requested, confirmed stays confirmed, and a
  * reminded booking goes back to confirmed because its reminder was for the old time. Parties
  * already here (arrived) and closed bookings cannot be moved.
@@ -294,7 +297,7 @@ export async function rescheduleReservationStaff(staff: Pick<StaffSession, "tena
     if (!RESCHEDULABLE.includes(row.status)) throw new AppError("invalid_state", `This booking is ${row.status.replace("_", " ")} and cannot be rescheduled.`, { status: row.status });
     if (row.status === "requested" && row.holdExpiresAt && row.holdExpiresAt > now) throw new AppError("conflict", "This online booking is still in progress.", { reason: "held" });
     const policy = policyWithFallback(await loadPolicy(tx, scope));
-    if (startAt.getTime() < now.getTime() + policy.onlineCutoffMinutes * 60_000) throw new AppError("conflict", "Choose a later reservation time.", { reason: "cutoff" });
+    if (startAt.getTime() < now.getTime() - STAFF_RESCHEDULE_PAST_MINUTES * 60_000) throw new AppError("conflict", "Choose a later reservation time.", { reason: "cutoff" });
     const partySize = input.partySize === undefined ? row.partySize : Number(input.partySize);
     if (!Number.isInteger(partySize) || partySize < 1 || partySize > 50) throw new AppError("invalid_state", "Enter how many guests.", { reason: "party_size" });
     const endAt = new Date(startAt.getTime() + diningMinutesFor(partySize, policy) * 60_000);
