@@ -15,7 +15,8 @@ export async function processBookingNotifications(now = new Date()) {
   const rows = await db.transaction(async (tx) => tx.select().from(s.bookingNotifications).where(and(inArray(s.bookingNotifications.status, ["pending", "failed"]), lte(s.bookingNotifications.scheduledAt, now))).orderBy(s.bookingNotifications.scheduledAt).limit(100).for("update"), LOCK_THEN_READ);
   let sent = 0;
   for (const row of rows) {
-    if (process.env.NODE_ENV === "production" && !process.env.BOOKING_MESSAGE_PROVIDER) { await db.update(s.bookingNotifications).set({ status: "failed", attempts: row.attempts + 1, lastError: "Message provider not configured", updatedAt: now }).where(and(eq(s.bookingNotifications.tenantId, row.tenantId), eq(s.bookingNotifications.id, row.id))); continue; }
+    // No real message provider exists yet, so production must never report a booking message as sent
+    if (process.env.NODE_ENV === "production") { await db.update(s.bookingNotifications).set({ status: "failed", attempts: row.attempts + 1, lastError: "No booking message provider is implemented yet", updatedAt: now }).where(and(eq(s.bookingNotifications.tenantId, row.tenantId), eq(s.bookingNotifications.id, row.id))); continue; }
     await db.update(s.bookingNotifications).set({ status: "sent", attempts: row.attempts + 1, providerRef: `mock_${row.id}`, sentAt: now, updatedAt: now }).where(and(eq(s.bookingNotifications.tenantId, row.tenantId), eq(s.bookingNotifications.id, row.id))); sent++;
   }
   return { sent, attempted: rows.length };
