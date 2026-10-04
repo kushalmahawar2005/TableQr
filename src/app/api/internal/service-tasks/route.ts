@@ -4,6 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import * as s from "@/db/schema";
 import { reconcilePendingPayments } from "@/server/billing/payments";
+import { reconcilePendingRefunds } from "@/server/billing/refunds";
 import { escalateServiceRequests } from "@/server/guest/service-requests";
 import { expireReadyWaitlists, processBookingNotifications } from "@/server/booking/notifications";
 
@@ -31,6 +32,8 @@ export async function POST(request: Request) {
         escalated += await escalateServiceRequests({ tenantId, outletId }, now);
         // Pending payments are re-checked with the gateway every minute (PS 6.4)
         await reconcilePendingPayments({ tenantId, outletId }, now);
+        // Online refunds whose webhook never arrived are settled by asking the gateway
+        await reconcilePendingRefunds({ tenantId, outletId }, now);
         // Held/Reserved follow the clock; expired online holds and timed blocks are released (S1)
         await reconcileFloor({ tenantId, outletId }, now);
       } catch (error) {

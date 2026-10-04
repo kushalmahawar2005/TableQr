@@ -754,26 +754,38 @@ export async function reopenBill(actor: Actor, now = new Date(), approval?: {ini
  * completed by staff.
  */
 export async function executeRefund(ctx: StaffContext, refundId: string, now = new Date()) {
-  const [row] = await db
-    .select({ refund: s.refunds, payment: s.payments })
-    .from(s.refunds)
-    .innerJoin(s.payments, and(eq(s.payments.tenantId, s.refunds.tenantId), eq(s.payments.id, s.refunds.paymentId)))
-    .where(and(eq(s.refunds.tenantId, ctx.tenantId), eq(s.payments.outletId, ctx.outletId), eq(s.refunds.id, refundId)));
-  if (!row) throw new AppError("not_found", "Refund not found.");
-  const { refund, payment } = row;
-  if (refund.status !== "pending" || refund.gatewayRef) return refund.status;
-  if (payment.channel === "counter") {
-    await db.update(s.refunds).set({ status: "success", completedAt: now }).where(and(eq(s.refunds.tenantId, ctx.tenantId), eq(s.refunds.id, refund.id)));
-    return "success" as const;
-  }
-  const gateway = gatewayByName(payment.channel);
-  if (!gateway || !payment.gatewayPaymentId) throw new AppError("invalid_state", "This payment cannot be refunded online.");
-  const res = await gateway.refund({ gatewayPaymentId: payment.gatewayPaymentId, amountPaise: refund.amountPaise, refundId: refund.id });
-  await db
-    .update(s.refunds)
-    .set({ gatewayRef: res.gatewayRefundId, status: res.status, completedAt: res.status === "success" ? now : null })
-    .where(and(eq(s.refunds.tenantId, ctx.tenantId), eq(s.refunds.id, refund.id)));
-  return res.status;
+  // The refund row stays locked for the whole attempt, so two clicks or two screens can never send
+  // the same refund to the gateway twice: the second one finds it already sent and returns.
+  return db.transaction(async (tx) => {
+    const [row] = await tx
+      .select({ refund: s.refunds, payment: s.payments })
+      .from(s.refunds)
+      .innerJoin(s.payments, and(eq(s.payments.tenantId, s.refunds.tenantId), eq(s.payments.id, s.refunds.paymentId)))
+      .where(and(eq(s.refunds.tenantId, ctx.tenantId), eq(s.payments.outletId, ctx.outletId), eq(s.refunds.id, refundId)))
+      .for("update");
+    if (!row) throw new AppError("not_found", "Refund not found.");
+    const { refund, payment } = row;
+    if (refund.status !== "pending" || refund.gatewayRef) return refund.status;
+    const settle = (patch: Partial<typeof s.refunds.$inferInsert>) =>
+      tx.update(s.refunds).set(patch).where(and(eq(s.refunds.tenantId, ctx.tenantId), eq(s.refunds.id, refund.id)));
+    if (payment.channel === "counter") {
+      await settle({ status: "success", completedAt: now });
+      return "success" as const;
+    }
+    const gateway = gatewayByName(payment.channel);
+    if (!gateway || !payment.gatewayPaymentId) throw new AppError("invalid_state", "This payment cannot be refunded online.");
+    let res;
+    try {
+      res = await gateway.refund({ gatewayPaymentId: payment.gatewayPaymentId, amountPaise: refund.amountPaise, refundId: refund.id });
+    } catch (err) {
+      // A refused or failed call never counts as money returned; the amount is free to refund again
+      console.error("[refunds] gateway refund failed", { refundId: refund.id, error: err instanceof Error ? err.message : String(err) });
+      await settle({ status: "failed", completedAt: null });
+      return "failed" as const;
+    }
+    await settle({ gatewayRef: res.gatewayRefundId, status: res.status, completedAt: res.status === "success" ? now : null });
+    return res.status;
+  }, LOCK_THEN_READ);
 }
 
 /** A verified gateway refund event: the only way an online refund becomes "success" */

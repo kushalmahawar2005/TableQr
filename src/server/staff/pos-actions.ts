@@ -3,6 +3,7 @@ import { staffFor } from "./request";
 import { AppError } from "../errors";
 import { posBillDetail, posQueue, posRoles } from "./pos-read";
 import { settleAtCounter, reopenBill } from "../billing/payments";
+import { processRefund, reconcileRefund, requestRefund, type RefundInput } from "../billing/refunds";
 import { changeWaiterLine, managerApproval, type Approval } from "./waiter-mutations";
 import { staffRealtimeToken, topics } from "../realtime/token";
 
@@ -21,4 +22,13 @@ export async function reopenAction(sessionId: string, approval?: Approval) {
 }
 export async function voidAction(input: { sessionId: string; lineId: string; reason: string; approval?: Approval }) {
   return run(s => changeWaiterLine(s, input, new Date(), posRoles));
+}
+export async function refundAction(input: RefundInput) {
+  return run(s => requestRefund(s, { paymentId: String(input.paymentId), amountPaise: Number(input.amountPaise), reason: String(input.reason ?? ""), requestId: String(input.requestId), approval: input.approval }));
+}
+export async function processRefundAction(refundId: string, approval?: Approval) {
+  return run(s => processRefund(s, String(refundId), approval));
+}
+export async function checkRefundAction(refundId: string) {
+  return run(async s => ({ status: await reconcileRefund(s, String(refundId)) }));
 }

@@ -34,6 +34,8 @@ export interface PaymentGateway {
   checkout(input: CheckoutInput): Checkout;
   fetchStatus(gatewayRef: string): Promise<{ status: GatewayStatus; amountPaise: number; gatewayPaymentId?: string; reason?: string }>;
   refund(input: { gatewayPaymentId: string; amountPaise: number; refundId: string }): Promise<{ gatewayRefundId: string; status: "pending" | "success" | "failed" }>;
+  /** Where a refund stands at the gateway; used to settle a refund whose webhook was missed */
+  fetchRefund(gatewayRefundId: string): Promise<{ status: "pending" | "success" | "failed" }>;
   /** Checks the webhook signature over the exact raw body */
   verifyWebhook(rawBody: string, signature: string | null): boolean;
   parseWebhook(rawBody: string): WebhookEvent;
@@ -45,8 +47,49 @@ const safeEqualHex = (a: string, b: string) => {
   return x.length === y.length && timingSafeEqual(x, y);
 };
 
+export type RazorpayMode = "test" | "live";
+
+/** A Razorpay setting that is missing, malformed or mixed; thrown on the server, never shown to guests */
+export class RazorpayConfigError extends Error {
+  constructor(message: string) {
+    super(`Razorpay configuration error: ${message}`);
+    this.name = "RazorpayConfigError";
+  }
+}
+
+export type RazorpayConfig = { mode: RazorpayMode; keyId: string; keySecret: string; webhookSecret: string; apiBase: string | undefined };
+
 /**
- * Razorpay, TEST MODE ONLY for now: refuses live keys. Orders are created server to server; the
+ * Reads and checks the Razorpay settings. Nothing is guessed: the mode is named by RAZORPAY_MODE
+ * (required in production) and must agree with the key prefix, so a test key can never be run as
+ * live nor a live key as test. Live keys are accepted only in production and need the webhook
+ * secret; the API base can only be overridden in test mode. Returns null when online payment is
+ * not configured at all.
+ */
+export function parseRazorpayConfig(env: Record<string, string | undefined>): RazorpayConfig | null {
+  const keyId = env.RAZORPAY_KEY_ID?.trim();
+  const keySecret = env.RAZORPAY_KEY_SECRET?.trim();
+  if (!keyId && !keySecret) return null;
+  if (!keyId || !keySecret) throw new RazorpayConfigError("RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET must be set together");
+  const found = /^rzp_(test|live)_[A-Za-z0-9]{6,}$/.exec(keyId);
+  if (!found) throw new RazorpayConfigError("RAZORPAY_KEY_ID must look like rzp_test_... or rzp_live_...");
+  const keyMode = found[1] as RazorpayMode;
+  if (keySecret.length < 8) throw new RazorpayConfigError("RAZORPAY_KEY_SECRET is too short to be a Razorpay secret");
+  const production = env.NODE_ENV === "production";
+  const declared = env.RAZORPAY_MODE?.trim();
+  if (declared !== undefined && declared !== "" && declared !== "test" && declared !== "live") throw new RazorpayConfigError('RAZORPAY_MODE must be "test" or "live"');
+  if (production && !declared) throw new RazorpayConfigError('RAZORPAY_MODE must be set to "test" or "live" in production');
+  if (declared && declared !== keyMode) throw new RazorpayConfigError(`RAZORPAY_MODE is "${declared}" but the key is a ${keyMode} key`);
+  if (keyMode === "live" && !production) throw new RazorpayConfigError("live keys are only allowed when NODE_ENV is production");
+  const webhookSecret = env.RAZORPAY_WEBHOOK_SECRET?.trim() ?? "";
+  if (keyMode === "live" && webhookSecret.length < 8) throw new RazorpayConfigError("RAZORPAY_WEBHOOK_SECRET is required for live keys");
+  const apiBase = env.RAZORPAY_API_BASE?.trim() || undefined;
+  if (keyMode === "live" && apiBase) throw new RazorpayConfigError("RAZORPAY_API_BASE cannot be changed for live keys");
+  return { mode: keyMode, keyId, keySecret, webhookSecret, apiBase };
+}
+
+/**
+ * Razorpay, in test or live mode (see parseRazorpayConfig). Orders are created server to server; the
  * guest pays on Razorpay's hosted checkout; webhooks are verified with the webhook secret.
  */
 export class RazorpayGateway implements PaymentGateway {
@@ -57,7 +100,7 @@ export class RazorpayGateway implements PaymentGateway {
     private readonly webhookSecret: string,
     private readonly apiBase = "https://api.razorpay.com",
   ) {
-    if (!keyId.startsWith("rzp_test_")) throw new Error("Only Razorpay test keys are allowed");
+    if (!/^rzp_(test|live)_[A-Za-z0-9]{6,}$/.test(keyId)) throw new RazorpayConfigError("RAZORPAY_KEY_ID must look like rzp_test_... or rzp_live_...");
   }
 
   private async call<T>(path: string, init: { method: "GET" | "POST"; body?: unknown }): Promise<T> {
@@ -120,6 +163,11 @@ export class RazorpayGateway implements PaymentGateway {
       body: { amount: input.amountPaise, receipt: input.refundId.slice(0, 40), speed: "normal" },
     });
     return { gatewayRefundId: r.id, status: r.status === "processed" ? ("success" as const) : r.status === "failed" ? ("failed" as const) : ("pending" as const) };
+  }
+
+  async fetchRefund(gatewayRefundId: string) {
+    const r = await this.call<{ status: string }>(`/v1/refunds/${encodeURIComponent(gatewayRefundId)}`, { method: "GET" });
+    return { status: r.status === "processed" ? ("success" as const) : r.status === "failed" ? ("failed" as const) : ("pending" as const) };
   }
 
   verifyWebhook(rawBody: string, signature: string | null) {
@@ -191,6 +239,10 @@ class MockGateway implements PaymentGateway {
     return { gatewayRefundId: id, status: "pending" as const };
   }
 
+  async fetchRefund(ref: string) {
+    return { status: this.refunds.get(ref) ?? ("pending" as const) };
+  }
+
   settleRefund(ref: string, status: "success" | "failed") { if (this.refunds.has(ref)) this.refunds.set(ref, status); }
   refundStatus(ref: string) { return this.refunds.get(ref) ?? null; }
 
@@ -223,14 +275,18 @@ class MockGateway implements PaymentGateway {
 
 export const mockGateway = new MockGateway();
 
-let razorpay: RazorpayGateway | null = null;
+let razorpay: { signature: string; gateway: RazorpayGateway } | null = null;
 
 function configuredRazorpay(): RazorpayGateway | null {
-  const { RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, RAZORPAY_WEBHOOK_SECRET, RAZORPAY_API_BASE } = process.env;
-  if (!RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET) return null;
-  razorpay ??= new RazorpayGateway(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, RAZORPAY_WEBHOOK_SECRET ?? "", RAZORPAY_API_BASE || undefined);
-  return razorpay;
+  const config = parseRazorpayConfig(process.env);
+  if (!config) return null;
+  const signature = [config.mode, config.keyId, config.keySecret, config.webhookSecret, config.apiBase].join("|");
+  if (razorpay?.signature !== signature) razorpay = { signature, gateway: new RazorpayGateway(config.keyId, config.keySecret, config.webhookSecret, config.apiBase) };
+  return razorpay.gateway;
 }
+
+/** "test", "live", or null when Razorpay is not configured; throws on a bad configuration */
+export const razorpayMode = (): RazorpayMode | null => parseRazorpayConfig(process.env)?.mode ?? null;
 
 /** The mock is for development and tests; production must configure a real (test) gateway */
 export const mockAllowed = () => process.env.NODE_ENV !== "production" || process.env.PAYMENTS_MOCK === "1";

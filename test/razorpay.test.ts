@@ -1,6 +1,6 @@
 import { createHmac } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { RazorpayGateway } from "@/server/payments/gateway";
+import { RazorpayConfigError, RazorpayGateway, gatewayFor, parseRazorpayConfig } from "@/server/payments/gateway";
 
 // The Razorpay adapter (test mode). No network: fetch is replaced by a recorder.
 
@@ -21,8 +21,9 @@ function stubFetch(body: unknown) {
 }
 
 describe("Razorpay adapter", () => {
-  it("refuses live keys", () => {
-    expect(() => new RazorpayGateway("rzp_live_xyz", SECRET, HOOK)).toThrow(/test keys/);
+  it("refuses a key that is not a Razorpay test or live key", () => {
+    for (const bad of ["rzp_live_xyz", "key_abc123456", "", "rzp_test_", "rzp_prod_abc123456"]) expect(() => new RazorpayGateway(bad, SECRET, HOOK)).toThrow(RazorpayConfigError);
+    expect(() => new RazorpayGateway("rzp_live_abc123XYZ", SECRET, HOOK)).not.toThrow();
   });
 
   it("creates the order server to server with the key pair", async () => {
@@ -69,5 +70,84 @@ describe("Razorpay adapter", () => {
     const calls = stubFetch({ id: "rfnd_1", status: "pending" });
     expect(await gw().refund({ gatewayPaymentId: "pay_1", amountPaise: 27300, refundId: "r1" })).toEqual({ gatewayRefundId: "rfnd_1", status: "pending" });
     expect(calls[0].url).toBe("https://rzp.example/v1/payments/pay_1/refund");
+  });
+});
+
+describe("Razorpay configuration", () => {
+  const TEST = { RAZORPAY_KEY_ID: "rzp_test_abc123", RAZORPAY_KEY_SECRET: "test_secret", RAZORPAY_WEBHOOK_SECRET: "hook_secret" };
+  const LIVE = { RAZORPAY_KEY_ID: "rzp_live_abc123", RAZORPAY_KEY_SECRET: "live_secret_value", RAZORPAY_WEBHOOK_SECRET: "live_hook_secret" };
+  const bad = (env: Record<string, string | undefined>, why: RegExp) => expect(() => parseRazorpayConfig(env)).toThrow(why);
+
+  it("not configured at all means online payment is simply off", () => {
+    expect(parseRazorpayConfig({ NODE_ENV: "production" })).toBeNull();
+    expect(parseRazorpayConfig({ RAZORPAY_KEY_ID: " ", RAZORPAY_KEY_SECRET: "" })).toBeNull();
+  });
+
+  it("test keys are accepted outside production, with or without naming the mode", () => {
+    expect(parseRazorpayConfig({ ...TEST, NODE_ENV: "development" })?.mode).toBe("test");
+    expect(parseRazorpayConfig({ ...TEST, NODE_ENV: "test", RAZORPAY_MODE: "test" })?.mode).toBe("test");
+    expect(parseRazorpayConfig({ ...TEST, NODE_ENV: "development", RAZORPAY_API_BASE: "https://rzp.example" })?.apiBase).toBe("https://rzp.example");
+  });
+
+  it("production must say which mode it is: a staging site on test keys, or live", () => {
+    bad({ ...TEST, NODE_ENV: "production" }, /RAZORPAY_MODE must be set/);
+    expect(parseRazorpayConfig({ ...TEST, NODE_ENV: "production", RAZORPAY_MODE: "test" })?.mode).toBe("test");
+    bad({ ...LIVE, NODE_ENV: "production" }, /RAZORPAY_MODE must be set/);
+    expect(parseRazorpayConfig({ ...LIVE, NODE_ENV: "production", RAZORPAY_MODE: "live" })).toMatchObject({ mode: "live", keyId: "rzp_live_abc123", webhookSecret: "live_hook_secret" });
+  });
+
+  it("a test key is never run as live and a live key never as test", () => {
+    bad({ ...TEST, NODE_ENV: "production", RAZORPAY_MODE: "live" }, /"live" but the key is a test key/);
+    bad({ ...LIVE, NODE_ENV: "production", RAZORPAY_MODE: "test" }, /"test" but the key is a live key/);
+    bad({ ...LIVE, NODE_ENV: "development" }, /live keys are only allowed/);
+    bad({ ...LIVE, NODE_ENV: "development", RAZORPAY_MODE: "live" }, /live keys are only allowed/);
+    bad({ ...LIVE, NODE_ENV: "test" }, /live keys are only allowed/);
+  });
+
+  it("malformed or incomplete settings fail fast with a clear error", () => {
+    bad({ ...TEST, RAZORPAY_KEY_ID: "abc" }, /must look like rzp_test_/);
+    bad({ ...TEST, RAZORPAY_KEY_ID: "rzp_live_" }, /must look like/);
+    bad({ ...TEST, RAZORPAY_KEY_SECRET: "" }, /must be set together/);
+    bad({ RAZORPAY_KEY_SECRET: "test_secret" }, /must be set together/);
+    bad({ ...TEST, RAZORPAY_KEY_SECRET: "short" }, /too short/);
+    bad({ ...TEST, RAZORPAY_MODE: "sandbox" }, /must be "test" or "live"/);
+    bad({ ...LIVE, NODE_ENV: "production", RAZORPAY_MODE: "live", RAZORPAY_WEBHOOK_SECRET: "" }, /RAZORPAY_WEBHOOK_SECRET is required/);
+    bad({ ...LIVE, NODE_ENV: "production", RAZORPAY_MODE: "live", RAZORPAY_API_BASE: "https://evil.example" }, /cannot be changed for live keys/);
+  });
+
+  it("gatewayFor throws the configuration error instead of silently falling back", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("RAZORPAY_KEY_ID", LIVE.RAZORPAY_KEY_ID);
+    vi.stubEnv("RAZORPAY_KEY_SECRET", LIVE.RAZORPAY_KEY_SECRET);
+    vi.stubEnv("RAZORPAY_WEBHOOK_SECRET", LIVE.RAZORPAY_WEBHOOK_SECRET);
+    vi.stubEnv("RAZORPAY_MODE", "test");
+    expect(() => gatewayFor()).toThrow(RazorpayConfigError);
+    vi.stubEnv("RAZORPAY_MODE", "live");
+    expect(gatewayFor()?.name).toBe("razorpay");
+    vi.unstubAllEnvs();
+  });
+
+  it("the live gateway keeps webhook verification, and the checkout form carries only the key id", () => {
+    const live = new RazorpayGateway(LIVE.RAZORPAY_KEY_ID, LIVE.RAZORPAY_KEY_SECRET, LIVE.RAZORPAY_WEBHOOK_SECRET);
+    const body = JSON.stringify({ event: "refund.processed", payload: { refund: { entity: { id: "rfnd_1", payment_id: "pay_1", amount: 5000, status: "processed" } } } });
+    const sign = (secret: string) => createHmac("sha256", secret).update(body).digest("hex");
+    expect(live.verifyWebhook(body, sign(LIVE.RAZORPAY_WEBHOOK_SECRET))).toBe(true);
+    expect(live.verifyWebhook(body, sign("another_secret"))).toBe(false);
+    expect(live.verifyWebhook(body + " ", sign(LIVE.RAZORPAY_WEBHOOK_SECRET))).toBe(false);
+    expect(live.verifyWebhook(body, null)).toBe(false);
+    expect(new RazorpayGateway(LIVE.RAZORPAY_KEY_ID, LIVE.RAZORPAY_KEY_SECRET, "").verifyWebhook(body, sign(""))).toBe(false);
+    const fields = JSON.stringify(live.checkout({ gatewayRef: "order_1", paymentId: "p1", amountPaise: 1000, method: "upi", outletName: "Spice Route", callbackUrl: "https://t.example/r" }));
+    expect(fields).toContain(LIVE.RAZORPAY_KEY_ID);
+    expect(fields).not.toContain(LIVE.RAZORPAY_KEY_SECRET);
+    expect(fields).not.toContain(LIVE.RAZORPAY_WEBHOOK_SECRET);
+  });
+
+  it("fetches a refund's state from the gateway", async () => {
+    stubFetch({ status: "processed" });
+    expect(await gw().fetchRefund("rfnd_1")).toEqual({ status: "success" });
+    stubFetch({ status: "failed" });
+    expect(await gw().fetchRefund("rfnd_1")).toEqual({ status: "failed" });
+    stubFetch({ status: "created" });
+    expect(await gw().fetchRefund("rfnd_1")).toEqual({ status: "pending" });
   });
 });
