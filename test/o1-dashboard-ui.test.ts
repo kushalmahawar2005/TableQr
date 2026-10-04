@@ -5,7 +5,7 @@ import { DashboardScreen, alertsOf } from "@/app/(console)/console/(app)/dashboa
 import { OPS_POLL_MS, TREND_POLL_MS, createDashboardSync, startDashboardSync } from "@/app/(console)/console/(app)/dashboard/_components/dashboard-sync";
 import { dashboardCases } from "@/app/dev/o1/_fixtures";
 import { addDays, dayRange, deltaLabel, deltaOf, lastDays, lateness } from "@/domain/dashboard";
-import { consoleSections, landingSection } from "@/lib/console-nav";
+import { consoleSections, homeFor, landingSection } from "@/lib/console-nav";
 import { canSee, staffRoles, type StaffRole } from "@/lib/staff-permissions";
 import type { DashboardData, RevenueTrend } from "@/server/staff/dashboard";
 
@@ -67,6 +67,20 @@ describe("navigation and landing", () => {
     expect(landingSection(["accountant"])).toBe("billing");
     expect(landingSection(["kitchen"])).toBeNull();
     expect(staffRoles.filter((r) => canSee([r], "dashboard"))).toEqual(["owner", "manager"]);
+  });
+});
+
+describe("home after sign-in", () => {
+  it("sends each role to the screen where it works", () => {
+    expect(homeFor(["owner"])).toBe("/console/dashboard");
+    expect(homeFor(["manager"])).toBe("/console/dashboard");
+    expect(homeFor(["host"])).toBe("/console/floor");
+    expect(homeFor(["waiter"])).toBe("/waiter");
+    expect(homeFor(["cashier"])).toBe("/pos");
+    expect(homeFor(["accountant"])).toBe("/pos");
+    expect(homeFor(["kitchen"])).toBe("/kds");
+    expect(homeFor(["host", "waiter"])).toBe("/console/floor"); // unchanged: a host-waiter kept the floor
+    expect(homeFor(["cashier", "manager"])).toBe("/console/dashboard");
   });
 });
 

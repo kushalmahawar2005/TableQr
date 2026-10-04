@@ -1,7 +1,7 @@
 "use server";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { landingSection } from "@/lib/console-nav";
+import { homeFor } from "@/lib/console-nav";
 import { AppError } from "@/server/errors";
 import { STAFF_COOKIE, STAFF_SESSION_HOURS, resolveStaff, signInStaff, signOutStaff } from "@/server/staff/auth";
 
@@ -16,9 +16,7 @@ export async function signInAction(_prev: SignInState, form: FormData): Promise<
   try {
     const { token } = await signInStaff({ outletCode: outlet, phone, pin: String(form.get("pin") ?? "") });
     const staff = await resolveStaff(token);
-    if(staff?.roles.includes("waiter") && !staff.roles.some(r=>["host","manager","owner"].includes(r))) destination = "/waiter";
-    // Owners and managers start on the O1 dashboard; every other role keeps its landing
-    if (staff && landingSection(staff.roles) === "dashboard") destination = "/console/dashboard";
+    if (staff) destination = homeFor(staff.roles);
     const jar = await cookies();
     jar.set(STAFF_COOKIE, token, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: STAFF_SESSION_HOURS * 3600 });
     // Not secret: saves typing the outlet code on this tablet next time

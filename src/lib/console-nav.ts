@@ -25,3 +25,18 @@ export function isConsoleSection(slug: string): slug is ConsoleSection {
 export function landingSection(roles: readonly StaffRole[]): ConsoleSection | null {
   return consoleSections.find((s) => canSee(roles, s.slug))?.slug ?? null;
 }
+
+/**
+ * Where a person goes right after signing in: the dashboard for owners and managers, the waiter
+ * app for waiters, the POS for cashiers and accountants, the kitchen display for kitchen staff, and
+ * the floor for hosts. A person with several roles gets the first that applies, in that order.
+ */
+export function homeFor(roles: readonly StaffRole[]): string {
+  if (landingSection(roles) === "dashboard") return "/console/dashboard";
+  const has = (...r: StaffRole[]) => roles.some((x) => r.includes(x));
+  if (has("host")) return "/console/floor";
+  if (has("waiter")) return "/waiter";
+  if (has("cashier", "accountant")) return "/pos";
+  if (has("kitchen")) return "/kds";
+  return "/console/floor";
+}
