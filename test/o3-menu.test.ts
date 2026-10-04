@@ -53,3 +53,12 @@ describe("O3 menu manager safety contracts", () => {
     expect(source).toContain("Only an owner can change prices.");
   });
 });
+
+describe("phone and tablet width", () => {
+  it("the three-column grid lets its children shrink, so the 650px item table scrolls inside its own box", async () => {
+    const { readFileSync } = await import("node:fs");
+    const src = readFileSync(new URL("../src/app/(console)/console/(app)/menu/_components/menu-manager.tsx", import.meta.url), "utf8");
+    expect(src).toContain("lg:grid-cols-[190px_minmax(0,1fr)_minmax(320px,430px)] [&>*]:min-w-0");
+    expect(src).toContain("overflow-x-auto");
+  });
+});

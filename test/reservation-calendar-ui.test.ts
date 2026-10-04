@@ -246,3 +246,11 @@ describe("drawer actions by role and lifecycle", () => {
     expect(src).toContain('role="alert"');
   });
 });
+
+describe("phone width", () => {
+  it("the search box shrinks to the row instead of pushing the page wider than the screen", () => {
+    const html = render("busy-day");
+    expect(html).toMatch(/<form class="flex w-full gap-2 sm:w-auto"/);
+    expect(html).toMatch(/aria-label="Search guest, phone or reference"[^>]*class="[^"]*min-w-0 flex-1 sm:min-w-64/);
+  });
+});

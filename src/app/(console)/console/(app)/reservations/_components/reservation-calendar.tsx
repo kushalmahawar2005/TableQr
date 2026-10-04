@@ -138,13 +138,13 @@ export function ReservationCalendar({ initial, realtimeUrl, preview = false, ini
 
       <section aria-label="Search and filters" className="mt-4 flex flex-wrap items-center gap-2 rounded-card border border-line bg-surface p-3">
         <form
-          className="flex gap-2"
+          className="flex w-full gap-2 sm:w-auto"
           onSubmit={(e) => {
             e.preventDefault();
             change({ search: query.search });
           }}
         >
-          <input aria-label="Search guest, phone or reference" placeholder="Search guest, phone or reference" className={`${field} min-w-64`} value={query.search} onChange={(e) => setQuery((q) => ({ ...q, search: e.target.value }))} />
+          <input aria-label="Search guest, phone or reference" placeholder="Search guest, phone or reference" className={`${field} min-w-0 flex-1 sm:min-w-64 sm:flex-none`} value={query.search} onChange={(e) => setQuery((q) => ({ ...q, search: e.target.value }))} />
           <button type="submit" className={plainButton}>
             Search
           </button>
