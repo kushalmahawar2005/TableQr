@@ -5,7 +5,7 @@ import { DashboardScreen, alertsOf } from "@/app/(console)/console/(app)/dashboa
 import { OPS_POLL_MS, TREND_POLL_MS, createDashboardSync, startDashboardSync } from "@/app/(console)/console/(app)/dashboard/_components/dashboard-sync";
 import { dashboardCases } from "@/app/dev/o1/_fixtures";
 import { addDays, dayRange, deltaLabel, deltaOf, lastDays, lateness } from "@/domain/dashboard";
-import { consoleSections, homeFor, landingSection } from "@/lib/console-nav";
+import { consoleSections, homeFor, isLiveSection, landingSection, visibleSections } from "@/lib/console-nav";
 import { canSee, staffRoles, type StaffRole } from "@/lib/staff-permissions";
 import type { DashboardData, RevenueTrend } from "@/server/staff/dashboard";
 
@@ -49,7 +49,7 @@ describe("deltas and days", () => {
 
 describe("navigation and landing", () => {
   // What /console chose before O1: the same list without the dashboard
-  const before = (roles: StaffRole[]) => consoleSections.filter((s) => s.slug !== "dashboard").find((s) => canSee(roles, s.slug))?.slug ?? null;
+  const before = (roles: StaffRole[]) => visibleSections.filter((s) => s.slug !== "dashboard").find((s) => canSee(roles, s.slug))?.slug ?? null;
 
   it("AT/AU: owner and manager land on the dashboard, first in the sidebar", () => {
     expect(consoleSections[0].slug).toBe("dashboard");
@@ -63,10 +63,21 @@ describe("navigation and landing", () => {
       expect(landingSection([role])).toBe(before([role]));
     }
     expect(landingSection(["host"])).toBe("floor");
-    expect(landingSection(["cashier"])).toBe("orders");
-    expect(landingSection(["accountant"])).toBe("billing");
+    expect(landingSection(["cashier"])).toBeNull(); // Orders is not built yet, so cashiers use /pos
+    expect(landingSection(["accountant"])).toBeNull();
     expect(landingSection(["kitchen"])).toBeNull();
     expect(staffRoles.filter((r) => canSee([r], "dashboard"))).toEqual(["owner", "manager"]);
+  });
+});
+
+describe("sections without a screen", () => {
+  it("are hidden from the sidebar and their routes 404 until they are built", () => {
+    for (const slug of ["waitlist", "orders", "billing", "reports", "settings"]) {
+      expect(isLiveSection(slug)).toBe(false);
+      expect(visibleSections.some((s) => s.slug === slug)).toBe(false);
+    }
+    expect(visibleSections.map((s) => s.slug)).toEqual(["dashboard", "floor", "reservations", "menu", "pricing"]);
+    expect(consoleSections.length).toBe(10); // still reserved with their role rules
   });
 });
 

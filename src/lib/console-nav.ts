@@ -6,14 +6,17 @@ export const consoleSections = [
   { slug: "dashboard", label: "Dashboard", hi: "डैशबोर्ड" },
   { slug: "floor", label: "Floor", hi: "फ़्लोर" },
   { slug: "reservations", label: "Reservations", hi: "बुकिंग" },
-  { slug: "waitlist", label: "Waitlist", hi: "वेटलिस्ट" },
-  { slug: "orders", label: "Orders", hi: "ऑर्डर" },
-  { slug: "billing", label: "Billing", hi: "बिलिंग" },
+  { slug: "waitlist", label: "Waitlist", hi: "वेटलिस्ट", live: false },
+  { slug: "orders", label: "Orders", hi: "ऑर्डर", live: false },
+  { slug: "billing", label: "Billing", hi: "बिलिंग", live: false },
   { slug: "menu", label: "Menu", hi: "मेन्यू" },
   { slug: "pricing", label: "Pricing", hi: "प्राइसिंग" },
-  { slug: "reports", label: "Reports", hi: "रिपोर्ट" },
-  { slug: "settings", label: "Settings", hi: "सेटिंग्स" },
+  { slug: "reports", label: "Reports", hi: "रिपोर्ट", live: false },
+  { slug: "settings", label: "Settings", hi: "सेटिंग्स", live: false },
 ] as const;
+
+/** Sections with a real screen. The rest stay reserved and are hidden until they are built. */
+export const visibleSections = consoleSections.filter((s) => !("live" in s && s.live === false));
 
 export type ConsoleSection = (typeof consoleSections)[number]["slug"];
 
@@ -23,7 +26,7 @@ export function isConsoleSection(slug: string): slug is ConsoleSection {
 
 /** Where /console sends this person: the first section their roles may open, or null */
 export function landingSection(roles: readonly StaffRole[]): ConsoleSection | null {
-  return consoleSections.find((s) => canSee(roles, s.slug))?.slug ?? null;
+  return visibleSections.find((s) => canSee(roles, s.slug))?.slug ?? null;
 }
 
 /**
@@ -40,3 +43,6 @@ export function homeFor(roles: readonly StaffRole[]): string {
   if (has("kitchen")) return "/kds";
   return "/console/floor";
 }
+
+/** True when the section has a real screen; the catch-all route 404s the others */
+export const isLiveSection = (slug: string) => visibleSections.some((s) => s.slug === slug);
