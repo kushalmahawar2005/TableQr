@@ -1,0 +1,169 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, it, vi } from "vitest";
+import { DashboardScreen, alertsOf } from "@/app/(console)/console/(app)/dashboard/_components/dashboard-screen";
+import { OPS_POLL_MS, TREND_POLL_MS, createDashboardSync, startDashboardSync } from "@/app/(console)/console/(app)/dashboard/_components/dashboard-sync";
+import { dashboardCases } from "@/app/dev/o1/_fixtures";
+import { addDays, dayRange, deltaLabel, deltaOf, lastDays, lateness } from "@/domain/dashboard";
+import { consoleSections, landingSection } from "@/lib/console-nav";
+import { canSee, staffRoles, type StaffRole } from "@/lib/staff-permissions";
+import type { DashboardData, RevenueTrend } from "@/server/staff/dashboard";
+
+// O1 Owner Dashboard: pure helpers, landing, polling controller and the screen rendered to HTML.
+
+vi.mock("@/app/(console)/console/(app)/dashboard/actions", () => ({}));
+
+const caseOf = (id: string) => dashboardCases().find((c) => c.id === id)!;
+const render = (id: string) => {
+  const c = caseOf(id);
+  return renderToStaticMarkup(createElement(DashboardScreen, { initial: c.data, initialTrend: c.trend, preview: c.preview ?? {} }));
+};
+const ok = <T,>(data: T) => ({ ok: true as const, data });
+
+describe("deltas and days", () => {
+  it("today vs yesterday never shows infinity", () => {
+    expect(deltaLabel(deltaOf(112, 100))).toBe("+12%");
+    expect(deltaLabel(deltaOf(92, 100))).toBe("−8%");
+    expect(deltaLabel(deltaOf(100, 100))).toBe("No change");
+    expect(deltaLabel(deltaOf(0, 0))).toBe("No change");
+    expect(deltaLabel(deltaOf(50, 0))).toBe("No prior-day baseline");
+  });
+
+  it("days are outlet-local, contiguous and seven long", () => {
+    const now = new Date("2026-10-04T14:30:00Z");
+    const days = lastDays(now, "Asia/Kolkata");
+    expect(days).toHaveLength(7);
+    expect(days[6].date).toBe("2026-10-04");
+    expect(days[6].start.toISOString()).toBe("2026-10-03T18:30:00.000Z");
+    for (let i = 1; i < 7; i++) expect(days[i].start.getTime()).toBe(days[i - 1].end.getTime());
+    expect(addDays("2026-03-01", -1)).toBe("2026-02-28");
+    expect(dayRange("2026-11-01", "America/New_York").end.getTime() - dayRange("2026-11-01", "America/New_York").start.getTime()).toBe(25 * 3600_000);
+  });
+
+  it("no-show eligibility waits for the grace period", () => {
+    const start = 1_000_000_000_000;
+    expect(lateness(start, start + 14 * 60_000, 15)).toEqual({ lateMinutes: 14, noShowEligible: false });
+    expect(lateness(start, start + 15 * 60_000, 15)).toEqual({ lateMinutes: 15, noShowEligible: true });
+  });
+});
+
+describe("navigation and landing", () => {
+  // What /console chose before O1: the same list without the dashboard
+  const before = (roles: StaffRole[]) => consoleSections.filter((s) => s.slug !== "dashboard").find((s) => canSee(roles, s.slug))?.slug ?? null;
+
+  it("AT/AU: owner and manager land on the dashboard, first in the sidebar", () => {
+    expect(consoleSections[0].slug).toBe("dashboard");
+    expect(landingSection(["owner"])).toBe("dashboard");
+    expect(landingSection(["manager"])).toBe("dashboard");
+  });
+
+  it("AO–AS/AV: every other role keeps its previous landing and never sees Dashboard", () => {
+    for (const role of ["host", "waiter", "cashier", "kitchen", "accountant"] as const) {
+      expect(canSee([role], "dashboard")).toBe(false);
+      expect(landingSection([role])).toBe(before([role]));
+    }
+    expect(landingSection(["host"])).toBe("floor");
+    expect(landingSection(["cashier"])).toBe("orders");
+    expect(landingSection(["accountant"])).toBe("billing");
+    expect(landingSection(["kitchen"])).toBeNull();
+    expect(staffRoles.filter((r) => canSee([r], "dashboard"))).toEqual(["owner", "manager"]);
+  });
+});
+
+describe("polling controller", () => {
+  const data = (n: number) => ({ generatedAt: n }) as unknown as DashboardData;
+  const trend = (n: number) => [{ date: "2026-10-04", revenuePaise: n }] as RevenueTrend;
+
+  it("AW/AX/AY: operations every minute, the trend every five, nothing while the tab is hidden", () => {
+    const timers: { fn: () => void; ms: number }[] = [];
+    const sync = { ops: vi.fn(async () => {}), trend: vi.fn(async () => {}) };
+    let visible = true;
+    const stop = startDashboardSync(sync, { every: (fn, ms) => (timers.push({ fn, ms }), () => {}), visible: () => visible });
+    expect(timers.map((t) => t.ms)).toEqual([OPS_POLL_MS, TREND_POLL_MS]);
+    const opsTick = timers.find((t) => t.ms === OPS_POLL_MS)!.fn;
+    for (let i = 0; i < 5; i++) opsTick();
+    expect(sync.ops).toHaveBeenCalledTimes(5);
+    expect(sync.trend).not.toHaveBeenCalled();
+    timers.find((t) => t.ms === TREND_POLL_MS)!.fn();
+    expect(sync.trend).toHaveBeenCalledTimes(1);
+    visible = false;
+    opsTick();
+    timers.find((t) => t.ms === TREND_POLL_MS)!.fn();
+    expect(sync.ops).toHaveBeenCalledTimes(5);
+    expect(sync.trend).toHaveBeenCalledTimes(1);
+    stop();
+  });
+
+  it("AZ/BA: manual refresh loads both; an older answer that arrives late never replaces a newer one", async () => {
+    const resolvers: ((v: ReturnType<typeof ok<DashboardData>>) => void)[] = [];
+    const shown: number[] = [];
+    const trends: number[] = [];
+    const sync = createDashboardSync({
+      loadOps: () => new Promise((r) => resolvers.push(r)),
+      loadTrend: async () => ok(trend(7)),
+      onOps: (d) => shown.push(d.generatedAt),
+      onTrend: (t) => trends.push(t[0].revenuePaise),
+      onError: () => {},
+    });
+    const first = sync.ops();
+    const second = sync.all();
+    resolvers[1](ok(data(2)));
+    await second;
+    resolvers[0](ok(data(1)));
+    await first;
+    expect(shown).toEqual([2]);
+    expect(trends).toEqual([7]);
+  });
+
+  it("BB: a failed refresh reports an error and keeps the last data", async () => {
+    const shown: number[] = [];
+    const errors: string[] = [];
+    let fail = false;
+    const sync = createDashboardSync({
+      loadOps: async () => (fail ? Promise.reject(new Error("offline")) : ok(data(1))),
+      loadTrend: async () => ok(trend(1)),
+      onOps: (d) => shown.push(d.generatedAt),
+      onTrend: () => {},
+      onError: (m) => errors.push(m),
+    });
+    await sync.ops();
+    fail = true;
+    await sync.ops();
+    expect(shown).toEqual([1]);
+    expect(errors).toHaveLength(1);
+  });
+});
+
+describe("screen", () => {
+  it("shows the eight KPIs, deltas, trend, operations, attention and top items", () => {
+    const html = render("busy");
+    for (const label of ["Today&#x27;s Revenue", "Orders Today", "Covers Served", "Average Bill", "Open Tables", "Upcoming Reservations", "Current Waitlist", "Outstanding Amount"]) expect(html).toContain(label);
+    expect(html).toContain("₹84,625");
+    expect(html).toContain("+12%");
+    expect(html).toContain("No change");
+    expect(html).toContain("Net sales from paid bills");
+    expect(html).toContain("Last 7 Days Revenue");
+    expect(html).toContain("Top 5 Items Today");
+    expect(html).toContain("T12");
+    expect(html).toContain("No-show eligible");
+    expect(html).toContain("pending refund");
+    expect(html).not.toMatch(/<form|type="submit"/);
+  });
+
+  it("handles empty days, missing baselines and calm outlets", () => {
+    const quiet = render("quiet");
+    expect(quiet).toContain("All clear");
+    expect(quiet).toContain("No items sold yet today.");
+    expect(quiet).toContain("No reservations due");
+    expect(render("no-baseline")).toContain("No prior-day baseline");
+    expect(alertsOf(caseOf("quiet").data)).toEqual([]);
+    expect(alertsOf(caseOf("blocked").data).map((a) => a.key)).toEqual(["blocked"]);
+  });
+
+  it("links only to screens that exist and loads no chart library", () => {
+    const html = render("busy");
+    const hrefs = [...html.matchAll(/href="([^"]+)"/g)].map((m) => m[1]);
+    expect(new Set(hrefs)).toEqual(new Set(["/console/floor", "/console/reservations", "/console/menu"]));
+    expect(html).not.toMatch(/recharts|chart\.js|echarts|<canvas/i);
+  });
+});

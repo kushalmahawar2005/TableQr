@@ -5,6 +5,8 @@ export const staffRoles = ["owner", "manager", "cashier", "host", "waiter", "kit
 export type StaffRole = (typeof staffRoles)[number];
 
 export const consoleSectionRoles = {
+  /** O1 Owner Dashboard: read-only, the current outlet only */
+  dashboard: ["manager", "owner"],
   floor: ["host", "manager", "owner"],
   reservations: ["host", "manager", "owner"],
   waitlist: ["host", "manager", "owner"],

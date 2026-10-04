@@ -4,6 +4,7 @@ import {
   Calendar03Icon,
   ChartHistogramIcon,
   DashboardSquare01Icon,
+  Home01Icon,
   Invoice01Icon,
   Logout01Icon,
   MenuRestaurantIcon,
@@ -20,6 +21,7 @@ import type { Lang } from "@/lib/i18n";
 import { signOutAction } from "../../login/actions";
 
 const ICONS: Record<string, IconSvgElement> = {
+  dashboard: Home01Icon,
   floor: DashboardSquare01Icon,
   reservations: Calendar03Icon,
   waitlist: UserGroupIcon,
