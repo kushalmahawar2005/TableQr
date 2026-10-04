@@ -32,7 +32,9 @@ export type LinePriceError =
   | { code: "modifier_unavailable"; modifierId: string }
   | { code: "duplicate_modifier"; modifierId: string }
   | { code: "too_few"; groupId: string; groupName: string; min: number }
-  | { code: "too_many"; groupId: string; groupName: string; max: number };
+  | { code: "too_many"; groupId: string; groupName: string; max: number }
+  /** Base price plus option deltas came out below zero: a menu set-up error, never an order line */
+  | { code: "negative_price" };
 
 export type PricedLine = {
   unitPricePaise: number;
@@ -41,6 +43,24 @@ export type PricedLine = {
 };
 
 export const MAX_QTY = 50;
+
+export type PriceSource = "brand_base" | "outlet_override";
+
+/** The one effective-price rule (O3 owns the brand price, O4 the outlet override): override ?? brand */
+export function resolveItemPrice(input: { brandPricePaise: number; outletOverridePricePaise: number | null | undefined }): { pricePaise: number; source: PriceSource } {
+  const override = input.outletOverridePricePaise;
+  return override === null || override === undefined
+    ? { pricePaise: input.brandPricePaise, source: "brand_base" }
+    : { pricePaise: override, source: "outlet_override" };
+}
+
+/**
+ * The prices a guest last reviewed in their cart, per configuration (dish plus options), in paise.
+ * Sent back with Place order for comparison only; the server always charges its own current price.
+ */
+export type PriceQuote = Record<string, number>;
+
+export const quoteKey = (itemId: string, modifierIds: string[]) => `${itemId}|${[...new Set(modifierIds)].sort().join(",")}`;
 
 export function priceLine(
   item: PricingItem,
@@ -83,5 +103,6 @@ export function priceLine(
   }
 
   const unitPricePaise = item.pricePaise + chosen.reduce((sum, c) => sum + c.priceDeltaPaise, 0);
+  if (unitPricePaise < 0) return { ok: false, error: { code: "negative_price" } };
   return { ok: true, line: { unitPricePaise, linePaise: unitPricePaise * qty, modifiers: chosen } };
 }

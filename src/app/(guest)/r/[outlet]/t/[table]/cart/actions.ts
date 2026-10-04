@@ -70,17 +70,28 @@ export async function restoreLineAction(outletCode: string, shortCode: string, s
 
 export type PlaceResult =
   | { ok: true; roundNo: number }
-  | { ok: false; error: Err | "items" | "cap" | "name_required" | "invalid_name" | "empty" };
+  | { ok: false; error: Err | "items" | "cap" | "name_required" | "invalid_name" | "empty" | "prices" };
+
+/** The reviewed prices from the phone, reduced to plain numbers; used only to compare */
+function cleanQuote(raw: unknown): Record<string, number> {
+  const out: Record<string, number> = {};
+  if (!raw || typeof raw !== "object") return out;
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>).slice(0, 200)) {
+    if (typeof value === "number" && Number.isInteger(value)) out[String(key).slice(0, 400)] = value;
+  }
+  return out;
+}
 
 /** Place order. The request id comes from the phone and is reused on every retry of one attempt. */
 export async function placeOrderAction(
   outletCode: string,
   shortCode: string,
-  input: { requestId: string; name?: string },
+  input: { requestId: string; name?: string; quote: Record<string, number> },
 ): Promise<PlaceResult> {
   try {
     const ctx = await context(outletCode, shortCode);
-    const res = await placeOrder(ctx, { requestId: String(input.requestId).slice(0, 64), name: input.name ? String(input.name) : undefined });
+    // Always compared: a missing or empty quote means nothing was reviewed, so prices must be confirmed
+    const res = await placeOrder(ctx, { requestId: String(input.requestId).slice(0, 64), name: input.name ? String(input.name) : undefined, quote: cleanQuote(input.quote) });
     return { ok: true, roundNo: res.roundNo };
   } catch (err) {
     if (err instanceof AppError) {
@@ -94,6 +105,8 @@ export async function placeOrderAction(
           return { ok: false, error: err.code };
         case "cart_empty":
           return { ok: false, error: "empty" };
+        case "price_changed":
+          return { ok: false, error: "prices" };
       }
     }
     return { ok: false, error: common(err) };

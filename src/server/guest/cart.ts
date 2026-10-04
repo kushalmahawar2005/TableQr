@@ -5,7 +5,7 @@ import { uuidv7 } from "@/db/id";
 import * as s from "@/db/schema";
 import { cleanNote, lineKey } from "@/domain/item-sheet";
 import { optionsKind } from "@/domain/menu-price";
-import { MAX_QTY, priceLine } from "@/domain/pricing";
+import { MAX_QTY, priceLine, quoteKey, type PriceQuote } from "@/domain/pricing";
 import { AppError } from "../errors";
 import { publish } from "../realtime/publish";
 import { topics } from "../realtime/token";
@@ -338,6 +338,7 @@ export async function getCart(ctx: GuestContext, now = new Date()) {
       modifiers: res?.ok ? res.line.modifiers.map((m) => ({ nameEn: m.nameEn, nameHi: m.nameHi })) : [],
       unitPricePaise: res?.ok ? res.line.unitPricePaise : null,
       linePaise: res?.ok ? res.line.linePaise : null,
+      quoteKey: quoteKey(line.itemId, (line.modifiers ?? []).map((m) => m.modifierId)),
       isAvailable: reason === null,
       reason,
       /** Plain: the dish as it comes; configured: options or a note */
@@ -346,9 +347,13 @@ export async function getCart(ctx: GuestContext, now = new Date()) {
   });
 
   const mine = priced.filter((l) => l.isMine);
+  // The unit prices shown for my placeable lines; Place order sends them back for comparison
+  const quote: PriceQuote = {};
+  for (const l of mine) if (!l.reason && l.unitPricePaise !== null) quote[l.quoteKey] = l.unitPricePaise;
   return {
     mine,
     table: priced,
+    quote,
     // Only lines that can be placed now count
     mySubtotalPaise: mine.reduce((sum, l) => sum + (l.reason ? 0 : (l.linePaise ?? 0)), 0),
   };

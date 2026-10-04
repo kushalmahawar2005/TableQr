@@ -41,6 +41,15 @@ export const canUse = (roles: readonly StaffRole[], allowed: readonly StaffRole[
 export const canSee = (roles: readonly StaffRole[], section: ConsoleSectionSlug) => canUse(roles, consoleSectionRoles[section]);
 export const can = (roles: readonly StaffRole[], permission: FloorPermission) => canUse(roles, floorPermissions[permission]);
 
+/** Outlet price overrides (O4). Brand prices stay with the Menu Manager (O3). */
+export const pricingPermissions = {
+  "pricing.view": ["manager", "owner"],
+  "pricing.edit": ["owner"],
+} as const satisfies Record<string, readonly StaffRole[]>;
+
+export type PricingPermission = keyof typeof pricingPermissions;
+export const canPrice = (roles: readonly StaffRole[], permission: PricingPermission) => canUse(roles, pricingPermissions[permission]);
+
 /** Kitchen display (S2): who may set up, repin or revoke a wall screen, and who works on one */
 export const kdsSetupRoles = ["manager", "owner"] as const satisfies readonly StaffRole[];
 export const kdsWorkRoles = ["kitchen", "manager", "owner"] as const satisfies readonly StaffRole[];

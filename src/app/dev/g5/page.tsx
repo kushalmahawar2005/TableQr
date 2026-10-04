@@ -63,6 +63,7 @@ export default async function G5Preview(props: PageProps<"/dev/g5">) {
     mine,
     myCount: mine.reduce((a, l) => a + l.qty, 0),
     subtotalPaise: mine.reduce((a, l) => a + (l.reason ? 0 : (l.linePaise ?? 0)), 0),
+    quote: {},
     others,
   });
   const others: CartScreenData["others"] = [

@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { uuidv7 } from "@/db/id";
 import * as s from "@/db/schema";
 import { checkFirstName, isPlaceholderName } from "@/domain/guest-name";
-import { priceLine } from "@/domain/pricing";
+import { priceLine, quoteKey, type PriceQuote } from "@/domain/pricing";
 import { LOCK_THEN_READ } from "../db-types";
 import { AppError } from "../errors";
 import { publish } from "../realtime/publish";
@@ -21,6 +21,12 @@ type PlaceInput = {
   requestId?: string;
   /** Open mode: the guest's first name, needed once before their first order */
   name?: string;
+  /**
+   * The unit prices the guest last saw in their cart. Comparison only: the order is always priced
+   * from the server's current menu, and a difference stops the order so the guest can review it.
+   * Staff orders and internal callers leave it out.
+   */
+  quote?: PriceQuote;
 };
 
 export async function placeOrder(ctx: GuestContext, input: PlaceInput = {}, now = new Date()) {
@@ -167,6 +173,15 @@ export function placeOrderTx(ctx: GuestContext, input: PlaceInput, now: Date, st
       });
     }
     const lines = priced.filter((p) => p !== null);
+    // Never charge a price the guest did not review: a changed (higher or lower) or unseen price stops here,
+    // before anything is written, and the cart shows the current prices to confirm
+    if (!staffDraft && input.quote) {
+      const quote = input.quote;
+      const changed = lines.filter(({ line, priced: p }) => quote[quoteKey(line.itemId, (line.modifiers ?? []).map((m) => m.modifierId))] !== p.unitPricePaise);
+      if (changed.length) {
+        throw new AppError("price_changed", "Prices have changed. Please review your cart before placing the order.", { cartLineIds: changed.map((c) => c.line.id) });
+      }
+    }
     const subtotalPaise = lines.reduce((sum, p) => sum + p.priced.linePaise, 0);
 
     const [{ rounds }] = await tx

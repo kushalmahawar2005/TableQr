@@ -2,6 +2,7 @@ import "server-only";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import * as s from "@/db/schema";
+import { adjustPrice, isValidNewPrice, isWholeRupee, validAdjustment } from "@/domain/price-adjust";
 import { AppError } from "../errors";
 import { publish } from "../realtime/publish";
 import { topics } from "../realtime/token";
@@ -16,6 +17,8 @@ type MenuTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 const audit = async (tx: MenuTx, staff: StaffSession, action: string, entity: string, entityId: string | null, before: unknown, after: unknown) => {
   await tx.insert(s.auditLog).values({ tenantId: staff.tenantId, outletId: staff.outletId, actorUserId: staff.userId, actorLabel: `staff:${staff.name}`, action, entity, entityId, before, after, createdAt: new Date() });
 };
+const menuChanged = (staff: StaffSession, entity: string, entityId: string | null, change: string) =>
+  publish({ tenantId: staff.tenantId, outletId: staff.outletId }, [{ topic: topics.menu, type: "menu.changed", data: { entity, entityId, change } }]);
 const cleanAliases = (value: string | null | undefined) => [...new Set(String(value ?? "").split(",").map((x) => x.trim()).filter(Boolean))].slice(0, 30).join(", ").slice(0, 300) || null;
 const checkText = (value: unknown, max: number, required = false) => { const x = String(value ?? "").trim(); if (required && !x) throw new AppError("invalid_state", "Complete the required menu fields."); if (x.length > max) throw new AppError("invalid_state", "One menu field is too long."); return x || null; };
 const checkSpice = (value: unknown) => value === null || value === undefined || value === "" ? null : Math.max(0, Math.min(3, Number(value)));
@@ -53,10 +56,13 @@ export async function saveMenuItem(staff: StaffSession, input: ItemInput) {
     const [old] = await db.select().from(s.menuItems).where(and(eq(s.menuItems.tenantId, staff.tenantId), eq(s.menuItems.id, input.id), eq(s.menuItems.brandId, outlet.brandId)));
     if (!old) throw new AppError("not_found", "Menu item not found.");
     if (!ownerOnly(staff) && old.pricePaise !== pricePaise) throw new AppError("forbidden", "Managers cannot edit prices.");
+    // New prices are whole rupees; an older price with paise can be saved unchanged
+    if (old.pricePaise !== pricePaise && !isValidNewPrice(pricePaise)) throw new AppError("invalid_state", "Enter a whole-rupee price.", { reason: "price" });
     await db.transaction(async (tx) => { await tx.update(s.menuItems).set(values).where(and(eq(s.menuItems.tenantId, staff.tenantId), eq(s.menuItems.id, input.id!))); await audit(tx, staff, "menu.item_updated", "menu_item", input.id!, old, values); });
     await publish({ tenantId: staff.tenantId, outletId: staff.outletId }, [{ topic: topics.menu, type: "menu.changed", data: { entity: "item", entityId: input.id, change: "updated" } }]);
     return input.id;
   }
+  if (!isValidNewPrice(pricePaise)) throw new AppError("invalid_state", "Enter a whole-rupee price.", { reason: "price" });
   const [row] = await db.insert(s.menuItems).values(values /* tenantId */).$returningId();
   const id = row.id;
   await db.insert(s.auditLog).values({ tenantId: staff.tenantId, outletId: staff.outletId, actorUserId: staff.userId, actorLabel: `staff:${staff.name}`, action: "menu.item_created", entity: "menu_item", entityId: id, after: values, createdAt: new Date() });
@@ -91,18 +97,54 @@ export async function reorderCategories(staff: StaffSession, ids: string[]) { gu
 
 export async function archiveCategory(staff: StaffSession, categoryId: string, restore = false) { guard(staff); const [active] = await db.select({ n: sql<number>`count(*)` }).from(s.menuItems).where(and(eq(s.menuItems.tenantId, staff.tenantId), eq(s.menuItems.categoryId, categoryId), eq(s.menuItems.isActive, true))); if (!restore && Number(active?.n ?? 0) > 0) throw new AppError("conflict", `Move or archive ${active.n} active item(s) first.`); await db.update(s.menuCategories).set({ isActive: restore }).where(and(eq(s.menuCategories.tenantId, staff.tenantId), eq(s.menuCategories.id, categoryId))); await db.insert(s.auditLog).values({ tenantId: staff.tenantId, outletId: staff.outletId, actorUserId: staff.userId, actorLabel: `staff:${staff.name}`, action: restore ? "menu.category_updated" : "menu.category_archived", entity: "menu_category", entityId: categoryId, after: { isActive: restore }, createdAt: new Date() }); }
 
-export async function bulkPrice(staff: StaffSession, itemIds: string[], mode: "percent" | "fixed", amount: number) { guard(staff); if (!ownerOnly(staff)) throw new AppError("forbidden", "Only an owner can change prices."); const rows = await db.select({ id: s.menuItems.id, pricePaise: s.menuItems.pricePaise }).from(s.menuItems).where(and(eq(s.menuItems.tenantId, staff.tenantId), inArray(s.menuItems.id, itemIds))); const changes = rows.map((r) => ({ id: r.id, before: r.pricePaise, after: Math.max(0, mode === "percent" ? Math.round(r.pricePaise * (1 + amount / 100)) : r.pricePaise + Math.round(amount)) })); await db.transaction(async (tx) => { for (const c of changes) { await tx.update(s.menuItems).set({ pricePaise: c.after }).where(and(eq(s.menuItems.tenantId, staff.tenantId), eq(s.menuItems.id, c.id))); } await audit(tx, staff, "menu.bulk_price_changed", "menu", null, null, { mode, amount, changes }); }); return changes; }
+/** Brand prices for this outlet's brand only; results are whole rupees, rounded half up */
+export async function bulkPrice(staff: StaffSession, itemIds: string[], mode: "percent" | "fixed", amount: number) {
+  guard(staff);
+  if (!ownerOnly(staff)) throw new AppError("forbidden", "Only an owner can change prices.");
+  if (mode !== "percent" && mode !== "fixed") throw new AppError("invalid_state", "Choose a percentage or a fixed amount.");
+  if (!validAdjustment(mode, Number(amount))) throw new AppError("invalid_state", mode === "percent" ? "Enter a percentage between -100 and 500." : "Enter a whole-rupee amount.", { reason: "amount" });
+  const ids = [...new Set(itemIds.map(String))];
+  if (ids.length === 0) throw new AppError("invalid_state", "Select at least one item.");
+  const brandId = (await db.select({ brandId: s.outlets.brandId }).from(s.outlets).where(and(eq(s.outlets.tenantId, staff.tenantId), eq(s.outlets.id, staff.outletId))))[0]?.brandId;
+  if (!brandId) throw new AppError("not_found", "Outlet not found.");
+  const changes = await db.transaction(async (tx) => {
+    const rows = await tx.select({ id: s.menuItems.id, pricePaise: s.menuItems.pricePaise }).from(s.menuItems).where(and(eq(s.menuItems.tenantId, staff.tenantId), eq(s.menuItems.brandId, brandId), inArray(s.menuItems.id, ids))).for("update");
+    // Another brand's item (or a stale id) fails the whole change; nothing outside this brand is written
+    if (rows.length !== ids.length) throw new AppError("not_found", "Choose items from this menu.");
+    const out = rows.map((r) => ({ id: r.id, before: r.pricePaise, after: adjustPrice(r.pricePaise, mode, Number(amount)) }));
+    if (out.some((c) => !isValidNewPrice(c.after))) throw new AppError("invalid_state", "One of the new prices is above the highest allowed price.", { reason: "price" });
+    for (const c of out) await tx.update(s.menuItems).set({ pricePaise: c.after }).where(and(eq(s.menuItems.tenantId, staff.tenantId), eq(s.menuItems.brandId, brandId), eq(s.menuItems.id, c.id)));
+    await audit(tx, staff, "menu.bulk_price_changed", "menu", null, null, { mode, amount, changes: out });
+    return out;
+  });
+  await menuChanged(staff, "menu", null, "price");
+  return changes;
+}
 
 export async function savePairings(staff: StaffSession, sourceItemId: string, pairedItemIds: string[]) { guard(staff); if (pairedItemIds.includes(sourceItemId)) throw new AppError("invalid_state", "An item cannot pair with itself."); const items = await db.select({ id: s.menuItems.id }).from(s.menuItems).where(and(eq(s.menuItems.tenantId, staff.tenantId), inArray(s.menuItems.id, [sourceItemId, ...pairedItemIds]), eq(s.menuItems.isActive, true))); if (items.length !== new Set([sourceItemId, ...pairedItemIds]).size) throw new AppError("not_found", "Choose active items from this menu."); await db.delete(s.menuItemPairings).where(and(eq(s.menuItemPairings.tenantId, staff.tenantId), eq(s.menuItemPairings.sourceItemId, sourceItemId))); if (pairedItemIds.length) await db.insert(s.menuItemPairings).values(pairedItemIds.map((pairedItemId, sortOrder) => ({ tenantId: staff.tenantId, sourceItemId, pairedItemId, sortOrder }))); await db.insert(s.auditLog).values({ tenantId: staff.tenantId, outletId: staff.outletId, actorUserId: staff.userId, actorLabel: `staff:${staff.name}`, action: "menu.pairings_updated", entity: "menu_item", entityId: sourceItemId, after: { pairedItemIds }, createdAt: new Date() }); }
 
 export async function saveModifierGroup(staff: StaffSession, input: { id?: string; itemId: string; nameEn: string; nameHi?: string | null; minSelect: number; maxSelect: number; options: { id?: string; nameEn: string; nameHi?: string | null; priceDeltaPaise: number; isAvailable: boolean }[] }) {
   guard(staff); if (input.maxSelect < input.minSelect || input.minSelect < 0) throw new AppError("invalid_state", "Modifier selection limits are invalid.");
-  const [item] = await db.select({ id: s.menuItems.id }).from(s.menuItems).where(and(eq(s.menuItems.tenantId, staff.tenantId), eq(s.menuItems.id, input.itemId))); if (!item) throw new AppError("not_found", "Menu item not found.");
+  const [item] = await db.select({ id: s.menuItems.id, pricePaise: s.menuItems.pricePaise }).from(s.menuItems).where(and(eq(s.menuItems.tenantId, staff.tenantId), eq(s.menuItems.id, input.itemId))); if (!item) throw new AppError("not_found", "Menu item not found.");
+  // Option prices are prices: a manager may edit names, limits and availability but never a delta
+  const existing = input.id ? await db.select({ id: s.modifiers.id, priceDeltaPaise: s.modifiers.priceDeltaPaise }).from(s.modifiers).where(and(eq(s.modifiers.tenantId, staff.tenantId), eq(s.modifiers.groupId, input.id))) : [];
+  const oldDelta = new Map(existing.map((m) => [m.id, m.priceDeltaPaise]));
+  for (const option of input.options) {
+    const delta = Math.round(Number(option.priceDeltaPaise));
+    const before = option.id ? oldDelta.get(option.id) : undefined;
+    // Unchanged, or a new option at no extra cost: not a price change
+    if (before !== undefined ? before === delta : delta === 0) continue;
+    if (!ownerOnly(staff)) throw new AppError("forbidden", "Managers cannot change option prices.", { reason: "price" });
+    if (!Number.isFinite(delta) || !isWholeRupee(Math.abs(delta))) throw new AppError("invalid_state", "Enter option prices in whole rupees.", { reason: "price" });
+    if (item.pricePaise + delta < 0) throw new AppError("invalid_state", "An option can't make the dish cost less than ₹0.", { reason: "negative_price" });
+  }
   const groupId = input.id ?? (await db.insert(s.modifierGroups).values({ tenantId: staff.tenantId, itemId: input.itemId, nameEn: checkText(input.nameEn, 80, true)!, nameHi: checkText(input.nameHi, 80), minSelect: input.minSelect, maxSelect: input.maxSelect }).$returningId())[0].id; // tenantId scoped
   if (input.id) await db.update(s.modifierGroups).set({ nameEn: checkText(input.nameEn, 80, true)!, nameHi: checkText(input.nameHi, 80), minSelect: input.minSelect, maxSelect: input.maxSelect }).where(and(eq(s.modifierGroups.tenantId, staff.tenantId), eq(s.modifierGroups.id, input.id)));
   for (const [sortOrder, option] of input.options.entries()) { const values = { tenantId: staff.tenantId, groupId, nameEn: checkText(option.nameEn, 80, true)!, nameHi: checkText(option.nameHi, 80), priceDeltaPaise: Math.round(option.priceDeltaPaise), isAvailable: option.isAvailable, sortOrder }; if (option.id) await db.update(s.modifiers).set(values).where(and(eq(s.modifiers.tenantId, staff.tenantId), eq(s.modifiers.id, option.id), eq(s.modifiers.groupId, groupId))); else await db.insert(s.modifiers).values(values /* tenantId */);
   }
-  await db.insert(s.auditLog).values({ tenantId: staff.tenantId, outletId: staff.outletId, actorUserId: staff.userId, actorLabel: `staff:${staff.name}`, action: "menu.modifier_updated", entity: "modifier_group", entityId: groupId, after: input, createdAt: new Date() }); return groupId;
+  await db.insert(s.auditLog).values({ tenantId: staff.tenantId, outletId: staff.outletId, actorUserId: staff.userId, actorLabel: `staff:${staff.name}`, action: "menu.modifier_updated", entity: "modifier_group", entityId: groupId, after: input, createdAt: new Date() });
+  await menuChanged(staff, "modifier_group", groupId, "updated");
+  return groupId;
 }
 
 export async function setModifierGroupActive(staff: StaffSession, groupId: string, active: boolean) {

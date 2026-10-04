@@ -5,7 +5,7 @@ import * as s from "@/db/schema";
 import { parseAllergens, parseSpice } from "@/domain/allergens";
 import { canSatisfy } from "@/domain/item-sheet";
 import { inWindow, localClock } from "@/domain/hours";
-import type { PricingItem } from "@/domain/pricing";
+import { resolveItemPrice, type PricingItem } from "@/domain/pricing";
 import type { Runner } from "../db-types";
 
 // The menu as a guest sees it at one outlet: central menu plus outlet overrides (PS 3.5, 7.3).
@@ -100,9 +100,10 @@ export async function loadItems(
           .filter((m) => m.groupId === g.id)
           .map((m) => ({ id: m.id, nameEn: m.nameEn, nameHi: m.nameHi, priceDeltaPaise: m.priceDeltaPaise, isAvailable: m.isAvailable })),
       }));
+    const price = resolveItemPrice({ brandPricePaise: item.pricePaise, outletOverridePricePaise: override?.pricePaise });
     const pricing: PricingItem = {
       id: item.id,
-      pricePaise: override?.pricePaise ?? item.pricePaise,
+      pricePaise: price.pricePaise,
       // A required choice with nothing left to choose makes the dish unorderable
       isAvailable: isItemAvailable(override, now) && itemGroups.every(canSatisfy),
       groups: itemGroups,
@@ -111,6 +112,8 @@ export async function loadItems(
       item,
       override,
       pricing,
+      /** Why this price applies: the outlet's own override, or the brand price */
+      priceSource: price.source,
       portionsLeft: override?.portionsLeft ?? null,
       /** Category hours in outlet local time, e.g. breakfast; null = all day */
       categoryWindow: windowByCategory.get(item.categoryId) ?? null,

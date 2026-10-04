@@ -39,7 +39,7 @@ export type CartPreview = {
   name?: string;
   offline?: boolean;
   placing?: boolean;
-  notice?: "failed" | "cap" | "items";
+  notice?: "failed" | "cap" | "items" | "prices";
   /** Show the Undo toast for this line, already removed */
   undoLine?: string;
 };
@@ -72,7 +72,7 @@ export function CartScreen({
   const [name, setName] = useState(preview?.name ?? "");
   const [nameTouched, setNameTouched] = useState(!!preview?.name);
   const [placing, setPlacing] = useState(!!preview?.placing);
-  const [notice, setNotice] = useState<"failed" | "cap" | "items" | null>(preview?.notice ?? null);
+  const [notice, setNotice] = useState<"failed" | "cap" | "items" | "prices" | null>(preview?.notice ?? null);
   const [toast, setToast] = useState<{ text: string; snapshot?: RemovedLine | null; lineId?: string } | null>(() => {
     const line = preview?.undoLine ? data.mine.find((l) => l.id === preview.undoLine) : undefined;
     return line ? { text: c.removed(pick(lang, line.nameEn, line.nameHi)), lineId: line.id } : null;
@@ -165,7 +165,7 @@ export function CartScreen({
     const id = requestId();
     let res: Awaited<ReturnType<typeof placeOrderAction>>;
     try {
-      res = await placeOrderAction(data.outlet.code, shortCode, { requestId: id, name: session.needsName ? name : undefined });
+      res = await placeOrderAction(data.outlet.code, shortCode, { requestId: id, name: session.needsName ? name : undefined, quote: data.quote });
     } catch {
       // The order may or may not have reached the kitchen; the same id makes a retry safe
       res = { ok: false, error: "failed" };
@@ -184,6 +184,11 @@ export function CartScreen({
     switch (res.error) {
       case "items":
         setNotice("items");
+        refresh();
+        break;
+      case "prices":
+        // Nothing was ordered; show the current prices and let the guest place it again
+        setNotice("prices");
         refresh();
         break;
       case "cap":
@@ -326,7 +331,7 @@ export function CartScreen({
                       <HugeiconsIcon icon={Alert02Icon} size={20} className="shrink-0 text-danger" aria-hidden />
                       <div>
                         <p className="text-body font-semibold text-danger">
-                          {notice === "cap" ? c.capTitle : notice === "items" ? c.itemsChanged : c.failed}
+                          {notice === "cap" ? c.capTitle : notice === "items" ? c.itemsChanged : notice === "prices" ? c.pricesChanged : c.failed}
                         </p>
                         {notice === "cap" && <p className="mt-0.5 text-caption text-ink/75">{c.capBody}</p>}
                       </div>

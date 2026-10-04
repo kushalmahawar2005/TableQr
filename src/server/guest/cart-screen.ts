@@ -63,6 +63,8 @@ export async function getCartScreen(outletCode: string, shortCode: string, devic
     mine,
     myCount: mine.reduce((n, l) => n + l.qty, 0),
     subtotalPaise: cart.mySubtotalPaise,
+    /** Prices the guest is reviewing now; sent back with Place order (comparison only) */
+    quote: cart.quote,
     others,
   };
 }

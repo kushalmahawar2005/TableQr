@@ -50,6 +50,7 @@ const en = {
   capTitle: "This is a large first order.",
   capBody: "Please ask your waiter to confirm it.",
   itemsChanged: "Some items just became unavailable. Remove them to order.",
+  pricesChanged: "Prices have changed. Please review your cart before placing the order.",
   slow: "Slow connection. Still placing your order…",
 
   pausedBy: (name: string | null) => (name ? `Ordering paused by ${name}` : "Ordering paused by the host"),
@@ -117,6 +118,7 @@ const hi: G5Copy = {
   capTitle: "यह बड़ा पहला ऑर्डर है।",
   capBody: "कृपया अपने वेटर से इसे कन्फ़र्म करवाएँ।",
   itemsChanged: "कुछ आइटम अभी उपलब्ध नहीं रहे। ऑर्डर के लिए उन्हें हटाएँ।",
+  pricesChanged: "दाम बदल गए हैं। ऑर्डर करने से पहले अपना कार्ट देख लें।",
   slow: "कनेक्शन धीमा है। ऑर्डर भेज रहे हैं…",
 
   pausedBy: (name) => (name ? `${name} ने ऑर्डर रोका है` : "होस्ट ने ऑर्डर रोका है"),

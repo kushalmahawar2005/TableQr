@@ -36,7 +36,9 @@ export type AppErrorCode =
   | "wrong"
   | "payment_required"
   /** Floor: the table, booking or party changed since the screen loaded; reload and retry */
-  | "conflict";
+  | "conflict"
+  /** Place order: a price changed since the guest last reviewed their cart; nothing was ordered */
+  | "price_changed";
 
 export class AppError extends Error {
   constructor(
