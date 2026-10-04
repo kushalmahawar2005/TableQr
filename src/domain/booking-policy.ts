@@ -90,6 +90,27 @@ export function localTime(date: string, minutes: number, timeZone: string): Date
   return new Date(guess - offsetMinutes(new Date(first), timeZone) * 60_000);
 }
 
+/**
+ * The UTC instant of an outlet wall-clock value from a `datetime-local` input ("2026-10-04T20:00").
+ * Null when malformed. The browser's and the server process's own time zones never take part.
+ */
+export function parseLocalDateTime(value: string, timeZone: string): Date | null {
+  const m = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})$/.exec(String(value ?? "").trim());
+  if (!m) return null;
+  const hour = Number(m[2]);
+  const minute = Number(m[3]);
+  if (hour > 23 || minute > 59) return null;
+  const at = localTime(m[1], hour * 60 + minute, timeZone);
+  return Number.isNaN(at.getTime()) || serviceDate(at, timeZone) !== m[1] ? null : at;
+}
+
+/** A `datetime-local` value ("2026-10-04T20:00") showing an instant in the outlet's time zone */
+export function localDateTimeValue(at: Date | number, timeZone: string): string {
+  const p = new Intl.DateTimeFormat("en-CA", { timeZone, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).formatToParts(new Date(at));
+  const get = (t: string) => p.find((x) => x.type === t)!.value;
+  return `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}`;
+}
+
 export type PacingState = "normal" | "near" | "full";
 
 export function pacingState(covers: number, capacity: number): PacingState {

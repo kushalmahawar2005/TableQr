@@ -1,3 +1,45 @@
+import type { Metadata } from "next";
 import Link from "next/link";
-const states=["empty","busy-day","week","confirmed","requested","arrived","seated","cancelled","no-show","late","credit","multi-table","waitlist","drawer","conflict","host"];
-export default async function ReservationCalendarBoard({searchParams}:{searchParams:Promise<{solo?:string}>}){const {solo}=await searchParams;if(!solo)return <main className="min-h-dvh bg-paper p-6"><h1 className="font-display text-3xl font-bold">Reservation Calendar review</h1><ul className="mt-5 grid gap-2 sm:grid-cols-3">{states.map(s=><li key={s}><Link className="underline" href={`?solo=${s}`}>{s}</Link></li>)}</ul></main>;return <main className="min-h-dvh bg-paper p-6"><Link href="/dev/reservation-calendar" className="underline">← All states</Link><h1 className="mt-5 font-display text-3xl font-bold">Reservations · {solo}</h1><div className="mt-5 grid gap-3">{["08:30","10:00","12:30","19:00"].map((t,i)=><article key={t} className="rounded-card border border-line bg-surface p-4"><div className="flex justify-between"><strong>{t} · {i+2} guests</strong><span className="rounded-full border border-line px-2 text-caption">{solo === "cancelled"?"cancelled":solo === "arrived"?"arrived":"confirmed"}</span></div><p className="mt-1 text-muted">{i%2?"Aarav Sharma":"Meera Kapoor"} · T{10+i} · {solo === "credit"?"Credit ₹800":"phone"}</p></article>)}</div></main>}
+import { notFound } from "next/navigation";
+import { ReservationCalendar } from "@/app/(console)/console/(app)/reservations/_components/reservation-calendar";
+import { calendarCases } from "./_fixtures";
+
+export const metadata: Metadata = { title: "Reservation Calendar states (dev)", robots: { index: false, follow: false } };
+export const dynamic = "force-dynamic";
+
+// Development-only review board for the Reservation Calendar: the real screen with sample data,
+// one state per page (?solo=<id>). Actions and live sync are off in preview.
+export default async function ReservationCalendarBoard(props: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  if (process.env.NODE_ENV === "production") notFound();
+  const q = await props.searchParams;
+  const cases = calendarCases();
+  const solo = cases.find((c) => c.id === q.solo);
+  if (!solo) {
+    return (
+      <main className="p-6">
+        <h1 className="font-display text-title font-bold">Reservation Calendar</h1>
+        <p className="text-caption text-muted">Development review board. Sample data. Open a state:</p>
+        <ul className="mt-4 grid gap-2 sm:grid-cols-3">
+          {cases.map((c) => (
+            <li key={c.id}>
+              <Link className="underline" href={`?solo=${c.id}`}>
+                {c.label}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </main>
+    );
+  }
+  return (
+    <>
+      <p className="px-5 pt-3 text-caption">
+        <Link href="/dev/reservation-calendar" className="underline">
+          ← All states
+        </Link>{" "}
+        · {solo.label}
+      </p>
+      <ReservationCalendar initial={solo.data} realtimeUrl={null} preview initialSelectedId={solo.selectedId ?? null} />
+    </>
+  );
+}

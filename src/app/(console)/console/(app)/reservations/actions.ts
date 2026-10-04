@@ -1,19 +1,72 @@
 "use server";
 import { AppError } from "@/server/errors";
-import { getReservationCalendar, editReservationDetails } from "@/server/staff/reservations";
-import { cancelReservation, checkInReservation, markNoShow, reassignReservation, seatReservation, createReservation } from "@/server/floor/reservations";
+import { cancelReservation, checkInReservation, markNoShow, reassignReservation, seatReservation } from "@/server/floor/reservations";
 import { rescheduleReservationStaff } from "@/server/booking/core";
-import { staffFor } from "@/server/staff/request";
-import { consoleSectionRoles } from "@/lib/staff-permissions";
 import { staffRealtimeToken, topics } from "@/server/realtime/token";
-async function run<T>(work: (staff: Awaited<ReturnType<typeof staffFor>>) => Promise<T>) { try { return { ok: true as const, data: await work(await staffFor(consoleSectionRoles.reservations)) }; } catch (e) { return { ok: false as const, message: e instanceof AppError ? e.message : "Could not complete this reservation action.", code: e instanceof AppError ? e.code : "failed" }; } }
-export async function calendarAction(input: Parameters<typeof getReservationCalendar>[1]) { return run((s) => getReservationCalendar(s, input)); }
-export async function editDetailsAction(id: string, input: Parameters<typeof editReservationDetails>[2]) { return run((s) => editReservationDetails(s, id, input)); }
-export async function reservationCancelAction(id: string) { return run((s) => cancelReservation(s, id)); }
-export async function reservationArriveAction(id: string) { return run((s) => checkInReservation(s, id)); }
-export async function reservationNoShowAction(id: string) { return run((s) => markNoShow(s, id)); }
-export async function reservationSeatAction(id: string, tableIds?: string[]) { return run((s) => seatReservation(s, { reservationId: id, tableIds })); }
-export async function reservationReassignAction(id: string, tableIds: string[]) { return run((s) => reassignReservation(s, { reservationId: id, tableIds })); }
-export async function reservationCreateAction(input: Parameters<typeof createReservation>[1]) { return run((s) => createReservation(s, input)); }
-export async function reservationRescheduleAction(id: string, localDateTime: string, partySize?: number) { return run((s) => rescheduleReservationStaff(s, id, { localDateTime, partySize })); }
-export async function calendarTokenAction() { try { const s = await staffFor(consoleSectionRoles.reservations); return staffRealtimeToken(s, [topics.floor]); } catch { return null; } }
+import type { StaffSession } from "@/server/staff/auth";
+import { staffFor } from "@/server/staff/request";
+import { createCalendarReservation, editReservationDetails, getReservationCalendar, type CalendarInput, type ReservationDetailsPatch } from "@/server/staff/reservations";
+import { consoleSectionRoles } from "@/lib/staff-permissions";
+
+// Reservation Calendar server actions. Staff, role and outlet always come from the httpOnly cookie;
+// the client sends only ids and values, and every service checks the role again.
+
+export type CalendarResult<T = null> = { ok: true; data: T } | { ok: false; code: string; message: string };
+
+async function run<T>(work: (staff: StaffSession) => Promise<T>): Promise<CalendarResult<T>> {
+  try {
+    return { ok: true, data: await work(await staffFor(consoleSectionRoles.reservations)) };
+  } catch (err) {
+    if (err instanceof AppError) return { ok: false, code: err.code, message: err.message };
+    console.error("[reservations] action failed", err);
+    return { ok: false, code: "failed", message: "That didn't go through. Try again." };
+  }
+}
+const done = async (work: Promise<unknown>) => {
+  await work;
+  return null;
+};
+
+export async function calendarAction(input: CalendarInput) {
+  return run((s) => getReservationCalendar(s, input));
+}
+
+export async function editDetailsAction(id: string, patch: ReservationDetailsPatch) {
+  return run((s) => done(editReservationDetails(s, id, patch)));
+}
+
+export async function reservationCreateAction(input: Parameters<typeof createCalendarReservation>[1]) {
+  return run((s) => createCalendarReservation(s, input));
+}
+
+export async function reservationRescheduleAction(id: string, localDateTime: string, partySize?: number) {
+  return run((s) => done(rescheduleReservationStaff(s, id, { localDateTime, partySize })));
+}
+
+export async function reservationArriveAction(id: string) {
+  return run((s) => done(checkInReservation(s, id)));
+}
+
+export async function reservationSeatAction(id: string, tableIds?: string[]) {
+  return run((s) => done(seatReservation(s, { reservationId: id, tableIds })));
+}
+
+export async function reservationReassignAction(id: string, tableIds: string[]) {
+  return run((s) => done(reassignReservation(s, { reservationId: id, tableIds })));
+}
+
+export async function reservationNoShowAction(id: string) {
+  return run((s) => done(markNoShow(s, id)));
+}
+
+export async function reservationCancelAction(id: string) {
+  return run((s) => done(cancelReservation(s, id)));
+}
+
+export async function calendarTokenAction() {
+  try {
+    return staffRealtimeToken(await staffFor(consoleSectionRoles.reservations), [topics.floor]);
+  } catch {
+    return null;
+  }
+}

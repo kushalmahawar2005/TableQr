@@ -6,17 +6,21 @@ import { db } from "@/db";
 import { uuidv7 } from "@/db/id";
 import * as s from "@/db/schema";
 import { localClock, type WeeklyHours } from "@/domain/hours";
-import { diningMinutesFor, localTime, overlaps, serviceDate, type BookingPolicy } from "@/domain/booking-policy";
+import { diningMinutesFor, localTime, overlaps, parseLocalDateTime, serviceDate, type BookingPolicy } from "@/domain/booking-policy";
 import { LOCK_THEN_READ, type Runner } from "../db-types";
 import { AppError } from "../errors";
 import { loadPolicy } from "../floor/policy";
+import { syncEvents, syncTableHolds } from "../floor/sync";
 import { publish } from "../realtime/publish";
 import { topics } from "../realtime/token";
 import { queueBookingNotification } from "./notifications";
+import { audit } from "../staff/audit";
 import type { StaffSession } from "../staff/auth";
 
 export const BOOKING_HOLD_MINUTES = 5;
 const LIVE = ["requested", "confirmed", "reminded", "arrived"] as const;
+/** Staff may move these to a new time; see rescheduleReservationStaff */
+const RESCHEDULABLE: string[] = ["requested", "confirmed", "reminded"];
 
 export type BookingPreference = { seatingPreference?: string | null; tableClass?: string | null; zoneId?: string | null };
 export type BookingSlot = {
@@ -267,26 +271,53 @@ export async function rescheduleBookingPublic(outletCode: string, token: string,
   return bookingByToken(outletCode, token);
 }
 
-/** Staff calendar wrapper around the same transactional allocation rules as public rescheduling. */
+/**
+ * Staff reschedule from the calendar: same allocation rules as the public reschedule. The new
+ * time is the outlet's wall clock, converted here on the server. The lifecycle never moves
+ * forward or back by accident: requested stays requested, confirmed stays confirmed, and a
+ * reminded booking goes back to confirmed because its reminder was for the old time. Parties
+ * already here (arrived) and closed bookings cannot be moved.
+ */
 export async function rescheduleReservationStaff(staff: Pick<StaffSession, "tenantId" | "outletId" | "outlet" | "roles" | "userId" | "name">, reservationId: string, input: { localDateTime: string; partySize?: number }, now = new Date()) {
   if (!staff.roles.some((r) => r === "owner" || r === "manager")) throw new AppError("forbidden", "Only managers and owners can reschedule reservations.");
   const scope = { tenantId: staff.tenantId, outletId: staff.outletId, outletCode: staff.outlet.code, timezone: staff.outlet.timezone, openingHours: null as WeeklyHours | null, name: staff.outlet.name, address: "", city: "" };
-  const result = await db.transaction(async (tx) => {
-    const [row] = await tx.select().from(s.reservations).where(and(eq(s.reservations.tenantId, scope.tenantId), eq(s.reservations.outletId, scope.outletId), eq(s.reservations.id, reservationId))).for("update");
-    if (!row || ["cancelled", "no_show", "completed", "seated"].includes(row.status)) throw new AppError("invalid_state", "This booking cannot be rescheduled now.");
-    const policy = policyWithFallback(await loadPolicy(tx, scope)); const [date, clock] = String(input.localDateTime).split("T"); const [hour, minute] = (clock ?? "").split(":").map(Number); const startAt = localTime(date, hour * 60 + minute, staff.outlet.timezone);
-    if (Number.isNaN(startAt.getTime()) || startAt.getTime() < now.getTime() + policy.onlineCutoffMinutes * 60_000) throw new AppError("conflict", "Choose a later reservation time.", { reason: "cutoff" });
-    const partySize = input.partySize ?? row.partySize; const endAt = new Date(startAt.getTime() + diningMinutesFor(partySize, policy) * 60_000);
+  const startAt = parseLocalDateTime(input.localDateTime, staff.outlet.timezone);
+  if (!startAt) throw new AppError("invalid_state", "Choose a valid date and time.", { reason: "start" });
+  const events = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .select()
+      .from(s.reservations)
+      .where(and(eq(s.reservations.tenantId, scope.tenantId), eq(s.reservations.outletId, scope.outletId), eq(s.reservations.id, String(reservationId))))
+      .for("update");
+    if (!row) throw new AppError("not_found", "This booking was not found.");
+    if (row.status === "arrived") throw new AppError("invalid_state", "This party has arrived. Seat them or cancel instead of rescheduling.", { status: row.status });
+    if (!RESCHEDULABLE.includes(row.status)) throw new AppError("invalid_state", `This booking is ${row.status.replace("_", " ")} and cannot be rescheduled.`, { status: row.status });
+    if (row.status === "requested" && row.holdExpiresAt && row.holdExpiresAt > now) throw new AppError("conflict", "This online booking is still in progress.", { reason: "held" });
+    const policy = policyWithFallback(await loadPolicy(tx, scope));
+    if (startAt.getTime() < now.getTime() + policy.onlineCutoffMinutes * 60_000) throw new AppError("conflict", "Choose a later reservation time.", { reason: "cutoff" });
+    const partySize = input.partySize === undefined ? row.partySize : Number(input.partySize);
+    if (!Number.isInteger(partySize) || partySize < 1 || partySize > 50) throw new AppError("invalid_state", "Enter how many guests.", { reason: "party_size" });
+    const endAt = new Date(startAt.getTime() + diningMinutesFor(partySize, policy) * 60_000);
     const chosen = await chooseTables(tx, scope, startAt, endAt, partySize, { seatingPreference: row.seatingPreference, tableClass: row.requestedTableClass, zoneId: row.requestedZoneId }, now, true, row.id);
     if (!chosen) throw new AppError("conflict", "That time is no longer available.", { reason: "full" });
+    const beforeTables = (await tx.select({ tableId: s.reservationTables.tableId }).from(s.reservationTables).where(and(eq(s.reservationTables.tenantId, scope.tenantId), eq(s.reservationTables.reservationId, row.id)))).map((t) => t.tableId);
+    const tableIds = chosen.map((t) => t.id);
+    const status = row.status === "reminded" ? "confirmed" : row.status;
     await tx.delete(s.reservationTables).where(and(eq(s.reservationTables.tenantId, scope.tenantId), eq(s.reservationTables.reservationId, row.id)));
-    await tx.insert(s.reservationTables).values(chosen.map((t) => ({ id: uuidv7(), tenantId: scope.tenantId, reservationId: row.id, tableId: t.id })));
-    await tx.update(s.reservations).set({ startAt, expectedEndAt: endAt, partySize, status: "confirmed", updatedAt: now }).where(and(eq(s.reservations.tenantId, scope.tenantId), eq(s.reservations.id, row.id)));
-    await tx.insert(s.reservationHistory).values({ tenantId: scope.tenantId, reservationId: row.id, kind: "rescheduled", before: { startAt: row.startAt, endAt: row.expectedEndAt, partySize: row.partySize }, after: { startAt, endAt, partySize, tableIds: chosen.map((t) => t.id) }, actorUserId: staff.userId, createdAt: now });
-    return row.id;
+    await tx.insert(s.reservationTables).values(tableIds.map((tableId) => ({ id: uuidv7(), tenantId: scope.tenantId, reservationId: row.id, tableId })));
+    await tx
+      .update(s.reservations)
+      .set({ startAt, expectedEndAt: endAt, partySize, status, ...(row.status === "reminded" ? { remindedAt: null } : {}), updatedAt: now })
+      .where(and(eq(s.reservations.tenantId, scope.tenantId), eq(s.reservations.id, row.id)));
+    const before = { startAt: row.startAt, endAt: row.expectedEndAt, partySize: row.partySize, status: row.status, tableIds: beforeTables };
+    const after = { startAt, endAt, partySize, status, tableIds };
+    await tx.insert(s.reservationHistory).values({ tenantId: scope.tenantId, reservationId: row.id, kind: "rescheduled", actorUserId: staff.userId, before, after, reason: "staff_reschedule", createdAt: now });
+    await audit(tx, staff, { action: "reservation.reschedule", entity: "reservation", entityId: row.id, before, after, now });
+    const sync = await syncTableHolds(tx, scope, now, [...new Set([...beforeTables, ...tableIds])]);
+    return [{ topic: topics.floor, type: "reservation.updated", data: { reservationId: row.id } }, ...syncEvents(sync)];
   }, LOCK_THEN_READ);
-  await publish({ tenantId: staff.tenantId, outletId: staff.outletId }, [{ topic: topics.floor, type: "reservation.updated", data: { reservationId: result } }]);
-  return result;
+  await publish({ tenantId: staff.tenantId, outletId: staff.outletId }, events);
+  return reservationId;
 }
 
 export async function arriveBookingPublic(outletCode: string, token: string, now = new Date()) {
