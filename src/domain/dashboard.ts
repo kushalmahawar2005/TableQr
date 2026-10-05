@@ -64,7 +64,7 @@ export function deltaLabel(d: Delta): string {
   if (d.kind === "up") return `+${d.pct}%`;
   if (d.kind === "down") return `−${d.pct}%`;
   if (d.kind === "same") return "No change";
-  return "No prior-day baseline";
+  return "Nothing yesterday to compare";
 }
 
 /** Late and no-show eligibility, the same rule as the S1 floor: no-show only after the grace period */

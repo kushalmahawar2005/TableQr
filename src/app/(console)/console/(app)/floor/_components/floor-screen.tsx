@@ -88,6 +88,8 @@ export function FloorScreen({ data: initial, lang, realtimeUrl, preview }: { dat
     return () => clearTimeout(t);
   }, [toast, preview]);
   const [busy, setBusy] = useState(false);
+  const [view, setView] = useState<"grid" | "map">("grid");
+  const [stateFilter, setStateFilter] = useState<string | null>(null);
   const [dragging, setDragging] = useState(!!preview?.dragging);
 
   const tz = data.outlet.timezone;
@@ -183,14 +185,23 @@ export function FloorScreen({ data: initial, lang, realtimeUrl, preview }: { dat
             </button>
           ))}
         </nav>
-        <ul aria-label={c.legend} className="order-last flex w-full gap-1.5 overflow-x-auto pb-0.5 xl:order-none xl:ml-auto xl:w-auto">
+        <div role="group" aria-label="View" className="flex rounded-input border border-line p-0.5 text-caption font-semibold">
+          {([["grid", "Tables"], ["map", "Map"]] as const).map(([v, label]) => (
+            <button key={v} type="button" aria-pressed={view === v} onClick={() => setView(v)} className={`min-h-9 rounded-[8px] px-3 ${focus} ${view === v ? "bg-ink text-white" : "text-muted hover:text-ink"}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+        <ul aria-label={c.legend} className="order-last flex w-full gap-1.5 overflow-x-auto pb-0.5 2xl:order-none 2xl:ml-auto 2xl:w-auto">
           {(["available", "held", "reserved", "seated", "bill_requested", "paid", "needs_cleaning", "blocked"] as const).map((st) => (
             <li key={st} className="shrink-0">
-              <StateChip state={st} label={`${c.states[st]} ${counts(st)}`} size="sm" />
+              <button type="button" aria-pressed={stateFilter === st} title={stateFilter === st ? "Show all tables" : `Show only ${c.states[st].toLowerCase()} tables`} onClick={() => setStateFilter(stateFilter === st ? null : st)} className={`rounded-full ${focus} ${stateFilter === st ? "ring-2 ring-ink ring-offset-1 ring-offset-surface" : stateFilter ? "opacity-50" : ""}`}>
+                <StateChip state={st} label={`${c.states[st]} ${counts(st)}`} size="sm" />
+              </button>
             </li>
           ))}
         </ul>
-        <div className="flex rounded-input border border-line p-0.5 text-caption font-semibold">
+        <div className="ml-auto flex rounded-input border border-line p-0.5 text-caption font-semibold 2xl:ml-0">
           {(["en", "hi"] as const).map((l) => (
             <button key={l} type="button" aria-pressed={lang === l} onClick={() => !preview && void setStaffLangAction(l).then(() => router.refresh())} className={`min-h-9 rounded-[8px] px-2.5 ${focus} ${lang === l ? "bg-ink text-white" : "text-muted"}`}>
               {l === "en" ? "EN" : "हिं"}
@@ -214,12 +225,14 @@ export function FloorScreen({ data: initial, lang, realtimeUrl, preview }: { dat
         </div>
       )}
 
-      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_300px] lg:grid-cols-[minmax(0,1fr)_360px]">
-        <main className="min-w-0 overflow-auto">
+      <div className="grid min-h-0 flex-1 grid-cols-1 sm:grid-cols-[minmax(0,1fr)_300px] lg:grid-cols-[minmax(0,1fr)_360px]">
+        <main className="min-h-[60dvh] min-w-0 overflow-auto sm:min-h-0">
           <FloorMap
             data={data}
             c={c}
             zoneId={zone}
+            view={view}
+            stateFilter={stateFilter}
             selectedId={selectedId}
             now={now}
             clock={clock}

@@ -280,9 +280,9 @@ function Header(props: {
   }[conn];
   const connTone = conn === "live" ? "text-kds-text" : conn === "offline" ? "text-kds-late" : conn === "polling" ? "text-kds-muted" : "text-kds-amber";
   return (
-    <header className="flex h-[72px] shrink-0 items-center gap-6 border-b border-kds-line px-4">
+    <header className="flex min-h-[72px] shrink-0 flex-wrap items-center gap-x-6 gap-y-2 border-b border-kds-line px-4 py-2 sm:h-[72px] sm:flex-nowrap sm:py-0">
       <div className="min-w-0">
-        <h1 className="font-display text-[28px] font-bold leading-8">
+        <h1 className="font-display text-[22px] font-bold leading-8 sm:text-[28px]">
           {c.kitchen} <span className="text-kds-muted">·</span> {board.station ?? (device.expeditor ? c.all : device.station)}
           {!device.expeditor && <span className="tabular ml-3 rounded-md bg-kds-text px-2 align-middle text-[22px] text-kds-bg">{board.counts[device.station ?? ""] ?? 0}</span>}
         </h1>
@@ -333,7 +333,7 @@ function BottomBar({
   const left = last ? Math.max(0, last.recallUntil - now) : 0;
   const blocked = last ? (last.blocked ?? (left <= 0 ? "expired" : null)) : null;
   return (
-    <footer className="flex h-20 shrink-0 items-center gap-4 border-t border-kds-line px-4">
+    <footer className="flex min-h-20 shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-t border-kds-line px-4 py-2 sm:h-20 sm:flex-nowrap sm:py-0">
       {last ? (
         <>
           <p className="min-w-0 truncate text-[20px]">

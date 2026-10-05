@@ -36,7 +36,6 @@ import {
 import { createCalendarSync, startCalendarSync, type CalendarSync } from "./calendar-sync";
 import { ReservationCompanion } from "./companion";
 
-const STATUSES = ["requested", "confirmed", "reminded", "arrived", "seated", "completed", "cancelled", "no_show"];
 const field = "min-h-11 rounded-input border border-line bg-surface px-3";
 const plainButton = "min-h-11 rounded-input border border-line px-3 font-semibold disabled:opacity-50";
 
@@ -51,7 +50,15 @@ export function ReservationCalendar({ initial, realtimeUrl, preview = false, ini
   const [notice, setNotice] = useState<Notice>(null);
   const [newName, setNewName] = useState("");
   const [newParty, setNewParty] = useState(2);
-  const [newWhen, setNewWhen] = useState("");
+  const [newDate, setNewDate] = useState(() => initial.date);
+  const [newTime, setNewTime] = useState("19:00");
+  const [adding, setAdding] = useState(false);
+  const [newPhone, setNewPhone] = useState("");
+  const [newSource, setNewSource] = useState<"phone" | "walk_in" | "staff">("phone");
+  const [newTable, setNewTable] = useState("");
+  const [newOccasion, setNewOccasion] = useState("");
+  const [newNotes, setNewNotes] = useState("");
+  const [moreFilters, setMoreFilters] = useState(false);
   const syncRef = useRef<CalendarSync | null>(null);
 
   useEffect(() => {
@@ -95,10 +102,14 @@ export function ReservationCalendar({ initial, realtimeUrl, preview = false, ini
   };
 
   const create = async () => {
-    const r = await reservationCreateAction({ name: newName, partySize: newParty, localDateTime: newWhen, source: "staff" });
+    const r = await reservationCreateAction({ name: newName, phone: newPhone.trim() || null, partySize: newParty, localDateTime: `${newDate}T${newTime}`, tableIds: newTable ? [newTable] : undefined, occasion: newOccasion || null, notes: newNotes.trim() || null, source: newSource });
     if (!r.ok) return setNotice({ kind: "error", text: r.message });
     setNewName("");
-    setNewWhen("");
+    setNewPhone("");
+    setNewTable("");
+    setNewOccasion("");
+    setNewNotes("");
+    setAdding(false);
     setNotice({ kind: "ok", text: "Reservation created." });
     reload();
   };
@@ -108,122 +119,93 @@ export function ReservationCalendar({ initial, realtimeUrl, preview = false, ini
   const selected = data.reservations.find((r) => r.id === selectedId) ?? null;
   const step = data.view === "week" ? 7 : 1;
 
+  const count = (st: string) => data.reservations.filter((r) => r.status === st).length;
+  const chips: [string, string][] = [["", "All"], ["confirmed", "Confirmed"], ["arrived", "Arrived"], ["seated", "Seated"], ["completed", "Done"], ["cancelled", "Cancelled"], ["no_show", "No-show"]];
+  const activeFilters = [query.zoneId, query.tableId, query.source, query.partySize].filter(Boolean).length;
+  const times = Array.from({ length: 25 }, (_, i) => { const m = 11 * 60 + i * 30; return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`; });
+  const clock12 = (t: string) => { const [h, m] = t.split(":").map(Number); return `${h % 12 === 0 ? 12 : h % 12}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`; };
+
   return (
-    <main className="min-h-dvh bg-paper p-5 text-ink">
-      <header className="flex flex-wrap items-center gap-3">
-        <div className="mr-auto">
-          <p className="text-caption uppercase tracking-widest text-muted">Reservations</p>
-          <h1 className="font-display text-title font-bold">{data.view === "day" ? formatDay(data.date) : `${formatDay(data.date)} – ${formatDay(addDays(data.date, 6))}`}</h1>
+    <main className="mx-auto min-h-dvh w-full max-w-[1200px] px-4 py-5 text-ink sm:px-6 lg:px-8 lg:py-7">
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-caption font-semibold text-muted">{data.reservations.length} {data.reservations.length === 1 ? "booking" : "bookings"} · {data.view === "day" ? "one day" : "this week"}</p>
+          <h1 className="mt-1 font-display text-title font-bold">{data.view === "day" ? formatDay(data.date) : `${formatDay(data.date)} – ${formatDay(addDays(data.date, 6))}`}</h1>
         </div>
-        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Date">
-          <button type="button" className={plainButton} aria-label={data.view === "day" ? "Previous day" : "Previous week"} onClick={() => change({ date: addDays(data.date, -step) })}>
-            ‹
+        {data.mayOperate && (
+          <button type="button" onClick={() => { setNewDate(query.date); setAdding(true); }} disabled={preview} className="inline-flex min-h-11 items-center gap-2 rounded-input bg-brand px-4 text-button font-semibold text-white hover:bg-brand-strong disabled:opacity-50">
+            <span aria-hidden="true" className="text-lg leading-none">+</span> New reservation
           </button>
-          <input aria-label="Date" type="date" className={field} value={query.date} onChange={(e) => e.target.value && change({ date: e.target.value })} />
-          <button type="button" className={plainButton} aria-label={data.view === "day" ? "Next day" : "Next week"} onClick={() => change({ date: addDays(data.date, step) })}>
-            ›
-          </button>
-          <button type="button" className={plainButton} disabled={busy || preview} onClick={today}>
-            Today
-          </button>
-        </div>
-        <div className="flex gap-2" role="group" aria-label="View">
-          {(["day", "week"] as const).map((v) => (
-            <button key={v} type="button" aria-pressed={data.view === v} className={`${plainButton} aria-pressed:bg-ink aria-pressed:text-paper`} onClick={() => change({ view: v })}>
-              {v === "day" ? "Day" : "Week"}
-            </button>
-          ))}
-        </div>
+        )}
       </header>
 
-      <section aria-label="Search and filters" className="mt-4 flex flex-wrap items-center gap-2 rounded-card border border-line bg-surface p-3">
-        <form
-          className="flex w-full gap-2 sm:w-auto"
-          onSubmit={(e) => {
-            e.preventDefault();
-            change({ search: query.search });
-          }}
-        >
-          <input aria-label="Search guest, phone or reference" placeholder="Search guest, phone or reference" className={`${field} min-w-0 flex-1 sm:min-w-64 sm:flex-none`} value={query.search} onChange={(e) => setQuery((q) => ({ ...q, search: e.target.value }))} />
-          <button type="submit" className={plainButton}>
-            Search
-          </button>
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-1 rounded-input border border-line bg-surface p-1" role="group" aria-label="Date">
+          <button type="button" className="grid size-10 place-items-center rounded-[8px] text-lg font-semibold hover:bg-ink/5" aria-label={data.view === "day" ? "Previous day" : "Previous week"} onClick={() => change({ date: addDays(data.date, -step) })}>‹</button>
+          <button type="button" className="min-h-10 rounded-[8px] px-3 text-body font-semibold hover:bg-ink/5 disabled:opacity-50" disabled={busy || preview} onClick={today}>Today</button>
+          <button type="button" className="grid size-10 place-items-center rounded-[8px] text-lg font-semibold hover:bg-ink/5" aria-label={data.view === "day" ? "Next day" : "Next week"} onClick={() => change({ date: addDays(data.date, step) })}>›</button>
+          <input aria-label="Pick a date" type="date" className="min-h-10 rounded-[8px] border-0 bg-transparent px-2 text-body" value={query.date} onChange={(e) => e.target.value && change({ date: e.target.value })} />
+        </div>
+        <div className="flex rounded-input border border-line bg-surface p-1" role="group" aria-label="View">
+          {(["day", "week"] as const).map((v) => (
+            <button key={v} type="button" aria-pressed={data.view === v} className="min-h-10 rounded-[8px] px-3 text-body font-semibold text-muted aria-pressed:bg-ink aria-pressed:text-paper" onClick={() => change({ view: v })}>{v === "day" ? "Day" : "Week"}</button>
+          ))}
+        </div>
+        <form className="flex min-w-0 flex-1 gap-2 sm:max-w-md" onSubmit={(e) => { e.preventDefault(); change({ search: query.search }); }}>
+          <input aria-label="Search guest, phone or reference" placeholder="Search by name, phone or booking number" className={`${field} min-w-0 flex-1`} value={query.search} onChange={(e) => setQuery((q) => ({ ...q, search: e.target.value }))} />
         </form>
-        <select aria-label="Status filter" className={field} value={query.status} onChange={(e) => change({ status: e.target.value })}>
-          <option value="">All statuses</option>
-          {STATUSES.map((x) => (
-            <option key={x} value={x}>
-              {x.replace("_", " ")}
-            </option>
-          ))}
-        </select>
-        <select aria-label="Zone filter" className={field} value={query.zoneId} onChange={(e) => change({ zoneId: e.target.value })}>
-          <option value="">All zones</option>
-          {data.zones.map((z) => (
-            <option key={z.id} value={z.id}>
-              {z.name}
-            </option>
-          ))}
-        </select>
-        <select aria-label="Table filter" className={field} value={query.tableId} onChange={(e) => change({ tableId: e.target.value })}>
-          <option value="">All tables</option>
-          {data.tables.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.code}
-            </option>
-          ))}
-        </select>
-        <select aria-label="Source filter" className={field} value={query.source} onChange={(e) => change({ source: e.target.value })}>
-          <option value="">All sources</option>
-          {data.sources.map((x) => (
-            <option key={x} value={x}>
-              {x.replace("_", " ")}
-            </option>
-          ))}
-        </select>
-        <input aria-label="Party size filter" type="number" min={1} placeholder="Party size" className={`${field} w-32`} value={query.partySize} onChange={(e) => change({ partySize: e.target.value })} />
-      </section>
+        <button type="button" aria-expanded={moreFilters} onClick={() => setMoreFilters((v) => !v)} className={`${plainButton} bg-surface`}>Filters{activeFilters ? ` (${activeFilters})` : ""}</button>
+      </div>
 
-      {data.mayOperate && (
-        <section aria-label="New reservation" className="mt-4 flex flex-wrap items-end gap-2 rounded-card border border-line bg-surface p-3">
-          <label className="text-caption font-semibold">
-            Guest
-            <input aria-label="New reservation guest" className={`${field} mt-1 block`} value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Guest name" />
-          </label>
-          <label className="text-caption font-semibold">
-            Party
-            <input type="number" min={1} max={50} className={`${field} mt-1 block w-20`} value={newParty} onChange={(e) => setNewParty(Number(e.target.value))} />
-          </label>
-          <label className="text-caption font-semibold">
-            Time (outlet)
-            <input type="datetime-local" className={`${field} mt-1 block`} value={newWhen} onChange={(e) => setNewWhen(e.target.value)} />
-          </label>
-          <button type="button" className="min-h-11 rounded-input bg-brand px-4 font-semibold text-white disabled:opacity-50" disabled={!newName || !newWhen || busy || preview} onClick={() => void create()}>
-            Create reservation
-          </button>
+      {moreFilters && (
+        <section aria-label="More filters" className="mt-3 flex flex-wrap items-center gap-2 rounded-card border border-line bg-surface p-3">
+          <select aria-label="Zone filter" className={field} value={query.zoneId} onChange={(e) => change({ zoneId: e.target.value })}>
+            <option value="">All areas</option>
+            {data.zones.map((z) => <option key={z.id} value={z.id}>{z.name}</option>)}
+          </select>
+          <select aria-label="Table filter" className={field} value={query.tableId} onChange={(e) => change({ tableId: e.target.value })}>
+            <option value="">All tables</option>
+            {data.tables.map((t) => <option key={t.id} value={t.id}>{t.code}</option>)}
+          </select>
+          <select aria-label="Source filter" className={field} value={query.source} onChange={(e) => change({ source: e.target.value })}>
+            <option value="">Any source</option>
+            {data.sources.map((x) => <option key={x} value={x}>{x.replace("_", " ")}</option>)}
+          </select>
+          <input aria-label="Party size filter" type="number" min={1} placeholder="Guests" className={`${field} w-28`} value={query.partySize} onChange={(e) => change({ partySize: e.target.value })} />
+          {activeFilters > 0 && <button type="button" className="min-h-11 px-2 text-body font-semibold underline underline-offset-4" onClick={() => change({ zoneId: "", tableId: "", source: "", partySize: "" })}>Clear filters</button>}
         </section>
       )}
 
+      <div role="tablist" aria-label="Booking status" className="mt-3 flex gap-2 overflow-x-auto pb-1">
+        {chips.map(([value, label]) => (
+          <button key={value || "all"} role="tab" aria-selected={query.status === value} onClick={() => change({ status: value })} className={`min-h-10 shrink-0 rounded-full border px-3.5 text-body font-semibold ${query.status === value ? "border-ink bg-ink text-paper" : "border-line bg-surface text-muted hover:text-ink"}`}>
+            {label}{!query.status && value ? ` ${count(value)}` : ""}
+          </button>
+        ))}
+      </div>
+
       {notice && (
-        <p role={notice.kind === "error" ? "alert" : "status"} className={`mt-4 rounded-input border p-3 ${notice.kind === "error" ? "border-danger text-danger" : "border-line text-ink"}`}>
-          {notice.text}
-        </p>
+        <p role={notice.kind === "error" ? "alert" : "status"} className={`mt-4 rounded-input border p-3 ${notice.kind === "error" ? "border-danger text-danger" : "border-line text-ink"}`}>{notice.text}</p>
       )}
 
       <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <section className="space-y-6" aria-busy={busy}>
-          {!days.length && <p className="rounded-card border border-line bg-surface p-6 text-muted">No reservations for this period.</p>}
+        <section className="min-w-0 space-y-6" aria-busy={busy}>
+          {!days.length && (
+            <div className="rounded-card border border-line bg-surface p-10 text-center">
+              <p className="font-display text-section font-bold">No bookings {query.status || query.search || activeFilters ? "match" : "for this day"}</p>
+              <p className="mt-1 text-body text-muted">{query.status || query.search || activeFilters ? "Try clearing the filters or search." : "When guests book online or you add one, it will show up here."}</p>
+              {data.mayOperate && !query.status && !query.search && <button type="button" onClick={() => { setNewDate(query.date); setAdding(true); }} className="mt-4 inline-flex min-h-11 items-center rounded-input bg-brand px-4 text-button font-semibold text-white">+ New reservation</button>}
+            </div>
+          )}
           {days.map((day) => (
             <section key={day.date} aria-label={day.label} data-date={day.date}>
               {data.view === "week" && <h2 className="mb-2 font-display text-section font-bold">{day.label}</h2>}
               <div className="space-y-4">
                 {day.slots.map((slot) => (
-                  <section key={slot.clock}>
-                    <h3 className="mb-2 text-body font-bold text-muted">{slot.label}</h3>
+                  <section key={slot.clock} className="grid gap-2 sm:grid-cols-[84px_minmax(0,1fr)]">
+                    <h3 className="pt-3 font-display text-section font-bold text-ink tabular">{slot.label}</h3>
                     <div className="space-y-2">
-                      {slot.items.map((r) => (
-                        <ReservationCard key={r.id} r={r} selected={r.id === selectedId} onSelect={() => setSelectedId(r.id)} />
-                      ))}
+                      {slot.items.map((r) => <ReservationCard key={r.id} r={r} selected={r.id === selectedId} onSelect={() => setSelectedId(r.id)} />)}
                     </div>
                   </section>
                 ))}
@@ -231,32 +213,98 @@ export function ReservationCalendar({ initial, realtimeUrl, preview = false, ini
             </section>
           ))}
         </section>
-        <aside className="rounded-card border border-line bg-surface p-5" aria-label="Reservation details">
-          {selected ? <Drawer key={selected.id} reservation={selected} data={data} preview={preview} onDone={reload} onClose={() => setSelectedId(null)} /> : <p className="text-muted">Select a reservation.</p>}
+        <aside className="h-fit rounded-card border border-line bg-surface p-5 lg:sticky lg:top-4" aria-label="Reservation details">
+          {selected ? <Drawer key={selected.id} reservation={selected} data={data} preview={preview} onDone={reload} onClose={() => setSelectedId(null)} /> : (
+            <div className="py-6 text-center"><p className="font-semibold text-ink">Pick a booking</p><p className="mt-1 text-body text-muted">Tap any booking to check the guest in, seat them, change the time or cancel.</p></div>
+          )}
         </aside>
       </div>
       <ReservationCompanion data={data} />
+
+      {adding && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-label="New reservation" onClick={() => setAdding(false)} onKeyDown={(e) => { if (e.key === "Escape") setAdding(false); }}>
+          <form className="no-scrollbar max-h-[92dvh] w-full max-w-md space-y-4 overflow-y-auto rounded-[1.25rem] border border-line bg-surface p-5 shadow-modal" onClick={(e) => e.stopPropagation()} onSubmit={(e) => { e.preventDefault(); void create(); }}>
+            <div className="flex items-center justify-between"><h2 className="font-display text-title font-bold">New reservation</h2><button type="button" aria-label="Close" onClick={() => setAdding(false)} className="grid size-10 place-items-center rounded-input text-muted hover:bg-ink/5">✕</button></div>
+            <p className="text-body text-muted">Keep a table for a guest at the time you choose. The table is held until they arrive.</p>
+            <label className="block text-body font-semibold">Guest name<input autoFocus required className={`${field} mt-1 block w-full`} value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Name of the person booking" /></label>
+            <label className="block text-body font-semibold">Phone number <span className="font-normal text-muted">(optional, to call them if needed)</span><input type="tel" inputMode="tel" className={`${field} mt-1 block w-full`} value={newPhone} onChange={(e) => setNewPhone(e.target.value)} placeholder="98765 43210" /></label>
+            <div>
+              <p className="text-body font-semibold">How many guests</p>
+              <div className="mt-1 flex items-center gap-3">
+                <button type="button" aria-label="One less" className="grid size-11 place-items-center rounded-input border border-line text-xl" onClick={() => setNewParty((n) => Math.max(1, n - 1))}>−</button>
+                <span className="w-10 text-center font-display text-title font-bold tabular" aria-live="polite">{newParty}</span>
+                <button type="button" aria-label="One more" className="grid size-11 place-items-center rounded-input border border-line text-xl" onClick={() => setNewParty((n) => Math.min(50, n + 1))}>+</button>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block text-body font-semibold">Date<input type="date" required className={`${field} mt-1 block w-full`} value={newDate} onChange={(e) => setNewDate(e.target.value)} /></label>
+              <label className="block text-body font-semibold">Time<select className={`${field} mt-1 block w-full`} value={newTime} onChange={(e) => setNewTime(e.target.value)}>{times.map((t) => <option key={t} value={t}>{clock12(t)}</option>)}</select></label>
+            </div>
+            <fieldset>
+              <legend className="text-body font-semibold">Which table? <span className="font-normal text-muted">(or let the system pick)</span></legend>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button type="button" aria-pressed={!newTable} onClick={() => setNewTable("")} className={`min-h-11 rounded-input border px-3 text-body font-semibold ${!newTable ? "border-brand bg-brand-soft text-ink" : "border-line text-muted hover:text-ink"}`}>Pick for me</button>
+                {data.tables.filter((t) => t.maxSeats >= newParty).sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true })).map((t) => (
+                  <button key={t.id} type="button" aria-pressed={newTable === t.id} onClick={() => setNewTable(t.id)} className={`min-h-11 min-w-16 rounded-input border px-3 text-left leading-tight ${newTable === t.id ? "border-brand bg-brand-soft text-ink" : "border-line text-ink hover:border-ink/40"}`}>
+                    <span className="block text-body font-bold">{t.code}</span>
+                    <span className="block text-label text-muted">seats {t.maxSeats}</span>
+                  </button>
+                ))}
+              </div>
+              {data.tables.filter((t) => t.maxSeats >= newParty).length === 0 && <p className="mt-2 text-caption text-warning">No single table seats {newParty}. The system will combine tables if it can.</p>}
+              <p className="mt-2 text-caption text-muted">{newTable ? `Table ${data.tables.find((t) => t.id === newTable)?.code} will be held for ${newName.trim() || "this guest"} at ${clock12(newTime)}.` : "A free table that fits the group is chosen for you."}</p>
+            </fieldset>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block text-body font-semibold">How did they book?
+                <select className={`${field} mt-1 block w-full`} value={newSource} onChange={(e) => setNewSource(e.target.value as typeof newSource)}>
+                  <option value="phone">Phone call</option><option value="walk_in">Walked in</option><option value="staff">Other</option>
+                </select>
+              </label>
+              <label className="block text-body font-semibold">Occasion <span className="font-normal text-muted">(optional)</span>
+                <select className={`${field} mt-1 block w-full`} value={newOccasion} onChange={(e) => setNewOccasion(e.target.value)}>
+                  <option value="">None</option><option value="Birthday">Birthday</option><option value="Anniversary">Anniversary</option><option value="Business meal">Business meal</option><option value="Family gathering">Family gathering</option>
+                </select>
+              </label>
+            </div>
+            <label className="block text-body font-semibold">Notes <span className="font-normal text-muted">(optional)</span><input className={`${field} mt-1 block w-full`} value={newNotes} onChange={(e) => setNewNotes(e.target.value)} maxLength={200} placeholder="Allergies, high chair, quiet corner…" /></label>
+            <div className="sticky -bottom-5 -mx-5 flex justify-end gap-2 border-t border-line bg-surface px-5 py-3">
+              <button type="button" className={plainButton} onClick={() => setAdding(false)}>Cancel</button>
+              <button type="submit" className="min-h-11 rounded-input bg-brand px-4 font-semibold text-white disabled:opacity-50" disabled={!newName.trim() || !newDate || busy || preview}>Create reservation</button>
+            </div>
+          </form>
+        </div>
+      )}
     </main>
   );
 }
 
+const STATUS_TONE: Record<string, string> = {
+  requested: "bg-[var(--state-held-soft)] text-[var(--state-held-text)]",
+  confirmed: "bg-[var(--state-cleaning-soft)] text-[var(--state-cleaning-text)]",
+  reminded: "bg-[var(--state-cleaning-soft)] text-[var(--state-cleaning-text)]",
+  arrived: "bg-[var(--state-reserved-soft)] text-[var(--state-reserved-text)]",
+  seated: "bg-[var(--state-available-soft)] text-[var(--state-available-text)]",
+  completed: "bg-[var(--state-paid-soft)] text-[var(--state-paid-text)]",
+  cancelled: "bg-[var(--state-seated-soft)] text-[var(--state-seated-text)]",
+  no_show: "bg-[var(--state-seated-soft)] text-[var(--state-seated-text)]",
+};
+
 function ReservationCard({ r, selected, onSelect }: { r: CalendarReservation; selected: boolean; onSelect: () => void }) {
+  const tables = r.assignments.map((a) => a.code).join(" + ");
   return (
-    <button type="button" aria-pressed={selected} onClick={onSelect} className="block min-h-20 w-full rounded-card border border-line bg-surface p-4 text-left focus-visible:outline-2 focus-visible:outline-brand aria-pressed:border-brand">
-      <div className="flex flex-wrap justify-between gap-2">
-        <strong>{r.name}</strong>
-        <span className="rounded-full border border-line px-2 py-0.5 text-caption">{r.status.replace("_", " ")}</span>
+    <button type="button" aria-pressed={selected} onClick={onSelect} className="block w-full rounded-card border border-line bg-surface p-4 text-left transition-colors hover:border-ink/30 focus-visible:outline-2 focus-visible:outline-brand aria-pressed:border-brand aria-pressed:ring-2 aria-pressed:ring-brand/30">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <strong className="font-display text-section">{r.name}</strong>
+        <span className={`rounded-full px-2.5 py-0.5 text-caption font-semibold capitalize ${STATUS_TONE[r.status] ?? "bg-ink/10"}`}>{r.status.replace("_", " ")}</span>
       </div>
-      <p className="mt-1 text-body">
-        {r.partySize} guests · {r.assignments.map((a) => a.code).join(" + ") || "Unassigned"} · {r.source.replace("_", " ")}
+      <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-body text-muted">
+        <span><b className="text-ink">{r.partySize}</b> {r.partySize === 1 ? "guest" : "guests"}</span>
+        <span>{tables ? <>Table <b className="text-ink">{tables}</b></> : <b className="text-warning">No table yet</b>}</span>
+        <span className="capitalize">{r.source.replace("_", " ")}</span>
       </p>
-      {r.occasion && <p className="text-caption text-muted">{r.occasion}</p>}
-      {r.lateMinutes > 0 && <p className="text-caption font-semibold text-warning">{r.lateMinutes} min late</p>}
-      {r.credit && (
-        <p className="text-caption font-semibold text-warning">
-          Credit: ₹{(r.credit.amountPaise / 100).toLocaleString("en-IN")} · {r.credit.status}
-        </p>
-      )}
+      {r.occasion && <p className="mt-1 text-caption text-muted">{r.occasion}</p>}
+      {r.lateMinutes > 0 && <p className="mt-1 text-caption font-semibold text-warning">{r.lateMinutes} min late</p>}
+      {r.credit && <p className="mt-1 text-caption font-semibold text-warning">Credit: ₹{(r.credit.amountPaise / 100).toLocaleString("en-IN")} · {r.credit.status}</p>}
     </button>
   );
 }

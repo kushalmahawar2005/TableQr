@@ -40,7 +40,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={`${inter.variable} ${manrope.variable} ${devanagari.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col font-sans text-body">
+      <body suppressHydrationWarning className="min-h-full flex flex-col font-sans text-body">
         {children}
       </body>
     </html>

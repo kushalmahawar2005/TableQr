@@ -1,16 +1,19 @@
 "use client";
 
-import { useActionState, useState } from "react";
-import { adminLoginAction, createTenantAction, type AdminLoginState, type TenantState } from "./actions";
+import { useActionState, useEffect, useState } from "react";
+import { BarChart3, Command, CreditCard, LayoutGrid, Repeat, ScrollText, LogOut, Moon, Settings, Store, Sun, Tag, type LucideIcon } from "lucide-react";
+import { Sidebar, SidebarBody, SidebarLabel, SidebarLink } from "@/components/ui/sidebar";
+import { saveTheme } from "@/components/theme-toggle";
+import { adminLoginAction, type AdminLoginState } from "./actions";
 
 const field = "mt-1 block h-10 w-full rounded-lg border border-[#dfe3ed] bg-white px-3 text-sm text-[#172033] outline-none transition focus:border-[#5b42f5] focus:ring-2 focus:ring-[#5b42f5]/15";
 
 export function AdminLogin() {
   const [state, action, pending] = useActionState<AdminLoginState, FormData>(adminLoginAction, { error: null });
   return <form action={action} className="mx-auto w-full max-w-sm rounded-2xl border border-[#e2e5ec] bg-white p-7 shadow-xl">
-    <div className="mb-6 flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-[#5b42f5] text-xl text-white">⌘</span><div><p className="font-display text-lg font-bold">TableQR</p><p className="text-xs text-muted">Platform Admin</p></div></div>
+    <div className="mb-6 flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-[#5b42f5] text-xl text-white">⌘</span><div><p className="font-display text-lg font-bold">TableQR</p><p className="text-xs text-muted-foreground">Platform Admin</p></div></div>
     <h1 className="font-display text-2xl font-bold text-[#172033]">Welcome back</h1>
-    <p className="mt-1 text-sm text-muted">Sign in to manage your platform.</p>
+    <p className="mt-1 text-sm text-muted-foreground">Sign in to manage your platform.</p>
     <label className="mt-6 block text-sm font-semibold">Email<input name="email" type="email" required className={field} /></label>
     <label className="mt-3 block text-sm font-semibold">Password<input name="password" type="password" required className={field} /></label>
     {state.error && <p role="alert" className="mt-3 text-sm text-danger">{state.error}</p>}
@@ -18,34 +21,48 @@ export function AdminLogin() {
   </form>;
 }
 
-export function AdminSidebar({ active, onSelect }: { active: string; onSelect: (item: string) => void }) {
-  const items = [
-    ["⌂", "Dashboard"], ["▣", "Tenants"], ["◇", "Plans & Pricing"], ["▤", "Subscriptions"],
-    ["▥", "Restaurants / Outlets"], ["♙", "Users & Roles"], ["⌗", "QR Codes"], ["▤", "Orders (All Tenants)"],
-    ["◷", "Reservations"], ["▣", "Payments"], ["▥", "Analytics"], ["♧", "Notifications"], ["⚙", "System Settings"], ["≡", "Audit Logs"],
-  ];
-  return <aside className="hidden min-h-dvh w-[236px] shrink-0 bg-[#171c2b] text-white lg:block">
-    <div className="flex h-[72px] items-center gap-3 border-b border-white/10 px-6"><span className="grid h-9 w-9 place-items-center rounded-lg bg-[#5b42f5] text-lg">⌘</span><div><p className="font-display text-lg font-bold">TableQR</p><p className="text-[11px] text-white/55">Platform Admin</p></div></div>
-    <nav className="space-y-1 px-3 py-5">{items.map(([icon, label]) => <button key={label} onClick={() => onSelect(label)} className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-[13px] transition ${active === label ? "bg-[#5b42f5] font-semibold" : "text-white/70 hover:bg-white/10 hover:text-white"}`}><span className="w-5 text-center text-base">{icon}</span>{label}{label === "Notifications" && <span className="ml-auto rounded-full bg-[#ef5267] px-1.5 text-[10px]">3</span>}</button>)}</nav>
-    <div className="mx-3 mt-8 rounded-xl bg-white/5 p-3 text-xs text-white/55"><p className="font-semibold text-white/85">TableQR</p><p className="mt-1">v0.1.0</p></div>
-  </aside>;
-}
+const navGroups: { title: string; items: { label: string; icon: LucideIcon }[] }[] = [
+  { title: "Overview", items: [{ label: "Dashboard", icon: LayoutGrid }] },
+  { title: "Tenants", items: [{ label: "Tenants", icon: Store }, { label: "Subscriptions", icon: Repeat }] },
+  { title: "Business", items: [{ label: "Plans & Pricing", icon: Tag }, { label: "Payments", icon: CreditCard }, { label: "Analytics", icon: BarChart3 }] },
+  { title: "System", items: [{ label: "Audit Logs", icon: ScrollText }, { label: "Settings", icon: Settings }] },
+];
 
-export function CreateTenantForm({ plans }: { plans: { code: string; name: string }[] }) {
-  const [state, action, pending] = useActionState<TenantState, FormData>(createTenantAction, { error: null, success: null });
-  return <form action={action} className="rounded-xl border border-[#e2e5ec] bg-white p-5 shadow-sm">
-    <h2 className="font-display text-lg font-bold">Add restaurant</h2><p className="mt-1 text-sm text-muted">Creates the first outlet, owner, zone, tables and QR codes.</p>
-    <div className="mt-4 grid gap-3 sm:grid-cols-2">{[
-      ["tenantName", "Restaurant name", "text"], ["contactName", "Contact name", "text"], ["contactPhone", "Contact phone", "tel"], ["contactEmail", "Contact email", "email"], ["brandName", "Brand name", "text"], ["outletCode", "Outlet code", "text"], ["outletName", "Outlet name", "text"], ["city", "City", "text"], ["address", "Address", "text"], ["ownerName", "Owner name", "text"], ["ownerPhone", "Owner phone", "tel"], ["ownerPin", "Owner 4-digit PIN", "password"], ["tableCount", "Tables", "number"],
-    ].map(([name, label, type]) => <label key={name} className="text-sm font-semibold">{label}<input name={name} type={type} required={!["contactEmail", "brandName"].includes(name)} defaultValue={name === "tableCount" ? "4" : undefined} min={name === "tableCount" ? "1" : undefined} max={name === "tableCount" ? "100" : undefined} pattern={name === "ownerPin" ? "\\d{4}" : undefined} maxLength={name === "ownerPin" ? 4 : undefined} className={field} /></label>)}
-      <label className="text-sm font-semibold">Plan<select name="planCode" required className={field}>{plans.map((p) => <option key={p.code} value={p.code}>{p.name}</option>)}</select></label>
+export function AdminSidebar({ active, onSelect, email, logout, dark, onTheme }: { active: string; onSelect: (item: string) => void; email: string; logout: () => Promise<void>; dark: boolean; onTheme: (dark: boolean) => void }) {
+  return <SidebarBody>
+    <div className="flex h-11 items-center gap-3 px-1.5">
+      <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-[#5b42f5] text-white"><Command aria-hidden="true" className="size-4" /></span>
+      <SidebarLabel><span className="block font-display text-sm font-bold leading-tight text-foreground">TableQR</span><span className="block text-[11px] font-normal text-muted-foreground">Platform Admin</span></SidebarLabel>
     </div>
-    {state.error && <p role="alert" className="mt-4 text-sm text-danger">{state.error}</p>}{state.success && <p role="status" className="mt-4 text-sm text-success">{state.success}</p>}
-    <button disabled={pending} className="mt-5 h-10 rounded-lg bg-[#5b42f5] px-5 text-sm font-semibold text-white disabled:opacity-60">{pending ? "Creating…" : "Create restaurant"}</button>
-  </form>;
+    <nav aria-label="Platform admin" className="mt-6 flex-1 space-y-5 overflow-y-auto overflow-x-hidden">
+      {navGroups.map((group) => <div key={group.title}>
+        <p className="mb-1 h-4 px-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70"><SidebarLabel>{group.title}</SidebarLabel></p>
+        <div className="space-y-0.5">{group.items.map(({ label, icon: Icon }) => <SidebarLink key={label} label={label} active={active === label} icon={<Icon className="size-[18px]" />} onClick={() => onSelect(label)} />)}</div>
+      </div>)}
+    </nav>
+    <div className="mt-3 space-y-2 border-t border-border pt-3">
+      <div className="flex h-11 items-center gap-3 px-1">
+        <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[#5b42f5] text-xs font-semibold text-white">{email.slice(0, 2).toUpperCase()}</span>
+        <SidebarLabel><span className="block truncate text-sm font-medium text-foreground">{email}</span><span className="block text-xs text-muted-foreground">Platform Owner</span></SidebarLabel>
+      </div>
+      <SidebarLink label={dark ? "Light mode" : "Dark mode"} icon={dark ? <Sun className="size-[18px]" /> : <Moon className="size-[18px]" />} onClick={() => { saveTheme(!dark); onTheme(!dark); }} role="switch" aria-checked={dark} />
+      <form action={logout}><SidebarLink type="submit" label="Sign out" icon={<LogOut className="size-[18px]" />} className="hover:bg-red-50 hover:text-red-600" /></form>
+    </div>
+  </SidebarBody>;
 }
 
-export function AdminShell(props: { email: string; children: React.ReactNode; logout: React.ReactNode }) {
+export function AdminShell(props: { email: string; pages: Record<string, React.ReactNode>; logout: () => Promise<void>; theme?: "light" | "dark" }) {
   const [active, setActive] = useState("Dashboard");
-  return <div className="flex min-h-dvh bg-[#f7f8fc] text-[#172033]"><AdminSidebar active={active} onSelect={setActive} /><div className="min-w-0 flex-1"><header className="flex h-[72px] items-center justify-between border-b border-[#e7e9ef] bg-white px-5 lg:px-8"><div className="hidden w-full max-w-[410px] items-center gap-2 rounded-lg border border-[#e2e5ec] bg-[#fafbfe] px-3 py-2 text-sm text-muted sm:flex">⌕ <span>Search tenants, restaurants, users, orders...</span><kbd className="ml-auto rounded border px-1.5 text-[10px]">⌘ K</kbd></div><div className="ml-auto flex items-center gap-4"><span className="text-xl">♧</span><span className="h-8 w-px bg-[#e7e9ef]" /> <span className="grid h-9 w-9 place-items-center rounded-full bg-[#20283b] text-xs text-white">KM</span><div className="hidden text-left sm:block"><p className="text-sm font-semibold">{props.email}</p><p className="text-xs text-muted">Platform Owner</p></div><span>⌄</span></div></header><main className="p-5 lg:p-8">{props.children}</main></div></div>;
+  const [dark, setDark] = useState(props.theme === "dark");
+  // Dialogs and side panels render in a portal on <body>, so the dark tokens must live on <html> while the admin is open.
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", dark);
+    return () => document.documentElement.classList.remove("dark");
+  }, [dark]);
+  return <Sidebar>
+    <div className={`flex min-h-svh flex-col bg-[var(--admin-bg)] text-[var(--admin-fg)] md:flex-row ${dark ? "dark" : ""}`}>
+      <AdminSidebar active={active} onSelect={setActive} email={props.email} logout={props.logout} dark={dark} onTheme={setDark} />
+      <main className="admin-scope min-w-0 flex-1 p-5 lg:p-8">{props.pages[active] ?? <div className="grid min-h-[50vh] place-items-center text-center"><div><p className="font-display text-lg font-bold">{active}</p><p className="mt-1 text-sm text-muted-foreground">This page is coming soon.</p></div></div>}</main>
+    </div>
+  </Sidebar>;
 }

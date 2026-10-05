@@ -12,7 +12,7 @@ export default async function StaffSignInPage() {
   if (staff) redirect(homeFor(staff.roles));
   const outlet = (await cookies()).get("tq_staff_outlet")?.value ?? "";
   return (
-    <main className="grid min-h-dvh place-items-center bg-[#f3f1ec] px-4">
+    <main className="grid min-h-dvh place-items-center bg-[#f3f1ec] px-4 py-8">
       <SignInForm outlet={outlet} />
     </main>
   );

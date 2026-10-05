@@ -4,7 +4,7 @@ import { AppError } from "../errors";
 import { posBillDetail, posQueue, posRoles } from "./pos-read";
 import { settleAtCounter, reopenBill } from "../billing/payments";
 import { processRefund, reconcileRefund, requestRefund, type RefundInput } from "../billing/refunds";
-import { changeWaiterLine, managerApproval, type Approval } from "./waiter-mutations";
+import { changeWaiterLine, managerApproval, waiterRequestBill, type Approval } from "./waiter-mutations";
 import { staffRealtimeToken, topics } from "../realtime/token";
 
 async function run<T>(work: (staff: Awaited<ReturnType<typeof staffFor>>) => Promise<T>) {
@@ -31,4 +31,9 @@ export async function processRefundAction(refundId: string, approval?: Approval)
 }
 export async function checkRefundAction(refundId: string) {
   return run(async s => ({ status: await reconcileRefund(s, String(refundId)) }));
+}
+
+/** Guests are done but nobody asked for the bill (or the request got lost): the cashier closes the eating stage so the bill can be paid. */
+export async function requestBillAction(sessionId: string) {
+  return run(s => waiterRequestBill(s, String(sessionId)));
 }

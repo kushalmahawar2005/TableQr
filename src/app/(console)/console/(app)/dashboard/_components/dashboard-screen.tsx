@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight01Icon, CheckmarkCircle02Icon, Clock01Icon, Invoice01Icon, LockIcon, MenuRestaurantIcon, MoneyReceive01Icon, RefreshIcon } from "@hugeicons/core-free-icons";
+import { ArrowRight01Icon, Calendar03Icon, ChartHistogramIcon, CheckmarkCircle02Icon, Clock01Icon, DashboardSquare01Icon, Invoice01Icon, LockIcon, MenuRestaurantIcon, MoneyReceive01Icon, Note01Icon, RefreshIcon, UserGroupIcon, Wallet01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import Link from "next/link";
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -66,8 +66,9 @@ export function DashboardScreen({ initial, initialTrend, preview }: { initial: D
         <div className="min-w-0">
           <p className="text-caption font-semibold text-muted">{dayLabel(data.date, { weekday: "long", day: "numeric", month: "long" })}</p>
           <h1 className="mt-1 font-display text-title font-bold text-ink">
-            {data.greeting}, <span className="break-words">{data.outletName}</span>
+            {data.greeting}
           </h1>
+          <p className="mt-0.5 break-words text-body font-semibold text-muted">{data.outletName}</p>
         </div>
         <div className="flex items-center gap-3">
           <span className="text-caption text-muted tabular" aria-live="polite">
@@ -90,6 +91,15 @@ export function DashboardScreen({ initial, initialTrend, preview }: { initial: D
           {shownError}
         </p>
       )}
+
+      <nav aria-label="Quick links" className="mt-5 flex gap-2 overflow-x-auto pb-1">
+        {([["/console/floor", "Open floor", DashboardSquare01Icon], ["/console/billing", "Take payment", Invoice01Icon], ["/console/orders", "See orders", Note01Icon], ["/console/reservations", "Reservations", Calendar03Icon], ["/console/reports", "Reports", ChartHistogramIcon]] as const).map(([href, label, icon]) => (
+          <Link key={href} href={href} className={`inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full border border-line bg-surface px-4 text-body font-semibold text-ink hover:border-ink/40 ${focus}`}>
+            <HugeiconsIcon icon={icon} size={18} aria-hidden />
+            {label}
+          </Link>
+        ))}
+      </nav>
 
       <Kpis data={data} />
 
@@ -118,12 +128,17 @@ function Delta({ today, yesterday }: { today: number; yesterday: number }) {
   );
 }
 
-function Kpi({ label, value, children }: { label: string; value: ReactNode; children?: ReactNode }) {
+function Kpi({ label, value, icon, tone, children }: { label: string; value: ReactNode; icon: IconSvgElement; tone: string; children?: ReactNode }) {
   return (
-    <div className={`${card} min-w-0 p-4`}>
-      <dt className="text-caption font-semibold text-muted">{label}</dt>
-      <dd className="mt-1.5">
-        <span className="block font-display text-title font-bold text-ink tabular break-words">{value}</span>
+    <div className={`${card} min-w-0 p-4 shadow-[0_1px_2px_rgb(31_41_55/0.04)]`}>
+      <div className="flex items-start justify-between gap-3">
+        <dt className="text-caption font-semibold text-muted">{label}</dt>
+        <span className="grid size-9 shrink-0 place-items-center rounded-input" style={{ background: `color-mix(in srgb, ${tone} 14%, var(--surface))`, color: tone }} aria-hidden>
+          <HugeiconsIcon icon={icon} size={19} />
+        </span>
+      </div>
+      <dd className="mt-1">
+        <span className="block font-display text-[26px] font-bold leading-8 text-ink tabular break-words">{value}</span>
         {children}
       </dd>
     </div>
@@ -133,46 +148,48 @@ function Kpi({ label, value, children }: { label: string; value: ReactNode; chil
 function Kpis({ data }: { data: DashboardData }) {
   const k = data.kpis;
   return (
-    <dl aria-label="Today at a glance" className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-      <Kpi label="Today's Revenue" value={money(k.revenue.today)}>
+    <dl aria-label="Today at a glance" className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <Kpi label="Today's Sales" value={money(k.revenue.today)} icon={MoneyReceive01Icon} tone="#c9482b">
         <Delta today={k.revenue.today} yesterday={k.revenue.yesterday} />
-        <p className="mt-2 text-caption text-muted">Net sales from paid bills</p>
+        <p className="mt-2 text-caption text-muted">Money from paid bills</p>
         <p className="mt-0.5 text-caption text-muted tabular">
-          Tax {money(data.secondary.taxPaise)} · Service {money(data.secondary.serviceChargePaise)} · Tips {money(data.secondary.tipPaise)} <span className="sr-only">(tips are not part of revenue)</span>
+          GST {money(data.secondary.taxPaise)} · Service {money(data.secondary.serviceChargePaise)} · Tips {money(data.secondary.tipPaise)} <span className="sr-only">(tips are not part of sales)</span>
         </p>
       </Kpi>
-      <Kpi label="Orders Today" value={k.orders.today}>
+      <Kpi label="Orders Today" value={k.orders.today} icon={Note01Icon} tone="#315e9e">
         <Delta today={k.orders.today} yesterday={k.orders.yesterday} />
       </Kpi>
-      <Kpi label="Covers Served" value={k.covers.today}>
+      <Kpi label="Guests Served" value={k.covers.today} icon={UserGroupIcon} tone="#237a68">
         <Delta today={k.covers.today} yesterday={k.covers.yesterday} />
       </Kpi>
-      <Kpi label="Average Bill" value={money(k.averageBill.today)}>
+      <Kpi label="Average Bill" value={money(k.averageBill.today)} icon={Invoice01Icon} tone="#8a5a00">
         <Delta today={k.averageBill.today} yesterday={k.averageBill.yesterday} />
         <p className="mt-2 text-caption text-muted tabular">
           {k.paidBills} paid {k.paidBills === 1 ? "bill" : "bills"}
         </p>
       </Kpi>
       <Kpi
-        label="Open Tables"
+        icon={DashboardSquare01Icon}
+        tone="#237a68"
+        label="Tables in Use"
         value={
           <>
             {k.openTables.open} <span className="text-section font-semibold text-muted">/ {k.openTables.total} tables</span>
           </>
         }
       >
-        <p className="mt-1 text-caption text-muted">Seated or bill requested</p>
+        <p className="mt-1 text-caption text-muted">Guests seated or bill asked</p>
       </Kpi>
-      <Kpi label="Upcoming Reservations" value={k.upcomingReservations}>
+      <Kpi label="Bookings Coming Up" value={k.upcomingReservations} icon={Calendar03Icon} tone="#315e9e">
         <p className="mt-1 text-caption text-muted">Next {UPCOMING_WINDOW_MINUTES} minutes</p>
       </Kpi>
-      <Kpi label="Current Waitlist" value={k.waitlist}>
+      <Kpi label="Waiting List" value={k.waitlist} icon={Clock01Icon} tone="#a74608">
         <p className="mt-1 text-caption text-muted tabular">
-          {data.operations.waitlist.waiting} waiting · {data.operations.waitlist.notified} notified
+          {data.operations.waitlist.waiting} waiting · {data.operations.waitlist.notified} called
         </p>
       </Kpi>
-      <Kpi label="Outstanding Amount" value={money(k.outstandingPaise)}>
-        <p className="mt-1 text-caption text-muted">Unpaid on open bills</p>
+      <Kpi label="Unpaid Bills" value={money(k.outstandingPaise)} icon={Wallet01Icon} tone="#b83a3a">
+        <p className="mt-1 text-caption text-muted">Still to collect from open tables</p>
       </Kpi>
     </dl>
   );
@@ -203,7 +220,8 @@ function Trend({ trend, today }: { trend: RevenueTrend; today: string }) {
   const max = Math.max(...trend.map((d) => d.revenuePaise), 0);
   const total = trend.reduce((n, d) => n + d.revenuePaise, 0);
   return (
-    <Section title="Last 7 Days Revenue" action={<span className="text-caption text-muted tabular">{money(total)} total</span>}>
+    <Section title="Sales, Last 7 Days" action={<span className="text-caption text-muted tabular">{money(total)} total</span>}>
+      {total === 0 && <p className="mb-2 rounded-input bg-ink/[0.04] px-3 py-2 text-body text-muted">No paid bills in the last 7 days. Sales will show up here as bills are paid.</p>}
       <ol className="flex h-44 items-end gap-1.5 sm:gap-3" aria-label="Net sales from paid bills per day">
         {trend.map((d) => {
           const isToday = d.date === today;
@@ -344,7 +362,7 @@ function Attention({ data }: { data: DashboardData }) {
       {alerts.length === 0 ? (
         <p className="flex items-center gap-2 text-body text-muted">
           <HugeiconsIcon icon={CheckmarkCircle02Icon} size={18} className="text-success" aria-hidden />
-          All clear. Nothing needs attention right now.
+          All good. Nothing needs your attention right now.
         </p>
       ) : (
         <ul className="grid gap-2">
@@ -367,7 +385,7 @@ function Attention({ data }: { data: DashboardData }) {
 
 function TopItems({ data }: { data: DashboardData }) {
   return (
-    <Section title="Top 5 Items Today" action={<span className="text-caption text-muted">By quantity sold</span>}>
+    <Section title="Top 5 Dishes Today" action={<span className="text-caption text-muted">Most sold first</span>}>
       {data.topItems.length === 0 ? (
         <p className="text-body text-muted">No items sold yet today.</p>
       ) : (

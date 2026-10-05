@@ -2,6 +2,7 @@
 import { AppError } from "@/server/errors";
 import { getOnlineAvailability, setOnlineBookingsPaused, setSlotCapacity } from "@/server/floor/pacing";
 import { getFloor, getTableDetail } from "@/server/floor/read";
+import { getTableQr, type TableQr } from "@/server/floor/qr-read";
 import { cancelReservation, checkInReservation, markNoShow, reassignReservation, seatReservation } from "@/server/floor/reservations";
 import {
   blockTable,
@@ -108,4 +109,14 @@ export type OnlineAvailability = Awaited<ReturnType<typeof getOnlineAvailability
 export async function setStaffLangAction(lang: "en" | "hi") {
   const { cookies } = await import("next/headers");
   (await cookies()).set("tq_lang", lang === "hi" ? "hi" : "en", { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 365 * 86400 });
+}
+
+/** The table's live QR for showing, printing or downloading. Same roles as the floor. */
+export async function tableQrAction(tableId: string): Promise<{ ok: true; qr: TableQr } | { ok: false; message: string }> {
+  try {
+    const st = await staff();
+    return { ok: true, qr: await getTableQr(st, String(tableId)) };
+  } catch (err) {
+    return { ok: false, message: err instanceof AppError ? err.message : "The QR could not be loaded." };
+  }
 }

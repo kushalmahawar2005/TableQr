@@ -1,4 +1,10 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+/*
+ ---break---
+ */
+@custom-variant dark (&:is(.dark *));
 
 /*
  * TableQR Design Foundation v1 (locked). Overrides the visual tokens in UI/UX spec section 2;
@@ -7,6 +13,12 @@
  */
 :root {
   color-scheme: only light;
+
+  /* Animated sidebar tokens (src/components/ui/animated-sidebar.tsx) */
+  --border: oklch(0.922 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --ring: oklch(0.708 0 0);
+  --hover: #f1f2f8;
 
   /* Core palette */
   --ink: #1f2937; /* main text */
@@ -72,6 +84,33 @@
 
   /* Hindi runs the same scale with about 10% more line height */
   --lh: 1;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --input: oklch(0.922 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
 }
 
 :lang(hi) {
@@ -80,6 +119,12 @@
 }
 
 @theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-border: var(--border);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-ring: var(--ring);
+  --color-hover: var(--hover);
   --color-ink: var(--ink);
   --color-accent: var(--accent);
   --color-paper: var(--paper);
@@ -150,6 +195,37 @@
   /* Motion: Natural Responsive by default, Cinematic Hospitality for chosen guest moments */
   --ease-natural: cubic-bezier(0.2, 0, 0, 1);
   --ease-hospitality: cubic-bezier(0.16, 1, 0.3, 1);
+    --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-input: var(--input);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
 }
 
 body {
@@ -259,4 +335,129 @@ body {
   .animate-pulse-once {
     animation: none !important;
   }
+}
+/*
+ ---break---
+ */
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}
+/*
+ ---break---
+ */
+
+/* Platform admin: shadcn tokens, kept apart from the brand --accent/--muted used by the guest and staff apps. */
+.admin-scope {
+  --accent: oklch(0.97 0 0);
+  --muted: oklch(0.97 0 0);
+  --primary: #5b42f5;
+  --primary-foreground: #ffffff;
+  --ring: #5b42f5;
+  --radius: 0.75rem;
+}
+
+/* Dark theme for the staff console. Opt-in: only a wrapper with .theme-dark changes, so guest pages stay light. */
+.theme-dark {
+  color-scheme: dark;
+  --ink: #e8eaf0;
+  --paper: #13161c;
+  --surface: #1b1f27;
+  --line: #2c323e;
+  --muted: #9aa3b2;
+  --success: #5fd0b0;
+  --warning: #f0b94a;
+  --danger: #ff8a8a;
+  --info: #8fb8f0;
+  --brand-soft: #3a2019;
+  --brand-border: #6b3a2e;
+  --state-available: #3fb594; --state-available-text: #6fd9bb; --state-available-soft: #14322b;
+  --state-held: #d29a3a; --state-held-text: #f0b94a; --state-held-soft: #3a2f12;
+  --state-reserved: #d6a53a; --state-reserved-text: #f0c85a; --state-reserved-soft: #3a3010;
+  --state-seated: #e06a6a; --state-seated-text: #ff9a9a; --state-seated-soft: #3d1c1c;
+  --state-bill: #e08a4a; --state-bill-text: #ffa566; --state-bill-soft: #3b2412;
+  --state-paid: #8a93a1; --state-paid-text: #b5bcc8; --state-paid-soft: #262a31;
+  --state-cleaning: #6a9ae0; --state-cleaning-text: #8fb8f0; --state-cleaning-soft: #1a2a40;
+  --state-blocked: #8a93a1; --state-blocked-text: #c5cad2; --state-blocked-soft: #2a2d31;
+  background: var(--paper);
+  color: var(--ink);
+}
+/* Solid ink surfaces flip to light in dark mode, so their label must flip to dark */
+.theme-dark .bg-ink { color: var(--paper); }
+.theme-dark .bg-ink\/90:hover { color: var(--paper); }
+
+/* Platform admin dark theme (shadcn .dark tokens are set on <html> and the shell) */
+/* html.dark exists only while the admin panel is mounted; see AdminShell */
+:root { --admin-bg: #f7f8fc; --admin-fg: #172033; }
+.dark { --admin-bg: oklch(0.16 0 0); --admin-fg: oklch(0.95 0 0); --hover: oklch(0.27 0 0); color-scheme: dark; }
+.dark .admin-scope { --accent: oklch(0.269 0 0); --muted: oklch(0.269 0 0); --primary: #7c6bff; --ring: #7c6bff; }
+.dark .bg-white, .dark [class*="bg-white"] { background-color: var(--card); }
+.dark .bg-emerald-100, .dark .bg-green-50 { background-color: rgb(16 185 129 / 0.16); }
+.dark .text-emerald-700 { color: #6ee7b7; }
+.dark .bg-amber-100 { background-color: rgb(245 158 11 / 0.16); }
+.dark .text-amber-700 { color: #fcd34d; }
+.dark .bg-red-100, .dark .bg-red-50 { background-color: rgb(239 68 68 / 0.16); }
+.dark .text-red-700, .dark .text-red-600 { color: #fca5a5; }
+.dark .bg-zinc-100 { background-color: rgb(161 161 170 / 0.16); }
+.dark .text-zinc-600 { color: #d4d4d8; }
+.dark .bg-sky-100 { background-color: rgb(14 165 233 / 0.16); }
+.dark .text-sky-700 { color: #7dd3fc; }
+.dark .bg-indigo-100 { background-color: rgb(99 102 241 / 0.2); }
+.dark .text-indigo-700, .dark .text-\[\#5b42f5\] { color: #a5b4fc; }
+.dark .bg-emerald-50 { background-color: rgb(16 185 129 / 0.12); }
+.dark .text-emerald-800 { color: #a7f3d0; }
+
+/* Scrolls as usual, but without a visible scrollbar */
+.no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* shadcn/ui inside the staff console: the component tokens follow the console palette, so dark mode just works.
+   --muted is left alone on purpose (here it is the grey text colour), so avoid shadcn variants that use bg-muted. */
+.console-ui {
+  --background: var(--paper);
+  --foreground: var(--ink);
+  --card: var(--surface);
+  --card-foreground: var(--ink);
+  --popover: var(--surface);
+  --popover-foreground: var(--ink);
+  --primary: var(--brand-main);
+  --primary-foreground: #ffffff;
+  --secondary: color-mix(in srgb, var(--ink) 7%, var(--surface));
+  --secondary-foreground: var(--ink);
+  --accent: color-mix(in srgb, var(--ink) 7%, var(--surface));
+  --accent-foreground: var(--ink);
+  --destructive: var(--danger);
+  --border: var(--line);
+  --input: var(--line);
+  --ring: color-mix(in srgb, var(--ink) 55%, transparent);
+  --muted-foreground: var(--muted);
 }

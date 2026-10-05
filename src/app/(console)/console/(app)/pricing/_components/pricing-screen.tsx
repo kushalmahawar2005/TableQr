@@ -1,15 +1,14 @@
 "use client";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
+import { Search, Tag, X } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { adjustPrice, isValidNewPrice, validAdjustment, type AdjustMode } from "@/domain/price-adjust";
 import type { PricingData, PricingRow } from "@/server/staff/pricing";
 import { bulkOutletPriceAction, clearOutletPriceAction, pricingDataAction, setOutletPriceAction } from "../actions";
 
 // O4 Pricing: outlet price overrides on top of the brand menu. Owners edit; managers view.
 // Every number shown here is re-checked by the server, which also refuses stale edits.
-
-const field = "min-h-11 rounded-input border border-line bg-surface px-3 text-body text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand";
-const plainButton = "min-h-11 rounded-input border border-line bg-surface px-3 text-button font-semibold text-ink hover:bg-paper focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:opacity-50";
-const primaryButton = "min-h-11 rounded-input bg-brand px-4 text-button font-semibold text-brand-on hover:bg-brand-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:opacity-50";
 
 const rupees = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2, minimumFractionDigits: 0 });
 /** ₹349, or ₹349.50 for an older price that still has paise */
@@ -29,7 +28,7 @@ const bulkLabels: Record<BulkKind, string> = {
   decrease_percent: "Decrease by %",
   increase_fixed: "Increase by ₹",
   decrease_fixed: "Decrease by ₹",
-  reset: "Reset to brand price",
+  reset: "Back to menu price",
 };
 
 type BulkPlan = { kind: BulkKind; value: string };
@@ -115,455 +114,349 @@ export function PricingScreen({ initial, preview }: { initial: PricingData; prev
   }
 
   const drawerRow = drawer ? (data.rows.find((r) => r.id === drawer) ?? null) : null;
+  const chip = (on: boolean) => `min-h-9 shrink-0 rounded-full border px-3.5 text-sm font-semibold transition-colors ${on ? "border-ink bg-ink text-paper" : "border-line bg-surface text-ink hover:border-ink/40"}`;
 
   return (
-    <main className="min-h-[calc(100dvh-5rem)] bg-paper p-4 text-ink sm:p-6">
+    <main className="min-h-[calc(100dvh-5rem)] bg-paper p-4 pb-28 text-ink sm:p-6 sm:pb-28">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="font-display text-title font-bold">Pricing</h1>
-          <p className="mt-1 text-body text-muted">Manage outlet-specific menu prices.</p>
+          <p className="mt-1 text-body text-muted">Set a different price for {data.outlet}. Other outlets are not affected.</p>
         </div>
-        <p className="max-w-md rounded-card border border-line bg-surface px-3 py-2 text-caption text-muted">
-          Brand prices are managed in Menu Manager. Outlet overrides apply only to this outlet ({data.outlet}).
-        </p>
       </header>
 
+      <div className="mt-4 grid grid-cols-3 gap-2 sm:max-w-xl sm:gap-3">
+        {[
+          ["Dishes", data.rows.length],
+          ["Changed here", overrideCount],
+          ["Menu price", data.rows.length - overrideCount],
+        ].map(([label, n]) => (
+          <div key={label as string} className="rounded-2xl border border-line bg-surface p-3">
+            <p className="font-display text-title font-bold tabular-nums">{n}</p>
+            <p className="text-caption text-muted">{label}</p>
+          </div>
+        ))}
+      </div>
+
       {!data.canEdit && (
-        <p role="status" className="mt-4 rounded-card border border-line bg-surface px-3 py-2 text-body text-info">
-          View only. Only an owner can change outlet prices.
+        <p role="status" className="mt-4 rounded-xl border border-line bg-surface px-3 py-2 text-body text-info">
+          View only. Only the owner can change prices.
         </p>
       )}
       {notice && (
-        <p role={notice.kind === "error" ? "alert" : "status"} className={`mt-4 rounded-card border px-3 py-2 text-body ${notice.kind === "error" ? "border-danger/30 bg-surface text-danger" : notice.kind === "success" ? "border-success/30 bg-surface text-success" : "border-line bg-surface text-info"}`}>
-          {notice.text}
+        <p role={notice.kind === "error" ? "alert" : "status"} className={`mt-4 flex items-start justify-between gap-3 rounded-xl border px-3 py-2 text-body ${notice.kind === "error" ? "border-danger/30 bg-surface text-danger" : notice.kind === "success" ? "border-success/30 bg-surface text-success" : "border-line bg-surface text-info"}`}>
+          <span>{notice.text}</span>
+          <button type="button" aria-label="Dismiss" className="shrink-0 opacity-60 hover:opacity-100" onClick={() => setNotice(null)}><X className="size-4" /></button>
         </p>
       )}
 
-      <section aria-label="Filters" className="mt-5 flex flex-wrap items-center gap-2">
-        <input aria-label="Search items" className={`${field} min-w-0 flex-1 sm:min-w-[220px] sm:flex-none`} placeholder="Search items" value={query} onChange={(e) => setQuery(e.target.value)} />
-        <select aria-label="Category" className={field} value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-          <option value="all">All categories</option>
-          {data.categories.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.nameEn}
-            </option>
-          ))}
-        </select>
-        <label className="flex min-h-11 items-center gap-2 rounded-input border border-line bg-surface px-3 text-body">
-          <input type="checkbox" className="size-4 accent-[var(--brand-main)]" checked={overridesOnly} onChange={(e) => setOverridesOnly(e.target.checked)} />
-          Overrides only ({overrideCount})
-        </label>
-        {data.canEdit && (
-          <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
-            <span className="text-caption text-muted" aria-live="polite">
-              {selected.size} selected
-            </span>
-            {selected.size > 0 && (
-              <button type="button" className={plainButton} onClick={() => setSelected(new Set())}>
-                Clear
-              </button>
-            )}
-            <button type="button" className={primaryButton} disabled={selected.size === 0} onClick={() => { setDrawer(null); setBulk({ kind: "increase_percent", value: "", preview: false }); }}>
-              Bulk adjust
-            </button>
+      <section aria-label="Filters" className="mt-5 space-y-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-0 flex-1 sm:max-w-sm">
+            <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" />
+            <Input aria-label="Search dishes" className="h-11 rounded-xl pl-9" placeholder="Search dish or category" value={query} onChange={(e) => setQuery(e.target.value)} />
           </div>
+          <div className="flex gap-1.5">
+            <button type="button" className={chip(!overridesOnly)} onClick={() => setOverridesOnly(false)}>All</button>
+            <button type="button" className={chip(overridesOnly)} onClick={() => setOverridesOnly(true)}>Changed here ({overrideCount})</button>
+          </div>
+          {data.canEdit && visible.length > 0 && (
+            <button type="button" className="ml-auto min-h-9 rounded-full border border-line bg-surface px-3.5 text-sm font-semibold hover:border-ink/40" onClick={toggleAllShown}>
+              {allShownSelected ? "Unselect all" : `Select all ${visible.length}`}
+            </button>
+          )}
+        </div>
+        <div className="no-scrollbar -mx-4 flex gap-1.5 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+          <button type="button" className={chip(categoryId === "all")} onClick={() => setCategoryId("all")}>All categories</button>
+          {data.categories.map((c) => (
+            <button key={c.id} type="button" className={chip(categoryId === c.id)} onClick={() => setCategoryId(c.id)}>{c.nameEn}</button>
+          ))}
+        </div>
+      </section>
+
+      <section aria-label="Dish prices" className="mt-4 min-w-0">
+        {data.rows.length === 0 ? (
+          <Empty title="No dishes yet." body="Add dishes in Menu first. Their prices will show here." />
+        ) : visible.length === 0 ? (
+          overridesOnly && overrideCount === 0 ? (
+            <Empty title="No price changes yet." body="Every dish uses its menu price at this outlet." />
+          ) : (
+            <Empty title="No dishes match." body="Try another search or category." action={<button type="button" className="min-h-10 rounded-xl border border-line px-4 text-sm font-semibold hover:border-ink/40" onClick={() => { setQuery(""); setCategoryId("all"); setOverridesOnly(false); }}>Clear filters</button>} />
+          )
+        ) : (
+          <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {visible.map((r) => {
+              const changed = r.source === "outlet_override";
+              const diff = r.pricePaise - r.brandPricePaise;
+              const on = selected.has(r.id);
+              return (
+                <li key={r.id} className={`flex items-center gap-3 rounded-2xl border bg-surface p-3.5 transition-colors ${on ? "border-brand ring-1 ring-brand" : "border-line"}`}>
+                  {data.canEdit && (
+                    <input type="checkbox" aria-label={`Select ${r.nameEn}`} className="size-5 shrink-0 accent-[var(--brand-main)]" checked={on} onChange={() => toggle(r.id)} />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-semibold">{r.nameEn}</p>
+                    <p className="truncate text-caption text-muted">{r.categoryName}</p>
+                    {changed && (
+                      <p className="mt-1 flex flex-wrap items-center gap-1.5 text-caption">
+                        <span className="rounded-full border border-brand-border bg-brand-soft px-2 py-0.5 font-semibold text-brand-strong">Changed here</span>
+                        <span className="text-muted">Menu {formatPrice(r.brandPricePaise)} · {diff > 0 ? "+" : "−"}{formatPrice(Math.abs(diff))}</span>
+                      </p>
+                    )}
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="font-display text-section font-bold tabular-nums">{formatPrice(r.pricePaise)}</p>
+                    {data.canEdit && (
+                      <button type="button" className="mt-1 min-h-9 rounded-lg border border-line px-3 text-sm font-semibold hover:border-ink/40" onClick={() => { setBulk(null); setDrawer(r.id); }}>
+                        Edit
+                      </button>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
         )}
       </section>
 
-      <div className={`mt-4 grid gap-5 ${(drawerRow && data.canEdit) || (bulk && data.canEdit) ? "lg:grid-cols-[minmax(0,1fr)_380px]" : ""}`}>
-        <section aria-label="Item prices" className="min-w-0">
-          {data.rows.length === 0 ? (
-            <Empty title="No menu items yet." body="Add dishes in Menu Manager first; their brand prices will show here." />
-          ) : visible.length === 0 ? (
-            overridesOnly && overrideCount === 0 ? (
-              <Empty title="No outlet overrides." body="Every item uses its brand price at this outlet." />
-            ) : (
-              <Empty title="No items match these filters." body="Try another search or category." action={<button type="button" className={plainButton} onClick={() => { setQuery(""); setCategoryId("all"); setOverridesOnly(false); }}>Clear filters</button>} />
-            )
-          ) : (
-            <>
-              {/* Desktop and tablet: a table */}
-              <div className="hidden overflow-hidden rounded-card border border-line bg-surface md:block">
-                <table className="w-full text-left text-body">
-                  <thead className="border-b border-line text-label font-bold uppercase tracking-wider text-muted">
-                    <tr>
-                      {data.canEdit && (
-                        <th scope="col" className="w-11 px-3 py-2">
-                          <input type="checkbox" aria-label="Select all shown items" className="size-4 accent-[var(--brand-main)]" checked={allShownSelected} onChange={toggleAllShown} />
-                        </th>
-                      )}
-                      <th scope="col" className="px-3 py-2">Item</th>
-                      <th scope="col" className="hidden px-3 py-2 lg:table-cell">Category</th>
-                      <th scope="col" className="px-3 py-2 text-right">Brand price</th>
-                      <th scope="col" className="px-3 py-2 text-right">Outlet price</th>
-                      <th scope="col" className="px-3 py-2 text-right">Effective price</th>
-                      <th scope="col" className="px-3 py-2">Source</th>
-                      {data.canEdit && <th scope="col" className="px-3 py-2"><span className="sr-only">Actions</span></th>}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {visible.map((r) => (
-                      <tr key={r.id} className={`border-b border-line last:border-0 ${drawer === r.id ? "bg-brand-soft" : ""}`}>
-                        {data.canEdit && (
-                          <td className="px-3 py-2">
-                            <input type="checkbox" aria-label={`Select ${r.nameEn}`} className="size-4 accent-[var(--brand-main)]" checked={selected.has(r.id)} onChange={() => toggle(r.id)} />
-                          </td>
-                        )}
-                        <td className="px-3 py-2">
-                          <span className="font-semibold">{r.nameEn}</span>
-                          <span className="block text-caption text-muted lg:hidden">{r.categoryName}</span>
-                        </td>
-                        <td className="hidden px-3 py-2 text-muted lg:table-cell">{r.categoryName}</td>
-                        <td className="px-3 py-2 text-right tabular-nums">{formatPrice(r.brandPricePaise)}</td>
-                        <td className="px-3 py-2 text-right tabular-nums">{r.outletPricePaise === null ? <span className="text-muted">—</span> : formatPrice(r.outletPricePaise)}</td>
-                        <td className="px-3 py-2 text-right font-semibold tabular-nums">{formatPrice(r.pricePaise)}</td>
-                        <td className="px-3 py-2"><SourceBadge source={r.source} /></td>
-                        {data.canEdit && (
-                          <td className="px-3 py-2">
-                            <div className="flex justify-end gap-1">
-                              <button type="button" className={plainButton} onClick={() => { setBulk(null); setDrawer(r.id); }}>Edit price</button>
-                              {r.source === "outlet_override" && <button type="button" className={plainButton} onClick={() => { setBulk(null); setDrawer(r.id); }}>Reset</button>}
-                            </div>
-                          </td>
-                        )}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+      {data.canEdit && selected.size > 0 && !bulk && (
+        <div className="fixed inset-x-3 bottom-3 z-20 mx-auto flex max-w-xl items-center justify-between gap-3 rounded-2xl border border-line bg-surface p-3 shadow-lg lg:left-[calc(var(--sidebar-width,16rem)+0.75rem)]">
+          <span className="text-sm font-semibold" aria-live="polite">{selected.size} selected</span>
+          <div className="flex gap-2">
+            <button type="button" className="min-h-11 rounded-xl border border-line px-3 text-sm font-semibold hover:border-ink/40" onClick={() => setSelected(new Set())}>Clear</button>
+            <button type="button" className="min-h-11 rounded-xl border border-brand bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-strong" onClick={() => { setDrawer(null); setBulk({ kind: "increase_percent", value: "", preview: false }); }}>
+              Change prices
+            </button>
+          </div>
+        </div>
+      )}
 
-              {/* Phone: cards */}
-              <ul className="space-y-2 md:hidden">
-                {data.canEdit && (
-                  <li>
-                    <label className="flex min-h-11 items-center gap-2 text-body">
-                      <input type="checkbox" className="size-4 accent-[var(--brand-main)]" checked={allShownSelected} onChange={toggleAllShown} />
-                      Select all shown
-                    </label>
-                  </li>
-                )}
-                {visible.map((r) => (
-                  <li key={r.id} className="rounded-card border border-line bg-surface p-3">
-                    <div className="flex items-start gap-3">
-                      {data.canEdit && <input type="checkbox" aria-label={`Select ${r.nameEn}`} className="mt-1 size-5 accent-[var(--brand-main)]" checked={selected.has(r.id)} onChange={() => toggle(r.id)} />}
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-start justify-between gap-2">
-                          <p className="font-semibold">{r.nameEn}</p>
-                          <p className="font-semibold tabular-nums">{formatPrice(r.pricePaise)}</p>
-                        </div>
-                        <p className="text-caption text-muted">{r.categoryName}</p>
-                        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-muted">
-                          <SourceBadge source={r.source} />
-                          <span>Brand {formatPrice(r.brandPricePaise)}</span>
-                          {r.outletPricePaise !== null && <span>Outlet {formatPrice(r.outletPricePaise)}</span>}
-                        </div>
-                        {data.canEdit && (
-                          <div className="mt-2 flex gap-2">
-                            <button type="button" className={plainButton} onClick={() => { setBulk(null); setDrawer(r.id); }}>Edit price</button>
-                            {r.source === "outlet_override" && <button type="button" className={plainButton} onClick={() => { setBulk(null); setDrawer(r.id); }}>Reset</button>}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-        </section>
-
-        {drawerRow && data.canEdit && (
-          <PriceDrawer
-            key={drawerRow.id}
-            row={drawerRow}
-            preview={preview}
-            busy={busy}
-            onClose={() => setDrawer(null)}
-            onSave={async (pricePaise) => {
-              setBusy(true);
-              const res = await setOutletPriceAction(drawerRow.id, pricePaise, drawerRow.outletPricePaise);
-              setBusy(false);
-              if (!res.ok) {
-                if (res.code === "conflict") await reload();
-                return res.message;
-              }
-              setNotice({ kind: "success", text: `${drawerRow.nameEn} now costs ${formatPrice(pricePaise)} at this outlet.` });
-              setDrawer(null);
-              await reload();
-              return null;
-            }}
-            onReset={async () => {
-              setBusy(true);
-              const res = await clearOutletPriceAction(drawerRow.id, drawerRow.outletPricePaise);
-              setBusy(false);
-              if (!res.ok) {
-                if (res.code === "conflict") await reload();
-                return res.message;
-              }
-              setNotice({ kind: "success", text: `${drawerRow.nameEn} is back to its brand price, ${formatPrice(drawerRow.brandPricePaise)}.` });
-              setDrawer(null);
-              await reload();
-              return null;
-            }}
-          />
-        )}
-
-        {bulk && data.canEdit && (
-          <BulkPanel
-            rows={selectedRows}
-            plan={bulk}
-            busy={busy}
-            onChange={setBulk}
-            onClose={() => setBulk(null)}
-            onApply={async (planned) => {
-              if (preview) return null;
-              setBusy(true);
-              const itemIds = planned.map((p) => p.row.id);
-              const expected = Object.fromEntries(planned.map((p) => [p.row.id, p.row.pricePaise]));
-              const res =
-                bulk.kind === "reset"
-                  ? await bulkOutletPriceAction({ action: "reset", itemIds, expected })
-                  : await bulkOutletPriceAction({
-                      action: "adjust",
-                      itemIds,
-                      expected,
-                      mode: bulk.kind.endsWith("percent") ? "percent" : "fixed",
-                      amount: (bulk.kind.startsWith("increase") ? 1 : -1) * (bulk.kind.endsWith("percent") ? Number(bulk.value) : Math.round(Number(bulk.value) * 100)),
-                    });
-              setBusy(false);
-              if (!res.ok) {
+      <Sheet open={!!drawerRow && data.canEdit} onOpenChange={(o) => !o && setDrawer(null)}>
+        <SheetContent className="w-full overflow-y-auto bg-background data-[side=right]:sm:max-w-md">
+          {drawerRow && (
+            <PriceDrawer
+              key={drawerRow.id}
+              row={drawerRow}
+              preview={preview}
+              busy={busy}
+              onSave={async (pricePaise) => {
+                setBusy(true);
+                const res = await setOutletPriceAction(drawerRow.id, pricePaise, drawerRow.outletPricePaise);
+                setBusy(false);
+                if (!res.ok) {
+                  if (res.code === "conflict") await reload();
+                  return res.message;
+                }
+                setNotice({ kind: "success", text: `${drawerRow.nameEn} now costs ${formatPrice(pricePaise)} at this outlet.` });
+                setDrawer(null);
                 await reload();
-                return res.code === "conflict" ? "Some prices changed since this preview. Nothing was changed. Check the new preview and apply again." : `Nothing was changed. ${res.message}`;
-              }
-              setNotice({ kind: "success", text: bulk.kind === "reset" ? `${itemIds.length} item${itemIds.length === 1 ? "" : "s"} back to brand price.` : `Updated ${itemIds.length} outlet price${itemIds.length === 1 ? "" : "s"}.` });
-              setBulk(null);
-              setSelected(new Set());
-              await reload();
-              return null;
-            }}
-          />
-        )}
-      </div>
-    </main>
-  );
-}
+                return null;
+              }}
+              onReset={async () => {
+                setBusy(true);
+                const res = await clearOutletPriceAction(drawerRow.id, drawerRow.outletPricePaise);
+                setBusy(false);
+                if (!res.ok) {
+                  if (res.code === "conflict") await reload();
+                  return res.message;
+                }
+                setNotice({ kind: "success", text: `${drawerRow.nameEn} is back to its menu price, ${formatPrice(drawerRow.brandPricePaise)}.` });
+                setDrawer(null);
+                await reload();
+                return null;
+              }}
+            />
+          )}
+        </SheetContent>
+      </Sheet>
 
-function SourceBadge({ source }: { source: PricingRow["source"] }) {
-  return source === "outlet_override" ? (
-    <span className="inline-flex items-center rounded-full border border-brand-border bg-brand-soft px-2 py-0.5 text-caption font-semibold text-brand-strong">Outlet override</span>
-  ) : (
-    <span className="inline-flex items-center rounded-full border border-line bg-paper px-2 py-0.5 text-caption font-semibold text-muted">Brand</span>
+      <Sheet open={!!bulk && data.canEdit} onOpenChange={(o) => !o && setBulk(null)}>
+        <SheetContent className="w-full overflow-y-auto bg-background data-[side=right]:sm:max-w-lg">
+          {bulk && (
+            <BulkPanel
+              rows={selectedRows}
+              plan={bulk}
+              busy={busy}
+              onChange={setBulk}
+              onApply={async (planned) => {
+                if (preview) return null;
+                setBusy(true);
+                const itemIds = planned.map((p) => p.row.id);
+                const expected = Object.fromEntries(planned.map((p) => [p.row.id, p.row.pricePaise]));
+                const res =
+                  bulk.kind === "reset"
+                    ? await bulkOutletPriceAction({ action: "reset", itemIds, expected })
+                    : await bulkOutletPriceAction({
+                        action: "adjust",
+                        itemIds,
+                        expected,
+                        mode: bulk.kind.endsWith("percent") ? "percent" : "fixed",
+                        amount: (bulk.kind.startsWith("increase") ? 1 : -1) * (bulk.kind.endsWith("percent") ? Number(bulk.value) : Math.round(Number(bulk.value) * 100)),
+                      });
+                setBusy(false);
+                if (!res.ok) {
+                  await reload();
+                  return res.code === "conflict" ? "Some prices changed since this preview. Nothing was changed. Check the new preview and apply again." : `Nothing was changed. ${res.message}`;
+                }
+                setNotice({ kind: "success", text: bulk.kind === "reset" ? `${itemIds.length} dish${itemIds.length === 1 ? "" : "es"} back to menu price.` : `Updated ${itemIds.length} price${itemIds.length === 1 ? "" : "s"}.` });
+                setBulk(null);
+                setSelected(new Set());
+                await reload();
+                return null;
+              }}
+            />
+          )}
+        </SheetContent>
+      </Sheet>
+    </main>
   );
 }
 
 function Empty({ title, body, action }: { title: string; body: string; action?: React.ReactNode }) {
   return (
-    <div className="rounded-card border border-dashed border-line bg-surface p-6 text-center">
-      <p className="font-semibold">{title}</p>
+    <div className="rounded-2xl border border-dashed border-line bg-surface p-8 text-center">
+      <Tag aria-hidden="true" className="mx-auto size-6 text-muted" />
+      <p className="mt-2 font-semibold">{title}</p>
       <p className="mt-1 text-body text-muted">{body}</p>
       {action && <div className="mt-3">{action}</div>}
     </div>
   );
 }
 
-/** Side panel on wide screens, bottom sheet on phones. Escape closes it. */
-function Panel({ title, labelId, onClose, children }: { title: string; labelId: string; onClose: () => void; children: React.ReactNode }) {
-  const ref = useRef<HTMLElement>(null);
-  const close = useRef(onClose);
-  useEffect(() => {
-    close.current = onClose;
-  });
-  // Focus moves into the panel once, when it opens
-  useEffect(() => {
-    ref.current?.querySelector<HTMLElement>("input, select")?.focus();
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") close.current();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
-  return (
-    <aside
-      ref={ref}
-      role="dialog"
-      aria-labelledby={labelId}
-      className="fixed inset-x-0 bottom-0 z-30 max-h-[85dvh] overflow-y-auto rounded-t-sheet border border-line bg-surface p-5 shadow-lg lg:static lg:z-auto lg:max-h-none lg:self-start lg:rounded-card lg:shadow-none"
-    >
-      <div className="flex items-start justify-between gap-3">
-        <h2 id={labelId} className="font-display text-section font-bold">
-          {title}
-        </h2>
-        <button type="button" className={plainButton} onClick={onClose}>
-          Close
-        </button>
-      </div>
-      {children}
-    </aside>
-  );
-}
+const sheetBtnPrimary = "inline-flex h-12 flex-1 items-center justify-center rounded-xl border border-brand bg-brand text-base font-semibold text-white hover:bg-brand-strong disabled:opacity-50";
+const sheetBtnPlain = "inline-flex h-12 items-center justify-center rounded-xl border border-line px-4 text-base font-semibold hover:border-ink/40 disabled:opacity-50";
 
-function PriceDrawer({ row, preview, busy, onClose, onSave, onReset }: { row: PricingRow; preview?: PricingPreview; busy: boolean; onClose: () => void; onSave: (paise: number) => Promise<string | null>; onReset: () => Promise<string | null> }) {
-  const [value, setValue] = useState(preview?.drawerValue ?? (row.outletPricePaise !== null && row.outletPricePaise % 100 === 0 ? String(row.outletPricePaise / 100) : ""));
+function PriceDrawer({ row, preview, busy, onSave, onReset }: { row: PricingRow; preview?: PricingPreview; busy: boolean; onSave: (paise: number) => Promise<string | null>; onReset: () => Promise<string | null> }) {
+  const [value, setValue] = useState(preview?.drawerValue ?? String(Math.round(row.pricePaise / 100)));
   const [error, setError] = useState<string | null>(preview?.drawerError ?? null);
   const parsed = parseRupees(value);
+  const diff = parsed === null ? null : parsed - row.brandPricePaise;
+  const nudge = (rupees: number) => {
+    const base = parsed ?? row.pricePaise;
+    setValue(String(Math.max(0, Math.round((base + rupees * 100) / 100))));
+    setError(null);
+  };
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
     if (preview) return;
     if (parsed === null) {
-      setError("Enter a whole-rupee price of ₹0 or more, for example 349.");
+      setError("Enter a whole-rupee price, for example 349.");
       return;
     }
     setError(await onSave(parsed));
   }
 
   return (
-    <Panel title={`Edit price · ${row.nameEn}`} labelId="price-drawer-title" onClose={onClose}>
-      <p className="mt-1 text-caption text-muted">{row.categoryName}</p>
-      <dl className="mt-4 grid grid-cols-2 gap-x-3 gap-y-2 text-body">
-        <dt className="text-muted">Brand base price</dt>
-        <dd className="text-right tabular-nums">{formatPrice(row.brandPricePaise)}</dd>
-        <dt className="text-muted">Current outlet override</dt>
-        <dd className="text-right tabular-nums">{row.outletPricePaise === null ? "None" : formatPrice(row.outletPricePaise)}</dd>
-        <dt className="text-muted">Effective price</dt>
-        <dd className="text-right font-semibold tabular-nums">{formatPrice(row.pricePaise)}</dd>
-        <dt className="text-muted">Price source</dt>
-        <dd className="text-right"><SourceBadge source={row.source} /></dd>
-      </dl>
-      <form className="mt-5 space-y-3 border-t border-line pt-4" onSubmit={save} noValidate>
-        <label className="block text-body font-semibold" htmlFor="outlet-price">
-          Outlet price (₹)
-        </label>
-        <input
-          id="outlet-price"
-          className={`${field} w-full`}
-          inputMode="numeric"
-          placeholder={String(Math.round(row.brandPricePaise / 100))}
-          value={value}
-          aria-invalid={!!error}
-          aria-describedby="outlet-price-help"
-          onChange={(e) => {
-            setValue(e.target.value);
-            setError(null);
-          }}
-        />
-        <p id="outlet-price-help" className={`text-caption ${error ? "text-danger" : "text-muted"}`} role={error ? "alert" : undefined}>
-          {error ?? "Whole rupees only. Applies to guests at this outlet; orders already placed keep their price."}
-        </p>
-        <button type="submit" className={`${primaryButton} w-full`} disabled={busy}>
-          {busy ? "Saving…" : "Save outlet price"}
-        </button>
-      </form>
-      {row.outletPricePaise !== null && (
-        <div className="mt-4 space-y-2 border-t border-line pt-4">
-          <p className="text-body">
-            Reset to brand price: guests here will pay <strong>{formatPrice(row.brandPricePaise)}</strong> instead of {formatPrice(row.pricePaise)}.
+    <>
+      <SheetHeader>
+        <SheetTitle className="font-display text-title font-bold">{row.nameEn}</SheetTitle>
+        <SheetDescription>{row.categoryName} · Menu price {formatPrice(row.brandPricePaise)}</SheetDescription>
+      </SheetHeader>
+      <form className="space-y-5 px-4 pb-8" onSubmit={save} noValidate>
+        <div>
+          <label htmlFor="outlet-price" className="text-sm font-semibold">Price at this outlet</label>
+          <div className="relative mt-2">
+            <span aria-hidden="true" className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-xl font-semibold text-muted">₹</span>
+            <Input id="outlet-price" inputMode="numeric" className="h-16 rounded-2xl pl-10 font-display text-3xl font-bold tabular-nums md:text-3xl" value={value} aria-invalid={!!error} onChange={(e) => { setValue(e.target.value); setError(null); }} />
+          </div>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {[-10, -5, 5, 10, 20].map((n) => (
+              <button key={n} type="button" onClick={() => nudge(n)} className="min-h-9 rounded-full border border-line px-3 text-sm font-semibold hover:border-ink/40">{n > 0 ? "+" : "−"}₹{Math.abs(n)}</button>
+            ))}
+          </div>
+          <p className={`mt-2 text-sm ${error ? "font-semibold text-danger" : "text-muted"}`} role={error ? "alert" : undefined}>
+            {error ?? (diff === null ? "Whole rupees only." : diff === 0 ? "Same as the menu price." : `${diff > 0 ? "+" : "−"}${formatPrice(Math.abs(diff))} from the menu price.`)}
           </p>
-          <button
-            type="button"
-            className={`${plainButton} w-full`}
-            disabled={busy}
-            onClick={async () => {
-              if (preview) return;
-              setError(await onReset());
-            }}
-          >
-            Reset to brand price
-          </button>
         </div>
-      )}
-    </Panel>
+        <p className="rounded-xl bg-ink/5 p-3 text-sm text-muted">New price is for guests at this outlet. Orders already placed keep their old price.</p>
+        <div className="flex gap-2">
+          {row.outletPricePaise !== null && (
+            <button type="button" className={sheetBtnPlain} disabled={busy} onClick={async () => { if (preview) return; setError(await onReset()); }}>
+              Back to {formatPrice(row.brandPricePaise)}
+            </button>
+          )}
+          <button type="submit" className={sheetBtnPrimary} disabled={busy}>{busy ? "Saving…" : "Save price"}</button>
+        </div>
+      </form>
+    </>
   );
 }
 
-function BulkPanel({ rows, plan, busy, onChange, onClose, onApply }: { rows: PricingRow[]; plan: BulkPlan & { preview: boolean }; busy: boolean; onChange: (p: BulkPlan & { preview: boolean }) => void; onClose: () => void; onApply: (planned: NonNullable<ReturnType<typeof planBulk>>) => Promise<string | null> }) {
+function BulkPanel({ rows, plan, busy, onChange, onApply }: { rows: PricingRow[]; plan: BulkPlan & { preview: boolean }; busy: boolean; onChange: (p: BulkPlan & { preview: boolean }) => void; onApply: (planned: NonNullable<ReturnType<typeof planBulk>>) => Promise<string | null> }) {
   const [error, setError] = useState<string | null>(null);
   const planned = planBulk(rows, plan);
   const isReset = plan.kind === "reset";
+  const isPercent = plan.kind.endsWith("percent");
+  const quick = isPercent ? ["5", "10", "15", "20"] : ["5", "10", "20", "50"];
 
   return (
-    <Panel title="Bulk adjust" labelId="bulk-title" onClose={onClose}>
-      <p className="mt-1 text-body text-muted">{rows.length} selected · results are whole rupees, rounded half up from each item&apos;s current effective price.</p>
+    <>
+      <SheetHeader>
+        <SheetTitle className="font-display text-title font-bold">Change {rows.length} price{rows.length === 1 ? "" : "s"}</SheetTitle>
+        <SheetDescription>{plan.preview ? "Check the new prices. Nothing changes until you apply." : "Pick what to do. You will see the result before it is saved."}</SheetDescription>
+      </SheetHeader>
       {!plan.preview ? (
         <form
-          className="mt-4 space-y-3"
+          className="space-y-5 px-4 pb-8"
           noValidate
           onSubmit={(e) => {
             e.preventDefault();
             if (!planned) {
-              setError(plan.kind.endsWith("percent") ? "Enter a percentage above 0 (up to 100 for a decrease)." : "Enter a whole-rupee amount above 0.");
+              setError(isPercent ? "Enter a percentage above 0 (up to 100 for a decrease)." : "Enter a whole-rupee amount above 0.");
               return;
             }
             setError(null);
             onChange({ ...plan, preview: true });
           }}
         >
-          <label className="block text-body font-semibold" htmlFor="bulk-kind">
-            Adjustment
-          </label>
-          <select id="bulk-kind" className={`${field} w-full`} value={plan.kind} onChange={(e) => onChange({ ...plan, kind: e.target.value as BulkKind })}>
+          <div className="grid grid-cols-2 gap-2">
             {(Object.keys(bulkLabels) as BulkKind[]).map((k) => (
-              <option key={k} value={k}>
+              <button key={k} type="button" onClick={() => { onChange({ ...plan, kind: k }); setError(null); }} className={`min-h-12 rounded-xl border px-3 text-sm font-semibold ${plan.kind === k ? "border-ink bg-ink text-paper" : "border-line bg-surface hover:border-ink/40"} ${k === "reset" ? "col-span-2" : ""}`}>
                 {bulkLabels[k]}
-              </option>
+              </button>
             ))}
-          </select>
+          </div>
           {!isReset && (
-            <>
-              <label className="block text-body font-semibold" htmlFor="bulk-value">
-                {plan.kind.endsWith("percent") ? "Percent" : "Amount (₹)"}
-              </label>
-              <input id="bulk-value" className={`${field} w-full`} inputMode="decimal" value={plan.value} aria-invalid={!!error} onChange={(e) => onChange({ ...plan, value: e.target.value })} />
-            </>
+            <div>
+              <label htmlFor="bulk-value" className="text-sm font-semibold">{isPercent ? "How many percent?" : "How many rupees?"}</label>
+              <div className="relative mt-2">
+                <span aria-hidden="true" className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-xl font-semibold text-muted">{isPercent ? "%" : "₹"}</span>
+                <Input id="bulk-value" inputMode="decimal" className="h-16 rounded-2xl pl-4 pr-10 font-display text-3xl font-bold tabular-nums md:text-3xl" value={plan.value} aria-invalid={!!error} onChange={(e) => onChange({ ...plan, value: e.target.value })} />
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {quick.map((q) => (
+                  <button key={q} type="button" onClick={() => onChange({ ...plan, value: q })} className={`min-h-9 rounded-full border px-3 text-sm font-semibold ${plan.value === q ? "border-ink bg-ink text-paper" : "border-line hover:border-ink/40"}`}>{q}{isPercent ? "%" : ""}</button>
+                ))}
+              </div>
+            </div>
           )}
-          {error && (
-            <p role="alert" className="text-caption text-danger">
-              {error}
-            </p>
-          )}
-          <button type="submit" className={`${primaryButton} w-full`} disabled={rows.length === 0}>
-            Preview
-          </button>
+          {error && <p role="alert" className="text-sm font-semibold text-danger">{error}</p>}
+          <button type="submit" className={`${sheetBtnPrimary} w-full`} disabled={rows.length === 0}>See new prices</button>
         </form>
       ) : planned ? (
-        <div className="mt-4 space-y-3">
-          <div className="max-h-[50dvh] overflow-auto rounded-card border border-line lg:max-h-[60vh]">
-            <table className="w-full text-left text-caption">
-              <thead className="sticky top-0 bg-surface text-label font-bold uppercase tracking-wider text-muted">
-                <tr>
-                  <th scope="col" className="px-2 py-2">Item</th>
-                  <th scope="col" className="px-2 py-2 text-right">Brand</th>
-                  <th scope="col" className="px-2 py-2 text-right">Now</th>
-                  <th scope="col" className="px-2 py-2">Change</th>
-                  <th scope="col" className="px-2 py-2 text-right">New</th>
-                </tr>
-              </thead>
-              <tbody>
-                {planned.map((p) => (
-                  <tr key={p.row.id} className="border-t border-line">
-                    <td className="px-2 py-2 font-semibold">{p.row.nameEn}</td>
-                    <td className="px-2 py-2 text-right tabular-nums">{formatPrice(p.row.brandPricePaise)}</td>
-                    <td className="px-2 py-2 text-right tabular-nums">{formatPrice(p.row.pricePaise)}</td>
-                    <td className="px-2 py-2">{p.label}</td>
-                    <td className="px-2 py-2 text-right font-semibold tabular-nums">{p.nextOutlet === null ? `${formatPrice(p.nextPrice)} (brand)` : formatPrice(p.nextPrice)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {error && (
-            <p role="alert" className="text-caption text-danger">
-              {error}
-            </p>
-          )}
-          <p className="text-caption text-muted">Nothing changes until you apply. All {planned.length} prices change together, or none do.</p>
+        <div className="space-y-4 px-4 pb-8">
+          <ul className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-surface">
+            {planned.map((p) => (
+              <li key={p.row.id} className="flex items-center justify-between gap-3 px-3.5 py-2.5">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold">{p.row.nameEn}</p>
+                  <p className="text-caption text-muted">{p.label}</p>
+                </div>
+                <p className="shrink-0 text-right tabular-nums">
+                  <span className="text-sm text-muted line-through">{formatPrice(p.row.pricePaise)}</span>{" "}
+                  <b>{formatPrice(p.nextPrice)}</b>
+                </p>
+              </li>
+            ))}
+          </ul>
+          {error && <p role="alert" className="text-sm font-semibold text-danger">{error}</p>}
+          <p className="text-caption text-muted">All {planned.length} prices change together, or none do. Results are whole rupees.</p>
           <div className="flex gap-2">
-            <button type="button" className={`${plainButton} flex-1`} onClick={() => onChange({ ...plan, preview: false })}>
-              Back
-            </button>
+            <button type="button" className={sheetBtnPlain} onClick={() => onChange({ ...plan, preview: false })}>Back</button>
             <button
               type="button"
-              className={`${primaryButton} flex-1`}
+              className={sheetBtnPrimary}
               disabled={busy}
               onClick={async () => {
                 const message = await onApply(planned);
@@ -576,6 +469,6 @@ function BulkPanel({ rows, plan, busy, onChange, onClose, onApply }: { rows: Pri
           </div>
         </div>
       ) : null}
-    </Panel>
+    </>
   );
 }

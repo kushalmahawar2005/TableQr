@@ -1,5 +1,6 @@
 "use client";
 
+import { TableQr } from "./table-qr";
 import { ArrowDown01Icon, ArrowUp01Icon, Calendar03Icon, DragDropVerticalIcon, Notification01Icon, PauseIcon, PlayIcon, PlusSignIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { formatRupees } from "@/domain/menu-price";
@@ -81,7 +82,7 @@ export function TablePanel({
       </div>
 
       {combined && (
-        <p className="mt-3 flex flex-wrap items-center gap-x-2 rounded-card border border-line bg-[#faf9f6] px-3 py-2 text-body">
+        <p className="mt-3 flex flex-wrap items-center gap-x-2 rounded-card border border-line bg-paper px-3 py-2 text-body">
           <span className="font-bold text-ink">{v!.tableIds.map((id) => codeOf.get(id)).join(" + ")}</span>
           <span className="text-muted">
             · {c.combined} · {c.seats(...combinedSeats(v!.tableIds, data))}
@@ -102,7 +103,7 @@ export function TablePanel({
       )}
 
       {v && (
-        <dl className="mt-4 grid grid-cols-2 gap-3 rounded-card border border-line bg-[#faf9f6] p-3">
+        <dl className="mt-4 grid grid-cols-2 gap-3 rounded-card border border-line bg-paper p-3">
           <Fact label={c.party}>
             {c.guests(v.partySize)}
             {v.guestName && <span className="block truncate text-caption font-normal text-muted">{v.guestName}</span>}
@@ -247,6 +248,7 @@ export function TablePanel({
           )}
         </div>
       )}
+      <TableQr tableId={table.id} canSheet={data.roles.some((r) => r === "owner" || r === "manager")} />
     </div>
   );
 }
@@ -469,7 +471,7 @@ export function TonightPanel({ data, c, clock, now, disabled, onPause, onExtra }
             return (
               <li key={s.startAt} className={`grid grid-cols-[4.75rem_1fr_auto] items-center gap-2 ${past ? "opacity-50" : ""}`}>
                 <span className="text-body font-semibold text-ink tabular">{clock(s.startAt)}</span>
-                <span className="relative h-6 overflow-hidden rounded-input border border-line bg-[#f6f4ef]" role="img" aria-label={`${c.covers(s.covers, s.capacity)} · ${c.pacingStates[s.state]}`}>
+                <span className="relative h-6 overflow-hidden rounded-input border border-line bg-paper" role="img" aria-label={`${c.covers(s.covers, s.capacity)} · ${c.pacingStates[s.state]}`}>
                   <span className="absolute inset-y-0 left-0" style={{ width: `${share * 100}%`, background: tone[s.state], opacity: 0.85 }} />
                   <span className="relative flex h-full items-center justify-between px-2 text-caption font-semibold text-ink">
                     <span className="tabular">{c.covers(s.covers, s.capacity)}</span>

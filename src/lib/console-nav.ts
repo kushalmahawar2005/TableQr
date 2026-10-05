@@ -6,13 +6,14 @@ export const consoleSections = [
   { slug: "dashboard", label: "Dashboard", hi: "डैशबोर्ड" },
   { slug: "floor", label: "Floor", hi: "फ़्लोर" },
   { slug: "reservations", label: "Reservations", hi: "बुकिंग" },
-  { slug: "waitlist", label: "Waitlist", hi: "वेटलिस्ट", live: false },
-  { slug: "orders", label: "Orders", hi: "ऑर्डर", live: false },
-  { slug: "billing", label: "Billing", hi: "बिलिंग", live: false },
+  { slug: "waitlist", label: "Waitlist", hi: "वेटलिस्ट" },
+  { slug: "orders", label: "Orders", hi: "ऑर्डर" },
+  { slug: "billing", label: "Billing", hi: "बिलिंग" },
   { slug: "menu", label: "Menu", hi: "मेन्यू" },
   { slug: "pricing", label: "Pricing", hi: "प्राइसिंग" },
-  { slug: "reports", label: "Reports", hi: "रिपोर्ट", live: false },
-  { slug: "settings", label: "Settings", hi: "सेटिंग्स", live: false },
+  { slug: "reports", label: "Reports", hi: "रिपोर्ट" },
+  { slug: "team", label: "Team", hi: "टीम" },
+  { slug: "settings", label: "Settings", hi: "सेटिंग्स" },
 ] as const;
 
 /** Sections with a real screen. The rest stay reserved and are hidden until they are built. */

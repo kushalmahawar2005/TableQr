@@ -15,6 +15,7 @@ export const consoleSectionRoles = {
   menu: ["manager", "owner"],
   pricing: ["manager", "owner"],
   reports: ["manager", "owner", "accountant"],
+  team: ["manager", "owner"],
   settings: ["manager", "owner"],
 } as const satisfies Record<string, readonly StaffRole[]>;
 

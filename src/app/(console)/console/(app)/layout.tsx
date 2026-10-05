@@ -10,10 +10,12 @@ import { StaffShell } from "./_components/staff-shell";
 export default async function ConsoleLayout({ children }: LayoutProps<"/console">) {
   const staff = await currentStaff();
   if (!staff) redirect("/console/login");
-  const lang = parseLang((await cookies()).get(LANG_COOKIE)?.value);
+  const jar = await cookies();
+  const lang = parseLang(jar.get(LANG_COOKIE)?.value);
+  const theme = jar.get("tq_theme")?.value === "dark" ? "dark" : "light";
   const sections = visibleSections.filter((s) => canSee(staff.roles, s.slug)).map((s) => ({ slug: s.slug, label: lang === "hi" ? s.hi : s.label }));
   return (
-    <StaffShell lang={lang} sections={sections} staff={{ name: staff.name, roles: staff.roles, outlet: staff.outlet.name, shiftEnds: staff.expiresAt }}>
+    <StaffShell theme={theme} lang={lang} sections={sections} staff={{ name: staff.name, roles: staff.roles, outlet: staff.outlet.name, shiftEnds: staff.expiresAt }}>
       {children}
     </StaffShell>
   );

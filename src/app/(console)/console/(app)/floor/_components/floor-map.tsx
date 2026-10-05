@@ -2,12 +2,37 @@
 
 import { Calendar03Icon, Invoice01Icon, Notification01Icon, UserGroupIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { FloorData, FloorTable } from "@/server/floor/read";
 import type { S1Copy } from "../_copy";
 import { STATE_STYLE, focus } from "./ui";
 
 /** Grid unit of the floor map in px: tables are drawn from their stored x/y/width/height */
 const UNIT = 46;
+/** Below this the tiles get too small to read, so the map scrolls sideways instead of shrinking further */
+const MIN_SCALE = 0.62;
+
+/** Shrinks the drawn floor to the width it is given so the whole room is visible without sideways scrolling. */
+function FitCanvas({ width, height, children }: { width: number; height: number; children: ReactNode }) {
+  const box = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(1);
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const measure = () => setScale(Math.max(MIN_SCALE, Math.min(1, el.clientWidth / width)));
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [width]);
+  return (
+    <div ref={box} className="overflow-x-auto p-3">
+      <div style={{ width: width * scale, height: height * scale }}>
+        <div style={{ width, height, transform: `scale(${scale})`, transformOrigin: "top left" }}>{children}</div>
+      </div>
+    </div>
+  );
+}
 
 export function FloorMap({
   data,
@@ -17,6 +42,8 @@ export function FloorMap({
   now,
   clock,
   dropping,
+  view = "map",
+  stateFilter = null,
   onSelect,
   onDrop,
 }: {
@@ -27,6 +54,8 @@ export function FloorMap({
   now: number;
   clock: (ms: number) => string;
   dropping: boolean;
+  view?: "grid" | "map";
+  stateFilter?: string | null;
   onSelect: (t: FloorTable) => void;
   onDrop: (t: FloorTable, entryId: string) => void;
 }) {
@@ -38,6 +67,30 @@ export function FloorMap({
       {zones.map((zone) => {
         const tables = data.tables.filter((t) => t.zoneId === zone.id);
         if (!tables.length) return null;
+        if (view === "grid") {
+          const shown = tables.filter((t) => !stateFilter || t.state === stateFilter).sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
+          return (
+            <section key={zone.id} aria-labelledby={`zone-${zone.id}`} className="rounded-card border border-line bg-surface">
+              <h2 id={`zone-${zone.id}`} className="flex items-center justify-between border-b border-line px-4 py-2 text-body font-bold text-ink">
+                {zone.name}
+                <span className="text-caption font-semibold text-muted">
+                  {tables.filter((t) => t.state === "available").length} {c.states.available.toLowerCase()} · {tables.length}
+                </span>
+              </h2>
+              {shown.length ? (
+                <ul className="grid grid-cols-[repeat(auto-fill,minmax(132px,1fr))] gap-3 p-3">
+                  {shown.map((t) => (
+                    <li key={t.id} className="h-[112px]">
+                      <Tile t={t} c={c} now={now} clock={clock} selected={selectedId === t.id} dropping={dropping} codeOf={codeOf} onSelect={onSelect} onDrop={onDrop} />
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="p-6 text-center text-body text-muted">No tables in this state.</p>
+              )}
+            </section>
+          );
+        }
         const cols = Math.max(...tables.map((t) => t.x + t.w));
         const rows = Math.max(...tables.map((t) => t.y + t.h));
         return (
@@ -48,15 +101,15 @@ export function FloorMap({
                 {tables.filter((t) => t.state === "available").length} {c.states.available.toLowerCase()} · {tables.length}
               </span>
             </h2>
-            <div className="overflow-x-auto p-3">
+            <FitCanvas width={cols * UNIT} height={rows * UNIT}>
               <ul className="relative" style={{ width: cols * UNIT, height: rows * UNIT }}>
                 {tables.map((t) => (
-                  <li key={t.id} className="absolute" style={{ left: t.x * UNIT, top: t.y * UNIT, width: t.w * UNIT - 8, height: t.h * UNIT - 8 }}>
+                  <li key={t.id} className={`absolute transition-opacity ${stateFilter && t.state !== stateFilter ? "opacity-20" : ""}`} style={{ left: t.x * UNIT, top: t.y * UNIT, width: t.w * UNIT - 8, height: t.h * UNIT - 8 }}>
                     <Tile t={t} c={c} now={now} clock={clock} selected={selectedId === t.id} dropping={dropping} codeOf={codeOf} onSelect={onSelect} onDrop={onDrop} />
                   </li>
                 ))}
               </ul>
-            </div>
+            </FitCanvas>
           </section>
         );
       })}
