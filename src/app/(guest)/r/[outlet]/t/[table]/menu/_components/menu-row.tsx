@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight01Icon, MinusSignIcon, PepperIcon, PlusSignIcon } from "@hugeicons/core-free-icons";
+import { ArrowRight01Icon, MinusSignIcon, PepperIcon, PlusSignIcon, Restaurant01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { memo, useState } from "react";
 import { formatRupees } from "@/domain/menu-price";
@@ -90,45 +90,100 @@ export const MenuRow = memo(function MenuRow({
     </>
   );
 
+  const thumb = (
+    <Thumb photo={photo} soldOut={soldOut} size="size-[88px]" onError={() => setImageOk(false)} />
+  );
+
   return (
     // Sold out stays readable: name in ink, price and description muted, photo faded
-    <li className="flex gap-4 border-b border-line/70 py-4 last:border-b-0">
+    <li className="mb-3 flex gap-3 rounded-2xl border border-line/80 bg-surface p-3 shadow-[0_1px_3px_rgb(0_0_0/0.05)]">
       {/* Tapping the dish opens its sheet once the item sheet (G4) exists; until then it is plain text */}
       {state.canOpenSheet ? (
         <button
           type="button"
           onClick={() => onOpen(item.id)}
-          className="min-w-0 flex-1 text-left focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand"
+          className="flex min-w-0 flex-1 gap-3 text-left focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand"
         >
-          {words}
+          {thumb}
+          <span className="min-w-0 flex-1">{words}</span>
         </button>
       ) : (
-        <div className="min-w-0 flex-1">{words}</div>
-      )}
-
-      <div className={`flex min-w-[104px] shrink-0 flex-col items-center ${photo ? "" : "justify-center"}`}>
-        {photo && (
-          // Restaurant photos can live on any host, so this stays a plain lazy image
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={photo}
-            alt=""
-            width={96}
-            height={96}
-            loading="lazy"
-            decoding="async"
-            onError={() => setImageOk(false)}
-            // A photo that failed before the page became interactive never fires onError
-            ref={(el) => {
-              if (el?.complete && el.naturalWidth === 0) setImageOk(false);
-            }}
-            className={`size-24 rounded-card bg-line/40 object-cover ${soldOut ? "opacity-60 grayscale" : ""}`}
-          />
-        )}
-        {/* Above the photo, which has its own layer when greyed */}
-        <div className={`relative z-10 ${photo ? "-mt-4" : ""}`}>
-          <RowAction item={item} name={name} state={state} c={c} onQty={onQty} onOpen={onOpen} />
+        <div className="flex min-w-0 flex-1 gap-3">
+          {thumb}
+          <div className="min-w-0 flex-1">{words}</div>
         </div>
+      )}
+      <div className="flex shrink-0 flex-col items-end justify-end">
+        <RowAction item={item} name={name} state={state} c={c} onQty={onQty} onOpen={onOpen} />
+      </div>
+    </li>
+  );
+});
+
+/** Dish photo, or a soft tile with a plate icon when the restaurant has not added one */
+export function Thumb({ photo, soldOut, size, onError }: { photo: string | null; soldOut?: boolean; size: string; onError?: () => void }) {
+  return photo ? (
+    // Restaurant photos can live on any host, so this stays a plain lazy image
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={photo}
+      alt=""
+      loading="lazy"
+      decoding="async"
+      onError={onError}
+      ref={(el) => {
+        if (el?.complete && el.naturalWidth === 0) onError?.();
+      }}
+      className={`${size} shrink-0 rounded-xl bg-line/40 object-cover ${soldOut ? "opacity-60 grayscale" : ""}`}
+    />
+  ) : (
+    <span aria-hidden className={`${size} grid shrink-0 place-items-center rounded-xl bg-brand-soft text-brand/70`}>
+      <HugeiconsIcon icon={Restaurant01Icon} size={28} strokeWidth={1.5} />
+    </span>
+  );
+}
+
+/** Popular row: a larger card with the photo on top, scrolled sideways */
+export const PopularCard = memo(function PopularCard({
+  item,
+  state,
+  lang,
+  c,
+  onQty,
+  onOpen,
+}: {
+  item: MenuRowItem;
+  state: RowState;
+  lang: Lang;
+  c: G3Copy;
+  onQty: (itemId: string, qty: number) => void;
+  onOpen: (itemId: string) => void;
+}) {
+  const name = pick(lang, item.nameEn, item.nameHi);
+  const price = formatRupees(item.price.paise);
+  const [imageOk, setImageOk] = useState(true);
+  const photo = item.imageUrl && imageOk ? item.imageUrl : null;
+  const body = (
+    <>
+      <Thumb photo={photo} soldOut={!item.available} size="aspect-[4/3] w-full" onError={() => setImageOk(false)} />
+      <span className="mt-2 flex items-center gap-1.5">
+        <VegMark veg={item.isVeg} label={item.isVeg ? c.veg : c.nonVeg} />
+        <span className="line-clamp-1 text-body font-bold text-ink">{name}</span>
+      </span>
+    </>
+  );
+  return (
+    <li className="w-40 shrink-0 rounded-2xl border border-line/80 bg-surface p-2.5 shadow-[0_1px_3px_rgb(0_0_0/0.05)]">
+      {state.canOpenSheet ? (
+        <button type="button" onClick={() => onOpen(item.id)} className="block w-full text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">
+          {body}
+        </button>
+      ) : (
+        <div>{body}</div>
+      )}
+      <div className="mt-1.5 flex items-center justify-between gap-2">
+        <span className={`text-body font-bold tabular ${item.available ? "text-brand-strong" : "text-muted"}`}>{item.price.from ? c.from(price) : price}</span>
+        <RowAction item={item} name={name} state={state} c={c} onQty={onQty} onOpen={onOpen} />
       </div>
     </li>
   );
@@ -181,14 +236,15 @@ function RowAction({
   if (state.qty === 0) {
     return (
       <div className="flex flex-col items-center">
-        <OutlineButton
-          label={c.add}
-          ariaLabel={c.addOne(name)}
-          disabled={state.blocked}
-          note={blockedNote}
+        <button
+          type="button"
           onClick={() => onQty(item.id, 1)}
-          icon={PlusSignIcon}
-        />
+          disabled={state.blocked}
+          aria-label={blockedNote ? `${c.addOne(name)}. ${blockedNote}` : c.addOne(name)}
+          className="relative grid size-9 place-items-center rounded-[10px] bg-brand text-brand-on shadow-[0_1px_2px_rgb(31_41_55/0.15)] transition-[transform,background-color] duration-100 ease-natural before:absolute before:-inset-1 hover:bg-brand-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand active:scale-[0.95] disabled:cursor-default disabled:bg-line disabled:text-muted disabled:shadow-none"
+        >
+          <HugeiconsIcon icon={PlusSignIcon} size={18} strokeWidth={2.4} aria-hidden />
+        </button>
         {inCart}
       </div>
     );
@@ -200,7 +256,7 @@ function RowAction({
       <div
         role="group"
         aria-label={c.qtyOf(state.qty, name)}
-        className={`flex min-h-9 min-w-[96px] items-center justify-between gap-1 rounded-[10px] text-brand-on shadow-[0_1px_2px_rgb(31_41_55/0.12)] ${state.blocked ? "bg-muted" : "bg-brand"}`}
+        className={`flex min-h-9 min-w-[92px] items-center justify-between gap-1 rounded-[10px] text-brand-on shadow-[0_1px_2px_rgb(31_41_55/0.12)] ${state.blocked ? "bg-muted" : "bg-brand"}`}
       >
         <StepButton icon={MinusSignIcon} label={c.removeOne(name)} disabled={state.blocked} note={blockedNote} onClick={() => onQty(item.id, state.qty - 1)} />
         <span aria-live="polite" className="min-w-6 text-center text-body font-bold tabular">

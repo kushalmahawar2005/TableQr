@@ -105,7 +105,7 @@ function Chip({ active, menu, onClick, children }: { active: boolean; menu?: boo
       aria-haspopup={menu ? "dialog" : undefined}
       onClick={onClick}
       className={`flex h-9 shrink-0 items-center gap-1 rounded-full border px-3.5 text-caption font-semibold whitespace-nowrap transition-colors duration-150 ease-natural focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
-        active ? "border-brand bg-brand text-brand-on" : "border-line bg-surface text-ink hover:border-ink/30"
+        active ? "border-brand bg-brand text-brand-on" : "border-line/80 bg-surface text-ink shadow-[0_1px_2px_rgb(0_0_0/0.04)] hover:border-ink/30"
       }`}
     >
       {active && !menu && <HugeiconsIcon icon={Tick02Icon} size={14} strokeWidth={2.4} aria-hidden />}

@@ -140,8 +140,12 @@ export function LandingView({
           summary={v.hideTable ? undefined : c.tableSummary(table.code, table.maxSeats, table.zone, v.pill.label)}
           status={<StatusPill {...v.pill} />}
         >
-          {v.people && <PeopleHere {...v.people} />}
-          {v.message && <CardMessage {...v.message} large={v.hideTable} />}
+          {v.people || v.message ? (
+            <>
+              {v.people && <PeopleHere {...v.people} />}
+              {v.message && <CardMessage {...v.message} large={v.hideTable} />}
+            </>
+          ) : null}
         </TableCard>
 
         {/* The action sits right under the table it acts on */}
@@ -173,17 +177,14 @@ export function LandingView({
         ) : null}
 
         {v.cta && (
-          <ul className="mt-7 grid animate-fade grid-cols-3 gap-2 [animation-delay:200ms]">
+          <ul className="mt-6 grid animate-fade grid-cols-3 gap-2 [animation-delay:200ms]">
             {c.reassurances.map((r, i) => (
-              <li key={r.title} className="flex flex-col items-center gap-1.5 text-center">
-                <HugeiconsIcon
-                  icon={[SmartPhone01Icon, Wallet01Icon, UserGroupIcon][i]}
-                  size={18}
-                  strokeWidth={1.6}
-                  className="text-brand"
-                  aria-hidden
-                />
-                <span className="text-caption text-muted">{r.title}</span>
+              <li key={r.title} className="flex flex-col items-center gap-1.5 rounded-guest border border-line bg-surface px-2 py-3.5 text-center">
+                <span className="grid size-9 place-items-center rounded-full bg-brand-soft">
+                  <HugeiconsIcon icon={[SmartPhone01Icon, Wallet01Icon, UserGroupIcon][i]} size={18} strokeWidth={1.8} className="text-brand-strong" aria-hidden />
+                </span>
+                <span className="text-caption font-semibold leading-tight text-ink">{r.title}</span>
+                <span className="text-label leading-tight text-muted">{r.body}</span>
               </li>
             ))}
           </ul>

@@ -280,7 +280,7 @@ function Header(props: {
   }[conn];
   const connTone = conn === "live" ? "text-kds-text" : conn === "offline" ? "text-kds-late" : conn === "polling" ? "text-kds-muted" : "text-kds-amber";
   return (
-    <header className="flex min-h-[72px] shrink-0 flex-wrap items-center gap-x-6 gap-y-2 border-b border-kds-line px-4 py-2 sm:h-[72px] sm:flex-nowrap sm:py-0">
+    <header className="flex min-h-[72px] shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-kds-line px-4 py-2 sm:h-[72px] sm:flex-nowrap sm:gap-x-6 sm:py-0">
       <div className="min-w-0">
         <h1 className="font-display text-[22px] font-bold leading-8 sm:text-[28px]">
           {c.kitchen} <span className="text-kds-muted">·</span> {board.station ?? (device.expeditor ? c.all : device.station)}
@@ -291,23 +291,24 @@ function Header(props: {
           {device.expeditor ? ` · ${c.expeditor}` : ""}
         </p>
       </div>
-      <p className="tabular ml-auto font-display text-[30px] font-bold" aria-label={c.clock}>
+      <p className="tabular ml-auto font-display text-[26px] font-bold sm:text-[30px]" aria-label={c.clock}>
         {time}
       </p>
       {board.avgMinutes !== null && <p className="hidden text-[18px] text-kds-muted xl:block">{c.avg(board.avgMinutes)}</p>}
       <button
         type="button"
         onClick={props.onSound}
-        className={`flex h-12 items-center gap-2 rounded-lg px-4 text-[18px] font-semibold ${sound === "locked" ? "bg-kds-new" : "bg-kds-card"}`}
+        aria-label={sound === "locked" ? c.enableSound : sound === "on" ? c.soundOn : c.soundOff}
+        className={`flex h-11 items-center gap-2 rounded-lg px-3 text-[18px] font-semibold sm:h-12 sm:px-4 ${sound === "locked" ? "bg-kds-new" : "bg-kds-card"}`}
       >
         <HugeiconsIcon icon={sound === "off" ? VolumeOffIcon : VolumeHighIcon} size={22} aria-hidden />
-        {sound === "locked" ? c.enableSound : sound === "on" ? c.soundOn : c.soundOff}
+        <span className={sound === "locked" ? "text-[16px] sm:text-[18px]" : "hidden sm:inline"}>{sound === "locked" ? c.enableSound : sound === "on" ? c.soundOn : c.soundOff}</span>
       </button>
-      <span role="status" className={`flex items-center gap-2 text-[18px] font-semibold ${connTone}`}>
+      <span role="status" aria-label={connLabel} className={`flex items-center gap-2 text-[18px] font-semibold ${connTone}`}>
         <HugeiconsIcon icon={conn === "offline" ? WifiOff01Icon : Wifi01Icon} size={22} aria-hidden />
-        {connLabel}
+        <span className="hidden sm:inline">{connLabel}</span>
       </span>
-      <button type="button" onClick={props.onSettings} aria-label={c.settings} className="flex h-12 w-12 items-center justify-center rounded-lg bg-kds-card">
+      <button type="button" onClick={props.onSettings} aria-label={c.settings} className="ml-auto flex h-11 w-11 items-center justify-center rounded-lg bg-kds-card sm:ml-0 sm:h-12 sm:w-12">
         <HugeiconsIcon icon={Settings02Icon} size={24} aria-hidden />
       </button>
     </header>
@@ -379,7 +380,7 @@ function Drawer({ title, onClose, c, children }: { title: string; onClose: () =>
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex h-[72px] shrink-0 items-center justify-between border-b border-kds-line px-5">
-          <h2 className="font-display text-[26px] font-bold">{title}</h2>
+          <h2 className="font-display text-[22px] font-bold sm:text-[26px]">{title}</h2>
           <button type="button" onClick={onClose} aria-label={c.close} className="flex h-12 w-12 items-center justify-center rounded-lg bg-kds-bg">
             <HugeiconsIcon icon={Cancel01Icon} size={24} aria-hidden />
           </button>
@@ -497,7 +498,7 @@ function StockPanel(props: {
   );
 }
 
-const field = "h-14 w-full rounded-lg border-2 border-kds-line bg-kds-bg px-4 text-[20px] text-kds-text outline-none focus:border-kds-text";
+const field = "mt-1 h-14 w-full rounded-lg border-2 border-kds-line bg-kds-bg px-4 text-[20px] text-kds-text outline-none focus:border-kds-text";
 
 function SettingsPanel(props: { c: KdsCopy; device: KdsDeviceView; stations: string[]; preview: boolean; soundPref: boolean; onClose: () => void }) {
   const { c, device, stations } = props;
@@ -530,13 +531,13 @@ function SettingsPanel(props: { c: KdsCopy; device: KdsDeviceView; stations: str
   return (
     <Drawer title={c.settingsTitle} onClose={props.onClose} c={c}>
       <p className="text-[18px] text-kds-muted">{c.settingsBody}</p>
-      <div className="mt-4 grid grid-cols-2 gap-3">
+      <div className="mt-4 grid grid-cols-1 gap-3 min-[480px]:grid-cols-2">
         <label className="block">
-          <span className="text-[16px] text-kds-muted">{c.phone}</span>
+          <span className="text-[16px] font-semibold text-kds-muted">{c.phone}</span>
           <input className={field} inputMode="tel" autoComplete="off" value={phone} onChange={(e) => setPhone(e.target.value)} />
         </label>
         <label className="block">
-          <span className="text-[16px] text-kds-muted">{c.pin}</span>
+          <span className="text-[16px] font-semibold text-kds-muted">{c.pin}</span>
           <input
             className={`${field} tracking-[0.4em]`}
             type="password"
@@ -559,7 +560,7 @@ function SettingsPanel(props: { c: KdsCopy; device: KdsDeviceView; stations: str
             type="button"
             aria-pressed={lang === l}
             onClick={() => setLang(l)}
-            className={`h-12 flex-1 rounded-lg text-[20px] font-semibold ${lang === l ? "bg-kds-text text-kds-bg" : "bg-kds-bg"}`}
+            className={`h-12 flex-1 rounded-lg border-2 text-[20px] font-semibold ${lang === l ? "border-kds-text bg-kds-text text-kds-bg" : "border-kds-line bg-kds-bg"}`}
           >
             {l === "en" ? "English" : "हिन्दी"}
           </button>
@@ -581,7 +582,7 @@ function SettingsPanel(props: { c: KdsCopy; device: KdsDeviceView; stations: str
         type="button"
         disabled={busy || pin.length !== 4}
         onClick={() => submit("save")}
-        className="mt-5 h-16 w-full rounded-lg bg-kds-ok text-[22px] font-bold disabled:opacity-50"
+        className="mt-3 h-16 w-full rounded-lg bg-kds-ok text-[22px] font-bold disabled:opacity-40"
       >
         {busy ? c.working : c.save}
       </button>
@@ -611,8 +612,9 @@ export function StationPicker(props: { c: KdsCopy; stations: string[]; station: 
             type="button"
             aria-pressed={!expeditor && station === st}
             onClick={() => props.onPick(st, false)}
-            className={`h-14 rounded-lg text-[20px] font-semibold ${!expeditor && station === st ? "bg-kds-text text-kds-bg" : "bg-kds-bg"}`}
+            className={`flex h-14 items-center justify-center gap-2 rounded-lg border-2 text-[20px] font-semibold ${!expeditor && station === st ? "border-kds-text bg-kds-text text-kds-bg" : "border-kds-line bg-kds-bg"}`}
           >
+            {!expeditor && station === st && <span aria-hidden>✓</span>}
             {st}
           </button>
         ))}
@@ -621,9 +623,9 @@ export function StationPicker(props: { c: KdsCopy; stations: string[]; station: 
         type="button"
         aria-pressed={expeditor}
         onClick={() => props.onPick(null, true)}
-        className={`mt-2 w-full rounded-lg px-4 py-3 text-left ${expeditor ? "bg-kds-text text-kds-bg" : "bg-kds-bg"}`}
+        className={`mt-2 w-full rounded-lg border-2 px-4 py-3 text-left ${expeditor ? "border-kds-text bg-kds-text text-kds-bg" : "border-kds-line bg-kds-bg"}`}
       >
-        <span className="block text-[20px] font-semibold">{c.expeditorAll}</span>
+        <span className="block text-[20px] font-semibold">{expeditor && <span aria-hidden>✓ </span>}{c.expeditorAll}</span>
         <span className={`block text-[16px] ${expeditor ? "text-kds-bg/80" : "text-kds-muted"}`}>{c.expeditorBody}</span>
       </button>
     </fieldset>

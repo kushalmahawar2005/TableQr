@@ -280,6 +280,9 @@ export function BillScreen({
 
 
   const total = bill.totals.totalPaise;
+  const remainingTotal = Math.min(total, data.people.reduce((n, p) => n + p.duePaise, 0));
+  const paidTotal = Math.max(0, total - remainingTotal);
+  const paidPct = total > 0 ? Math.round((paidTotal / total) * 100) : 0;
   const taxRates = Object.keys(bill.totals.taxBreakup);
   const gstLabel = taxRates.length === 1 ? c.gst(pct(Number(taxRates[0]))) : c.gstMixed;
   const host = data.people.find((p) => p.isHost);
@@ -363,15 +366,32 @@ export function BillScreen({
           />
         ) : (
           <>
-            {/* Table total */}
-            <section aria-label={c.tableTotal} className="mt-4 flex flex-wrap items-end justify-between gap-x-4 gap-y-1 rounded-guest border border-line bg-surface px-4 py-3.5">
-              <div className="min-w-0">
-                <p className="text-body font-semibold text-ink">{c.tableTotal}</p>
-                <p className="text-caption text-muted">{c.includingTax}</p>
+            {/* Table total: a receipt with how much of it is already paid */}
+            <section aria-label={c.tableTotal} className="mt-4 overflow-hidden rounded-guest border border-line bg-surface shadow-[0_1px_3px_rgb(0_0_0/0.05)]">
+              <div className="flex items-center justify-between gap-3 border-b border-dashed border-line bg-brand-soft/40 px-4 py-3">
+                <h2 className="flex items-center gap-2 font-display text-section font-bold text-ink">
+                  <HugeiconsIcon icon={Invoice01Icon} size={18} className="text-brand-strong" aria-hidden />
+                  {c.yourBill}
+                </h2>
+                <span className="text-caption text-muted">{c.paidOf(bill.paidCount, data.people.length)}</span>
               </div>
-              <div className="text-right">
-                <p className="font-display text-title leading-tight font-bold text-ink tabular">{formatRupees(total)}</p>
-                <p className="text-caption text-muted">{c.paidOf(bill.paidCount, data.people.length)}</p>
+              <dl className="space-y-1.5 px-4 pt-3 text-body">
+                <Row label={c.subtotal} value={exact(bill.totals.subtotalPaise - bill.totals.discountPaise)} />
+                {bill.totals.serviceChargeBp > 0 && <Row label={c.serviceCharge(pct(bill.totals.serviceChargeBp))} value={exact(bill.totals.serviceChargePaise)} />}
+                <Row label={gstLabel} value={exact(bill.totals.taxPaise)} />
+                <div className="!mt-3 flex items-baseline justify-between gap-3 border-t border-line pt-3">
+                  <dt className="font-semibold text-ink">{c.tableTotal}</dt>
+                  <dd className="font-display text-title leading-tight font-bold text-ink tabular">{formatRupees(total)}</dd>
+                </div>
+              </dl>
+              <div className="px-4 pt-3 pb-4">
+                <div className="flex justify-between gap-3 text-caption font-semibold tabular">
+                  <span className="text-[var(--state-available-text)]">{c.paidAmount(formatRupees(paidTotal))}</span>
+                  <span className="text-brand-strong">{c.remainingAmount(formatRupees(remainingTotal))}</span>
+                </div>
+                <div role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={paidPct} className="mt-1.5 h-2 overflow-hidden rounded-full bg-brand-soft">
+                  <div className="h-full rounded-full bg-brand transition-[width] duration-500" style={{ width: `${paidPct}%` }} />
+                </div>
               </div>
             </section>
 
@@ -380,7 +400,7 @@ export function BillScreen({
               <h2 id="g8-split" className="font-display text-section font-bold text-ink">
                 {c.split}
               </h2>
-              <div role="radiogroup" aria-labelledby="g8-split" className="mt-2 grid grid-cols-[repeat(3,minmax(min-content,1fr))] gap-1 rounded-cta bg-ink/[0.06] p-1">
+              <div role="radiogroup" aria-labelledby="g8-split" className="mt-2 grid grid-cols-[repeat(3,minmax(min-content,1fr))] gap-1 rounded-cta border border-line/80 bg-surface p-1 shadow-[0_1px_3px_rgb(0_0_0/0.05)]">
                 {(["my_items", "equal", "custom"] as Mode[]).map((m) => (
                   <button
                     key={m}
@@ -389,7 +409,7 @@ export function BillScreen({
                     aria-checked={bill.mode === m}
                     disabled={!bill.canEdit || !online || !!busy}
                     onClick={() => bill.mode !== m && void act(`mode-${m}`, () => splitModeAction(data.outlet.code, shortCode, m))}
-                    className={`min-h-11 rounded-input px-1.5 text-caption font-semibold transition-colors ${focusRing} ${bill.mode === m ? "bg-surface text-ink shadow-[0_1px_2px_rgb(31_41_55/0.12)]" : "text-muted enabled:hover:text-ink"}`}
+                    className={`min-h-11 rounded-input px-1.5 text-caption font-semibold transition-colors ${focusRing} ${bill.mode === m ? "border border-brand-border bg-brand-soft text-brand-strong shadow-[0_1px_2px_rgb(31_41_55/0.12)]" : "text-muted enabled:hover:text-ink"}`}
                   >
                     {c.modes[m]}
                   </button>
@@ -420,7 +440,7 @@ export function BillScreen({
                 <h2 id="g8-people" className="font-display text-section font-bold text-ink">
                   {c.people} <span className="font-normal text-muted">({data.people.length})</span>
                 </h2>
-                <ul className="mt-2 divide-y divide-line/70 rounded-guest border border-line bg-surface">
+                <ul className="mt-2 space-y-2">
                   {data.people.map((p) => {
                     const hostMenu = session.isHost && !p.isHost && p.status === "paid" && !p.paidAndLeft && !p.removed;
                     const payable = !p.isMe && p.status === "unpaid" && p.duePaise > 0 && canPay;
@@ -450,7 +470,7 @@ export function BillScreen({
                       </>
                     );
                     return (
-                      <li key={p.id} className="flex items-center">
+                      <li key={p.id} className="flex items-center rounded-guest border border-line/80 bg-surface shadow-[0_1px_3px_rgb(0_0_0/0.05)]">
                         {payable ? (
                           <button type="button" onClick={() => openOthers(p.id)} aria-label={`${c.payFor(shortName(p))}, ${formatRupees(p.duePaise)}`} className={`flex min-h-16 w-full flex-wrap items-center gap-x-3 gap-y-1 px-3.5 py-2.5 text-left ${focusRing}`}>
                             {body}
@@ -477,7 +497,7 @@ export function BillScreen({
 
             {/* Your share */}
             {data.mine && (
-              <section aria-labelledby="g8-mine" className="mt-6 rounded-guest border border-line bg-surface p-4">
+              <section aria-labelledby="g8-mine" className="mt-6 rounded-guest border border-line bg-surface p-4 shadow-[0_1px_3px_rgb(0_0_0/0.05)]">
                 <h2 id="g8-mine" className="font-display text-section font-bold text-ink">
                   {c.yourShare}
                 </h2>

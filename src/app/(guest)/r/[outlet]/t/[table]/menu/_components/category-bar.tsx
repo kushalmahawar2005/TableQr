@@ -39,8 +39,8 @@ export function CategoryBar({ categories, label }: { categories: CategoryLink[];
   const current = categories.some((c) => c.id === active) ? active : categories[0]?.id;
 
   return (
-    <nav aria-label={label} className="sticky top-0 z-20 -mx-4 border-b border-line bg-paper/95 px-4 backdrop-blur-[2px] min-[360px]:-mx-5 min-[360px]:px-5">
-      <div ref={bar} className="flex gap-5 overflow-x-auto [scrollbar-width:none]">
+    <nav aria-label={label} className="sticky top-0 z-20 -mx-4 bg-paper/95 px-4 py-2 backdrop-blur-[2px] min-[360px]:-mx-5 min-[360px]:px-5">
+      <div ref={bar} className="flex gap-2 overflow-x-auto py-1 [scrollbar-width:none]">
         {categories.map((c) => {
           const on = c.id === current;
           return (
@@ -54,12 +54,11 @@ export function CategoryBar({ categories, label }: { categories: CategoryLink[];
                 setActive(c.id);
                 document.getElementById(`cat-${c.id}`)?.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
               }}
-              className={`relative shrink-0 py-3 text-body whitespace-nowrap transition-colors duration-150 ease-natural focus-visible:outline-2 focus-visible:outline-brand ${
-                on ? "font-bold text-ink" : "font-medium text-muted hover:text-ink"
+              className={`shrink-0 rounded-xl border px-4 py-2.5 text-body whitespace-nowrap shadow-[0_1px_2px_rgb(0_0_0/0.04)] transition-colors duration-150 ease-natural focus-visible:outline-2 focus-visible:outline-brand ${
+                on ? "border-brand-border bg-brand-soft font-bold text-brand-strong" : "border-line/80 bg-surface font-medium text-ink hover:border-ink/30"
               }`}
             >
               {c.label}
-              <span aria-hidden className={`absolute inset-x-0 -bottom-px h-0.5 rounded-full ${on ? "bg-brand" : "bg-transparent"}`} />
             </a>
           );
         })}

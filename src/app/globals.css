@@ -154,7 +154,7 @@
   --color-brand-on: var(--brand-on);
 
   --font-sans: var(--font-inter), var(--font-devanagari), system-ui, sans-serif;
-  --font-display: var(--font-manrope), var(--font-devanagari), system-ui, sans-serif;
+  --font-display: var(--font-manrope), var(--font-devanagari-display), var(--font-devanagari), system-ui, sans-serif;
   --font-hindi: var(--font-devanagari), var(--font-inter), system-ui, sans-serif;
 
   /* Type scale: size / line height */
@@ -460,4 +460,12 @@ body {
   --input: var(--line);
   --ring: color-mix(in srgb, var(--ink) 55%, transparent);
   --muted-foreground: var(--muted);
+}
+
+/* Self-hosted font family names (see src/app/layout.tsx) */
+:root {
+  --font-inter: "Inter Variable";
+  --font-manrope: "Manrope Variable";
+  --font-devanagari: "Hind";
+  --font-devanagari-display: "Poppins";
 }

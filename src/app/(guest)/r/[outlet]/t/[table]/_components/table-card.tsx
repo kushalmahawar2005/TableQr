@@ -23,17 +23,20 @@ export function TableCard({
   className?: string;
 }) {
   return (
-    <section aria-label={summary} className={`rounded-guest border border-line bg-surface px-5 py-5 ${className}`}>
-      {title && (
-        <>
-          <p className="text-caption text-muted">{eyebrow}</p>
-          <h1 className="mt-0.5 font-display text-display font-bold text-ink tabular">{title}</h1>
-          {meta && <p className="mt-0.5 text-body text-muted">{meta}</p>}
-          <hr className="-mx-5 my-4 border-line/70" />
-        </>
+    <section aria-label={summary} className={`rounded-guest border border-line bg-surface px-5 py-5 shadow-[0_1px_2px_rgb(0_0_0/0.04)] ${className}`}>
+      {title ? (
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-caption text-muted">{eyebrow}</p>
+            <h1 className="mt-0.5 font-display text-display font-bold text-ink tabular">{title}</h1>
+            {meta && <p className="mt-0.5 text-body text-muted">{meta}</p>}
+          </div>
+          <div className="flex shrink-0 flex-wrap justify-end gap-2 pt-1">{status}</div>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2">{status}</div>
       )}
-      <div className="flex flex-wrap items-center gap-2">{status}</div>
-      {children && <div className="mt-4">{children}</div>}
+      {children && <div className={title ? "mt-4 border-t border-line/70 pt-4" : "mt-4"}>{children}</div>}
     </section>
   );
 }

@@ -15,7 +15,7 @@ import { BUILT } from "../_screens";
 import { CartBar } from "./cart-bar";
 import { CategoryBar } from "./category-bar";
 import { FilterBar } from "./filter-bar";
-import { MenuRow, pick } from "./menu-row";
+import { MenuRow, PopularCard, pick } from "./menu-row";
 
 /** A frozen state for the dev review board */
 export type MenuPreview = {
@@ -230,7 +230,7 @@ export function MenuClient({
       <form role="search" onSubmit={(e) => { e.preventDefault(); (document.activeElement as HTMLElement | null)?.blur(); }} className="mt-3">
         <label className="relative block">
           <span className="sr-only">{c.searchLabel}</span>
-          <HugeiconsIcon icon={Search01Icon} size={20} className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-muted" aria-hidden />
+          <HugeiconsIcon icon={Search01Icon} size={20} className="pointer-events-none absolute top-1/2 left-4 -translate-y-1/2 text-brand" aria-hidden />
           <input
             type="search"
             enterKeyHint="search"
@@ -240,7 +240,7 @@ export function MenuClient({
             onFocus={() => setSearchFocused(true)}
             onBlur={() => setSearchFocused(false)}
             placeholder={c.searchPlaceholder}
-            className="h-12 w-full rounded-input border border-line bg-surface pr-11 pl-11 text-section text-ink outline-none placeholder:text-muted/80 focus:border-brand focus:shadow-[0_0_0_3px_var(--brand-soft)] [&::-webkit-search-cancel-button]:hidden"
+            className="h-12 w-full rounded-full border border-line/80 bg-surface pr-11 pl-12 text-body text-ink shadow-[0_1px_3px_rgb(0_0_0/0.05)] outline-none placeholder:text-muted/80 focus:border-brand focus:shadow-[0_0_0_3px_var(--brand-soft)] [&::-webkit-search-cancel-button]:hidden"
           />
           {query && (
             <button
@@ -303,14 +303,25 @@ export function MenuClient({
           </div>
           {sections.map((s) => (
             <section key={s.id} id={`cat-${s.id}`} aria-labelledby={`h-${s.id}`} className="scroll-mt-14 pt-5">
-              <h2 id={`h-${s.id}`} className="font-display text-section font-bold text-ink">
-                {s.label}
-              </h2>
-              <ul className="mt-1">
-                {s.items.map((item) => (
-                  <MenuRow key={item.id} item={item} state={rowState(item)} lang={lang} c={c} onQty={setQty} onOpen={openItem} />
-                ))}
-              </ul>
+              <div className="flex items-baseline justify-between gap-3">
+                <h2 id={`h-${s.id}`} className="font-display text-title font-bold text-ink">
+                  {s.label}
+                </h2>
+                <span className="shrink-0 rounded-full border border-line/80 bg-surface px-2.5 py-0.5 text-caption text-muted">{c.itemCount(s.items.length)}</span>
+              </div>
+              {s.id === "popular" ? (
+                <ul className="-mx-4 mt-3 flex gap-3 overflow-x-auto px-4 pb-2 [scrollbar-width:none] min-[360px]:-mx-5 min-[360px]:px-5">
+                  {s.items.map((item) => (
+                    <PopularCard key={item.id} item={item} state={rowState(item)} lang={lang} c={c} onQty={setQty} onOpen={openItem} />
+                  ))}
+                </ul>
+              ) : (
+                <ul className="mt-3">
+                  {s.items.map((item) => (
+                    <MenuRow key={item.id} item={item} state={rowState(item)} lang={lang} c={c} onQty={setQty} onOpen={openItem} />
+                  ))}
+                </ul>
+              )}
             </section>
           ))}
         </>

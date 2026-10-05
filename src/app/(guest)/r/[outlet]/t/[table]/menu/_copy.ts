@@ -35,6 +35,8 @@ const en = {
 
   categoriesLabel: "Menu sections",
   popular: "Popular",
+  itemCount: (n: number) => `${n} ${n === 1 ? "item" : "items"}`,
+  myOrder: "My order",
 
   veg: "Vegetarian",
   nonVeg: "Non-vegetarian",
@@ -108,6 +110,8 @@ const hi: G3Copy = {
 
   categoriesLabel: "मेन्यू के हिस्से",
   popular: "लोकप्रिय",
+  itemCount: (n: number) => `${n} आइटम`,
+  myOrder: "मेरा ऑर्डर",
 
   veg: "शाकाहारी",
   nonVeg: "मांसाहारी",
