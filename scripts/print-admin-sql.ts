@@ -22,11 +22,16 @@ async function main() {
   ];
 
   const lines = plans.map(
-    (p) => `INSERT IGNORE INTO \`plans\` (\`code\`, \`name\`, \`monthly_price_paise\`, \`features\`, \`sort_order\`) VALUES (${q(p.code)}, ${q(p.name)}, ${p.price ?? "NULL"}, ${q(JSON.stringify(p.features))}, ${p.sort});`,
+    (p) =>
+      "INSERT IGNORE INTO `plans` (`code`, `name`, `monthly_price_paise`, `features`, `sort_order`, `created_at`, `updated_at`) VALUES (" +
+      [q(p.code), q(p.name), p.price ?? "NULL", q(JSON.stringify(p.features)), p.sort, "NOW(3)", "NOW(3)"].join(", ") +
+      ");",
   );
   const hash = await hashAdminPassword(password);
   lines.push(
-    `INSERT INTO \`platform_admins\` (\`id\`, \`email\`, \`name\`, \`password_hash\`, \`role\`) VALUES (${q(uuidv7())}, ${q(email)}, ${q(name)}, ${q(hash)}, 'super_admin') ON DUPLICATE KEY UPDATE \`password_hash\` = VALUES(\`password_hash\`), \`name\` = VALUES(\`name\`), \`role\` = 'super_admin', \`is_active\` = 1;`,
+    "INSERT INTO `platform_admins` (`id`, `email`, `name`, `password_hash`, `role`, `is_active`, `created_at`, `updated_at`) VALUES (" +
+      [q(uuidv7()), q(email), q(name), q(hash), "'super_admin'", "1", "NOW(3)", "NOW(3)"].join(", ") +
+      ") ON DUPLICATE KEY UPDATE `password_hash` = VALUES(`password_hash`), `name` = VALUES(`name`), `role` = 'super_admin', `is_active` = 1, `updated_at` = NOW(3);",
   );
   console.log(lines.join("\n"));
 }
