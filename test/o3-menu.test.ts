@@ -35,6 +35,7 @@ describe("O3 menu manager import validation", () => {
     const result = await storeMenuImage({ tenantId: "o3-test", brandId: "brand", filename: "x.png", contentType: "image/png", bytes: await sharp({ create: { width: 2, height: 2, channels: 4, background: "red" } }).png().toBuffer() });
     expect(result.url).toMatch(/^\/uploads\/menus\//);
     await unlink(`${process.cwd()}/public${result.url}`);
+    await unlink(`${process.cwd()}/public${result.url.replace(/\.webp$/, "-sm.webp")}`).catch(() => {});
   });
 });
 

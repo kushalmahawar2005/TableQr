@@ -15,6 +15,8 @@ export type BillMessage = {
   roundOffPaise?: number;
   totalPaise: number;
   paidPaise?: number;
+  /** The bill as a page that saves as a PDF */
+  link?: string | null;
 };
 
 const rs = (paise: number) => `₹${(paise / 100).toLocaleString("en-IN", { minimumFractionDigits: paise % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
@@ -33,6 +35,8 @@ export function billMessage(b: BillMessage): string {
     b.roundOffPaise ? `Round off: ${b.roundOffPaise < 0 ? "−" : ""}${rs(Math.abs(b.roundOffPaise))}` : "",
     `*Total: ${rs(b.totalPaise)}*`,
     b.paidPaise ? `Paid: ${rs(b.paidPaise)}` : "",
+    "",
+    b.link ? `Bill (PDF): ${b.link}` : "",
     "",
     "Thank you for dining with us!",
   ];

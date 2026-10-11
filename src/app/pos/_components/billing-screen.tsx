@@ -23,7 +23,7 @@ const quiet = cn(buttonVariants({ variant: "secondary" }), "h-11 gap-2 border bo
 const brand = cn(buttonVariants({ variant: "default" }), "h-11 gap-2 px-4 text-sm hover:bg-primary/90");
 const field = "mt-1 block min-h-11 w-full rounded-input border border-line bg-surface px-3 text-body text-ink outline-none focus:border-ink focus-visible:ring-2 focus-visible:ring-ink/20";
 
-export function BillingScreen({ initial, realtimeUrl, embedded = false }: { initial: PosQueue; realtimeUrl: string | null; embedded?: boolean }) {
+export function BillingScreen({ initial, realtimeUrl, embedded = false, openSession = null }: { initial: PosQueue; realtimeUrl: string | null; embedded?: boolean; openSession?: string | null }) {
   const [queue, setQueue] = useState(initial);
   const [detail, setDetail] = useState<PosBillDetail | null>(null);
   const [tab, setTab] = useState<"due" | "paid">("due");
@@ -79,6 +79,13 @@ export function BillingScreen({ initial, realtimeUrl, embedded = false }: { init
   };
 
   const open = (id: string) => void run(() => actions.detailAction(id), (d) => { setDetail(d); setShare(""); });
+  // Sent here from the floor's "Take payment": that table's bill opens at once, asked for or not
+  const opened = useRef(false);
+  useEffect(() => {
+    if (!openSession || opened.current) return;
+    opened.current = true;
+    void actions.detailAction(openSession).then((d) => { if (d.ok) setDetail(d.data); });
+  }, [openSession]);
   const closeSheet = () => { setSheet(null); setPhone(""); setPin(""); setReason(""); setReceived(""); setReference(""); setDone(null); settleKey.current = null; };
 
   const dueAll = queue.queue as Card[];
@@ -224,6 +231,7 @@ export function BillingScreen({ initial, realtimeUrl, embedded = false }: { init
                           roundOffPaise: detail.bill?.roundOffPaise ?? 0,
                           totalPaise: detail.bill?.totalPaise ?? 0,
                           paidPaise: paidSoFar,
+                          link: detail.bill && typeof window !== "undefined" ? `${window.location.origin}/b/${detail.bill.shareToken}` : null,
                         })}
                       />
                       {!isPaidBill && <button type="button" className={brand} disabled={!canPay} onClick={() => { setMethod("cash"); setSheet({ kind: "pay" }); }}><Banknote className="size-4" aria-hidden="true" />{L("Take payment", "भुगतान लें")}</button>}

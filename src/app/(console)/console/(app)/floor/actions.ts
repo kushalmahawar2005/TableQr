@@ -7,6 +7,7 @@ import { cancelReservation, checkInReservation, markNoShow, reassignReservation,
 import {
   blockTable,
   clearEmptyVisit,
+  closeVisit,
   combineTables,
   extendTime,
   markNeedsCleaning,
@@ -37,8 +38,8 @@ async function act(work: (s: StaffSession) => Promise<unknown>): Promise<FloorRe
     return { ok: true };
   } catch (err) {
     if (err instanceof AppError) {
-      const { latestEndAt, reason, startAt, name, until, allowedAt } = (err.details ?? {}) as Record<string, unknown>;
-      return { ok: false, code: err.code, message: err.message, details: { latestEndAt, reason, startAt, name, until, allowedAt } };
+      const { latestEndAt, reason, startAt, name, until, allowedAt, duePaise } = (err.details ?? {}) as Record<string, unknown>;
+      return { ok: false, code: err.code, message: err.message, details: { latestEndAt, reason, startAt, name, until, allowedAt, duePaise } };
     }
     console.error("[floor] action failed", err);
     return { ok: false, code: "failed", message: "That didn't go through. Try again." };
@@ -75,6 +76,8 @@ export const seatWalkInAction = async (tableId: string, partySize: number, guest
 export const needsCleaningAction = async (tableId: string) => act((s) => markNeedsCleaning(s, String(tableId)));
 export const readyAction = async (tableId: string) => act((s) => markReady(s, String(tableId)));
 export const clearEmptyAction = async (tableId: string) => act((s) => clearEmptyVisit(s, String(tableId)));
+/** Clear a table whose party is done; owed money needs a reason (manager or owner) */
+export const closeVisitAction = async (tableId: string, reason: string | null) => act((s) => closeVisit(s, { tableId: String(tableId), reason }));
 export const blockAction = async (tableId: string, reason: BlockReason, note: string | null, until: number | null) =>
   act((s) => blockTable(s, { tableId: String(tableId), reason, note, until }));
 export const unblockAction = async (tableId: string) => act((s) => unblockTable(s, String(tableId)));

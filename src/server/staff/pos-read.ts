@@ -7,6 +7,7 @@ import { loadRefundState } from "../billing/refunds";
 import { requireStaffRole } from "./waiter";
 import type { StaffSession } from "./auth";
 import { billDiscount } from "../billing/discounts";
+import { billToken } from "../billing/bill-link";
 
 export const posRoles = ["cashier", "manager", "owner", "accountant"] as const;
 async function guard(staff: StaffSession) { await requireStaffRole(staff, posRoles); return staff; }
@@ -66,6 +67,6 @@ export async function posBillDetail(staff: StaffSession, sessionId: string) {
     row.bill ? db.select().from(s.payments).where(and(eq(s.payments.tenantId, staff.tenantId), eq(s.payments.billId, row.bill.id))).orderBy(desc(s.payments.createdAt)) : Promise.resolve([]),
   ]);
   const refundState = await loadRefundState(staff.tenantId, payments);
-  return { sessionId, tableId: row.table.id, tableCode: row.table.code, status: row.session.status, bill: row.bill ? { id: row.bill.id, status: row.bill.status, subtotalPaise: row.bill.subtotalPaise, discountPaise: row.bill.discountPaise, discount: await billDiscount(staff, row.bill.id), taxPaise: row.bill.taxPaise, serviceChargePaise: row.bill.serviceChargePaise, roundOffPaise: row.bill.roundOffPaise, totalPaise: row.bill.totalPaise } : null, people, lines, shares: shares.map(x => ({ id: x.id, participantId: x.participantId, amountPaise: x.amountPaise, paidPaise: x.paidPaise, status: x.status, frozenAt: x.frozenAt?.getTime() ?? null })), needsApproval: !staff.roles.some(r => r === "manager" || r === "owner"), payments: payments.map(x => ({ id: x.id, method: x.method, amountPaise: x.amountPaise, tipPaise: x.tipPaise, status: x.status, channel: x.channel, createdAt: x.createdAt.getTime(), refund: refundState.get(x.id)! })) };
+  return { sessionId, tableId: row.table.id, tableCode: row.table.code, status: row.session.status, bill: row.bill ? { id: row.bill.id, status: row.bill.status, subtotalPaise: row.bill.subtotalPaise, discountPaise: row.bill.discountPaise, discount: await billDiscount(staff, row.bill.id), taxPaise: row.bill.taxPaise, serviceChargePaise: row.bill.serviceChargePaise, roundOffPaise: row.bill.roundOffPaise, totalPaise: row.bill.totalPaise, shareToken: billToken(row.bill.id) } : null, people, lines, shares: shares.map(x => ({ id: x.id, participantId: x.participantId, amountPaise: x.amountPaise, paidPaise: x.paidPaise, status: x.status, frozenAt: x.frozenAt?.getTime() ?? null })), needsApproval: !staff.roles.some(r => r === "manager" || r === "owner"), payments: payments.map(x => ({ id: x.id, method: x.method, amountPaise: x.amountPaise, tipPaise: x.tipPaise, status: x.status, channel: x.channel, createdAt: x.createdAt.getTime(), refund: refundState.get(x.id)! })) };
 }
 export type PosBillDetail = Awaited<ReturnType<typeof posBillDetail>>;

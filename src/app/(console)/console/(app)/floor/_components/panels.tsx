@@ -9,7 +9,7 @@ import type { S1Copy } from "../_copy";
 import { bookingTablesReady, combinableFree, inProgress } from "./floor-logic";
 import { Pill, StateChip, btnDanger, btnLine, btnPrimary, btnQuiet, focus } from "./ui";
 
-export type TableAction = "seat" | "seat_booking" | "check_in" | "move" | "swap" | "combine" | "manage" | "extend" | "cleaning" | "ready" | "clear" | "block" | "unblock";
+export type TableAction = "seat" | "seat_booking" | "check_in" | "move" | "swap" | "combine" | "manage" | "extend" | "cleaning" | "ready" | "clear" | "close" | "pay" | "block" | "unblock";
 
 type Shared = { c: S1Copy; clock: (ms: number) => string; now: number; disabled: boolean };
 
@@ -63,7 +63,12 @@ export function TablePanel({
     { a: "manage", label: c.manageTables, show: may.seat && combined },
     { a: "combine", label: c.actions.combine, show: may.seat && !!v && !combined && canAdd },
     { a: "clear", label: c.actions.clear, show: may.seat && !!v && v.rounds === 0 && v.joined === 0 },
-    { a: "cleaning", label: c.actions.cleaning, kind: "primary", show: may.reset && table.state === "paid" },
+    // Take the money here even if the guest never asked for the bill on their phone
+    { a: "pay", label: c.actions.pay, kind: "primary", show: may.billing && !!v && v.rounds > 0 },
+    { a: "close", label: c.actions.close, show: may.seat && !!v && (v.rounds > 0 || v.joined > 0) },
+    // Paid and gone: clear the table in one tap, or send it to cleaning first
+    { a: "ready", label: c.actions.close, kind: "primary", show: may.reset && table.state === "paid" },
+    { a: "cleaning", label: c.actions.cleaning, show: may.reset && table.state === "paid" },
     { a: "ready", label: c.actions.ready, kind: "primary", show: may.reset && table.state === "needs_cleaning" },
     { a: "unblock", label: c.actions.unblock, show: may.block && table.state === "blocked" },
     { a: "block", label: c.actions.block, kind: "danger", show: may.block && !v && ["available", "needs_cleaning", "paid"].includes(table.state) },

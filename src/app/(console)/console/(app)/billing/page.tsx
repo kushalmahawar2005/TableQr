@@ -8,7 +8,8 @@ import { currentStaff } from "@/server/staff/request";
 export const metadata: Metadata = { title: "Billing", robots: { index: false, follow: false } };
 
 // Billing is the cashier POS inside the console frame: same read model and actions as /pos.
-export default async function BillingPage() {
+export default async function BillingPage(props: { searchParams: Promise<{ session?: string }> }) {
+  const { session } = await props.searchParams;
   const staff = await currentStaff();
   if (!staff) redirect("/console/login");
   if (!canSee(staff.roles, "billing")) {
@@ -19,5 +20,5 @@ export default async function BillingPage() {
       </main>
     );
   }
-  return <BillingScreen embedded initial={await posQueue(staff)} realtimeUrl={process.env.NEXT_PUBLIC_REALTIME_URL ?? null} />;
+  return <BillingScreen embedded openSession={typeof session === "string" ? session : null} initial={await posQueue(staff)} realtimeUrl={process.env.NEXT_PUBLIC_REALTIME_URL ?? null} />;
 }

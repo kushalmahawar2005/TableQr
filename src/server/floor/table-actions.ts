@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, isNotNull } from "drizzle-orm";
+import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { db } from "@/db";
 import * as s from "@/db/schema";
 import { blockReasons, type BlockReason, type TableState } from "@/db/schema";
@@ -9,7 +9,11 @@ import { AppError } from "../errors";
 import { publish, type RealtimeEvent } from "../realtime/publish";
 import { assertMay, type StaffSession } from "../staff/auth";
 import { audit } from "../staff/audit";
-import { assignTable, tableStateEvents, visitChanged } from "./assignments";
+import { assignTable, releaseVisitTables, tableStateEvents, visitChanged } from "./assignments";
+import { lockSession, syncBill } from "../billing/bill";
+import { syncOrderStatus, syncTickets } from "../kitchen/order-state";
+import { topics } from "../realtime/token";
+import { can } from "@/lib/staff-permissions";
 import { loadPolicy } from "./policy";
 import { syncEvents, syncTableHolds } from "./sync";
 import {
@@ -87,18 +91,21 @@ export async function markNeedsCleaning(staff: FloorActor, tableId: string, now 
   });
 }
 
-/** Needs cleaning → Available (or Held/Reserved if a booking is due), once nothing holds the table */
+/**
+ * Clear table: Paid or Needs cleaning → Available (or Held/Reserved if a booking is due), once
+ * nothing holds the table. Paid tables can go straight back; the cleaning step is optional.
+ */
 export async function markReady(staff: FloorActor, tableId: string, now = new Date()) {
   assertMay(staff, "floor.clean");
   const scope = scopeOf(staff);
   return run(staff, async (tx) => {
     const table = (await lockTables(tx, scope, [tableId])).get(tableId)!;
-    if (table.state !== "needs_cleaning") throw new AppError("invalid_state", `${table.code} is not waiting to be cleaned.`, { state: table.state });
+    if (table.state !== "needs_cleaning" && table.state !== "paid") throw new AppError("invalid_state", `${table.code} is not waiting to be cleared.`, { state: table.state });
     if (await visitAt(tx, scope, table.id)) throw new AppError("conflict", `${table.code} still has a party.`, { reason: "occupied" });
     await setState(tx, scope, [table.id], "available", now);
     const sync = await syncTableHolds(tx, scope, now, [table.id]);
     const state = sync.changes.find((c) => c.tableId === table.id)?.state ?? "available";
-    await audit(tx, staff, { action: "table.ready", entity: "table", entityId: table.id, before: { state: "needs_cleaning" }, after: { state }, now });
+    await audit(tx, staff, { action: "table.ready", entity: "table", entityId: table.id, before: { state: table.state }, after: { state }, now });
     return { result: { state }, events: [...tableStateEvents([table.id], "available"), ...syncEvents(sync)] };
   });
 }
@@ -344,5 +351,77 @@ export async function clearEmptyVisit(staff: FloorActor, tableId: string, now = 
     }
     await audit(tx, staff, { action: "table.clear_empty", entity: "session", entityId: visit.session.id, before: { tableIds: visit.tableIds }, after: { state: "needs_cleaning" }, now });
     return { result: null, events: [...tableStateEvents(visit.tableIds, "needs_cleaning"), visitChanged(visit.session.id, "closed")] };
+  });
+}
+
+/**
+ * Clear a table that still has a party: the party is done and gone. When nothing is left to pay
+ * (a ₹0 bill, or everyone paid) the visit simply closes. When money is still owed it closes only
+ * with a reason ("left without paying"), by a manager or owner, and the bill is cancelled, not
+ * marked paid. Open requests at the table are closed too; the table is free straight away.
+ */
+export async function closeVisit(staff: FloorActor, input: { tableId: string; reason?: string | null }, now = new Date()) {
+  assertMay(staff, "floor.seat");
+  const scope = scopeOf(staff);
+  return run(staff, async (tx) => {
+    const first = await lockTables(tx, scope, [input.tableId]);
+    const visit = await liveVisit(tx, scope, first.get(input.tableId)!);
+    await lockTables(tx, scope, visit.tableIds);
+    const billScope = { ...scope, sessionId: visit.session.id };
+    await lockSession(tx, billScope);
+    const { billId } = await syncBill(tx, billScope, now);
+    const shares = await tx.select({ amountPaise: s.billShares.amountPaise, paidPaise: s.billShares.paidPaise }).from(s.billShares).where(and(eq(s.billShares.tenantId, scope.tenantId), eq(s.billShares.billId, billId)));
+    const [moving] = await tx
+      .select({ id: s.payments.id })
+      .from(s.payments)
+      .where(and(eq(s.payments.tenantId, scope.tenantId), eq(s.payments.billId, billId), inArray(s.payments.status, ["initiated", "pending"])))
+      .limit(1);
+    if (moving) throw new AppError("conflict", "An online payment is still being checked. Wait a moment, then try again.", { reason: "payment_in_flight" });
+    const duePaise = shares.reduce((n, sh) => n + Math.max(0, sh.amountPaise - sh.paidPaise), 0);
+    const reason = String(input.reason ?? "").trim().slice(0, 200);
+    if (duePaise > 0) {
+      if (!reason) throw new AppError("invalid_state", `₹${(duePaise / 100).toLocaleString("en-IN")} is still to pay. Take the payment, or write why the table is closed unpaid.`, { reason: "unpaid", duePaise });
+      if (!can(staff.roles, "floor.block")) throw new AppError("forbidden", "Only a manager or owner can close a table that has not paid.", { reason: "unpaid" });
+    }
+    await tx.update(s.bills).set({ status: duePaise > 0 ? "cancelled" : "paid", closedAt: now }).where(and(eq(s.bills.tenantId, scope.tenantId), eq(s.bills.id, billId)));
+    await tx.update(s.tableSessions).set({ status: "closed", openKey: null, closedAt: now }).where(and(eq(s.tableSessions.tenantId, scope.tenantId), eq(s.tableSessions.id, visit.session.id)));
+    await releaseVisitTables(tx, scope.tenantId, visit.session.id, now);
+    await tx
+      .update(s.serviceRequests)
+      .set({ status: "done", doneAt: now, doneByUserId: staff.userId })
+      .where(and(eq(s.serviceRequests.tenantId, scope.tenantId), eq(s.serviceRequests.sessionId, visit.session.id), eq(s.serviceRequests.status, "open")));
+    await tx
+      .update(s.reservations)
+      .set({ status: "completed", completedAt: now })
+      .where(and(eq(s.reservations.tenantId, scope.tenantId), eq(s.reservations.sessionId, visit.session.id), eq(s.reservations.status, "seated")));
+    // The party is gone: whatever the kitchen or the floor still had open for it is done
+    const leftover = await tx
+      .select({ orderId: s.orderLines.orderId })
+      .from(s.orderLines)
+      .where(and(eq(s.orderLines.tenantId, scope.tenantId), eq(s.orderLines.sessionId, visit.session.id), inArray(s.orderLines.status, ["placed", "accepted", "preparing", "ready"])));
+    const openOrders = [...new Set(leftover.map((l) => l.orderId))];
+    if (openOrders.length) {
+      await tx
+        .update(s.orderLines)
+        .set({ status: "served", servedAt: now })
+        .where(and(eq(s.orderLines.tenantId, scope.tenantId), eq(s.orderLines.sessionId, visit.session.id), inArray(s.orderLines.status, ["placed", "accepted", "preparing", "ready"])));
+      for (const orderId of openOrders) {
+        await syncTickets(tx, scope.tenantId, orderId, now);
+        await syncOrderStatus(tx, scope.tenantId, orderId, now);
+      }
+    }
+    await setState(tx, scope, visit.tableIds, "available", now);
+    const sync = await syncTableHolds(tx, scope, now, visit.tableIds);
+    await audit(tx, staff, {
+      action: duePaise > 0 ? "table.closed_unpaid" : "table.closed",
+      entity: "session",
+      entityId: visit.session.id,
+      before: { tableIds: visit.tableIds, duePaise },
+      after: { state: "available", bill: duePaise > 0 ? "cancelled" : "paid" },
+      reason: reason || null,
+      now,
+    });
+    const kitchen = openOrders.map((orderId) => ({ topic: topics.kitchen, type: "ticket.updated", data: { orderId } }));
+    return { result: { duePaise }, events: [...tableStateEvents(visit.tableIds, "available"), ...syncEvents(sync), visitChanged(visit.session.id, "closed"), ...kitchen] };
   });
 }

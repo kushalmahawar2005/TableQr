@@ -131,7 +131,7 @@ export function floorData(over: Record<string, Partial<FloorTable>> = dinner, ex
     outlet: { code: "SRJ01", name: "Spice Route", timezone: "Asia/Kolkata" },
     serviceDate: "2026-10-02",
     roles: ["host"],
-    may: { seat: true, reset: true, block: false, bookings: true, pause: true, capacity: false, waitlist: true },
+    may: { seat: true, reset: true, block: false, bookings: true, pause: true, capacity: false, waitlist: true, billing: false },
     layout: { version: "live", zones },
     tables: FLOOR.map((sp) => table(sp, over[sp.code] ?? {})),
     arrivals: [late, iyer, mehta, das],

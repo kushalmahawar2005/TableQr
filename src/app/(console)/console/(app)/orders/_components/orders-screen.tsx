@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { Check, ChefHat, Clock, Flame, Receipt, RefreshCw, Search, Utensils } from "lucide-react";
 import type { OrderRow } from "@/server/staff/orders-read";
 import { VisitRecord } from "../../reservations/_components/visit-record";
+import { servedAction } from "../actions";
 
 type Status = OrderRow["status"];
 const STEPS: { key: Status; label: string }[] = [{ key: "placed", label: "Placed" }, { key: "accepted", label: "Accepted" }, { key: "preparing", label: "Cooking" }, { key: "ready", label: "Ready" }, { key: "served", label: "Served" }];
@@ -33,6 +34,16 @@ export function OrdersScreen({ orders, outlet }: { orders: OrderRow[]; outlet: s
   const [filter, setFilter] = useState<Filter>("active");
   const [query, setQuery] = useState("");
   const [now, setNow] = useState(() => Date.now());
+  const [error, setError] = useState<string | null>(null);
+
+  function serve(o: OrderRow) {
+    setError(null);
+    start(async () => {
+      const res = await servedAction(o.readyLineIds);
+      if (!res.ok) setError(res.message);
+      router.refresh();
+    });
+  }
 
   // Stays live: ages tick every 20 seconds and the list is fetched again at the same time
   useEffect(() => {
@@ -87,6 +98,7 @@ export function OrdersScreen({ orders, outlet }: { orders: OrderRow[]; outlet: s
       </dl>
 
       <div className="mt-5 flex flex-wrap items-center gap-2">
+        {error && <p role="alert" className="w-full rounded-input bg-danger/10 px-3 py-2 text-body font-semibold text-danger">{error}</p>}
         <div role="tablist" aria-label="Filter orders" className="flex gap-2 overflow-x-auto">
           {FILTERS.map(([key, label]) => (
             <button key={key} role="tab" aria-selected={filter === key} onClick={() => setFilter(key)} className={`min-h-11 shrink-0 rounded-full border px-4 text-body font-semibold focus-visible:outline-2 focus-visible:outline-ink ${filter === key ? "border-ink bg-ink text-white" : "border-line bg-surface text-muted hover:text-ink"}`}>
@@ -143,6 +155,11 @@ export function OrdersScreen({ orders, outlet }: { orders: OrderRow[]; outlet: s
 
                 <div className="mt-3 flex items-center justify-between gap-3">
                   <span className="font-display text-section font-bold tabular text-ink">{money(o.totalPaise)}</span>
+                  {o.status === "ready" && o.readyLineIds.length > 0 && (
+                    <button type="button" disabled={pending} onClick={() => serve(o)} className="ml-auto min-h-10 rounded-input bg-ink px-3 text-body font-semibold text-white hover:bg-ink/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:opacity-50">
+                      Mark served
+                    </button>
+                  )}
                   <VisitRecord sessionId={o.sessionId} className="rounded-input px-2 py-1 text-body font-semibold text-ink underline underline-offset-4 hover:bg-ink/5 focus-visible:outline-2 focus-visible:outline-ink">View table record</VisitRecord>
                 </div>
               </li>

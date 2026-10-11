@@ -20,4 +20,10 @@ describe("bill on WhatsApp", () => {
     expect(whatsappLink("Hi there", "9876543210")).toBe("https://wa.me/919876543210?text=Hi%20there");
     expect(whatsappLink("Hi")).toBe("https://wa.me/?text=Hi");
   });
+
+  it("adds the PDF link when there is one", () => {
+    const text = billMessage({ outlet: "Spice Route", table: "T4", kind: "bill", lines: [], subtotalPaise: 0, totalPaise: 0, link: "https://x.test/b/abc.def" });
+    expect(text).toContain("Bill (PDF): https://x.test/b/abc.def");
+    expect(text).not.toMatch(/\n\n\n/);
+  });
 });

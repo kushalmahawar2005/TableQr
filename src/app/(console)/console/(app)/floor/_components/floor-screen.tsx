@@ -13,6 +13,7 @@ import {
   capacityAction,
   checkInAction,
   clearEmptyAction,
+  closeVisitAction,
   combineAction,
   extendAction,
   leftAction,
@@ -48,6 +49,7 @@ export type FloorSheet =
   | { kind: "seat"; tableId: string; partySize?: number; error?: { message: string; latestEndAt?: number | null } }
   | { kind: "pick"; mode: PickMode; tableId?: string; reservationId?: string; entryId?: string; error?: string }
   | { kind: "block"; tableId: string; error?: string }
+  | { kind: "close"; tableId: string; error?: string; unpaid?: boolean }
   | { kind: "waitlist_add"; error?: string }
   | { kind: "manage"; tableId: string; error?: string };
 
@@ -147,7 +149,9 @@ export function FloorScreen({ data: initial, lang, realtimeUrl, preview }: { dat
     else if (a === "block") setSheet({ kind: "block", tableId: id });
     else if (a === "extend") void run(() => extendAction(id), c.toast.extended(code));
     else if (a === "cleaning") void run(() => needsCleaningAction(id), c.toast.cleaning(code));
-    else if (a === "ready") void run(() => readyAction(id), c.toast.ready(code));
+    else if (a === "ready") void run(() => readyAction(id), selected.state === "paid" ? c.toast.closed(code) : c.toast.ready(code));
+    else if (a === "close") setSheet({ kind: "close", tableId: id });
+    else if (a === "pay" && selected.visit) router.push(`/console/billing?session=${encodeURIComponent(selected.visit.sessionId)}`);
     else if (a === "clear") void run(() => clearEmptyAction(id), c.toast.cleared(code));
     else if (a === "unblock") void run(() => unblockAction(id), c.toast.unblocked(code));
   }
@@ -316,6 +320,7 @@ export function FloorScreen({ data: initial, lang, realtimeUrl, preview }: { dat
 
       {sheet?.kind === "seat" && <SeatSheet sheet={sheet} data={data} c={c} clock={clock} busy={busy} disabled={disabled} onClose={() => setSheet(null)} run={run} setSheet={setSheet} />}
       {sheet?.kind === "pick" && <PickSheet sheet={sheet} data={data} c={c} busy={busy} disabled={disabled} onClose={() => setSheet(null)} run={run} setSheet={setSheet} />}
+      {sheet?.kind === "close" && <CloseSheet sheet={sheet} data={data} c={c} disabled={disabled} onClose={() => setSheet(null)} run={run} setSheet={setSheet} />}
       {sheet?.kind === "block" && <BlockSheet sheet={sheet} data={data} c={c} disabled={disabled} now={now} onClose={() => setSheet(null)} run={run} setSheet={setSheet} />}
       {sheet?.kind === "manage" && <ManageSheet sheet={sheet} data={data} c={c} disabled={disabled} onClose={() => setSheet(null)} run={run} setSheet={setSheet} />}
       {toast && (
@@ -432,6 +437,53 @@ function PickSheet({ sheet, data, c, busy, disabled, onClose, run, setSheet }: {
           ))}
         </ul>
       )}
+    </Dialog>
+  );
+}
+
+/** Clears a seated table: closes the visit; money still owed needs a written reason */
+function CloseSheet({ sheet, data, c, disabled, onClose, run, setSheet }: { sheet: Extract<FloorSheet, { kind: "close" }>; data: FloorData; c: S1Copy; disabled: boolean; onClose: () => void; run: Run; setSheet: (s: FloorSheet) => void }) {
+  const table = data.tables.find((t) => t.id === sheet.tableId)!;
+  const [reason, setReason] = useState("");
+  return (
+    <Dialog title={c.closeTitle(table.code)} onClose={onClose} closeLabel={c.close}>
+      <p className="text-body text-muted">{c.closeBody}</p>
+      {sheet.unpaid && (
+        <>
+          <p className="mt-3 text-body text-muted">{c.closeUnpaid}</p>
+          <label className="mt-3 block text-body font-semibold">
+            {c.closeReason}
+            <input autoFocus value={reason} onChange={(e) => setReason(e.target.value.slice(0, 200))} className="mt-1 h-11 w-full rounded-input border border-line px-3 text-body outline-none focus:border-ink" />
+          </label>
+        </>
+      )}
+      {sheet.error && (
+        <div className="mt-3">
+          <ErrorNote text={sheet.error} />
+        </div>
+      )}
+      <div className="mt-5 flex justify-end gap-2">
+        <button type="button" onClick={onClose} className={btnLine}>
+          {c.cancel}
+        </button>
+        <button
+          type="button"
+          disabled={disabled || (sheet.unpaid && !reason.trim())}
+          onClick={() =>
+            void run(
+              () => closeVisitAction(table.id, reason.trim() || null),
+              c.toast.closed(table.code),
+              (r) => {
+                setSheet({ ...sheet, error: r.message, unpaid: sheet.unpaid || r.details?.reason === "unpaid" });
+                return true;
+              },
+            )
+          }
+          className={btnPrimary}
+        >
+          {c.actions.close}
+        </button>
+      </div>
     </Dialog>
   );
 }

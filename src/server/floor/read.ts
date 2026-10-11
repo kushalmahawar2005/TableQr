@@ -5,7 +5,7 @@ import * as s from "@/db/schema";
 import { isPlaceholderName } from "@/domain/guest-name";
 import { ARRIVALS_WINDOW_MINUTES, serviceDate } from "@/domain/booking-policy";
 import type { StaffRole } from "@/lib/staff-permissions";
-import { can } from "@/lib/staff-permissions";
+import { can, canSee } from "@/lib/staff-permissions";
 import { configuredReceiptChannels } from "../receipts/channels";
 import { getPacing } from "./pacing";
 import { loadPolicy } from "./policy";
@@ -156,6 +156,7 @@ export async function getFloor(staff: Staff, now = new Date()) {
       pause: can(staff.roles, "booking.pause"),
       capacity: can(staff.roles, "booking.capacity"),
       waitlist: can(staff.roles, "waitlist.manage"),
+      billing: canSee(staff.roles, "billing"),
     },
     layout: { version: layout.version, zones: layout.zones },
     tables: tiles,
