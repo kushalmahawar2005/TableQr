@@ -298,11 +298,10 @@ export function MenuClient({
         <Empty title={c.filteredEmpty.title} body={c.filteredEmpty.body} action={c.clearFilters} onAction={() => setFilters(NO_FILTERS)} />
       ) : (
         <>
-          <div className="mt-3">
-            <CategoryBar categories={sections.map((s) => ({ id: s.id, label: s.label }))} label={c.categoriesLabel} />
-          </div>
+          {/* Straight in the page, not in a wrapper, so it can stay stuck to the top while the menu scrolls */}
+          <CategoryBar categories={sections.map((s) => ({ id: s.id, label: s.label, photo: s.items.find((i) => i.imageUrl)?.imageUrl ?? null }))} label={c.categoriesLabel} />
           {sections.map((s) => (
-            <section key={s.id} id={`cat-${s.id}`} aria-labelledby={`h-${s.id}`} className="scroll-mt-14 pt-5">
+            <section key={s.id} id={`cat-${s.id}`} aria-labelledby={`h-${s.id}`} className="scroll-mt-32 pt-5">
               <div className="flex items-baseline justify-between gap-3">
                 <h2 id={`h-${s.id}`} className="font-display text-title font-bold text-ink">
                   {s.label}
