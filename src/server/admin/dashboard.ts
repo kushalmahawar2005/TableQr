@@ -5,6 +5,7 @@ import { db } from "@/db";
 import * as s from "@/db/schema";
 import type { AdminActivity, AdminData, AdminGrowthPoint } from "@/app/admin/admin-types";
 import { requirePlatformAdmin } from "./auth";
+import { hasKitchenDisplay, kitchenFor } from "../plan";
 
 const DAY = 86_400_000;
 
@@ -54,6 +55,8 @@ export async function getAdminData(): Promise<AdminData> {
       status: s.tenants.status,
       createdAt: s.tenants.createdAt,
       trialEndsAt: s.tenants.trialEndsAt,
+      kitchenOverride: s.tenants.kitchenDisplay,
+      tableLimit: s.tenants.tableLimit,
     }).from(s.tenants).orderBy(desc(s.tenants.createdAt)),
     db.select({
       code: s.plans.code,
@@ -192,6 +195,9 @@ export async function getAdminData(): Promise<AdminData> {
       return {
         ...tenant,
         planName: plan?.name ?? tenant.planCode,
+        kitchenDisplay: kitchenFor(tenant.kitchenOverride, plan?.features),
+        kitchenFromPlan: hasKitchenDisplay(plan?.features),
+        tableLimit: tenant.tableLimit ?? plan?.features.maxTables ?? null,
         createdAt: tenant.createdAt.toISOString(),
         trialEndsAt: tenant.trialEndsAt?.toISOString() ?? null,
         outletCount: outlets?.count ?? 0,

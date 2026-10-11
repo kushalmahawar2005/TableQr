@@ -11,6 +11,8 @@ export const consoleSectionRoles = {
   reservations: ["host", "manager", "owner"],
   waitlist: ["host", "manager", "owner"],
   orders: ["cashier", "waiter", "manager", "owner"],
+  /** The kitchen board inside the console, on every plan (the separate wall screen is a plan feature) */
+  kitchen: ["kitchen", "manager", "owner"],
   billing: ["cashier", "manager", "owner", "accountant"],
   menu: ["manager", "owner"],
   pricing: ["manager", "owner"],
@@ -54,5 +56,6 @@ export type PricingPermission = keyof typeof pricingPermissions;
 export const canPrice = (roles: readonly StaffRole[], permission: PricingPermission) => canUse(roles, pricingPermissions[permission]);
 
 /** Kitchen display (S2): who may set up, repin or revoke a wall screen, and who works on one */
-export const kdsSetupRoles = ["manager", "owner"] as const satisfies readonly StaffRole[];
+/** Who signs a kitchen wall screen in, with their own phone and PIN: kitchen staff, managers and owners */
+export const kdsSetupRoles = ["kitchen", "manager", "owner"] as const satisfies readonly StaffRole[];
 export const kdsWorkRoles = ["kitchen", "manager", "owner"] as const satisfies readonly StaffRole[];

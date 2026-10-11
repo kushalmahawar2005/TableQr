@@ -4,6 +4,7 @@ import { db } from "@/db";
 import * as s from "@/db/schema";
 import { AppError } from "../errors";
 import { staffRealtimeToken, topics } from "../realtime/token";
+import type { StaffSession } from "../staff/auth";
 import type { StaffContext } from "../staff/context";
 import { acceptTicket, bumpLine, bumpTicket, recallTicket, setOutOfStock, startTicket } from "./actions";
 import { kitchenStations, type KdsDevice } from "./device";
@@ -15,11 +16,32 @@ import { averageTicketMinutes, getKitchenDisplay, getUnavailableItems, searchKit
 
 /** Acting context for audit and scoping: no signed-in user, the screen is the actor */
 export function kdsActor(device: KdsDevice): StaffContext {
+  if (device.staff) return { tenantId: device.tenantId, outletId: device.outletId, userId: device.staff.userId, actorLabel: `staff:${device.staff.name}` };
   return {
     tenantId: device.tenantId,
     outletId: device.outletId,
     userId: null,
     actorLabel: `kds:${device.expeditor ? "expeditor" : device.station}:${device.deviceId.slice(-8)}`,
+  };
+}
+
+/**
+ * The kitchen board inside the console, for every plan: the signed-in staff member sees all
+ * stations (like an expeditor screen) and every change is recorded against them.
+ */
+export async function consoleKitchen(staff: StaffSession): Promise<KdsDevice> {
+  const [outlet] = await db.select({ brandId: s.outlets.brandId }).from(s.outlets).where(and(eq(s.outlets.tenantId, staff.tenantId), eq(s.outlets.id, staff.outletId)));
+  if (!outlet) throw new AppError("not_found", "Outlet not found.");
+  return {
+    tenantId: staff.tenantId,
+    outletId: staff.outletId,
+    deviceId: `console:${staff.sessionId}`,
+    station: null,
+    expeditor: true,
+    lang: "en",
+    outlet: { code: staff.outlet.code, name: staff.outlet.name, timezone: staff.outlet.timezone, brandId: outlet.brandId },
+    expiresAt: staff.expiresAt,
+    staff: { userId: staff.userId, name: staff.name },
   };
 }
 

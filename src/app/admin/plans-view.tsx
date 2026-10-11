@@ -15,7 +15,8 @@ import type { AdminData, AdminPlan, AdminPlanFeatures } from "./admin-types";
 const money = (paise: number) => `₹${Math.round(paise / 100).toLocaleString("en-IN")}`;
 const TONES = ["#5b42f5", "#16c784", "#f08b18", "#ed5368", "#3d91ef", "#e875b1"];
 
-const FEATURES: { key: keyof Pick<AdminPlanFeatures, "groupSplit" | "pricingRules" | "suggestions" | "guestCampaigns" | "multiOutlet">; label: string }[] = [
+const FEATURES: { key: keyof Pick<AdminPlanFeatures, "groupSplit" | "pricingRules" | "suggestions" | "guestCampaigns" | "multiOutlet" | "kitchenDisplay">; label: string }[] = [
+  { key: "kitchenDisplay", label: "Kitchen display (KDS)" },
   { key: "multiOutlet", label: "Multiple outlets" },
   { key: "groupSplit", label: "Group bill split" },
   { key: "pricingRules", label: "Pricing rules" },
@@ -50,6 +51,7 @@ function PlanDialog({ plan, onClose }: { plan: AdminPlan | "new" | null; onClose
         bookings: f.get("bookings") === "full" ? "full" : "reservations_only",
         groupSplit: f.get("groupSplit") === "on", pricingRules: f.get("pricingRules") === "on", suggestions: f.get("suggestions") === "on",
         guestCampaigns: f.get("guestCampaigns") === "on", multiOutlet: f.get("multiOutlet") === "on", poweredBy: f.get("poweredBy") === "on",
+        kitchenDisplay: f.get("kitchenDisplay") === "on",
       },
     };
     setError(null);
@@ -76,7 +78,7 @@ function PlanDialog({ plan, onClose }: { plan: AdminPlan | "new" | null; onClose
           <div className="space-y-1.5"><Label htmlFor="plan-staff">Max staff</Label><Input id="plan-staff" name="maxStaff" type="number" min={1} defaultValue={f?.maxStaff ?? ""} /><p className="text-xs text-muted-foreground">Empty = unlimited.</p></div>
         </div>
         <fieldset className="space-y-2.5"><legend className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Included features</legend>
-          <div className="grid gap-2.5 sm:grid-cols-2">{FEATURES.map((x) => check(x.key, x.label, f?.[x.key] ?? false))}</div>
+          <div className="grid gap-2.5 sm:grid-cols-2">{FEATURES.map((x) => check(x.key, x.label, f?.[x.key] ?? (!!f && x.key === "kitchenDisplay")))}</div>
           {check("poweredBy", "Show “Powered by TableQR”", f?.poweredBy ?? false, "A small line on the guest page. Usually on for lower plans.")}
         </fieldset>
         {check("isPublic", "Available for new tenants", editing?.isPublic ?? true, "Turn off to hide this plan. Existing tenants on it are not affected.")}
@@ -127,7 +129,7 @@ export function PlansView({ data }: { data: AdminData }) {
             <li className="flex justify-between"><span className="text-muted-foreground">Staff</span><span className="font-medium">{p.features.maxStaff ? `Up to ${p.features.maxStaff}` : "Unlimited"}</span></li>
             <li className="flex justify-between"><span className="text-muted-foreground">Bookings</span><span className="font-medium">{p.features.bookings === "full" ? "Full" : "Reservations only"}</span></li>
           </ul>
-          <ul className="space-y-1.5 border-t pt-3 text-sm">{FEATURES.map((x) => <li key={x.key} className={`flex items-center gap-2 ${p.features[x.key] ? "" : "text-muted-foreground"}`}>{p.features[x.key] ? <Check className="size-4 text-emerald-600" aria-label="Included" /> : <X className="size-4 text-zinc-300" aria-label="Not included" />}{x.label}</li>)}</ul>
+          <ul className="space-y-1.5 border-t pt-3 text-sm">{FEATURES.map((x) => { const on = p.features[x.key] ?? x.key === "kitchenDisplay"; return <li key={x.key} className={`flex items-center gap-2 ${on ? "" : "text-muted-foreground"}`}>{on ? <Check className="size-4 text-emerald-600" aria-label="Included" /> : <X className="size-4 text-zinc-300" aria-label="Not included" />}{x.label}</li>; })}</ul>
           <Button variant="outline" className="mt-auto" onClick={() => setDialog(p)}><Pencil />Edit plan</Button>
         </CardContent>
       </Card>;

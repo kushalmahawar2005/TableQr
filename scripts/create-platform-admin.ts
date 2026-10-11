@@ -19,10 +19,10 @@ async function main() {
   if (!email || !name || !password) throw new Error("Set PLATFORM_ADMIN_EMAIL, PLATFORM_ADMIN_NAME and PLATFORM_ADMIN_PASSWORD");
 
   const plans = [
-    { code: "starter", name: "Starter", monthlyPricePaise: 99900, sortOrder: 0, features: { maxTables: 15, maxStaff: 3, bookings: "reservations_only" as const, groupSplit: false, pricingRules: false, suggestions: false, guestCampaigns: false, multiOutlet: false, poweredBy: true } },
-    { code: "growth", name: "Growth", monthlyPricePaise: 249900, sortOrder: 1, features: { maxTables: 40, maxStaff: 10, bookings: "full" as const, groupSplit: true, pricingRules: false, suggestions: false, guestCampaigns: false, multiOutlet: false, poweredBy: true } },
-    { code: "pro", name: "Pro", monthlyPricePaise: 499900, sortOrder: 2, features: { maxTables: 80, maxStaff: 25, bookings: "full" as const, groupSplit: true, pricingRules: true, suggestions: true, guestCampaigns: true, multiOutlet: false, poweredBy: false } },
-    { code: "chain", name: "Chain", monthlyPricePaise: null, sortOrder: 3, features: { maxTables: null, maxStaff: null, bookings: "full" as const, groupSplit: true, pricingRules: true, suggestions: true, guestCampaigns: true, multiOutlet: true, poweredBy: false } },
+    { code: "starter", name: "Starter", monthlyPricePaise: 99900, sortOrder: 0, features: { maxTables: 15, maxStaff: 3, bookings: "reservations_only" as const, groupSplit: false, pricingRules: false, suggestions: false, guestCampaigns: false, multiOutlet: false, poweredBy: true, kitchenDisplay: false } },
+    { code: "growth", name: "Growth", monthlyPricePaise: 249900, sortOrder: 1, features: { maxTables: 40, maxStaff: 10, bookings: "full" as const, groupSplit: true, pricingRules: false, suggestions: false, guestCampaigns: false, multiOutlet: false, poweredBy: true, kitchenDisplay: false } },
+    { code: "pro", name: "Pro", monthlyPricePaise: 499900, sortOrder: 2, features: { maxTables: 80, maxStaff: 25, bookings: "full" as const, groupSplit: true, pricingRules: true, suggestions: true, guestCampaigns: true, multiOutlet: false, poweredBy: false, kitchenDisplay: true } },
+    { code: "chain", name: "Chain", monthlyPricePaise: null, sortOrder: 3, features: { maxTables: null, maxStaff: null, bookings: "full" as const, groupSplit: true, pricingRules: true, suggestions: true, guestCampaigns: true, multiOutlet: true, poweredBy: false, kitchenDisplay: true } },
   ];
 
   for (const plan of plans) {

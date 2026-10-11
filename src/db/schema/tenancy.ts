@@ -38,6 +38,10 @@ export const tenants = mysqlTable(
     billingGstin: varchar("billing_gstin", { length: 15 }),
     billingAddress: varchar("billing_address", { length: 300 }),
     createdByAdminId: ref("created_by_admin_id").references(() => platformAdmins.id),
+    /** Platform admin's choice for the kitchen screen; null follows the plan */
+    kitchenDisplay: boolean("kitchen_display"),
+    /** Tables this restaurant pays for (set at onboarding, changed by the platform admin); null uses the plan's limit */
+    tableLimit: int("table_limit"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

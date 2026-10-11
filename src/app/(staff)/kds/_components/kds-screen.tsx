@@ -15,10 +15,11 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { Lang } from "@/lib/i18n";
 import type { KdsBoard } from "@/server/kitchen/kds";
-import { acceptAction, bumpLineAction, bumpTicketAction, logoutAction, recallAction, searchAction, settingsAction, startAction, stockAction, type KdsResult } from "../actions";
+import { logoutAction, settingsAction, type KdsResult } from "../actions";
+import { KdsActionsProvider, useKdsActions, wallActions, type KdsActions } from "./kds-actions";
 import { kdsCopy, type KdsCopy } from "../_copy";
 import { cookable, createAnnouncer, liveCard, sortCards, type Announcer, type Connection, type KdsCard } from "./kds-logic";
-import { playLate, playNewTicket, rememberedAnnouncements, saveAnnouncements, setSoundPref, soundPreference, subscribeSoundPref, unlockAudio } from "./sound";
+import { audioReady, playLate, playNewTicket, rememberedAnnouncements, saveAnnouncements, setSoundPref, soundPreference, subscribeSoundPref, unlockAudio } from "./sound";
 import { TicketCard, type CardAction } from "./ticket-card";
 import { useKdsSync } from "./use-kds-sync";
 
@@ -50,8 +51,21 @@ export type KdsPreview = {
   cards?: KdsCard[];
 };
 
-export function KdsScreen(props: { initial: KdsBoard; device: KdsDeviceView; realtimeUrl: string | null; preview?: KdsPreview }) {
+/**
+ * The kitchen board. On a wall screen it acts through the screen's device cookie; inside the console
+ * (`embedded`) it acts as the signed-in staff member and fits under the console's top bar.
+ */
+export function KdsScreen(props: { initial: KdsBoard; device: KdsDeviceView; realtimeUrl: string | null; preview?: KdsPreview; actions?: KdsActions; embedded?: boolean }) {
+  return (
+    <KdsActionsProvider value={props.actions ?? wallActions}>
+      <KdsBoardScreen {...props} />
+    </KdsActionsProvider>
+  );
+}
+
+function KdsBoardScreen(props: { initial: KdsBoard; device: KdsDeviceView; realtimeUrl: string | null; preview?: KdsPreview; embedded?: boolean }) {
   const { device, preview } = props;
+  const actions = useKdsActions();
   const lang = device.lang;
   const c = kdsCopy[lang];
   const router = useRouter();
@@ -72,6 +86,16 @@ export function KdsScreen(props: { initial: KdsBoard; device: KdsDeviceView; rea
   // Sound: the preference lives on this screen; playing needs one tap after each page load
   const soundPref = useSyncExternalStore(subscribeSoundPref, soundPreference, () => true);
   const [unlocked, setUnlocked] = useState(false);
+  // Sound stays on across console pages and reloads: coming back finds it already running, and
+  // after a reload the first tap anywhere turns it back on when the preference is on
+  useEffect(() => {
+    if (preview || !soundPref) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the audio context outlives this screen
+    if (audioReady()) { setUnlocked(true); return; }
+    const wake = () => void unlockAudio().then(setUnlocked);
+    window.addEventListener("pointerdown", wake, { once: true });
+    return () => window.removeEventListener("pointerdown", wake);
+  }, [preview, soundPref]);
   const sound = preview?.sound ?? (!soundPref ? "off" : unlocked ? "on" : "locked");
   const announcer = useRef<Announcer | null>(null);
   const lastStation = useRef(board.station);
@@ -126,7 +150,7 @@ export function KdsScreen(props: { initial: KdsBoard; device: KdsDeviceView; rea
   async function onAction(card: KdsCard, action: CardAction) {
     if (busy[card.ticketId]) return;
     setBusy((b) => ({ ...b, [card.ticketId]: action }));
-    const fn = action === "accept" ? acceptAction : action === "start" ? startAction : bumpTicketAction;
+    const fn = action === "accept" ? actions.accept : action === "start" ? actions.start : actions.bumpTicket;
     const res = await guarded(() => fn(card.ticketId));
     if (res?.ok && action === "bump") {
       // A calm exit: the card fades, then the board reloads without it
@@ -144,7 +168,7 @@ export function KdsScreen(props: { initial: KdsBoard; device: KdsDeviceView; rea
   async function onBumpLine(card: KdsCard, lineId: string) {
     if (busyLines.has(lineId)) return;
     setBusyLines((s) => new Set(s).add(lineId));
-    await guarded(() => bumpLineAction(lineId));
+    await guarded(() => actions.bumpLine(lineId));
     await sync.refresh();
     setBusyLines((s) => {
       const next = new Set(s);
@@ -154,7 +178,7 @@ export function KdsScreen(props: { initial: KdsBoard; device: KdsDeviceView; rea
   }
 
   async function onRecall(ticketId: string) {
-    const res = await guarded(() => recallAction(ticketId));
+    const res = await guarded(() => actions.recall(ticketId));
     if (res?.ok) say(c.recalled);
     await sync.refresh();
   }
@@ -162,7 +186,7 @@ export function KdsScreen(props: { initial: KdsBoard; device: KdsDeviceView; rea
   const stations = device.expeditor ? [null, ...board.stations] : [device.station];
 
   return (
-    <div lang={lang} className="flex h-dvh min-h-0 flex-col bg-kds-bg font-sans text-kds-text">
+    <div lang={lang} className={`flex min-h-0 flex-col bg-kds-bg font-sans text-kds-text ${props.embedded ? "h-[calc(100dvh-7.5rem)] sm:h-[calc(100dvh-3.5rem)]" : "h-dvh"}`}>
       <Header
         c={c}
         lang={lang}
@@ -175,10 +199,13 @@ export function KdsScreen(props: { initial: KdsBoard; device: KdsDeviceView; rea
           if (sound === "on") setSoundPref(false);
           else {
             setSoundPref(true);
-            setUnlocked(await unlockAudio());
+            const on = await unlockAudio();
+            setUnlocked(on);
+            // One ring straight away, so the kitchen knows the volume is right
+            if (on) playNewTicket();
           }
         }}
-        onSettings={() => setPanel("settings")}
+        onSettings={props.embedded ? undefined : () => setPanel("settings")}
       />
 
       {device.expeditor && (
@@ -267,7 +294,8 @@ function Header(props: {
   conn: Connection;
   sound: "on" | "off" | "locked";
   onSound: () => void;
-  onSettings: () => void;
+  /** Missing inside the console: there is no wall-screen device to set up there */
+  onSettings?: () => void;
 }) {
   const { c, lang, device, board, now, conn, sound } = props;
   const time = new Intl.DateTimeFormat(lang === "hi" ? "hi-IN-u-nu-latn" : "en-IN", { hour: "numeric", minute: "2-digit", timeZone: device.timezone }).format(now);
@@ -308,9 +336,11 @@ function Header(props: {
         <HugeiconsIcon icon={conn === "offline" ? WifiOff01Icon : Wifi01Icon} size={22} aria-hidden />
         <span className="hidden sm:inline">{connLabel}</span>
       </span>
-      <button type="button" onClick={props.onSettings} aria-label={c.settings} className="ml-auto flex h-11 w-11 items-center justify-center rounded-lg bg-kds-card sm:ml-0 sm:h-12 sm:w-12">
-        <HugeiconsIcon icon={Settings02Icon} size={24} aria-hidden />
-      </button>
+      {props.onSettings && (
+        <button type="button" onClick={props.onSettings} aria-label={c.settings} className="ml-auto flex h-11 w-11 items-center justify-center rounded-lg bg-kds-card sm:ml-0 sm:h-12 sm:w-12">
+          <HugeiconsIcon icon={Settings02Icon} size={24} aria-hidden />
+        </button>
+      )}
     </header>
   );
 }
@@ -403,6 +433,7 @@ function StockPanel(props: {
   refresh: () => Promise<void>;
 }) {
   const { c, lang, board, offline, preview } = props;
+  const actions = useKdsActions();
   const [q, setQ] = useState(preview?.stockQuery ?? "");
   const [hits, setHits] = useState<SearchHit[]>(preview?.stockHits ?? []);
   const [busy, setBusy] = useState<string | null>(null);
@@ -419,14 +450,14 @@ function StockPanel(props: {
       return;
     }
     timer.current = setTimeout(async () => {
-      const res = await searchAction(value).catch(() => null);
+      const res = await actions.search(value).catch(() => null);
       if (res?.ok) setHits(res.data);
     }, 250);
   }
 
   async function toggle(id: string, label: string, outOfStock: boolean) {
     setBusy(id);
-    const res = await props.guarded(() => stockAction(id, outOfStock));
+    const res = await props.guarded(() => actions.stock(id, outOfStock));
     if (res?.ok) props.say(outOfStock ? c.stockDone(label) : c.stockRestored(label));
     await props.refresh();
     setBusy(null);

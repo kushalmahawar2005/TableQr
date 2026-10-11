@@ -40,6 +40,9 @@ const en = {
   hostIs: (name: string) => `${name} is the host`,
 
   startOrdering: "Start ordering",
+  welcome: "Welcome to",
+  orderNow: "Order now",
+  back: "Back",
   joinTable: (code: string) => `Join Table ${code}`,
   startingFor: (code: string) => `Start ordering at Table ${code}`,
   checking: "Checking table…",
@@ -131,6 +134,9 @@ const hi: G1Copy = {
   hostIs: (name) => `${name} होस्ट हैं`,
 
   startOrdering: "ऑर्डर शुरू करें",
+  welcome: "आपका स्वागत है",
+  orderNow: "ऑर्डर करें",
+  back: "वापस",
   joinTable: (code) => `टेबल ${code} से जुड़ें`,
   startingFor: (code) => `टेबल ${code} पर ऑर्डर शुरू करें`,
   checking: "टेबल देख रहे हैं…",

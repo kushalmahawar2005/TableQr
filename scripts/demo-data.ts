@@ -32,13 +32,13 @@ export async function seedPlatform(db: Db) {
   const base = { groupSplit: false, pricingRules: false, suggestions: false, guestCampaigns: false, multiOutlet: false };
   await db.insert(s.plans).values([
     { code: "starter", name: "Starter", monthlyPricePaise: rupees(999), sortOrder: 0,
-      features: { ...base, maxTables: 15, maxStaff: 3, bookings: "reservations_only", poweredBy: true } },
+      features: { ...base, maxTables: 15, maxStaff: 3, bookings: "reservations_only", poweredBy: true, kitchenDisplay: false } },
     { code: "growth", name: "Growth", monthlyPricePaise: rupees(2499), sortOrder: 1,
-      features: { ...base, maxTables: 40, maxStaff: 10, bookings: "full", groupSplit: true, poweredBy: true } },
+      features: { ...base, maxTables: 40, maxStaff: 10, bookings: "full", groupSplit: true, poweredBy: true, kitchenDisplay: false } },
     { code: "pro", name: "Pro", monthlyPricePaise: rupees(4999), sortOrder: 2,
-      features: { maxTables: 80, maxStaff: 25, bookings: "full", groupSplit: true, pricingRules: true, suggestions: true, guestCampaigns: true, multiOutlet: false, poweredBy: false } },
+      features: { maxTables: 80, maxStaff: 25, bookings: "full", groupSplit: true, pricingRules: true, suggestions: true, guestCampaigns: true, multiOutlet: false, poweredBy: false, kitchenDisplay: true } },
     { code: "chain", name: "Chain", monthlyPricePaise: null, sortOrder: 3,
-      features: { maxTables: null, maxStaff: null, bookings: "full", groupSplit: true, pricingRules: true, suggestions: true, guestCampaigns: true, multiOutlet: true, poweredBy: false } },
+      features: { maxTables: null, maxStaff: null, bookings: "full", groupSplit: true, pricingRules: true, suggestions: true, guestCampaigns: true, multiOutlet: true, poweredBy: false, kitchenDisplay: true } },
   ]);
   const adminId = uuidv7();
   await db.insert(s.platformAdmins).values({ id: adminId, email: "admin@tableqr.local", name: "Platform Owner", role: "super_admin" });

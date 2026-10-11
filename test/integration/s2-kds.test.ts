@@ -10,6 +10,7 @@ import { getGuestContext, type GuestContext } from "@/server/guest/context";
 import { placeOrder } from "@/server/guest/order";
 import { startOrJoinTable } from "@/server/guest/session";
 import { markServed } from "@/server/kitchen/actions";
+import { assignableRoles } from "@/server/staff/team";
 import { kdsSetupOptions, resolveKdsDevice, revokeKdsDevice, setupKdsDevice, updateKdsDevice, type KdsDevice } from "@/server/kitchen/device";
 import { getKitchenDisplay } from "@/server/kitchen/display";
 import { kdsAccept, kdsActor, kdsBoard, kdsBumpLine, kdsBumpTicket, kdsRecall, kdsSearch, kdsStart, kdsStock, viewStation } from "@/server/kitchen/kds";
@@ -71,9 +72,10 @@ afterAll(async () => {
 });
 
 describe("trusted kitchen screen", () => {
-  it("only a manager or owner sets a screen up; stations come from this outlet's menu", async () => {
-    await failsWith(kdsSetupOptions({ outletCode: "SRJ01", phone: "9000000006", pin: "6666" }), "forbidden");
-    await failsWith(setupKdsDevice({ outletCode: "SRJ01", phone: "9000000006", pin: "6666", station: "Main", expeditor: false }), "forbidden");
+  it("kitchen staff, a manager or the owner sets a screen up; stations come from this outlet's menu", async () => {
+    // Kitchen staff sign the screen in with their own phone and PIN; a waiter cannot
+    expect((await kdsSetupOptions({ outletCode: "SRJ01", phone: "9000000006", pin: "6666" })).stations).toContain("Main");
+    await failsWith(setupKdsDevice({ outletCode: "SRJ01", phone: "9000000005", pin: "5555", station: "Main", expeditor: false }), "forbidden");
     await failsWith(setupKdsDevice({ ...MANAGER, pin: "9999", station: "Main", expeditor: false }), "sign_in_failed");
     expect((await kdsSetupOptions(MANAGER)).stations).toEqual(["Bar", "Cold", "Dessert", "Main", "Tandoor"]);
     await failsWith(setupKdsDevice({ ...MANAGER, station: "Grill", expeditor: false }), "invalid_state", "station");
@@ -99,13 +101,27 @@ describe("trusted kitchen screen", () => {
 
   it("settings and logout need a manager PIN; a revoked screen is signed out", async () => {
     const { token } = await device("Cold");
-    await failsWith(updateKdsDevice(token, { phone: "9000000006", pin: "6666", station: "Main", expeditor: false, lang: "hi" }), "forbidden");
+    await failsWith(updateKdsDevice(token, { phone: "9000000005", pin: "5555", station: "Main", expeditor: false, lang: "hi" }), "forbidden");
     await updateKdsDevice(token, { phone: MANAGER.phone, pin: MANAGER.pin, station: "Main", expeditor: false, lang: "hi" });
     expect(await resolveKdsDevice(token)).toMatchObject({ station: "Main", lang: "hi" });
-    await failsWith(revokeKdsDevice(token, { phone: "9000000006", pin: "6666" }), "forbidden");
+    await failsWith(revokeKdsDevice(token, { phone: "9000000005", pin: "5555" }), "forbidden");
     await revokeKdsDevice(token, { phone: MANAGER.phone, pin: MANAGER.pin });
     expect(await resolveKdsDevice(token)).toBeNull();
     expect((await audits("kds.revoke")).length).toBe(1);
+  });
+  it("is a plan feature: a plan without it refuses setup and turns existing screens off", async () => {
+    const [tenant] = await env.db.select({ planCode: s.tenants.planCode }).from(s.tenants).where(eq(s.tenants.id, env.demo.tenantId));
+    await env.db.update(s.tenants).set({ planCode: "starter" }).where(eq(s.tenants.id, env.demo.tenantId));
+    try {
+      await failsWith(setupKdsDevice({ ...MANAGER, station: "Main", expeditor: false }), "forbidden", "plan");
+      expect(await resolveKdsDevice(tandoorToken)).toBeNull();
+      // And the owner cannot hand out the Kitchen role on that plan
+      expect(await assignableRoles(env.demo.tenantId)).toEqual(["manager", "waiter", "accountant"]);
+    } finally {
+      await env.db.update(s.tenants).set({ planCode: tenant.planCode }).where(eq(s.tenants.id, env.demo.tenantId));
+    }
+    expect(await resolveKdsDevice(tandoorToken)).not.toBeNull();
+    expect(await assignableRoles(env.demo.tenantId)).toEqual(["manager", "waiter", "accountant", "kitchen"]);
   });
 });
 

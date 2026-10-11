@@ -12,7 +12,7 @@ import { NOW, s2Cases } from "@/app/dev/s2/_fixtures";
 // S2 Kitchen Display rendered to HTML, plus the pure rules behind the timer and sound.
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push() {}, replace() {}, refresh() {} }) }));
-vi.mock("@/app/(staff)/kds/actions", () => ({}));
+vi.mock("@/app/(staff)/kds/actions", () => ({ boardAction() {}, kdsTokenAction() {}, acceptAction() {}, startAction() {}, bumpTicketAction() {}, bumpLineAction() {}, recallAction() {}, stockAction() {}, searchAction() {}, settingsAction() {}, logoutAction() {} }));
 
 const caseOf = (id: string) => s2Cases().find((c) => c.id === id)!;
 const render = (id: string) => {

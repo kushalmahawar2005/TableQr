@@ -23,9 +23,8 @@ import type { TableLanding } from "@/server/guest/table";
 import { g1Copy, type G1Copy } from "../_copy";
 import { LanguageToggle } from "./language-toggle";
 import { OutletHeader } from "./outlet-header";
-import { JoinCodeCta } from "./join-code-cta";
-import { StartCta } from "./start-cta";
 import { StatusPill, type Tone } from "./status-pill";
+import { WelcomeFlow } from "./welcome-flow";
 import { CardMessage, PeopleHere, TableCard } from "./table-card";
 
 type Pill = { tone: Tone; icon: IconSvgElement; label: string };
@@ -102,12 +101,15 @@ export function LandingView({
   lang,
   shortCode,
   preview,
+  initialStep,
 }: {
   data: TableLanding;
   lang: Lang;
   shortCode: string;
   /** Dev preview: renders without a full-height screen and without calling the server */
   preview?: boolean;
+  /** Dev preview: open the welcome flow on its language step */
+  initialStep?: "welcome" | "language";
 }) {
   const c = g1Copy[lang];
   const { outlet, table } = data;
@@ -122,6 +124,23 @@ export function LandingView({
     .filter(Boolean)
     .join(" · ");
 
+  // A table the guest can sit at opens with the welcome card, then the language, then the menu
+  if (welcoming && (v.cta === "start" || v.cta === "join" || v.cta === "code")) {
+    return (
+      <WelcomeFlow
+        outlet={{ code: outlet.code, name: outlet.name, logoUrl: outlet.logoUrl, subline, poweredBy: outlet.poweredBy }}
+        table={{ code: table.code, zone: table.zone }}
+        people={v.people?.line}
+        cta={v.cta}
+        lang={lang}
+        shortCode={shortCode}
+        style={style}
+        preview={preview}
+        initialStep={initialStep}
+      />
+    );
+  }
+
   return (
     <GuestFrame lang={lang} style={style} preview={preview}>
       <OutletHeader
@@ -133,7 +152,7 @@ export function LandingView({
 
       <main className="flex flex-1 flex-col pt-3">
         <TableCard
-          className={welcoming ? "animate-rise" : "animate-fade"}
+          className="animate-fade"
           eyebrow={c.youAreAt}
           title={v.hideTable ? undefined : c.table(table.code)}
           meta={[c.seats(table.maxSeats), table.zone].join(" · ")}
@@ -148,29 +167,8 @@ export function LandingView({
           ) : null}
         </TableCard>
 
-        {/* The action sits right under the table it acts on */}
-        {welcoming ? (
-          <div className="mt-4 animate-fade [animation-delay:120ms]">
-            {v.cta === "code" ? (
-              <JoinCodeCta outletCode={outlet.code} shortCode={shortCode} label={c.joinTable(table.code)} lang={lang} preview={preview} />
-            ) : (
-              <StartCta
-                outletCode={outlet.code}
-                shortCode={shortCode}
-                label={v.cta === "join" ? c.joinTable(table.code) : c.startOrdering}
-                ariaLabel={v.cta === "join" ? c.joinTable(table.code) : c.startingFor(table.code)}
-                pendingLabel={c.opening}
-                askStaffText={c.askStaffToContinue}
-                failedText={c.actionError}
-                preview={preview}
-              />
-            )}
-            <p className="mt-3 flex items-start justify-center gap-1.5 text-center text-caption text-muted">
-              <HugeiconsIcon icon={QrCodeIcon} size={14} className="mt-px shrink-0" aria-hidden />
-              {c.notYourTable}
-            </p>
-          </div>
-        ) : v.cta === "ask_staff" ? (
+        {/* Tables a guest can sit at open the welcome flow above; this view only says why not */}
+        {v.cta === "ask_staff" ? (
           <p role="status" className="mt-4 rounded-cta border border-line bg-surface px-4 py-4 text-center text-body font-semibold text-ink">
             {c.askStaffToContinue}
           </p>

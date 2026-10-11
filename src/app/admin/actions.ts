@@ -15,6 +15,7 @@ import { getSettingsData } from "@/server/admin/settings";
 import type { AnalyticsData, AnalyticsRange, AuditData, PaymentsData, SettingsData, TenantDetail } from "./admin-types";
 import { requirePlatformAdmin, signInPlatformAdmin, signOutPlatformAdmin } from "@/server/admin/auth";
 import { randomInt } from "node:crypto";
+import { hasKitchenDisplay } from "@/server/plan";
 
 export type AdminLoginState = { error: string | null };
 export type TenantState = { error: string | null; success: string | null; outletCode?: string };
@@ -43,12 +44,13 @@ export async function createTenantAction(_prev: TenantState, form: FormData): Pr
   try {
     const admin = await requirePlatformAdmin();
     if (admin.role !== "super_admin") return { error: "Only a super admin can create restaurants.", success: null };
-    const tenantName = text(form, "tenantName");
+    // One name is asked for, the brand guests see; it also names the business account
+    const brandName = text(form, "brandName") || text(form, "tenantName");
+    const tenantName = text(form, "tenantName") || brandName;
     const contactName = text(form, "contactName");
     const contactPhone = text(form, "contactPhone");
     const contactEmail = text(form, "contactEmail").toLowerCase();
     const planCode = text(form, "planCode");
-    const brandName = text(form, "brandName") || tenantName;
     const typedCode = text(form, "outletCode").toUpperCase();
     const outletName = text(form, "outletName");
     const city = text(form, "city");
@@ -57,13 +59,15 @@ export async function createTenantAction(_prev: TenantState, form: FormData): Pr
     const ownerName = text(form, "ownerName");
     const ownerPin = text(form, "ownerPin");
     const tableCount = Math.min(100, Math.max(1, Number(text(form, "tableCount") || 4)));
+    // Kitchen screen chosen at onboarding: stored only when it differs from the plan
+    const kitchenChoice = form.get("kitchenDisplay") === null ? null : text(form, "kitchenDisplay") === "on";
     if (!tenantName || !contactName || !contactPhone || !planCode || !outletName || !city || !address || !ownerPhone || !ownerName || !isPin(ownerPin)) {
       return { error: "Please fill every required field. Owner PIN must be exactly 4 digits.", success: null };
     }
     if (typedCode && !/^[A-Z0-9]{2,12}$/.test(typedCode)) return { error: "Outlet code must be 2-12 letters or numbers.", success: null };
 
     const result = await db.transaction(async (tx) => {
-      const [plan] = await tx.select({ code: s.plans.code }).from(s.plans).where(and(eq(s.plans.code, planCode), eq(s.plans.isPublic, true)));
+      const [plan] = await tx.select({ code: s.plans.code, features: s.plans.features }).from(s.plans).where(and(eq(s.plans.code, planCode), eq(s.plans.isPublic, true)));
       if (!plan) throw new Error("Selected plan does not exist.");
       const taken = async (code: string) => (await tx.select({ id: s.outlets.id }).from(s.outlets).where(eq(s.outlets.code, code))).length > 0;
       let outletCode = typedCode;
@@ -83,7 +87,8 @@ export async function createTenantAction(_prev: TenantState, form: FormData): Pr
       const outletId = uuidv7();
       const zoneId = uuidv7();
       const userId = uuidv7();
-      await tx.insert(s.tenants).values({ id: tenantId, name: tenantName, planCode, contactName, contactPhone, contactEmail: contactEmail || null, createdByAdminId: admin.id });
+      const kitchenDisplay = kitchenChoice === null || kitchenChoice === hasKitchenDisplay(plan.features) ? null : kitchenChoice;
+      await tx.insert(s.tenants).values({ id: tenantId, name: tenantName, planCode, contactName, contactPhone, contactEmail: contactEmail || null, createdByAdminId: admin.id, kitchenDisplay, tableLimit: tableCount });
       await tx.insert(s.brands).values({ id: brandId, tenantId, name: brandName });
       await tx.insert(s.outlets).values({ id: outletId, tenantId, brandId, code: outletCode, name: outletName, city, address });
       await tx.insert(s.users).values({ id: userId, tenantId, phone: ownerPhone, name: ownerName, pinHash: await hashPin(ownerPin) });
@@ -185,6 +190,39 @@ export async function changeTenantPlanAction(tenantId: string, planCode: string)
   }
 }
 
+/** How many tables this restaurant may have on its floor (what it pays for) */
+export async function setTenantTableLimitAction(tenantId: string, limit: number): Promise<TenantActionState> {
+  try {
+    const admin = await requireSuperAdmin();
+    const next = Math.floor(Number(limit));
+    if (!Number.isFinite(next) || next < 1 || next > 500) return { error: "Enter a table limit from 1 to 500." };
+    const [tenant] = await db.select({ tableLimit: s.tenants.tableLimit }).from(s.tenants).where(eq(s.tenants.id, tenantId));
+    if (!tenant) return { error: "Tenant not found." };
+    await db.update(s.tenants).set({ tableLimit: next }).where(eq(s.tenants.id, tenantId));
+    await logAdminAction(admin, tenantId, "admin.table_limit_changed", { tableLimit: tenant.tableLimit }, { tableLimit: next });
+    revalidatePath("/admin");
+    return { error: null };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Table limit could not be saved." };
+  }
+}
+
+/** Turns this restaurant's kitchen screen (and Kitchen staff role) on or off; null goes back to its plan */
+export async function setTenantKitchenAction(tenantId: string, on: boolean | null): Promise<TenantActionState> {
+  try {
+    const admin = await requireSuperAdmin();
+    const [tenant] = await db.select({ kitchenDisplay: s.tenants.kitchenDisplay }).from(s.tenants).where(eq(s.tenants.id, tenantId));
+    if (!tenant) return { error: "Tenant not found." };
+    const next = on === null ? null : on === true;
+    await db.update(s.tenants).set({ kitchenDisplay: next }).where(eq(s.tenants.id, tenantId));
+    await logAdminAction(admin, tenantId, "admin.kitchen_changed", { kitchenDisplay: tenant.kitchenDisplay }, { kitchenDisplay: next });
+    revalidatePath("/admin");
+    return { error: null };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Kitchen setting could not be saved." };
+  }
+}
+
 export async function resetOwnerPinAction(tenantId: string, pin: string): Promise<TenantActionState> {
   try {
     const admin = await requireSuperAdmin();
@@ -224,6 +262,7 @@ export type PlanInput = {
     guestCampaigns: boolean;
     multiOutlet: boolean;
     poweredBy: boolean;
+    kitchenDisplay: boolean;
   };
 };
 

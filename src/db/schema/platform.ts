@@ -24,6 +24,8 @@ export type PlanFeatures = {
   multiOutlet: boolean;
   /** Small "powered by TableQR" line on the guest page (lower plans) */
   poweredBy: boolean;
+  /** Kitchen display screen (KDS). Missing on older plan rows means included. */
+  kitchenDisplay?: boolean;
 };
 
 /** Plans and prices are data, so the operator can change them without a release */

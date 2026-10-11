@@ -17,7 +17,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ push() {}, replace() {},
 vi.mock("@/app/(guest)/r/[outlet]/t/[table]/table/actions", () => ({}));
 vi.mock("@/app/(guest)/r/[outlet]/t/[table]/orders/actions", () => ({}));
 vi.mock("@/app/(guest)/r/[outlet]/t/[table]/menu/actions", () => ({}));
-vi.mock("@/app/(guest)/r/[outlet]/t/[table]/actions", () => ({ setLanguage() {} }));
+vi.mock("@/app/(guest)/r/[outlet]/t/[table]/actions", () => ({ setLanguage() {}, startInLanguage() {}, joinWithCode() {} }));
 
 const invite = { qrPath: "M4 4h1v1h-1z", qrBox: 37 };
 const table = (data: TableScreenData, preview?: TablePreview, lang: Lang = "en") =>

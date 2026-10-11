@@ -3,6 +3,7 @@
 import {
   Calendar03Icon,
   ChartHistogramIcon,
+  ChefHatIcon,
   DashboardSquare01Icon,
   Home01Icon,
   Invoice01Icon,
@@ -21,6 +22,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import type { Lang } from "@/lib/i18n";
 import { signOutAction } from "../../login/actions";
+import { NotificationBell } from "./notification-bell";
 
 const ICONS: Record<string, IconSvgElement> = {
   dashboard: Home01Icon,
@@ -28,6 +30,7 @@ const ICONS: Record<string, IconSvgElement> = {
   reservations: Calendar03Icon,
   waitlist: UserGroupIcon,
   orders: Note01Icon,
+  kitchen: ChefHatIcon,
   billing: Invoice01Icon,
   menu: MenuRestaurantIcon,
   pricing: Tag01Icon,
@@ -50,6 +53,7 @@ export function StaffShell({
   activeSlug,
   preview = false,
   theme = "light",
+  kitchen = false,
 }: {
   lang: Lang;
   sections: { slug: string; label: string }[];
@@ -58,6 +62,8 @@ export function StaffShell({
   activeSlug?: string;
   preview?: boolean;
   theme?: "light" | "dark";
+  /** Show the Kitchen button in the top bar */
+  kitchen?: boolean;
 }) {
   const [dark, setDark] = useState(theme === "dark");
   // Dialogs and menus render in a portal on <body>, outside this wrapper, so the console theme must also be on <html> while the console is open.
@@ -67,6 +73,15 @@ export function StaffShell({
     root.classList.toggle("theme-dark", dark);
     return () => root.classList.remove("console-ui", "theme-dark");
   }, [dark]);
+  // One bell only, so it never rings twice: in the top bar of the content on wider screens, in the phone top bar otherwise
+  const [wide, setWide] = useState<boolean | null>(null);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 640px)");
+    const update = () => setWide(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
   const path = usePathname();
   const active = activeSlug ?? path?.split("/")[2];
   const role = staff.roles.map((r) => ROLE[lang][r as keyof (typeof ROLE)["en"]] ?? r).join(", ");
@@ -78,6 +93,8 @@ export function StaffShell({
           <span className="min-w-0"><span className="block truncate font-display text-body font-bold leading-tight">TableQR</span><span className="block truncate text-caption leading-tight text-muted">{staff.outlet}</span></span>
         </span>
         <span className="flex items-center">
+        {kitchen && <KitchenButton lang={lang} active={active === "kitchen"} preview={preview} compact />}
+        {wide === false && <NotificationBell preview={preview} placement="header" />}
         <ThemeToggle dark={dark} onChange={setDark} className="grid size-10 place-items-center rounded-input text-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-2 focus-visible:outline-ink" />
         <form action={preview ? undefined : signOutAction}>
           <button type={preview ? "button" : "submit"} aria-label={lang === "hi" ? "साइन आउट" : "Sign out"} className="grid size-10 place-items-center rounded-input text-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-2 focus-visible:outline-ink">
@@ -128,7 +145,15 @@ export function StaffShell({
           </form>
         </div>
       </aside>
-      <div className="flex min-w-0 flex-1 flex-col pb-[calc(4rem+env(safe-area-inset-bottom))] sm:pb-0">{children}</div>
+      <div className="flex min-w-0 flex-1 flex-col pb-[calc(4rem+env(safe-area-inset-bottom))] sm:pb-0">
+        {/* Top bar on tablets and computers, level with the sidebar's logo row */}
+        <header className="sticky top-0 z-20 hidden h-14 shrink-0 print:hidden items-center justify-end gap-2 border-b border-line bg-surface/95 px-4 backdrop-blur-[2px] sm:flex lg:px-6">
+          <span className="mr-auto truncate text-caption text-muted">{staff.outlet}</span>
+          {kitchen && <KitchenButton lang={lang} active={active === "kitchen"} preview={preview} />}
+          {wide && <NotificationBell preview={preview} placement="header" />}
+        </header>
+        {children}
+      </div>
       <nav aria-label={lang === "hi" ? "स्टाफ मेन्यू" : "Staff menu"} className="fixed inset-x-0 bottom-0 z-30 flex overflow-x-auto border-t border-line bg-surface pb-[env(safe-area-inset-bottom)] sm:hidden">
         {sections.map((s) => {
           const current = s.slug === active;
@@ -141,5 +166,24 @@ export function StaffShell({
         })}
       </nav>
     </div>
+  );
+}
+
+/** Opens the kitchen board in the console; a pill on wide screens, an icon on phones */
+function KitchenButton({ lang, active, preview, compact = false }: { lang: Lang; active: boolean; preview: boolean; compact?: boolean }) {
+  const label = lang === "hi" ? "किचन" : "Kitchen";
+  return (
+    <Link
+      href={preview ? "#" : "/console/kitchen"}
+      aria-current={active ? "page" : undefined}
+      aria-label={label}
+      title={label}
+      className={`flex items-center gap-2 rounded-input font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-ink ${
+        compact ? "size-10 justify-center" : "min-h-10 border border-line px-3 text-body"
+      } ${active ? "bg-ink text-white" : "text-muted hover:bg-ink/5 hover:text-ink"}`}
+    >
+      <HugeiconsIcon icon={ChefHatIcon} size={20} className="shrink-0" aria-hidden />
+      {!compact && <span>{label}</span>}
+    </Link>
   );
 }

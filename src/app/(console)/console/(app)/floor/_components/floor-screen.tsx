@@ -166,7 +166,7 @@ export function FloorScreen({ data: initial, lang, realtimeUrl, preview }: { dat
   return (
     <div lang={lang} className="flex min-h-dvh flex-1 flex-col">
       {!online && (
-        <div role="alert" className="sticky top-0 z-20 flex items-center gap-2 bg-danger px-4 py-2 text-body font-semibold text-white">
+        <div role="alert" className="sticky top-0 z-20 flex sm:top-14 items-center gap-2 bg-danger px-4 py-2 text-body font-semibold text-white">
           <HugeiconsIcon icon={WifiOff01Icon} size={18} aria-hidden />
           {c.offline}
         </div>

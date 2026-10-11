@@ -7,7 +7,7 @@ const SIZES = [["a6", "Small (A6)"], ["a5", "Medium (A5)"], ["a4", "Large (A4)"]
 
 export function PrintBar({ count, size, outlet, single }: { count: number; size: string; outlet: string; single: boolean }) {
   return (
-    <header className="no-print sticky top-0 z-10 flex flex-wrap items-center gap-3 border-b border-neutral-200 bg-white px-4 py-3">
+    <header className="no-print sticky top-0 z-10 flex sm:top-14 flex-wrap items-center gap-3 border-b border-neutral-200 bg-white px-4 py-3">
       <Link href="/console/floor" className="rounded-lg border border-neutral-300 px-3 py-2 text-sm font-semibold hover:bg-neutral-50">← Back to floor</Link>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-bold">{outlet} · QR posters</p>

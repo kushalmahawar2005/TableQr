@@ -1,3 +1,5 @@
+import { ringBell } from "@/lib/bell-sound";
+
 // Kitchen sounds, generated with Web Audio (no audio files). Browsers only allow sound after a
 // tap on the page, so the screen asks once with "Enable sound". Mute is remembered per screen.
 
@@ -36,32 +38,16 @@ export async function unlockAudio(): Promise<boolean> {
 
 export const audioReady = () => ctx?.state === "running";
 
-function tone(freq: number, start: number, length: number, peak: number) {
-  if (!ctx) return;
-  const osc = ctx.createOscillator();
-  const gain = ctx.createGain();
-  osc.type = "sine";
-  osc.frequency.value = freq;
-  const t = ctx.currentTime + start;
-  gain.gain.setValueAtTime(0.0001, t);
-  gain.gain.exponentialRampToValueAtTime(peak, t + 0.02);
-  gain.gain.exponentialRampToValueAtTime(0.0001, t + length);
-  osc.connect(gain).connect(ctx.destination);
-  osc.start(t);
-  osc.stop(t + length + 0.05);
-}
-
-/** New ticket: one soft chime */
+/** New ticket: a loud service bell, rung three times */
 export function playNewTicket() {
-  if (!audioReady()) return;
-  tone(880, 0, 0.7, 0.18);
+  if (!audioReady() || !ctx) return;
+  ringBell(ctx, { times: 3 });
 }
 
-/** Ticket turned late: two tones, lower and firmer */
+/** Ticket turned late: a lower bell, rung four times */
 export function playLate() {
-  if (!audioReady()) return;
-  tone(660, 0, 0.35, 0.22);
-  tone(440, 0.38, 0.5, 0.22);
+  if (!audioReady() || !ctx) return;
+  ringBell(ctx, { times: 4, urgent: true });
 }
 
 const SEEN_KEY = "tq_kds_announced";

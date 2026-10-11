@@ -26,8 +26,9 @@ const base: TableLanding = {
   landing: { kind: "start" },
 };
 
-const states: { id: string; label: string; data: TableLanding }[] = [
-  { id: "start", label: "1 · Available → Start ordering", data: base },
+const states: { id: string; label: string; data: TableLanding; step?: "language" }[] = [
+  { id: "start", label: "1 · Available → Welcome", data: base },
+  { id: "language", label: "1b · Language step", data: base, step: "language" },
   {
     id: "join",
     label: "2 · Session open → Join",
@@ -124,7 +125,7 @@ export default async function G1Preview(props: PageProps<"/dev/g1">) {
       <div className="flex flex-wrap items-start gap-6">
         {states.map((s) => (
           <Frame key={s.id} label={s.label}>
-            <LandingView data={s.data} lang={lang} shortCode="k7Qm" preview />
+            <LandingView data={s.data} lang={lang} shortCode="k7Qm" preview initialStep={s.step} />
           </Frame>
         ))}
         <Frame label="13 · Unknown QR">

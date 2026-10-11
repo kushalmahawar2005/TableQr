@@ -113,6 +113,27 @@
       "when": 1791043208000,
       "tag": "0015_o2_floor_editor",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "5",
+      "when": 1791741687360,
+      "tag": "0016_plan_kitchen_display",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "5",
+      "when": 1791742844050,
+      "tag": "0017_tenant_kitchen_display",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "5",
+      "when": 1791743842715,
+      "tag": "0018_tenant_table_limit",
+      "breakpoints": true
     }
   ]
 }

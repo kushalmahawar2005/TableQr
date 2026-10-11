@@ -75,6 +75,15 @@ export async function joinWithCode(outletCode: string, shortCode: string, code: 
   redirect(`/r/${encodeURIComponent(outletCode)}/t/${encodeURIComponent(shortCode)}/menu`);
 }
 
+/**
+ * The language step of the welcome flow: remembers the language the guest tapped, then starts or
+ * joins the table exactly as Start ordering does (and so lands on the menu).
+ */
+export async function startInLanguage(outletCode: string, shortCode: string, prev: StartResult, form: FormData): Promise<StartResult> {
+  (await cookies()).set(LANG_COOKIE, parseLang(String(form.get("lang") ?? "")), { ...cookieBase, maxAge: YEAR });
+  return startOrJoin(outletCode, shortCode, prev);
+}
+
 /** EN / HI switch, remembered on this phone. Setting the cookie re-renders the page. */
 export async function setLanguage(lang: string) {
   (await cookies()).set(LANG_COOKIE, parseLang(lang), { ...cookieBase, maxAge: YEAR });

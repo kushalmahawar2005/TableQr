@@ -1,41 +1,41 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Copy, Dices, Loader2, MessageCircle } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Copy, Dices, Loader2, MessageCircle } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
 import { createTenantAction, type TenantState } from "./actions";
 
 type Field = { name: string; label: string; type?: string; required?: boolean; defaultValue?: string; hint?: string; full?: boolean };
 
-const sections: { title: string; fields: Field[] }[] = [
-  { title: "Business", fields: [
-    { name: "tenantName", label: "Company name", required: true, hint: "The business that pays for TableQR, e.g. Sharma Hospitality Pvt Ltd" },
-    { name: "brandName", label: "Brand name", hint: "The restaurant name guests see. Leave empty to use the company name" },
+// Onboarding in four short steps; every field stays in one form, so going back keeps what was typed
+const sections: { title: string; help: string; fields: Field[] }[] = [
+  { title: "Restaurant", help: "Who you are setting up", fields: [
+    { name: "brandName", label: "Brand name", required: true, hint: "The restaurant name guests see, e.g. Spice Route" },
     { name: "contactName", label: "Contact person", required: true },
     { name: "contactPhone", label: "Contact phone", type: "tel", required: true },
     { name: "contactEmail", label: "Contact email", type: "email" },
   ] },
-  { title: "First outlet", fields: [
+  { title: "Location", help: "Where it is and how many tables", fields: [
     { name: "outletName", label: "Outlet name", required: true, hint: "This location, e.g. Spice Route - Jaipur" },
     { name: "outletCode", label: "Outlet code", hint: "Made from the outlet name. You can change it. The owner signs in with it" },
     { name: "city", label: "City", required: true },
-    { name: "tableCount", label: "Number of tables", type: "number", required: true, defaultValue: "4" },
+    { name: "tableCount", label: "Number of tables", type: "number", required: true, defaultValue: "4", hint: "Also the most tables this restaurant can have. Change it later under the tenant." },
     { name: "address", label: "Address", required: true, full: true },
   ] },
-  { title: "Owner login", fields: [
+  { title: "Owner login", help: "How the owner signs in", fields: [
     { name: "ownerName", label: "Owner name", required: true },
     { name: "ownerPhone", label: "Owner phone", type: "tel", required: true },
     { name: "ownerPin", label: "4-digit PIN", type: "password", required: true, hint: "The owner signs in with this. Tap Generate for a random one" },
   ] },
 ];
 
-const selectClass = "h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
-
-export function CreateTenantDialog({ open, onOpenChange, plans }: { open: boolean; onOpenChange: (open: boolean) => void; plans: { code: string; name: string }[] }) {
+export function CreateTenantDialog({ open, onOpenChange, plans }: { open: boolean; onOpenChange: (open: boolean) => void; plans: { code: string; name: string; kitchen: boolean }[] }) {
   const router = useRouter();
   const [state, action, pending] = useActionState<TenantState, FormData>(createTenantAction, { error: null, success: null });
 
@@ -59,6 +59,34 @@ export function CreateTenantDialog({ open, onOpenChange, plans }: { open: boolea
     setDigits(d);
     setCodeEdited(false);
     setCode(suggest(outletName, d));
+  };
+  const [step, setStep] = useState(0);
+  const [planCode, setPlanCode] = useState(plans[0]?.code ?? "");
+  // Kitchen screen follows the chosen plan until the admin sets it themselves
+  const [kitchen, setKitchen] = useState<boolean | null>(null);
+  const kitchenOn = kitchen ?? plans.find((p) => p.code === planCode)?.kitchen ?? false;
+  const [review, setReview] = useState<Record<string, string>>({});
+  const form = useRef<HTMLFormElement>(null);
+  const last = sections.length; // the plan and review step comes after the field sections
+  const field = (name: string) => form.current?.elements.namedItem(name) as HTMLInputElement | null;
+
+  /** Checks this step's fields with the browser's own messages; true when all are fine */
+  const stepValid = () => {
+    const els = form.current?.querySelectorAll<HTMLInputElement | HTMLSelectElement>(`[data-step="${step}"] :is(input, select)`) ?? [];
+    for (const el of els) if (!el.checkValidity()) { el.reportValidity(); return false; }
+    return true;
+  };
+  const next = () => {
+    if (!stepValid()) return;
+    // Sensible defaults for the next step, never overwriting what was typed
+    if (step === 0 && !outletName.trim()) changeOutletName(field("brandName")?.value ?? "");
+    if (step === 1) {
+      const name = field("ownerName"), phone = field("ownerPhone");
+      if (name && !name.value) name.value = field("contactName")?.value ?? "";
+      if (phone && !phone.value) phone.value = field("contactPhone")?.value ?? "";
+    }
+    if (step === last - 1 && form.current) setReview(Object.fromEntries([...new FormData(form.current)].map(([k, v]) => [k, String(v)])));
+    setStep(step + 1);
   };
   const [creds, setCreds] = useState<{ tenant: string; outlet: string; phone: string; pin: string } | null>(null);
   const [copied, setCopied] = useState(false);
@@ -95,9 +123,19 @@ export function CreateTenantDialog({ open, onOpenChange, plans }: { open: boolea
           <Button render={<a href={`https://wa.me/${waNumber}?text=${encodeURIComponent(message)}`} target="_blank" rel="noreferrer noopener" />} nativeButton={false}><MessageCircle />Send on WhatsApp</Button>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>Done</Button>
         </div>
-      </div> : <form action={(fd) => { setCreds({ tenant: String(fd.get("tenantName") ?? ""), outlet: String(fd.get("outletCode") ?? "").toUpperCase(), phone: String(fd.get("ownerPhone") ?? ""), pin: String(fd.get("ownerPin") ?? "") }); action(fd); }} className="space-y-6">
-        {sections.map((section) => <fieldset key={section.title} className="space-y-3">
-          <legend className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{section.title}</legend>
+      </div> : <form ref={form} onSubmit={(e) => { if (step < last) e.preventDefault(); }} action={(fd) => { setCreds({ tenant: String(fd.get("brandName") ?? ""), outlet: String(fd.get("outletCode") ?? "").toUpperCase(), phone: String(fd.get("ownerPhone") ?? ""), pin: String(fd.get("ownerPin") ?? "") }); action(fd); }} onKeyDown={(e) => { if (e.key === "Enter" && step < last && (e.target as HTMLElement).tagName === "INPUT") { e.preventDefault(); next(); } }} className="space-y-5">
+        <ol className="grid grid-cols-4 gap-2" aria-label="Steps">
+          {[...sections.map((s) => s.title), "Plan"].map((title, i) => <li key={title} aria-current={i === step ? "step" : undefined} className="space-y-1.5">
+            <span className={`block h-1.5 rounded-full transition-colors ${i <= step ? "bg-primary" : "bg-muted"}`} />
+            <span className="flex items-center gap-1.5 text-xs">
+              <Badge variant={i <= step ? "default" : "outline"} className="size-5 justify-center rounded-full p-0">{i < step ? <Check className="size-3" /> : i + 1}</Badge>
+              <span className={i === step ? "font-semibold text-foreground" : "text-muted-foreground"}>{title}</span>
+            </span>
+          </li>)}
+        </ol>
+        <Separator />
+        {sections.map((section, i) => <fieldset key={section.title} data-step={i} className={i === step ? "space-y-3" : "hidden"}>
+          <legend className="mb-1"><span className="block text-base font-semibold">{section.title}</span><span className="block text-sm text-muted-foreground">{section.help}</span></legend>
           <div className="grid gap-3 sm:grid-cols-2">{section.fields.map((f) => <div key={f.name} className={f.full ? "space-y-1.5 sm:col-span-2" : "space-y-1.5"}>
             <Label htmlFor={f.name}>{f.label}{f.required && <span className="text-red-500"> *</span>}</Label>
             {f.name === "outletCode" ? <div className="flex gap-2">
@@ -112,14 +150,30 @@ export function CreateTenantDialog({ open, onOpenChange, plans }: { open: boolea
             {f.hint && <p className="text-xs text-muted-foreground">{f.hint}</p>}
           </div>)}</div>
         </fieldset>)}
-        <fieldset className="space-y-1.5">
-          <legend className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Plan</legend>
-          <select name="planCode" required className={selectClass} aria-label="Plan">{plans.map((p) => <option key={p.code} value={p.code}>{p.name}</option>)}</select>
+        <fieldset data-step={last} className={step === last ? "space-y-4" : "hidden"}>
+          <legend className="mb-1"><span className="block text-base font-semibold">Plan</span><span className="block text-sm text-muted-foreground">Pick a plan and check the details</span></legend>
+          <div role="radiogroup" aria-label="Plan" className="grid gap-2 sm:grid-cols-2">
+            {plans.map((p) => <label key={p.code} className="flex cursor-pointer items-center gap-3 rounded-xl border p-3 text-sm transition-colors hover:bg-muted/50 has-[:checked]:border-primary has-[:checked]:bg-primary/5 has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring/50">
+              <input type="radio" name="planCode" value={p.code} checked={planCode === p.code} onChange={() => setPlanCode(p.code)} required className="size-4 accent-[var(--primary)]" />
+              <span className="font-medium">{p.name}</span>
+              {p.kitchen && <span className="ml-auto text-xs text-muted-foreground">Kitchen included</span>}
+            </label>)}
+          </div>
+          <label className="flex cursor-pointer items-start gap-3 rounded-xl border p-3 text-sm has-[:checked]:border-primary has-[:checked]:bg-primary/5">
+            <input type="checkbox" checked={kitchenOn} onChange={(e) => setKitchen(e.target.checked)} className="mt-0.5 size-4 accent-[var(--primary)]" />
+            <input type="hidden" name="kitchenDisplay" value={kitchenOn ? "on" : "off"} />
+            <span><span className="block font-medium">Kitchen screen</span><span className="block text-xs text-muted-foreground">Gives the Kitchen staff role and the wall kitchen screen. Comes with the plan when ticked by default; you can change it for this restaurant.</span></span>
+          </label>
+          <dl className="divide-y rounded-xl border text-sm">
+            {([["Brand", review.brandName], ["Contact", [review.contactName, review.contactPhone].filter(Boolean).join(" · ")], ["Outlet", [review.outletName, review.city].filter(Boolean).join(", ")], ["Outlet code", review.outletCode || "Made when created"], ["Tables", review.tableCount], ["Owner", [review.ownerName, review.ownerPhone].filter(Boolean).join(" · ")], ["Kitchen screen", kitchenOn ? "Yes" : "No"]] as const).map(([k, v]) => <div key={k} className="flex items-center justify-between gap-4 px-4 py-2.5"><dt className="text-muted-foreground">{k}</dt><dd className="min-w-0 break-words text-right font-medium">{v}</dd></div>)}
+          </dl>
         </fieldset>
         {state.error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{state.error}</p>}
-        <div className="flex justify-end gap-2">
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button type="submit" disabled={pending}>{pending && <Loader2 className="animate-spin" />}{pending ? "Creating…" : "Create tenant"}</Button>
+        <div className="flex justify-between gap-2">
+          {step === 0 ? <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button> : <Button type="button" variant="outline" onClick={() => setStep(step - 1)} disabled={pending}><ArrowLeft />Back</Button>}
+          {/* Separate keys: the click that shows the last step must not land on a fresh Create button */}
+          {step < last ? <Button key="next" type="button" onClick={next}>Next<ArrowRight /></Button>
+            : <Button key="create" type="submit" disabled={pending}>{pending && <Loader2 className="animate-spin" />}{pending ? "Creating…" : "Create restaurant"}</Button>}
         </div>
       </form>}
     </DialogContent>

@@ -13,9 +13,11 @@ export default async function ConsoleLayout({ children }: LayoutProps<"/console"
   const jar = await cookies();
   const lang = parseLang(jar.get(LANG_COOKIE)?.value);
   const theme = jar.get("tq_theme")?.value === "dark" ? "dark" : "light";
-  const sections = visibleSections.filter((s) => canSee(staff.roles, s.slug)).map((s) => ({ slug: s.slug, label: lang === "hi" ? s.hi : s.label }));
+  // The kitchen board is a button in the top bar, not a sidebar row
+  const sections = visibleSections.filter((s) => s.slug !== "kitchen" && canSee(staff.roles, s.slug)).map((s) => ({ slug: s.slug, label: lang === "hi" ? s.hi : s.label }));
+  const kitchen = canSee(staff.roles, "kitchen");
   return (
-    <StaffShell theme={theme} lang={lang} sections={sections} staff={{ name: staff.name, roles: staff.roles, outlet: staff.outlet.name, shiftEnds: staff.expiresAt }}>
+    <StaffShell theme={theme} lang={lang} sections={sections} kitchen={kitchen} staff={{ name: staff.name, roles: staff.roles, outlet: staff.outlet.name, shiftEnds: staff.expiresAt }}>
       {children}
     </StaffShell>
   );

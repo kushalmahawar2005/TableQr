@@ -8,14 +8,24 @@ import { AppError } from "../errors";
 import { audit } from "./audit";
 import type { StaffSession } from "./auth";
 import { hashPin, isPin } from "./pin";
+import { tenantHasKitchen } from "../plan";
 
 // Team: the people who can sign in at this outlet. Managers see the list; only the owner adds
 // people, changes a role, resets a PIN or switches someone off. The owner role itself is never
 // handed out here, and a person can never change their own access.
 
 type Staff = Pick<StaffSession, "tenantId" | "outletId" | "roles" | "userId" | "name">;
-export const TEAM_ROLES = ["manager", "cashier", "host", "waiter", "kitchen", "accountant"] as const satisfies readonly StaffRole[];
+/** Roles the owner can give. Kitchen only when the restaurant has the kitchen screen (plan or admin). */
+export const TEAM_ROLES = ["manager", "waiter", "accountant", "kitchen"] as const satisfies readonly StaffRole[];
 export type TeamRole = (typeof TEAM_ROLES)[number];
+/** Older roles (cashier, host) are no longer handed out; people who already have them keep working */
+const LIST_ORDER = ["owner", "manager", "waiter", "accountant", "kitchen", "cashier", "host"];
+
+/** The roles this restaurant's owner may give, from its plan */
+export async function assignableRoles(tenantId: string): Promise<TeamRole[]> {
+  const kitchen = await tenantHasKitchen(tenantId);
+  return TEAM_ROLES.filter((r) => r !== "kitchen" || kitchen);
+}
 
 export type TeamMember = { id: string; name: string; phone: string; isActive: boolean; roles: StaffRole[]; isMe: boolean; locked: boolean };
 
@@ -38,8 +48,7 @@ export async function listTeam(staff: Staff): Promise<TeamMember[]> {
     if (r.role === "owner" || r.outletId === null) m.locked = true;
     byUser.set(r.id, m);
   }
-  const order = ["owner", ...TEAM_ROLES];
-  return [...byUser.values()].sort((a, b) => order.indexOf(a.roles[0]) - order.indexOf(b.roles[0]) || a.name.localeCompare(b.name));
+  return [...byUser.values()].sort((a, b) => LIST_ORDER.indexOf(a.roles[0]) - LIST_ORDER.indexOf(b.roles[0]) || a.name.localeCompare(b.name));
 }
 
 async function target(tx: Pick<typeof db, "select">, staff: Staff, userId: string) {
@@ -61,7 +70,7 @@ export async function addMember(staff: Staff, input: { name: string; phone: stri
   const role = input.role as TeamRole;
   if (name.length < 2 || name.length > 80) throw bad("Enter the person's name.");
   if (phone.length !== 10) throw bad("Enter a 10-digit mobile number.");
-  if (!TEAM_ROLES.includes(role)) throw bad("Pick a role.");
+  if (!(await assignableRoles(staff.tenantId)).includes(role)) throw bad("Pick a role.");
   return db.transaction(async (tx) => {
     const [existing] = await tx.select().from(s.users).where(and(eq(s.users.tenantId, staff.tenantId), eq(s.users.phone, phone)));
     let userId = existing?.id;
@@ -83,7 +92,7 @@ export async function addMember(staff: Staff, input: { name: string; phone: stri
 
 export async function changeRole(staff: Staff, userId: string, role: string, now = new Date()) {
   ownerOnly(staff);
-  if (!TEAM_ROLES.includes(role as TeamRole)) throw bad("Pick a role.");
+  if (!(await assignableRoles(staff.tenantId)).includes(role as TeamRole)) throw bad("Pick a role.");
   await db.transaction(async (tx) => {
     const { roles } = await target(tx, staff, userId);
     await tx.delete(s.staffRoles).where(and(eq(s.staffRoles.tenantId, staff.tenantId), eq(s.staffRoles.userId, userId), eq(s.staffRoles.outletId, staff.outletId)));

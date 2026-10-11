@@ -15,10 +15,10 @@ async function main() {
   if (!email || !name || !password) throw new Error("Set ADMIN_EMAIL, ADMIN_NAME and ADMIN_PW");
 
   const plans = [
-    { code: "starter", name: "Starter", price: 99900, sort: 0, features: { maxTables: 15, maxStaff: 3, bookings: "reservations_only", groupSplit: false, pricingRules: false, suggestions: false, guestCampaigns: false, multiOutlet: false, poweredBy: true } },
-    { code: "growth", name: "Growth", price: 249900, sort: 1, features: { maxTables: 40, maxStaff: 10, bookings: "full", groupSplit: true, pricingRules: false, suggestions: false, guestCampaigns: false, multiOutlet: false, poweredBy: true } },
-    { code: "pro", name: "Pro", price: 499900, sort: 2, features: { maxTables: 80, maxStaff: 25, bookings: "full", groupSplit: true, pricingRules: true, suggestions: true, guestCampaigns: true, multiOutlet: false, poweredBy: false } },
-    { code: "chain", name: "Chain", price: null, sort: 3, features: { maxTables: null, maxStaff: null, bookings: "full", groupSplit: true, pricingRules: true, suggestions: true, guestCampaigns: true, multiOutlet: true, poweredBy: false } },
+    { code: "starter", name: "Starter", price: 99900, sort: 0, features: { maxTables: 15, maxStaff: 3, bookings: "reservations_only", groupSplit: false, pricingRules: false, suggestions: false, guestCampaigns: false, multiOutlet: false, poweredBy: true, kitchenDisplay: false } },
+    { code: "growth", name: "Growth", price: 249900, sort: 1, features: { maxTables: 40, maxStaff: 10, bookings: "full", groupSplit: true, pricingRules: false, suggestions: false, guestCampaigns: false, multiOutlet: false, poweredBy: true, kitchenDisplay: false } },
+    { code: "pro", name: "Pro", price: 499900, sort: 2, features: { maxTables: 80, maxStaff: 25, bookings: "full", groupSplit: true, pricingRules: true, suggestions: true, guestCampaigns: true, multiOutlet: false, poweredBy: false, kitchenDisplay: true } },
+    { code: "chain", name: "Chain", price: null, sort: 3, features: { maxTables: null, maxStaff: null, bookings: "full", groupSplit: true, pricingRules: true, suggestions: true, guestCampaigns: true, multiOutlet: true, poweredBy: false, kitchenDisplay: true } },
   ];
 
   const lines = plans.map(

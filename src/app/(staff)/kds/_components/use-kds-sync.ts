@@ -3,7 +3,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { connectRealtime, type RealtimeEvent } from "@/lib/realtime-client";
 import type { KdsBoard } from "@/server/kitchen/kds";
-import { boardAction, kdsTokenAction } from "../actions";
+import { useKdsActions } from "./kds-actions";
 import type { Connection } from "./kds-logic";
 
 export const POLL_MS = 12_000;
@@ -19,6 +19,7 @@ export const isKitchenHint = (e: RealtimeEvent) => e.topic === "kitchen" || (e.t
  */
 export function useKdsSync(initial: KdsBoard, realtimeUrl: string | null, preview: boolean) {
   const router = useRouter();
+  const actions = useKdsActions();
   const [board, setBoard] = useState(initial);
   const [skew, setSkew] = useState(0);
   const [now, setNow] = useState(initial.renderedAt);
@@ -47,7 +48,7 @@ export function useKdsSync(initial: KdsBoard, realtimeUrl: string | null, previe
     }
     inflight.current = true;
     try {
-      const res = await boardAction(station.current);
+      const res = await actions.board(station.current);
       setOffline(false);
       if (res.ok) {
         setBoard(res.data);
@@ -63,7 +64,7 @@ export function useKdsSync(initial: KdsBoard, realtimeUrl: string | null, previe
         void refresh();
       }
     }
-  }, [preview, router]);
+  }, [preview, router, actions]);
 
   const showStation = useCallback(
     (next: string | null) => {
@@ -85,7 +86,7 @@ export function useKdsSync(initial: KdsBoard, realtimeUrl: string | null, previe
     const poll = setInterval(() => void refresh(), POLL_MS);
     const stop = connectRealtime({
       url: realtimeUrl,
-      getToken: kdsTokenAction,
+      getToken: actions.token,
       pollMs: POLL_MS,
       onEvents: (events) => events.some(isKitchenHint) && hint(),
       onResync: () => void refresh(),
@@ -106,7 +107,7 @@ export function useKdsSync(initial: KdsBoard, realtimeUrl: string | null, previe
       window.removeEventListener("online", goOnline);
       window.removeEventListener("offline", goOffline);
     };
-  }, [preview, realtimeUrl, refresh]);
+  }, [preview, realtimeUrl, refresh, actions]);
 
   return { board, now, conn: (offline ? "offline" : conn) as Connection, offline, refresh, showStation };
 }

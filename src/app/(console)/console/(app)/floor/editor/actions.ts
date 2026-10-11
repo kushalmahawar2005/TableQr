@@ -5,7 +5,7 @@ import { addDraftTable, addDraftZone, deleteDraftTable, getOrCreateDraft, publis
 
 async function run<T>(work: (staff: Awaited<ReturnType<typeof staffFor>>) => Promise<T>) {
   try { return { ok: true as const, data: await work(await staffFor(floorEditorRoles)) }; }
-  catch (e) { return { ok: false as const, error: e instanceof AppError ? e.message : "Could not save the floor plan.", code: e instanceof AppError ? e.code : "unknown" }; }
+  catch (e) { return { ok: false as const, error: e instanceof AppError ? e.message : "Could not save the floor plan.", code: e instanceof AppError ? e.code : "unknown", reason: e instanceof AppError ? (e.details?.reason as string | undefined) : undefined }; }
 }
 export async function draftAction() { return run(getOrCreateDraft); }
 export async function updateTableAction(versionId: string, id: string, patch: Parameters<typeof updateDraftTable>[3], revision: number) { return run((s) => updateDraftTable(s, versionId, id, patch, revision)); }

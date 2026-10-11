@@ -14,7 +14,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { changeTenantPlanAction, extendTrialAction, getTenantDetailAction, resetOwnerPinAction, setTenantStatusAction, updateTenantAction } from "./actions";
+import { changeTenantPlanAction, extendTrialAction, getTenantDetailAction, resetOwnerPinAction, setTenantKitchenAction, setTenantStatusAction, setTenantTableLimitAction, updateTenantAction } from "./actions";
 import { CreateTenantDialog } from "./create-tenant-dialog";
 import type { AdminData, AdminTenant, TenantDetail } from "./admin-types";
 
@@ -158,6 +158,39 @@ function TenantSheet({ tenant, plans, now, onClose }: { tenant: AdminTenant | nu
                 <p className="text-sm text-muted-foreground">{tenant.monthlyPricePaise ? `${money(tenant.monthlyPricePaise)} / outlet / month` : "Custom pricing"}{tenant.billingCycle ? ` · ${tenant.billingCycle}` : ""}</p>
                 <p className="mt-2 text-xs text-muted-foreground">{tenant.status === "trial" ? "Trial ends" : "Next renewal"}: <span className="font-medium text-foreground">{date(tenant.status === "trial" ? tenant.trialEndsAt : tenant.renewalAt)}</span></p>
                 <Button variant="outline" size="sm" className="mt-3" onClick={() => setTab("manage")}>Change plan</Button>
+              </section>
+              <section className="rounded-xl border bg-white p-4 sm:col-span-2">
+                <form
+                  className="flex flex-wrap items-end justify-between gap-3"
+                  onSubmit={(e) => { e.preventDefault(); const n = Number(new FormData(e.currentTarget).get("tableLimit")); run(() => setTenantTableLimitAction(tenant.id, n), "Table limit saved."); }}
+                >
+                  <div>
+                    <h3 className="text-sm font-semibold">Tables allowed</h3>
+                    <p className="mt-0.5 text-sm text-muted-foreground">The owner cannot add more tables than this on the floor plan; they are asked to upgrade.</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Input key={tenant.id + String(tenant.tableLimit)} name="tableLimit" type="number" min={1} max={500} defaultValue={tenant.tableLimit ?? ""} placeholder="No limit" className="w-24" aria-label="Tables allowed" />
+                    <Button size="sm" type="submit" disabled={pending}>Save</Button>
+                  </div>
+                </form>
+              </section>
+              <section className="rounded-xl border bg-white p-4 sm:col-span-2">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-semibold">Kitchen screen</h3>
+                    <p className="mt-0.5 text-sm text-muted-foreground">
+                      {tenant.kitchenDisplay ? "On: the Kitchen staff role and the wall kitchen screen are available." : "Off: no Kitchen role or wall screen. Managers still use the Kitchen board in the console."}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {tenant.kitchenOverride === null ? `Following the ${tenant.planName} plan (${tenant.kitchenFromPlan ? "included" : "not included"}).` : `Set by admin. The ${tenant.planName} plan alone would ${tenant.kitchenFromPlan ? "include" : "not include"} it.`}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2" role="group" aria-label="Kitchen screen">
+                    <Button size="sm" variant={tenant.kitchenDisplay ? "default" : "outline"} disabled={pending || tenant.kitchenDisplay} onClick={() => run(() => setTenantKitchenAction(tenant.id, true), "Kitchen screen turned on.")}>On</Button>
+                    <Button size="sm" variant={!tenant.kitchenDisplay ? "default" : "outline"} disabled={pending || !tenant.kitchenDisplay} onClick={() => run(() => setTenantKitchenAction(tenant.id, false), "Kitchen screen turned off.")}>Off</Button>
+                    {tenant.kitchenOverride !== null && <Button size="sm" variant="ghost" disabled={pending} onClick={() => run(() => setTenantKitchenAction(tenant.id, null), "Kitchen screen follows the plan again.")}>Use plan</Button>}
+                  </div>
+                </div>
               </section>
               <section className="rounded-xl border bg-white p-4"><h3 className="mb-2 text-sm font-semibold">Quick actions</h3>
                 <div className="flex flex-wrap gap-2">
@@ -374,7 +407,7 @@ export function TenantsView({ data }: { data: AdminData }) {
       </CardContent>
     </Card>
 
-    <CreateTenantDialog key={String(adding)} open={adding} onOpenChange={setAdding} plans={data.plans.filter((p) => p.isPublic).map((p) => ({ code: p.code, name: p.name }))} />
+    <CreateTenantDialog key={String(adding)} open={adding} onOpenChange={setAdding} plans={data.plans.filter((p) => p.isPublic).map((p) => ({ code: p.code, name: p.name, kitchen: p.features.kitchenDisplay !== false }))} />
     <TenantSheet tenant={selected} plans={data.plans} now={now} onClose={() => setSelectedId(null)} />
   </div>;
 }

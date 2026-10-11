@@ -8,6 +8,7 @@ export const consoleSections = [
   { slug: "reservations", label: "Reservations", hi: "बुकिंग" },
   { slug: "waitlist", label: "Waitlist", hi: "वेटलिस्ट" },
   { slug: "orders", label: "Orders", hi: "ऑर्डर" },
+  { slug: "kitchen", label: "Kitchen", hi: "किचन" },
   { slug: "billing", label: "Billing", hi: "बिलिंग" },
   { slug: "menu", label: "Menu", hi: "मेन्यू" },
   { slug: "pricing", label: "Pricing", hi: "प्राइसिंग" },
@@ -32,7 +33,7 @@ export function landingSection(roles: readonly StaffRole[]): ConsoleSection | nu
 
 /**
  * Where a person goes right after signing in: the dashboard for owners and managers, the waiter
- * app for waiters, the POS for cashiers and accountants, the kitchen display for kitchen staff, and
+ * app for waiters, the POS for cashiers and accountants, the console kitchen board for kitchen staff, and
  * the floor for hosts. A person with several roles gets the first that applies, in that order.
  */
 export function homeFor(roles: readonly StaffRole[]): string {
@@ -41,7 +42,7 @@ export function homeFor(roles: readonly StaffRole[]): string {
   if (has("host")) return "/console/floor";
   if (has("waiter")) return "/waiter";
   if (has("cashier", "accountant")) return "/pos";
-  if (has("kitchen")) return "/kds";
+  if (has("kitchen")) return "/console/kitchen";
   return "/console/floor";
 }
 

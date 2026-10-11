@@ -28,4 +28,21 @@ describe("O2 versioned floor editor", () => {
   it("allows immediate QR revoke/reissue without changing table identity and denies host", async () => {
     const [table] = await env.db.select().from(s.diningTables).where(and(eq(s.diningTables.tenantId, owner.tenantId), eq(s.diningTables.code, "T1"))); await fail(revokeOrReissueQr(host, table.id, true), "forbidden"); await revokeOrReissueQr(owner, table.id, true); const qrs = await env.db.select().from(s.qrCodes).where(and(eq(s.qrCodes.tenantId, owner.tenantId), eq(s.qrCodes.tableId, table.id), eq(s.qrCodes.type, "table"))); expect(qrs.filter((q) => !q.revokedAt)).toHaveLength(1); expect(table.id).toBe(env.demo.tableIds.T1);
   });
+
+  it("stops at the restaurant's table limit and asks for an upgrade", async () => {
+    const draft = await getOrCreateDraft(owner);
+    const live = draft.tables.filter((t) => !t.archived).length;
+    await env.db.update(s.tenants).set({ tableLimit: live }).where(eq(s.tenants.id, owner.tenantId));
+    try {
+      const fresh = await getOrCreateDraft(owner);
+      expect(fresh.tableLimit).toBe(live);
+      const zone = fresh.zones.find((z) => !z.archived)!;
+      const err = await addDraftTable(owner, fresh.version.id, { code: "TX9", zoneId: zone.id, maxSeats: 4 }, fresh.version.revision).then(() => null, (e: unknown) => e);
+      expect(err).toBeInstanceOf(AppError);
+      expect((err as AppError).details?.reason).toBe("table_limit");
+      expect((err as AppError).message).toContain(`includes ${live} tables`);
+    } finally {
+      await env.db.update(s.tenants).set({ tableLimit: null }).where(eq(s.tenants.id, owner.tenantId));
+    }
+  });
 });

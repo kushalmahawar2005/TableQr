@@ -9,15 +9,14 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import type { TeamMember } from "@/server/staff/team";
 import { addMemberAction, changeRoleAction, resetPinAction, setActiveAction } from "../actions";
 
-const ROLES = [
+const ALL_ROLES = [
+  { id: "manager", label: "Manager", does: "Runs the outlet: floor, menu, billing, reports, approvals", opens: "Dashboard", path: "/console/dashboard" },
   { id: "waiter", label: "Waiter", does: "Takes orders at tables, serves, requests the bill", opens: "Waiter app", path: "/waiter" },
-  { id: "kitchen", label: "Kitchen", does: "Sees orders and marks food ready", opens: "Kitchen screen", path: "/kds" },
-  { id: "cashier", label: "Cashier", does: "Takes payments, prints bills", opens: "Billing", path: "/pos" },
-  { id: "host", label: "Host", does: "Seats guests, bookings and waitlist", opens: "Floor", path: "/console/floor" },
-  { id: "manager", label: "Manager", does: "Runs the outlet: menu, reports, approvals", opens: "Dashboard", path: "/console/dashboard" },
-  { id: "accountant", label: "Accountant", does: "Views bills and reports", opens: "Billing", path: "/pos" },
+  { id: "accountant", label: "Accountant", does: "Takes payments, views bills and reports", opens: "Billing", path: "/pos" },
+  { id: "kitchen", label: "Kitchen", does: "Sees orders and marks food ready. Signs in on the kitchen screen with this phone and PIN", opens: "Kitchen", path: "/console/kitchen" },
 ] as const;
-const LABEL: Record<string, string> = { owner: "Owner", ...Object.fromEntries(ROLES.map((r) => [r.id, r.label])) };
+// Older roles still shown on people who have them
+const LABEL: Record<string, string> = { owner: "Owner", cashier: "Cashier", host: "Host", ...Object.fromEntries(ALL_ROLES.map((r) => [r.id, r.label])) };
 const TONE: Record<string, string> = { owner: "#c9482b", manager: "#315e9e", waiter: "#237a68", kitchen: "#a74608", cashier: "#8a5a00", host: "#6d5bd0", accountant: "#64748b" };
 const field = "h-11 rounded-xl";
 
@@ -30,8 +29,10 @@ function copy(text: string) {
   try { void navigator.clipboard.writeText(text); } catch { /* clipboard may be blocked; the details stay on screen */ }
 }
 
-export function TeamScreen({ initial, canEdit, outletCode, outletName }: { initial: TeamMember[]; canEdit: boolean; outletCode: string; outletName: string }) {
+export function TeamScreen({ initial, canEdit, outletCode, outletName, roles: allowed }: { initial: TeamMember[]; canEdit: boolean; outletCode: string; outletName: string; roles: readonly string[] }) {
   const router = useRouter();
+  // Only the roles this restaurant's plan allows (Kitchen comes with the kitchen screen)
+  const ROLES = ALL_ROLES.filter((r) => allowed.includes(r.id));
   const [pending, start] = useTransition();
   const [adding, setAdding] = useState(false);
   const [manage, setManage] = useState<string | null>(null);
@@ -79,7 +80,7 @@ export function TeamScreen({ initial, canEdit, outletCode, outletName }: { initi
         <div className="min-w-0">
           <p className="text-caption font-semibold text-muted">{outletName}</p>
           <h1 className="mt-1 font-display text-title font-bold text-ink">Team</h1>
-          <p className="mt-1 text-body text-muted">People who can sign in here. {canEdit ? "Add your waiters, kitchen and cashiers." : "Only the owner can change the team."}</p>
+          <p className="mt-1 text-body text-muted">People who can sign in here. {canEdit ? "Add your managers, waiters and accountants." : "Only the owner can change the team."}</p>
         </div>
         {canEdit && <button type="button" onClick={openAdd} className="inline-flex h-11 items-center gap-2 rounded-xl border border-brand bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-strong"><Plus className="size-4" aria-hidden="true" />Add person</button>}
       </header>
@@ -92,7 +93,7 @@ export function TeamScreen({ initial, canEdit, outletCode, outletName }: { initi
         <p className="text-sm font-semibold">How your team signs in</p>
         <p className="mt-1 text-sm text-muted">Open <b className="text-ink">/console/login</b>, type the outlet code <b className="font-mono text-ink">{outletCode}</b>, their phone number and 4-digit PIN. Each role lands on its own screen automatically.</p>
         <div className="mt-3 flex flex-wrap gap-1.5 text-xs">
-          {ROLES.slice(0, 4).map((r) => <span key={r.id} className="rounded-full bg-ink/5 px-2.5 py-1 font-semibold">{r.label} → {r.opens}</span>)}
+          {ROLES.map((r) => <span key={r.id} className="rounded-full bg-ink/5 px-2.5 py-1 font-semibold">{r.label} → {r.opens}</span>)}
         </div>
       </section>
 

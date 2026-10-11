@@ -8,6 +8,7 @@ import { canUse, kdsSetupRoles } from "@/lib/staff-permissions";
 import { AppError } from "../errors";
 import { hashToken, verifyStaffPin } from "../staff/auth";
 import { audit } from "../staff/audit";
+import { KITCHEN_NOT_IN_PLAN, tenantHasKitchen } from "../plan";
 
 // Trusted kitchen screens (S2). A manager or owner sets the screen up once with their phone and
 // PIN; it then holds its own 30-day credential, pinned to one station or to the expeditor's All
@@ -26,6 +27,8 @@ export type KdsDevice = {
   lang: "en" | "hi";
   outlet: { code: string; name: string; timezone: string; brandId: string };
   expiresAt: number;
+  /** Set when a signed-in staff member works the board from the console instead of a wall screen */
+  staff?: { userId: string; name: string };
 };
 
 type Scope = { tenantId: string; outletId: string };
@@ -45,7 +48,8 @@ export async function kitchenStations(scope: Scope): Promise<string[]> {
 
 async function managerAt(input: { outletCode: string; phone: string; pin: string; now: Date }) {
   const who = await verifyStaffPin(input);
-  if (!canUse(who.roles, kdsSetupRoles)) throw new AppError("forbidden", "Only a manager or owner can set up a kitchen screen.");
+  if (!canUse(who.roles, kdsSetupRoles)) throw new AppError("forbidden", "Only kitchen staff, a manager or the owner can set up a kitchen screen.");
+  if (!(await tenantHasKitchen(who.scope.tenantId))) throw new AppError("forbidden", KITCHEN_NOT_IN_PLAN, { reason: "plan" });
   return who;
 }
 
@@ -98,6 +102,8 @@ export async function resolveKdsDevice(token: string | null | undefined, now = n
     .innerJoin(s.outlets, and(eq(s.outlets.tenantId, s.kdsDevices.tenantId), eq(s.outlets.id, s.kdsDevices.outletId)))
     .where(and(eq(s.kdsDevices.tokenHash, hashToken(token)), isNull(s.kdsDevices.revokedAt), gt(s.kdsDevices.expiresAt, now)));
   if (!row) return null;
+  // Switching the kitchen screen off (plan or admin) turns existing screens off too
+  if (!(await tenantHasKitchen(row.d.tenantId))) return null;
   if (!row.d.lastSeenAt || now.getTime() - row.d.lastSeenAt.getTime() > 5 * 60_000) {
     await db.update(s.kdsDevices).set({ lastSeenAt: now }).where(and(eq(s.kdsDevices.tenantId, row.d.tenantId), eq(s.kdsDevices.id, row.d.id)));
   }

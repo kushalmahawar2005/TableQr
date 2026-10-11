@@ -65,11 +65,11 @@ describe("navigation and landing", () => {
     expect(landingSection(["host"])).toBe("floor");
     expect(landingSection(["cashier"])).toBe("orders");
     expect(landingSection(["accountant"])).toBe("billing");
-    expect(landingSection(["kitchen"])).toBeNull();
+    expect(landingSection(["kitchen"])).toBe("kitchen");
     // After sign-in they still go to their own app, not the console
     expect(homeFor(["cashier"])).toBe("/pos");
     expect(homeFor(["accountant"])).toBe("/pos");
-    expect(homeFor(["kitchen"])).toBe("/kds");
+    expect(homeFor(["kitchen"])).toBe("/console/kitchen");
     expect(staffRoles.filter((r) => canSee([r], "dashboard"))).toEqual(["owner", "manager"]);
   });
 });
@@ -90,7 +90,7 @@ describe("home after sign-in", () => {
     expect(homeFor(["waiter"])).toBe("/waiter");
     expect(homeFor(["cashier"])).toBe("/pos");
     expect(homeFor(["accountant"])).toBe("/pos");
-    expect(homeFor(["kitchen"])).toBe("/kds");
+    expect(homeFor(["kitchen"])).toBe("/console/kitchen");
     expect(homeFor(["host", "waiter"])).toBe("/console/floor"); // unchanged: a host-waiter kept the floor
     expect(homeFor(["cashier", "manager"])).toBe("/console/dashboard");
   });

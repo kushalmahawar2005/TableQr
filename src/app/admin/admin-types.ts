@@ -6,6 +6,12 @@ export type AdminTenant = {
   contactPhone: string;
   planCode: string;
   planName: string;
+  /** The admin's choice when set, else the plan's; null override means it follows the plan */
+  kitchenDisplay: boolean;
+  kitchenOverride: boolean | null;
+  kitchenFromPlan: boolean;
+  /** Tables the restaurant may have; null means no limit */
+  tableLimit: number | null;
   status: "trial" | "active" | "suspended" | "cancelled";
   createdAt: string;
   trialEndsAt: string | null;
@@ -31,6 +37,7 @@ export type AdminPlanFeatures = {
   suggestions: boolean;
   guestCampaigns: boolean;
   multiOutlet: boolean;
+  kitchenDisplay?: boolean;
   poweredBy: boolean;
 };
 export type AdminPlan = { code: string; name: string; monthlyPricePaise: number | null; isPublic: boolean; tenantCount: number; features: AdminPlanFeatures; sortOrder: number };

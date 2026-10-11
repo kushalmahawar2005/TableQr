@@ -8,6 +8,7 @@ import { AppError } from "../errors";
 import { publish } from "../realtime/publish";
 import { topics } from "../realtime/token";
 import type { StaffSession } from "../staff/auth";
+import { tableLimitMessage, tenantTableLimit } from "../plan";
 
 export const floorEditorRoles = ["manager", "owner"] as const;
 type Scope = Pick<StaffSession, "tenantId" | "outletId" | "userId" | "name" | "roles">;
@@ -21,6 +22,17 @@ const audit = async (tx: Tx, staff: Scope, action: string, entity: string, entit
 async function nextVersion(staff: Scope) {
   const [row] = await db.select({ n: sql<number>`coalesce(max(${s.floorLayoutVersions.versionNumber}),0)` }).from(s.floorLayoutVersions).where(and(eq(s.floorLayoutVersions.tenantId, staff.tenantId), eq(s.floorLayoutVersions.outletId, staff.outletId)));
   return Number(row?.n ?? 0) + 1;
+}
+
+/** Refuses when this draft would have more live tables than the restaurant pays for */
+async function assertTableRoom(tx: Tx, staff: Scope, versionId: string, adding: number) {
+  const limit = await tenantTableLimit(staff.tenantId);
+  if (limit === null) return;
+  const [row] = await tx
+    .select({ n: sql<number>`count(*)` })
+    .from(s.floorLayoutTables)
+    .where(and(eq(s.floorLayoutTables.tenantId, staff.tenantId), eq(s.floorLayoutTables.versionId, versionId), eq(s.floorLayoutTables.archived, false)));
+  if (Number(row?.n ?? 0) + adding > limit) throw new AppError("forbidden", tableLimitMessage(limit), { reason: "table_limit", limit });
 }
 
 /** Returns the single editable draft, cloning the canonical published floor lazily. */
@@ -55,7 +67,7 @@ async function loadDraftTx(tx: Tx, staff: Scope, version: typeof s.floorLayoutVe
     tx.select().from(s.floorLayoutTables).where(and(eq(s.floorLayoutTables.tenantId, staff.tenantId), eq(s.floorLayoutTables.versionId, version.id))).orderBy(asc(s.floorLayoutTables.code)),
     tx.select().from(s.floorLayoutCombinations).where(and(eq(s.floorLayoutCombinations.tenantId, staff.tenantId), eq(s.floorLayoutCombinations.versionId, version.id))),
   ]);
-  return { version, zones, tables, combinations };
+  return { version, zones, tables, combinations, tableLimit: await tenantTableLimit(staff.tenantId) };
 }
 
 type TablePatch = Partial<Pick<typeof s.floorLayoutTables.$inferInsert, "code" | "minSeats" | "maxSeats" | "tableClass" | "shape" | "posX" | "posY" | "width" | "height" | "isBookableOnline" | "archived" | "logicalZoneId">>;
@@ -77,11 +89,11 @@ export async function updateDraftTable(staff: Scope, versionId: string, tableId:
   const next = { ...patch } as TablePatch;
   if (next.code != null) next.code = String(next.code).trim().toUpperCase();
   if (next.minSeats != null && next.maxSeats != null && (next.minSeats < 1 || next.maxSeats < next.minSeats)) throw new AppError("invalid_state", "Maximum seats must be at least minimum seats.");
-  return revise(staff, versionId, expectedRevision, async (tx) => { const [old] = await tx.select().from(s.floorLayoutTables).where(and(eq(s.floorLayoutTables.tenantId, staff.tenantId), eq(s.floorLayoutTables.versionId, versionId), eq(s.floorLayoutTables.id, tableId))); if (!old) throw new AppError("not_found", "Draft table not found."); await tx.update(s.floorLayoutTables).set({ ...next, updatedAt: new Date() }).where(and(eq(s.floorLayoutTables.tenantId, staff.tenantId), eq(s.floorLayoutTables.id, tableId))); await audit(tx, staff, next.code && next.code !== old.code ? "floor.table_code_changed" : "floor.table_updated", "floor_layout_table", tableId, old, next); });
+  return revise(staff, versionId, expectedRevision, async (tx) => { const [old] = await tx.select().from(s.floorLayoutTables).where(and(eq(s.floorLayoutTables.tenantId, staff.tenantId), eq(s.floorLayoutTables.versionId, versionId), eq(s.floorLayoutTables.id, tableId))); if (!old) throw new AppError("not_found", "Draft table not found."); if (old.archived && next.archived === false) await assertTableRoom(tx, staff, versionId, 1); await tx.update(s.floorLayoutTables).set({ ...next, updatedAt: new Date() }).where(and(eq(s.floorLayoutTables.tenantId, staff.tenantId), eq(s.floorLayoutTables.id, tableId))); await audit(tx, staff, next.code && next.code !== old.code ? "floor.table_code_changed" : "floor.table_updated", "floor_layout_table", tableId, old, next); });
 }
 
 export async function addDraftTable(staff: Scope, versionId: string, input: { code: string; zoneId: string; shape?: "square" | "round" | "long"; maxSeats: number }, expectedRevision: number) {
-  return revise(staff, versionId, expectedRevision, async (tx) => { if (!input.code.trim() || input.maxSeats < 1) throw new AppError("invalid_state", "Enter a valid table code and capacity."); const [zone] = await tx.select().from(s.floorLayoutZones).where(and(eq(s.floorLayoutZones.tenantId, staff.tenantId), eq(s.floorLayoutZones.versionId, versionId), eq(s.floorLayoutZones.id, input.zoneId), eq(s.floorLayoutZones.archived, false))); if (!zone) throw new AppError("not_found", "Choose an active zone."); const [dup] = await tx.select({ id: s.floorLayoutTables.id }).from(s.floorLayoutTables).where(and(eq(s.floorLayoutTables.tenantId, staff.tenantId), eq(s.floorLayoutTables.versionId, versionId), eq(s.floorLayoutTables.code, input.code.trim().toUpperCase()))); if (dup) throw new AppError("conflict", "Table code already exists in this draft."); const id = uuidv7(); await tx.insert(s.floorLayoutTables).values({ id, tenantId: staff.tenantId, versionId, logicalZoneId: zone.id, code: input.code.trim().toUpperCase(), minSeats: 1, maxSeats: input.maxSeats, tableClass: `${input.maxSeats}-top`, shape: input.shape ?? "square", posX: 1, posY: 1, width: 2, height: 2, isBookableOnline: true, archived: false, createdAt: new Date(), updatedAt: new Date() }); await audit(tx, staff, "floor.table_created", "floor_layout_table", id, undefined, input); });
+  return revise(staff, versionId, expectedRevision, async (tx) => { await assertTableRoom(tx, staff, versionId, 1); if (!input.code.trim() || input.maxSeats < 1) throw new AppError("invalid_state", "Enter a valid table code and capacity."); const [zone] = await tx.select().from(s.floorLayoutZones).where(and(eq(s.floorLayoutZones.tenantId, staff.tenantId), eq(s.floorLayoutZones.versionId, versionId), eq(s.floorLayoutZones.id, input.zoneId), eq(s.floorLayoutZones.archived, false))); if (!zone) throw new AppError("not_found", "Choose an active zone."); const [dup] = await tx.select({ id: s.floorLayoutTables.id }).from(s.floorLayoutTables).where(and(eq(s.floorLayoutTables.tenantId, staff.tenantId), eq(s.floorLayoutTables.versionId, versionId), eq(s.floorLayoutTables.code, input.code.trim().toUpperCase()))); if (dup) throw new AppError("conflict", "Table code already exists in this draft."); const id = uuidv7(); await tx.insert(s.floorLayoutTables).values({ id, tenantId: staff.tenantId, versionId, logicalZoneId: zone.id, code: input.code.trim().toUpperCase(), minSeats: 1, maxSeats: input.maxSeats, tableClass: `${input.maxSeats}-top`, shape: input.shape ?? "square", posX: 1, posY: 1, width: 2, height: 2, isBookableOnline: true, archived: false, createdAt: new Date(), updatedAt: new Date() }); await audit(tx, staff, "floor.table_created", "floor_layout_table", id, undefined, input); });
 }
 
 export async function addDraftZone(staff: Scope, versionId: string, name: string, expectedRevision: number) { return revise(staff, versionId, expectedRevision, async (tx) => { const id = uuidv7(); await tx.insert(s.floorLayoutZones).values({ id, tenantId: staff.tenantId, versionId, name: name.trim().slice(0, 60) || "New zone", sortOrder: 999, posX: 0, posY: 0, width: 12, height: 8, archived: false, createdAt: new Date(), updatedAt: new Date() }); await audit(tx, staff, "floor.zone_created", "floor_layout_zone", id, undefined, { name }); }); }
@@ -116,6 +128,7 @@ export async function publishDraft(staff: Scope, versionId: string, expectedRevi
     const [v] = await tx.select().from(s.floorLayoutVersions).where(and(eq(s.floorLayoutVersions.tenantId, staff.tenantId), eq(s.floorLayoutVersions.outletId, staff.outletId), eq(s.floorLayoutVersions.id, versionId), eq(s.floorLayoutVersions.status, "draft"))).limit(1);
     if (!v || v.revision !== expectedRevision) throw new AppError("conflict", "This floor draft changed in another window. Reload the latest draft.", { reason: "STALE_DRAFT" });
     const { zones, tables } = await validateDraft(tx, staff, versionId);
+    await assertTableRoom(tx, staff, versionId, 0);
     const oldPublished = await tx.select().from(s.floorLayoutVersions).where(and(eq(s.floorLayoutVersions.tenantId, staff.tenantId), eq(s.floorLayoutVersions.outletId, staff.outletId), eq(s.floorLayoutVersions.status, "published"))).orderBy(desc(s.floorLayoutVersions.versionNumber)).limit(1);
     for (const z of zones.filter((x) => x.archived && x.logicalZoneId)) {
       const [future] = await tx.select({ id: s.reservations.id }).from(s.reservations).where(and(eq(s.reservations.tenantId, staff.tenantId), eq(s.reservations.outletId, staff.outletId), eq(s.reservations.requestedZoneId, z.logicalZoneId!), gte(s.reservations.startAt, new Date()), inArray(s.reservations.status, ["requested", "confirmed", "reminded", "arrived"]))).limit(1);
