@@ -52,6 +52,8 @@ export async function getOrderTracker(ctx: GuestContext, now = new Date()) {
         nameEn: line.nameEn,
         nameHi: line.nameHi,
         qty: line.qty,
+        /** Price with its options, times the quantity, as placed */
+        amountPaise: line.unitPricePaise * line.qty,
         options: line.modifiers ?? [],
         note: line.note,
         status: line.status,

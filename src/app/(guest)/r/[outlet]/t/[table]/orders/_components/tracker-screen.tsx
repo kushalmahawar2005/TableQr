@@ -20,6 +20,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { brandStyle, deriveBrandTokens } from "@/domain/brand";
+import { formatRupees } from "@/domain/menu-price";
 import type { LineStatus } from "@/domain/kitchen";
 import type { Lang } from "@/lib/i18n";
 import type { TrackerScreenData } from "@/server/guest/tracker-screen";
@@ -33,7 +34,7 @@ import { useTrackerSync } from "../_hooks/use-tracker-sync";
 
 type Round = TrackerScreenData["rounds"][number];
 type Line = Round["lines"][number];
-export type TrackerPreview = { offline?: boolean; failed?: boolean; confirm?: "cancel" | "bill"; notice?: { text: string; error?: boolean } };
+export type TrackerPreview = { offline?: boolean; failed?: boolean; confirm?: "cancel" | "bill"; notice?: { text: string; error?: boolean }; tab?: "orders" | "items" };
 
 const steps = ["placed", "accepted", "preparing", "ready"] as const;
 
@@ -89,6 +90,8 @@ export function TrackerScreen({
   const billRequested = session.status === "bill_requested";
   const canOrder = !billRequested && !session.orderingLocked;
   const goMenu = () => { if (!preview) router.push(`${tablePath}/menu`); };
+  const [tab, setTab] = useState<"orders" | "items">(() => preview?.tab ?? "orders");
+  const items = itemList(data.rounds);
   const nameOf = (line: Line) => (lang === "hi" && line.nameHi ? line.nameHi : line.nameEn);
 
   function requestId(kind: ServiceKind) {
@@ -271,8 +274,35 @@ export function TrackerScreen({
           </div>
         )}
 
-        {/* Rounds List / Empty State */}
-        {data.rounds.length ? (
+        {/* Two views of the same orders: by round as sent, or every dish added up */}
+        {data.rounds.length > 0 && (
+          <div role="tablist" aria-label={c.activeOrders} className="mt-5 grid grid-cols-2 border-b border-line">
+            {(["orders", "items"] as const).map((t) => {
+              const on = tab === t;
+              const count = t === "orders" ? data.rounds.length : items.lines.reduce((n, l) => n + l.qty, 0);
+              return (
+                <button
+                  key={t}
+                  type="button"
+                  role="tab"
+                  aria-selected={on}
+                  onClick={() => setTab(t)}
+                  className={`-mb-px flex min-h-12 items-center justify-center gap-2 border-b-2 text-body font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-brand ${
+                    on ? "border-brand text-brand-strong" : "border-transparent text-muted hover:text-ink"
+                  }`}
+                >
+                  {t === "orders" ? c.ordersTab : c.itemsTab}
+                  <span className={`min-w-6 rounded-full px-1.5 text-label tabular ${on ? "bg-brand text-brand-on" : "bg-ink/10 text-ink"}`}>{count}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Rounds List / Item List / Empty State */}
+        {data.rounds.length && tab === "items" ? (
+          <ItemList items={items} c={c} lang={lang} />
+        ) : data.rounds.length ? (
           <div className="mt-5 space-y-4">
             {data.rounds.map((round) => (
               <RoundView
@@ -588,6 +618,49 @@ function RoundView({
           );
         })}
       </ul>
+    </section>
+  );
+}
+
+/** Every dish across all rounds, added up by name and options; cancelled and voided ones left out */
+function itemList(rounds: Round[]) {
+  const map = new Map<string, { key: string; nameEn: string; nameHi: string | null; options: Line["options"]; qty: number; amountPaise: number }>();
+  for (const r of [...rounds].reverse()) {
+    for (const l of r.lines) {
+      if (l.status === "cancelled" || l.status === "voided") continue;
+      const key = [l.nameEn, ...l.options.map((o) => o.nameEn)].join("|");
+      const row = map.get(key) ?? { key, nameEn: l.nameEn, nameHi: l.nameHi, options: l.options, qty: 0, amountPaise: 0 };
+      row.qty += l.qty;
+      row.amountPaise += l.amountPaise;
+      map.set(key, row);
+    }
+  }
+  const lines = [...map.values()];
+  return { lines, totalPaise: lines.reduce((n, l) => n + l.amountPaise, 0) };
+}
+
+function ItemList({ items, c, lang }: { items: ReturnType<typeof itemList>; c: G6Copy; lang: Lang }) {
+  if (!items.lines.length) return <p className="py-10 text-center text-body text-muted">{c.itemsEmpty}</p>;
+  const pick = (en: string, hi: string | null | undefined) => (lang === "hi" && hi ? hi : en);
+  return (
+    <section className="mt-4 rounded-2xl border border-line bg-surface px-4 shadow-sm">
+      <ul className="divide-y divide-line/70">
+        {items.lines.map((l) => (
+          <li key={l.key} className="flex items-start gap-3 py-3">
+            <span className="min-w-8 rounded-md bg-ink/5 px-1.5 py-0.5 text-center text-caption font-bold tabular text-ink">{l.qty}×</span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-body font-semibold break-words text-ink">{pick(l.nameEn, l.nameHi)}</span>
+              {l.options.length > 0 && <span className="block text-caption text-muted">{l.options.map((o) => pick(o.nameEn, o.nameHi)).join(", ")}</span>}
+            </span>
+            <span className="shrink-0 text-body font-semibold tabular text-ink">{formatRupees(l.amountPaise)}</span>
+          </li>
+        ))}
+      </ul>
+      <div className="flex items-baseline justify-between gap-3 border-t border-line py-3">
+        <span className="text-body font-bold text-ink">{c.itemsTotal}</span>
+        <span className="font-display text-section font-bold tabular text-ink">{formatRupees(items.totalPaise)}</span>
+      </div>
+      <p className="pb-3 text-caption text-muted">{c.itemsTaxNote}</p>
     </section>
   );
 }

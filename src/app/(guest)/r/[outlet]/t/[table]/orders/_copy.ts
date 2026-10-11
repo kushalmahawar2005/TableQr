@@ -5,6 +5,11 @@ import type { ServiceKind } from "@/server/guest/service-requests";
 const en = {
   title: "Your orders",
   activeOrders: "Active Orders",
+  ordersTab: "Orders",
+  itemsTab: "Item list",
+  itemsTotal: "Items total",
+  itemsTaxNote: "Taxes and charges are added on the bill",
+  itemsEmpty: "Nothing ordered yet",
   live: "Live",
   subtitle: "Every round, at a glance",
   language: "Language",
@@ -97,6 +102,11 @@ export type G6Copy = typeof en;
 const hi: G6Copy = {
   title: "आपके ऑर्डर",
   activeOrders: "सक्रिय ऑर्डर",
+  ordersTab: "ऑर्डर",
+  itemsTab: "आइटम सूची",
+  itemsTotal: "आइटम कुल",
+  itemsTaxNote: "टैक्स और चार्ज बिल में जोड़े जाएँगे",
+  itemsEmpty: "अभी कुछ ऑर्डर नहीं हुआ",
   live: "लाइव",
   subtitle: "हर राउंड की जानकारी",
   language: "भाषा",

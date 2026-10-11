@@ -12,7 +12,7 @@ const NOW = Date.parse("2026-10-01T15:14:00Z");
 type Round = TrackerScreenData["rounds"][number];
 type Line = Round["lines"][number];
 function line(id: string, nameEn: string, nameHi: string, status: Line["status"], qty = 1, mine = true): Line {
-  return { id, nameEn, nameHi, qty, status, options: [], note: null, isMine: mine, canCancel: mine && status === "placed" };
+  return { id, nameEn, nameHi, qty, amountPaise: qty * 24000, status, options: [], note: null, isMine: mine, canCancel: mine && status === "placed" };
 }
 function round(n: number, status: Round["status"], lines: Line[], minutes = 3): Round {
   return { orderId: `r${n}`, roundNo: n, placedAt: NOW - minutes * 60_000, placedBy: n === 1 ? "Bhavna" : "Aarav", status, statusText: GUEST_STATUS_TEXT[status], step: status === "served" ? 3 : ["placed", "accepted", "preparing", "ready"].indexOf(status), isLate: false, lateAt: ["placed", "accepted", "preparing"].includes(status) ? NOW + 600_000 : null, lines };
@@ -35,6 +35,7 @@ export default async function G6Preview(props: { searchParams: Promise<Record<st
   const lang = parseLang(typeof q.lang === "string" ? q.lang : undefined);
   const cases: { id: string; label: string; data: TrackerScreenData; preview: TrackerPreview; loading?: boolean }[] = [
     { id: "normal", label: "Live rounds", data: base, preview: {} },
+    { id: "items", label: "Item list tab", data: base, preview: { tab: "items" } },
     { id: "late", label: "Taking longer", data: { ...base, rounds: base.rounds.map((r, i) => i ? { ...r, isLate: true, lateAt: NOW - 60_000 } : r) }, preview: {} },
     { id: "empty", label: "Nothing ordered", data: { ...base, rounds: [], inProgress: 0 }, preview: {} },
     { id: "served", label: "All served", data: { ...base, rounds: [round(1, "served", [line("paneer", "Paneer Tikka", "पनीर टिक्का", "served", 2)])], inProgress: 0 }, preview: {} },
