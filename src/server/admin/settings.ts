@@ -5,6 +5,7 @@ import { db } from "@/db";
 import * as s from "@/db/schema";
 import type { SettingsData } from "@/app/admin/admin-types";
 import { requirePlatformAdmin } from "./auth";
+import { photoBucket } from "../menu-storage";
 
 const set = (name: string) => Boolean(process.env[name]?.trim());
 
@@ -29,7 +30,11 @@ export async function getSettingsData(): Promise<SettingsData> {
       { label: "Live updates (realtime)", ok: set("REALTIME_URL") && set("REALTIME_PUBLISH_SECRET"), detail: set("REALTIME_URL") ? "Configured" : "Not set. Screens fall back to refreshing" },
       { label: "Online payments", ok: !paymentsMock || !production, detail: paymentsMock ? (production ? "Test mode is ON in production" : "Test mode (no real money)") : "Live mode" },
       { label: "SMS / OTP", ok: !smsMock || !production, detail: smsMock ? (production ? "Test mode is ON in production" : "Test mode (messages are not sent)") : "Live mode" },
-      { label: "Menu image storage", ok: Boolean(process.env.MENU_STORAGE_DRIVER), detail: process.env.MENU_STORAGE_DRIVER ? `Using ${process.env.MENU_STORAGE_DRIVER}` : "Not configured" },
+      {
+        label: "Menu image storage",
+        ok: Boolean(photoBucket()),
+        detail: photoBucket() ? `Bucket ${process.env.MENU_STORAGE_BUCKET}` : process.env.MENU_STORAGE_DRIVER === "local" ? "On this server. A redeploy can wipe photos; set up R2" : "Not configured",
+      },
       { label: "Public app address", ok: set("PUBLIC_APP_URL") || set("NEXT_PUBLIC_APP_URL"), detail: set("PUBLIC_APP_URL") || set("NEXT_PUBLIC_APP_URL") ? "Set" : "Not set. QR links may be wrong" },
     ],
   };

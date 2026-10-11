@@ -9,4 +9,14 @@ export async function register() {
   } catch (err) {
     console.error("[schema] could not update the database at startup", err);
   }
+  // Photos still on this machine go to the photo bucket once one is set up (R2); in the background
+  void (async () => {
+    try {
+      const [{ db }, { movePhotosToBucket }] = await Promise.all([import("@/db"), import("@/server/menu-storage")]);
+      const res = await movePhotosToBucket(db.$client);
+      if (res.moved || res.missing) console.log(`[photos] moved ${res.moved} to the bucket; ${res.missing} files were already gone`);
+    } catch (err) {
+      console.error("[photos] could not move photos to the bucket", err);
+    }
+  })();
 }
