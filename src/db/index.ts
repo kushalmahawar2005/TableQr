@@ -11,7 +11,8 @@ const pool =
   globalForDb.pool ??
   mysql.createPool({
     ...dbConfig(),
-    connectionLimit: 10,
+    // Shared hosting caps MySQL connections, so 10 by default; raise DB_POOL_SIZE on a VPS
+    connectionLimit: Math.max(1, Number(process.env.DB_POOL_SIZE) || 10),
     charset: "utf8mb4", // Hindi menu names
     timezone: "Z", // store and read every timestamp as UTC
   });

@@ -117,24 +117,40 @@ function preferenceRank(group: Table[], pref: BookingPreference) {
   return (zone && cls ? 0 : 1) + (zone ? 0 : 2) + (cls ? 0 : 1);
 }
 
-async function chooseTables(run: Runner, scope: OutletScope, startAt: Date, endAt: Date, party: number, pref: BookingPreference, now: Date, lock = false, exceptReservationId?: string) {
+/** Everything table choice needs, read once: bookable tables, live bookings, open visits and the policy */
+async function loadFloor(run: Runner, scope: OutletScope, now: Date, lock = false, exceptReservationId?: string) {
   const q = run.select().from(s.diningTables).where(and(eq(s.diningTables.tenantId, scope.tenantId), eq(s.diningTables.outletId, scope.outletId), eq(s.diningTables.isActive, true), eq(s.diningTables.isBookableOnline, true), ne(s.diningTables.state, "blocked"))).orderBy(asc(s.diningTables.id));
   const tables = lock ? await q.for("update") : await q;
   const claims = await liveClaims(run, scope, exceptReservationId);
   const sessions = await activeSessions(run, scope, now);
+  const policy = await loadPolicy(run, scope);
+  return { tables, claims, sessions, policy };
+}
+type Floor = Awaited<ReturnType<typeof loadFloor>>;
+
+/** The best free table (or pair) for a time, worked out from an already loaded floor */
+function pickTables(floor: Floor, startAt: Date, endAt: Date, party: number, pref: BookingPreference) {
   const blocked = new Set<string>();
-  for (const c of claims) if (overlaps(startAt.getTime(), endAt.getTime(), c.startAt.getTime(), c.endAt.getTime(), 0)) blocked.add(c.tableId);
-  for (const v of sessions) {
-    const until = v.expectedEndAt ?? new Date(v.openedAt.getTime() + diningMinutesFor(Math.max(1, v.partySize ?? 1), await loadPolicy(run, scope)) * 60_000);
-    if (until.getTime() + (await loadPolicy(run, scope)).turnoverBufferMinutes * 60_000 > startAt.getTime()) blocked.add(v.tableId);
+  for (const c of floor.claims) if (overlaps(startAt.getTime(), endAt.getTime(), c.startAt.getTime(), c.endAt.getTime(), 0)) blocked.add(c.tableId);
+  for (const v of floor.sessions) {
+    const until = v.expectedEndAt ?? new Date(v.openedAt.getTime() + diningMinutesFor(Math.max(1, v.partySize ?? 1), floor.policy) * 60_000);
+    if (until.getTime() + floor.policy.turnoverBufferMinutes * 60_000 > startAt.getTime()) blocked.add(v.tableId);
   }
-  const available = tables.filter((t) => !blocked.has(t.id));
+  const available = floor.tables.filter((t) => !blocked.has(t.id));
   return combinations(available, party).sort((a, b) => preferenceRank(a, pref) - preferenceRank(b, pref) || a.length - b.length || a[0].id.localeCompare(b[0].id))[0] ?? null;
+}
+
+async function chooseTables(run: Runner, scope: OutletScope, startAt: Date, endAt: Date, party: number, pref: BookingPreference, now: Date, lock = false, exceptReservationId?: string) {
+  return pickTables(await loadFloor(run, scope, now, lock, exceptReservationId), startAt, endAt, party, pref);
 }
 
 async function slotCredit(run: Runner, scope: OutletScope, policy: BookingPolicy, startAt: Date) {
   if (policy.peakCreditPaise <= 0 && policy.repeatNoShowCreditPaise <= 0) return { amountPaise: 0, reason: null as string | null };
-  const claims = await liveClaims(run, scope);
+  return creditFor(policy, await liveClaims(run, scope), startAt);
+}
+
+function creditFor(policy: BookingPolicy, claims: { startAt: Date }[], startAt: Date) {
+  if (policy.peakCreditPaise <= 0 && policy.repeatNoShowCreditPaise <= 0) return { amountPaise: 0, reason: null as string | null };
   const end = new Date(startAt.getTime() + 30 * 60_000);
   const covers = claims.filter((x) => x.startAt >= startAt && x.startAt < end).length;
   if (policy.peakCreditPaise > 0 && covers >= Math.floor(policy.pacingCoversPerSlot * 0.8)) return { amountPaise: policy.peakCreditPaise, reason: "Peak slot booking credit" };
@@ -153,13 +169,15 @@ export async function getBookingAvailability(outletCode: string, input: { date: 
   const latest = new Date(now.getTime() + policy.bookingWindowDays * 86_400_000);
   const starts = slotStarts(date, scope, policy);
   const slots: BookingSlot[] = [];
+  // One read of the floor for the whole day; each slot is then worked out in memory
+  const floor = await loadFloor(db, scope, now);
   for (const start of starts) {
     const end = new Date(start.getTime() + diningMinutesFor(party, policy) * 60_000);
     const tooSoon = start.getTime() < now.getTime() + policy.onlineCutoffMinutes * 60_000;
     const outside = date < today || start > latest;
     const paused = exception?.onlineBookingsPaused === true;
-    const credit = await slotCredit(db, scope, policy, start);
-    const chosen = !tooSoon && !outside && !paused ? await chooseTables(db, scope, start, end, party, input.preference ?? {}, now) : null;
+    const credit = creditFor(policy, floor.claims, start);
+    const chosen = !tooSoon && !outside && !paused ? pickTables(floor, start, end, party, input.preference ?? {}) : null;
     slots.push({ startAt: start.getTime(), endAt: end.getTime(), available: !!chosen, reason: paused ? "blackout" : tooSoon ? "cutoff" : outside ? "outside_window" : chosen ? "available" : "full", alternatives: [], creditRequiredPaise: credit.amountPaise, creditReason: credit.reason });
   }
   const available = slots.filter((x) => x.available).map((x) => x.startAt);
