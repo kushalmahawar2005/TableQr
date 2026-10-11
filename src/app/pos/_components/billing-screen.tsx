@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle, ArrowLeft, Banknote, BellRing, Check, CreditCard, PackagePlus, Printer, ReceiptText, RotateCcw, Search, Trash2, Users, Wallet, WifiOff } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Banknote, BellRing, Check, CreditCard, PackagePlus, Printer, ReceiptText, RotateCcw, Search, ShoppingBag, Trash2, Users, Wallet, WifiOff } from "lucide-react";
 import type { PosBillDetail, PosQueue } from "@/server/staff/pos-read";
 import * as actions from "@/server/staff/pos-actions";
 import { connectRealtime } from "@/lib/realtime-client";
@@ -15,7 +15,7 @@ import { billHtml, printHtml } from "./bill-print";
 import { RefundPanel } from "./refund-panel";
 import { billMessage, whatsappLink, whatsappNumber } from "@/domain/bill-message";
 
-type Card = { sessionId: string; tableCode: string; status: string; totalPaise: number; paidPaise: number; balancePaise: number; partySize: number; requestedAt: number | null; pendingOnline: boolean; payAtCounter?: boolean };
+type Card = { sessionId: string; tableCode: string; takeaway?: boolean; guestName?: string | null; status: string; totalPaise: number; paidPaise: number; balancePaise: number; partySize: number; requestedAt: number | null; pendingOnline: boolean; payAtCounter?: boolean };
 type Sheet = { kind: "pay" } | { kind: "reopen" } | { kind: "void"; lineId: string } | null;
 
 const rs = (paise: number) => `₹${(paise / 100).toLocaleString("en-IN", { minimumFractionDigits: paise % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
@@ -86,6 +86,8 @@ export function BillingScreen({ initial, realtimeUrl, embedded = false, openSess
     opened.current = true;
     void actions.detailAction(openSession).then((d) => { if (d.ok) setDetail(d.data); });
   }, [openSession]);
+  // A parcel for a guest at the counter: opens at once and goes straight to adding items
+  const newTakeaway = () => void run(() => actions.startTakeawayAction(null), async (r) => { const d = await actions.detailAction(r.sessionId); if (d.ok) { setDetail(d.data); setShare(""); setAdding(true); } });
   const closeSheet = () => { setSheet(null); setPhone(""); setPin(""); setReason(""); setReceived(""); setReference(""); setDone(null); settleKey.current = null; };
 
   const dueAll = queue.queue as Card[];
@@ -134,6 +136,7 @@ export function BillingScreen({ initial, realtimeUrl, embedded = false, openSess
             </h1>
           </div>
           <div className="flex gap-2">
+            <button type="button" className={brand} disabled={busy || offline} onClick={newTakeaway}><ShoppingBag className="size-4" aria-hidden="true" />{L("New takeaway", "नया पार्सल")}</button>
             <button type="button" className={quiet} onClick={() => setHi(!hi)}>{hi ? "EN" : "हिंदी"}</button>
             {!embedded && <form action={signOutAction}><button className={quiet}>{L("Sign out", "बाहर निकलें")}</button></form>}
           </div>
@@ -171,7 +174,7 @@ export function BillingScreen({ initial, realtimeUrl, embedded = false, openSess
                   <li key={c.sessionId}>
                     <button type="button" onClick={() => open(c.sessionId)} aria-pressed={sel} className={`block w-full rounded-card border bg-surface p-4 text-left transition-colors hover:border-ink/30 focus-visible:outline-2 focus-visible:outline-brand ${sel ? "border-brand ring-2 ring-brand/30" : "border-line"}`}>
                       <div className="flex items-start justify-between gap-3">
-                        <div><p className="font-display text-section font-bold">{L("Table", "टेबल")} {c.tableCode}</p><p className="mt-0.5 flex items-center gap-1.5 text-caption text-muted"><Users className="size-3.5" aria-hidden="true" />{c.partySize} {L("guests", "लोग")}{tab === "due" && mins !== null ? ` · ${L("bill asked", "बिल माँगा")} ${mins < 1 ? L("just now", "अभी") : `${mins} min`}` : ""}</p></div>
+                        <div><p className="font-display text-section font-bold">{c.takeaway ? <><ShoppingBag className="mr-1.5 inline size-4 align-[-2px]" aria-hidden="true" />{L("Takeaway", "पार्सल")}</> : L("Table", "टेबल")} {c.tableCode}{c.guestName ? <span className="ml-1.5 text-body font-semibold text-muted">· {c.guestName}</span> : null}</p><p className="mt-0.5 flex items-center gap-1.5 text-caption text-muted"><Users className="size-3.5" aria-hidden="true" />{c.partySize} {L("guests", "लोग")}{tab === "due" && mins !== null ? ` · ${L("bill asked", "बिल माँगा")} ${mins < 1 ? L("just now", "अभी") : `${mins} min`}` : ""}</p></div>
                         <p className="font-display text-section font-bold tabular">{tab === "due" ? rs(c.balancePaise) : rs(c.totalPaise)}</p>
                       </div>
                       <div className="mt-2 flex flex-wrap gap-1.5">
@@ -179,7 +182,7 @@ export function BillingScreen({ initial, realtimeUrl, embedded = false, openSess
                         {tab === "due" && c.payAtCounter && !c.pendingOnline && <span className="inline-flex items-center gap-1 rounded-full bg-[var(--state-held-soft)] px-2 py-0.5 text-caption font-semibold text-[var(--state-held-text)]"><BellRing className="size-3" aria-hidden="true" />{L("Wants to pay at counter", "काउंटर पर भुगतान")}</span>}
                         {c.pendingOnline && <span className="rounded-full bg-[var(--state-cleaning-soft)] px-2 py-0.5 text-caption font-semibold text-[var(--state-cleaning-text)]">{L("Online payment being checked", "ऑनलाइन भुगतान जाँच में")}</span>}
                         {tab === "due" && c.paidPaise > 0 && <span className="rounded-full bg-[var(--state-available-soft)] px-2 py-0.5 text-caption font-semibold text-[var(--state-available-text)]">{L("Part paid", "आंशिक भुगतान")} {rs(c.paidPaise)}</span>}
-                        {tab === "due" && c.status !== "bill_requested" && <span className="rounded-full bg-ink/10 px-2 py-0.5 text-caption font-semibold text-muted">{L("Still eating", "अभी खा रहे हैं")}</span>}
+                        {tab === "due" && c.status !== "bill_requested" && !c.takeaway && <span className="rounded-full bg-ink/10 px-2 py-0.5 text-caption font-semibold text-muted">{L("Still eating", "अभी खा रहे हैं")}</span>}
                       </div>
                     </button>
                   </li>
@@ -206,7 +209,7 @@ export function BillingScreen({ initial, realtimeUrl, embedded = false, openSess
                   <button type="button" className="mb-3 inline-flex items-center gap-1.5 text-body font-semibold text-muted hover:text-ink lg:hidden" onClick={() => setDetail(null)}><ArrowLeft className="size-4" aria-hidden="true" />{L("All bills", "सभी बिल")}</button>
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <h2 className="font-display text-title font-bold">{L("Table", "टेबल")} {detail.tableCode}</h2>
+                      <h2 className="font-display text-title font-bold">{detail.takeaway ? L("Takeaway", "पार्सल") : L("Table", "टेबल")} {detail.tableCode}</h2>
                       <p className="mt-0.5 flex flex-wrap items-center gap-2 text-body text-muted">
                         <span className={`rounded-full px-2.5 py-0.5 text-caption font-semibold ${isPaidBill ? "bg-[var(--state-paid-soft)] text-[var(--state-paid-text)]" : detail.status === "bill_requested" ? "bg-[var(--state-bill-soft)] text-[var(--state-bill-text)]" : "bg-[var(--state-seated-soft)] text-[var(--state-seated-text)]"}`}>{isPaidBill ? L("Paid", "भुगतान हुआ") : detail.status === "bill_requested" ? L("Bill asked", "बिल माँगा") : L("Still eating", "अभी खा रहे हैं")}</span>
                         {detail.people.length > 0 && <span>{detail.people.map((p) => p.name).join(", ")}</span>}
@@ -238,7 +241,20 @@ export function BillingScreen({ initial, realtimeUrl, embedded = false, openSess
                       {!isPaidBill && <button type="button" className={brand} disabled={!canPay} onClick={() => { setMethod("cash"); setSheet({ kind: "pay" }); }}><Banknote className="size-4" aria-hidden="true" />{L("Take payment", "भुगतान लें")}</button>}
                     </div>
                   </div>
-                  {detail.status === "open" && !isPaidBill && (
+                  {detail.takeaway && detail.status === "open" && !isPaidBill && (
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-input bg-brand-soft px-3 py-2.5 text-body">
+                      <p className="min-w-0 flex-1">{live.length ? L("Add everything the guest wants, then get the bill and take the payment.", "ग्राहक जो चाहे सब जोड़ें, फिर बिल लें और भुगतान लें।") : L("Add the items for this parcel.", "इस पार्सल के आइटम जोड़ें।")}</p>
+                      <div className="flex flex-wrap gap-2">
+                        {live.length === 0 && <button type="button" className={quiet} disabled={busy || offline} onClick={() => void run(() => actions.cancelTakeawayAction(detail.sessionId), async () => { setDetail(null); })}>{L("Cancel takeaway", "पार्सल रद्द करें")}</button>}
+                        {live.length === 0 ? (
+                          <button type="button" className={brand} disabled={offline} onClick={() => setAdding(true)}><PackagePlus className="size-4" aria-hidden="true" />{L("Add items", "आइटम जोड़ें")}</button>
+                        ) : (
+                          <button type="button" className={brand} disabled={busy || offline} onClick={() => void run(() => actions.requestBillAction(detail.sessionId), async () => { open(detail.sessionId); })}><Check className="size-4" aria-hidden="true" />{L("Get the bill", "बिल लें")}</button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  {!detail.takeaway && detail.status === "open" && !isPaidBill && (
                     <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-input bg-[var(--state-held-soft)] px-3 py-2.5 text-body text-[var(--state-held-text)]">
                       <p className="flex min-w-0 flex-1 items-start gap-2"><AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" /><span>{L("The guests have not asked for the bill. If they are done, or the request did not reach you, close the table's eating stage here.", "मेहमानों ने बिल नहीं माँगा। अगर वे खा चुके हैं, या अनुरोध नहीं पहुँचा, तो यहाँ से खाना बंद करें।")}</span></p>
                       <button type="button" className={quiet} disabled={offline} onClick={() => setClosing(true)}><Check className="size-4" aria-hidden="true" />{L("Guests are done · Get the bill", "खाना हो गया · बिल लें")}</button>

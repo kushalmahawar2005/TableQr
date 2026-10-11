@@ -129,7 +129,7 @@ export function OrdersScreen({ orders, outlet }: { orders: OrderRow[]; outlet: s
               <li key={o.id} className={`rounded-card border bg-surface p-4 sm:p-5 ${isSlow ? "border-danger/60" : "border-line"}`}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="font-display text-section font-bold text-ink">Table {o.table}{o.roundNo > 1 && <span className="ml-2 text-body font-semibold text-muted">· Round {o.roundNo}</span>}</p>
+                    <p className="font-display text-section font-bold text-ink">{o.takeaway ? `Takeaway ${o.table}` : `Table ${o.table}`}{o.roundNo > 1 && <span className="ml-2 text-body font-semibold text-muted">· Round {o.roundNo}</span>}</p>
                     <p className="mt-0.5 text-caption text-muted tabular">{clock(o.placedAt)} · {ago(age)}{took !== null ? ` · served in ${took} min` : ""}</p>
                   </div>
                   <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-caption font-semibold ${TONE[o.status]}`}>{LABEL[o.status]}</span>

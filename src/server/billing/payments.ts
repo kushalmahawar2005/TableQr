@@ -1,4 +1,5 @@
 import "server-only";
+import { TAKEAWAY_CLASS } from "../floor/takeaway-class";
 import { and, eq, inArray, isNull, notInArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { uuidv7 } from "@/db/id";
@@ -662,6 +663,13 @@ async function closeBill(tx: Tx, bill: typeof s.bills.$inferSelect, now: Date): 
   // of them now, so nothing open still claims a table that is about to be reset
   const tableIds = await setVisitTablesState(tx, t, bill.sessionId, "paid", now);
   await releaseVisitTables(tx, t, bill.sessionId, now);
+  // A takeaway counter has nobody to clear away: it is free for the next parcel at once
+  if (tableIds.length) {
+    await tx
+      .update(s.diningTables)
+      .set({ state: "available", stateChangedAt: now })
+      .where(and(eq(s.diningTables.tenantId, t), inArray(s.diningTables.id, tableIds), eq(s.diningTables.tableClass, TAKEAWAY_CLASS)));
+  }
   await tx
     .update(s.reservations)
     .set({ status: "completed", completedAt: now })

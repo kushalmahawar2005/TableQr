@@ -50,8 +50,8 @@ export function AddItemsDialog({ detail, open, hi, onClose, onPlaced }: { detail
 
   const add = (item: WaiterMenu[number]) => setCart((c) => {
     const needsChoice = item.pricing.groups.some((g) => g.minSelect > 0);
-    const same = needsChoice ? undefined : c.find((l) => l.item.id === item.id && !l.parcel && l.mods.length === 0);
-    return same ? c.map((l) => (l === same ? { ...l, qty: Math.min(50, l.qty + 1) } : l)) : [...c, { key: `${item.id}-${Date.now()}`, item, qty: 1, mods: [], parcel: false }];
+    const same = needsChoice ? undefined : c.find((l) => l.item.id === item.id && l.parcel === !!detail.takeaway && l.mods.length === 0);
+    return same ? c.map((l) => (l === same ? { ...l, qty: Math.min(50, l.qty + 1) } : l)) : [...c, { key: `${item.id}-${Date.now()}`, item, qty: 1, mods: [], parcel: !!detail.takeaway }];
   });
   const change = (key: string, patch: Partial<Line>) => setCart((c) => c.map((l) => (l.key === key ? { ...l, ...patch } : l)).filter((l) => l.qty > 0));
   const reset = () => { setCart([]); setQuery(""); setError(null); setNewGuest(""); };
@@ -80,12 +80,12 @@ export function AddItemsDialog({ detail, open, hi, onClose, onPlaced }: { detail
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="no-scrollbar max-h-[92dvh] gap-3 overflow-y-auto p-5 sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle className="font-display text-title font-bold">{L("Add items", "आइटम जोड़ें")} · {L("Table", "टेबल")} {detail.tableCode}</DialogTitle>
+          <DialogTitle className="font-display text-title font-bold">{L("Add items", "आइटम जोड़ें")} · {detail.takeaway ? L("Takeaway", "पार्सल") : L("Table", "टेबल")} {detail.tableCode}</DialogTitle>
           <DialogDescription>{L("These go to the kitchen and are added to the bill. Mark an item as parcel to have it packed.", "ये किचन को जाएँगे और बिल में जुड़ेंगे। पैक कराने के लिए पार्सल चुनें।")}</DialogDescription>
         </DialogHeader>
 
         <div>
-          <p className="text-sm font-semibold">{L("For whom?", "किसके लिए?")}</p>
+          <p className="text-sm font-semibold">{detail.takeaway ? L("Guest name (optional)", "ग्राहक का नाम (वैकल्पिक)") : L("For whom?", "किसके लिए?")}</p>
           <div className="mt-1.5 flex flex-wrap gap-2">
             {people.map((p) => <button key={p.id} type="button" aria-pressed={who === p.id && !newGuest.trim()} onClick={() => { setPerson(p.id); setNewGuest(""); }} className={`min-h-10 rounded-lg border px-3 text-sm font-semibold ${who === p.id && !newGuest.trim() ? "border-primary bg-primary/10" : "border-border text-muted-foreground hover:text-foreground"}`}>{p.name}</button>)}
             <div className="relative min-w-40 flex-1"><UserPlus className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" /><input value={newGuest} onChange={(e) => setNewGuest(e.target.value)} placeholder={L("New guest name", "नया नाम")} className={`${field} h-10 pl-8`} /></div>

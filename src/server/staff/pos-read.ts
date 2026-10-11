@@ -9,6 +9,7 @@ import type { StaffSession } from "./auth";
 import { billDiscount } from "../billing/discounts";
 import { billToken } from "../billing/bill-link";
 import { whatsappReady } from "../whatsapp/cloud";
+import { TAKEAWAY_CLASS } from "../floor/takeaway-class";
 
 export const posRoles = ["cashier", "manager", "owner", "accountant"] as const;
 async function guard(staff: StaffSession) { await requireStaffRole(staff, posRoles); return staff; }
@@ -46,9 +47,10 @@ export async function posQueue(staff: StaffSession) {
     const ps = payments.filter(x => x.billSessionId === session.id).map(x => x.payment);
     const due = sh.reduce((n, x) => n + Math.max(0, x.amountPaise - x.paidPaise), 0);
     const paid = sh.reduce((n, x) => n + x.paidPaise, 0);
-    return { sessionId: session.id, tableCode: table.code, status: session.status, billStatus: bill?.status ?? null, totalPaise: bill?.totalPaise ?? 0, paidPaise: paid, balancePaise: due, partySize: Math.max(session.partySize ?? 0, people.filter(p => p.sessionId === session.id).length), requestedAt: bill?.requestedAt?.getTime() ?? null, pendingOnline: ps.some(p => ["initiated", "pending"].includes(p.status)), payAtCounter: counterSessions.has(session.id), paymentMethods: [...new Set(ps.map(p => p.method))] };
+    return { sessionId: session.id, tableCode: table.code, takeaway: table.tableClass === TAKEAWAY_CLASS, guestName: session.guestName, status: session.status, billStatus: bill?.status ?? null, totalPaise: bill?.totalPaise ?? 0, paidPaise: paid, balancePaise: due, partySize: Math.max(session.partySize ?? 0, people.filter(p => p.sessionId === session.id).length), requestedAt: bill?.requestedAt?.getTime() ?? null, pendingOnline: ps.some(p => ["initiated", "pending"].includes(p.status)), payAtCounter: counterSessions.has(session.id), paymentMethods: [...new Set(ps.map(p => p.method))] };
   });
-  const queue = cards.filter(c => c.balancePaise > 0).sort((a, b) => Number(b.payAtCounter) - Number(a.payAtCounter) || Number(b.pendingOnline) - Number(a.pendingOnline) || (b.requestedAt ?? 0) - (a.requestedAt ?? 0));
+  // Takeaway orders wait here from the first item, since the guest pays at the counter anyway
+  const queue = cards.filter(c => c.balancePaise > 0 || (c.takeaway && c.billStatus !== "paid")).sort((a, b) => Number(b.payAtCounter) - Number(a.payAtCounter) || Number(b.pendingOnline) - Number(a.pendingOnline) || (b.requestedAt ?? 0) - (a.requestedAt ?? 0));
   const recent = [...cards.filter(c => c.balancePaise === 0 && c.billStatus === "paid"), ...recentPaid].slice(0, 20);
   return { identity: { name: staff.name, roles: staff.roles, outlet: staff.outlet.name }, queue, recent, realtimeToken: null };
 }
@@ -68,6 +70,6 @@ export async function posBillDetail(staff: StaffSession, sessionId: string) {
     row.bill ? db.select().from(s.payments).where(and(eq(s.payments.tenantId, staff.tenantId), eq(s.payments.billId, row.bill.id))).orderBy(desc(s.payments.createdAt)) : Promise.resolve([]),
   ]);
   const refundState = await loadRefundState(staff.tenantId, payments);
-  return { sessionId, tableId: row.table.id, tableCode: row.table.code, status: row.session.status, bill: row.bill ? { id: row.bill.id, status: row.bill.status, subtotalPaise: row.bill.subtotalPaise, discountPaise: row.bill.discountPaise, discount: await billDiscount(staff, row.bill.id), taxPaise: row.bill.taxPaise, serviceChargePaise: row.bill.serviceChargePaise, roundOffPaise: row.bill.roundOffPaise, totalPaise: row.bill.totalPaise, shareToken: billToken(row.bill.id) } : null, people, lines, shares: shares.map(x => ({ id: x.id, participantId: x.participantId, amountPaise: x.amountPaise, paidPaise: x.paidPaise, status: x.status, frozenAt: x.frozenAt?.getTime() ?? null })), pdfOnWhatsApp: whatsappReady(), needsApproval: !staff.roles.some(r => r === "manager" || r === "owner"), payments: payments.map(x => ({ id: x.id, method: x.method, amountPaise: x.amountPaise, tipPaise: x.tipPaise, status: x.status, channel: x.channel, createdAt: x.createdAt.getTime(), refund: refundState.get(x.id)! })) };
+  return { sessionId, tableId: row.table.id, tableCode: row.table.code, takeaway: row.table.tableClass === TAKEAWAY_CLASS, guestName: row.session.guestName, status: row.session.status, bill: row.bill ? { id: row.bill.id, status: row.bill.status, subtotalPaise: row.bill.subtotalPaise, discountPaise: row.bill.discountPaise, discount: await billDiscount(staff, row.bill.id), taxPaise: row.bill.taxPaise, serviceChargePaise: row.bill.serviceChargePaise, roundOffPaise: row.bill.roundOffPaise, totalPaise: row.bill.totalPaise, shareToken: billToken(row.bill.id) } : null, people, lines, shares: shares.map(x => ({ id: x.id, participantId: x.participantId, amountPaise: x.amountPaise, paidPaise: x.paidPaise, status: x.status, frozenAt: x.frozenAt?.getTime() ?? null })), pdfOnWhatsApp: whatsappReady(), needsApproval: !staff.roles.some(r => r === "manager" || r === "owner"), payments: payments.map(x => ({ id: x.id, method: x.method, amountPaise: x.amountPaise, tipPaise: x.tipPaise, status: x.status, channel: x.channel, createdAt: x.createdAt.getTime(), refund: refundState.get(x.id)! })) };
 }
 export type PosBillDetail = Awaited<ReturnType<typeof posBillDetail>>;
