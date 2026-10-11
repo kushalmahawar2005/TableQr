@@ -28,7 +28,7 @@ hr{border:0;border-top:1px dashed #000;margin:8px 0}
 <hr>
 ${lines.map((l) => `<div class="it"><span class="q">${l.qty}×</span><span class="n">${esc(l.name)}${l.note && /parcel|pack/i.test(l.note) ? " (PARCEL)" : ""}</span><span class="p">${rs(l.qty * l.unitPricePaise)}</span></div>`).join("")}
 <hr>
-${b ? row("Items", rs(b.subtotalPaise)) + row("Tax", rs(b.taxPaise)) + (b.serviceChargePaise ? row("Service charge", rs(b.serviceChargePaise)) : "") + (b.roundOffPaise ? row("Round off", rs(b.roundOffPaise)) : "") + row("TOTAL", rs(b.totalPaise), true) : ""}
+${b ? row("Items", rs(b.subtotalPaise)) + (b.discountPaise ? row("Discount", "− " + rs(b.discountPaise)) : "") + row("Tax", rs(b.taxPaise)) + (b.serviceChargePaise ? row("Service charge", rs(b.serviceChargePaise)) : "") + (b.roundOffPaise ? row("Round off", rs(b.roundOffPaise)) : "") + row("TOTAL", rs(b.totalPaise), true) : ""}
 ${kind === "receipt" && paid.length ? `<hr>${paid.map((p) => row(`Paid by ${METHOD[p.method] ?? p.method}`, rs(p.amountPaise + p.tipPaise))).join("")}${row("Total paid", rs(paidTotal), true)}` : ""}
 <hr>
 <div class="c m">Thank you for dining with us!</div>

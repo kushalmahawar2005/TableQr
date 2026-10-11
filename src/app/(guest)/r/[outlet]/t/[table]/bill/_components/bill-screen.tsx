@@ -376,7 +376,9 @@ export function BillScreen({
                 <span className="text-caption text-muted">{c.paidOf(bill.paidCount, data.people.length)}</span>
               </div>
               <dl className="space-y-1.5 px-4 pt-3 text-body">
-                <Row label={c.subtotal} value={exact(bill.totals.subtotalPaise - bill.totals.discountPaise)} />
+                {bill.totals.discountPaise > 0 && <Row label={c.subtotal} value={exact(bill.totals.subtotalPaise)} />}
+                {bill.totals.discountPaise > 0 && <Row label={c.discount} value={`− ${exact(bill.totals.discountPaise)}`} />}
+                <Row label={bill.totals.discountPaise > 0 ? c.afterDiscount : c.subtotal} value={exact(bill.totals.subtotalPaise - bill.totals.discountPaise)} />
                 {bill.totals.serviceChargeBp > 0 && <Row label={c.serviceCharge(pct(bill.totals.serviceChargeBp))} value={exact(bill.totals.serviceChargePaise)} />}
                 <Row label={gstLabel} value={exact(bill.totals.taxPaise)} />
                 <div className="!mt-3 flex items-baseline justify-between gap-3 border-t border-line pt-3">

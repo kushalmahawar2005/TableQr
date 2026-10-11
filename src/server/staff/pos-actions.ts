@@ -3,6 +3,7 @@ import { staffFor } from "./request";
 import { AppError } from "../errors";
 import { posBillDetail, posQueue, posRoles } from "./pos-read";
 import { settleAtCounter, reopenBill } from "../billing/payments";
+import { clearBillDiscount, setBillDiscount } from "../billing/discounts";
 import { processRefund, reconcileRefund, requestRefund, type RefundInput } from "../billing/refunds";
 import { changeWaiterLine, managerApproval, waiterRequestBill, type Approval } from "./waiter-mutations";
 import { staffRealtimeToken, topics } from "../realtime/token";
@@ -37,3 +38,6 @@ export async function checkRefundAction(refundId: string) {
 export async function requestBillAction(sessionId: string) {
   return run(s => waiterRequestBill(s, String(sessionId)));
 }
+/** Discount on the whole bill: percent (1-100) or whole rupees, with a reason */
+export async function discountAction(input: { sessionId: string; kind: "percent" | "flat"; value: number; reason: string }) { return run((s) => setBillDiscount(s, input)); }
+export async function clearDiscountAction(sessionId: string) { return run((s) => clearBillDiscount(s, sessionId)); }

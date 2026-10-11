@@ -93,7 +93,7 @@ export function DashboardScreen({ initial, initialTrend, preview }: { initial: D
       )}
 
       <nav aria-label="Quick links" className="mt-5 flex gap-2 overflow-x-auto pb-1">
-        {([["/console/floor", "Open floor", DashboardSquare01Icon], ["/console/billing", "Take payment", Invoice01Icon], ["/console/orders", "See orders", Note01Icon], ["/console/reservations", "Reservations", Calendar03Icon], ["/console/reports", "Reports", ChartHistogramIcon]] as const).map(([href, label, icon]) => (
+        {([["/console/floor", "Open floor", DashboardSquare01Icon], ["/console/billing", "Take payment", Invoice01Icon], ["/console/orders", "See orders", Note01Icon], ["/console/reservations", "Reservations", Calendar03Icon], ["/console/reports", "Reports", ChartHistogramIcon], ["/console/reports/day-close", "Day close", Invoice01Icon]] as const).map(([href, label, icon]) => (
           <Link key={href} href={href} className={`inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full border border-line bg-surface px-4 text-body font-semibold text-ink hover:border-ink/40 ${focus}`}>
             <HugeiconsIcon icon={icon} size={18} aria-hidden />
             {label}

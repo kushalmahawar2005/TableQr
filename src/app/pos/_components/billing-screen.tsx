@@ -242,6 +242,7 @@ export function BillingScreen({ initial, realtimeUrl, embedded = false }: { init
                       <h3 className="font-display text-section font-bold">{L("Bill total", "बिल का कुल")}</h3>
                       <dl className="mt-2 space-y-1.5 text-body">
                         <div className="flex justify-between"><dt className="text-muted">{L("Items", "आइटम")} ({live.length})</dt><dd className="tabular">{rs(detail.bill?.subtotalPaise ?? 0)}</dd></div>
+                        {!!detail.bill?.discountPaise && <div className="flex justify-between text-[var(--state-available-text)]"><dt>{L("Discount", "छूट")}{detail.bill.discount ? ` · ${detail.bill.discount.kind === "percent" ? `${detail.bill.discount.value / 100}%` : rs(detail.bill.discount.value)} · ${detail.bill.discount.reason}` : ""}</dt><dd className="tabular">− {rs(detail.bill.discountPaise)}</dd></div>}
                         <div className="flex justify-between"><dt className="text-muted">{L("Tax", "कर")}</dt><dd className="tabular">{rs(detail.bill?.taxPaise ?? 0)}</dd></div>
                         {!!detail.bill?.serviceChargePaise && <div className="flex justify-between"><dt className="text-muted">{L("Service charge", "सर्विस चार्ज")}</dt><dd className="tabular">{rs(detail.bill.serviceChargePaise)}</dd></div>}
                         {!!detail.bill?.roundOffPaise && <div className="flex justify-between"><dt className="text-muted">{L("Round off", "राउंड ऑफ़")}</dt><dd className="tabular">{rs(detail.bill.roundOffPaise)}</dd></div>}
@@ -250,6 +251,17 @@ export function BillingScreen({ initial, realtimeUrl, embedded = false }: { init
                         {!isPaidBill && <div className="flex justify-between rounded-input bg-brand-soft px-3 py-2 font-display text-section font-bold"><dt>{L("Still to pay", "बाकी")}</dt><dd className="tabular">{rs(detail.shares.reduce((n, s) => n + Math.max(0, s.amountPaise - s.paidPaise), 0))}</dd></div>}
                       </dl>
                     </div>
+
+                    {!isPaidBill && paidSoFar === 0 && (
+                      <DiscountBox
+                        key={detail.sessionId}
+                        hi={hi}
+                        current={detail.bill?.discount ?? null}
+                        disabled={offline || busy}
+                        onApply={(kind, value, reason) => void run(() => actions.discountAction({ sessionId: detail.sessionId, kind, value, reason }), async () => { setMessage({ tone: "ok", text: L("Discount applied.", "छूट लग गई।") }); const d = await actions.detailAction(detail.sessionId); if (d.ok) setDetail(d.data); })}
+                        onClear={() => void run(() => actions.clearDiscountAction(detail.sessionId), async () => { setMessage({ tone: "ok", text: L("Discount removed.", "छूट हटा दी।") }); const d = await actions.detailAction(detail.sessionId); if (d.ok) setDetail(d.data); })}
+                      />
+                    )}
 
                     {!isPaidBill && detail.shares.length > 1 && (
                       <fieldset className="rounded-card border border-line bg-surface p-4 sm:p-5">
@@ -359,5 +371,54 @@ export function BillingScreen({ initial, realtimeUrl, embedded = false }: { init
       </Dialog>
       {detail && <AddItemsDialog detail={detail} open={adding} hi={hi} onClose={() => setAdding(false)} onPlaced={async () => { await refresh(); }} />}
     </main>
+  );
+}
+
+/** Give, change or remove the bill's discount: a percent or rupees, always with a reason */
+function DiscountBox({ hi, current, disabled, onApply, onClear }: {
+  hi: boolean;
+  current: { kind: string; value: number; amountPaise: number; reason: string } | null;
+  disabled: boolean;
+  onApply: (kind: "percent" | "flat", value: number, reason: string) => void;
+  onClear: () => void;
+}) {
+  const L = (en: string, hin: string) => (hi ? hin : en);
+  const [open, setOpen] = useState(false);
+  const [kind, setKind] = useState<"percent" | "flat">("percent");
+  const [value, setValue] = useState("");
+  const [reason, setReason] = useState("");
+  const n = Number(value);
+  const valid = reason.trim().length >= 2 && (kind === "percent" ? n > 0 && n <= 100 : Number.isInteger(n) && n > 0);
+  if (!open) {
+    return (
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" className={quiet} disabled={disabled} onClick={() => setOpen(true)}>{current ? L("Change discount", "छूट बदलें") : L("Give discount", "छूट दें")}</button>
+        {current && <button type="button" className="h-11 px-3 text-sm font-semibold text-danger" disabled={disabled} onClick={onClear}>{L("Remove discount", "छूट हटाएँ")}</button>}
+      </div>
+    );
+  }
+  return (
+    <form
+      className="rounded-card border border-line bg-surface p-4 sm:p-5"
+      onSubmit={(e) => { e.preventDefault(); if (valid) { onApply(kind, n, reason.trim()); setOpen(false); } }}
+    >
+      <h3 className="font-display text-section font-bold">{L("Discount on this bill", "इस बिल पर छूट")}</h3>
+      <div className="mt-3 flex gap-2">
+        {(["percent", "flat"] as const).map((k) => (
+          <button key={k} type="button" aria-pressed={kind === k} onClick={() => setKind(k)} className={cn("h-10 rounded-full border px-4 text-sm font-semibold", kind === k ? "border-ink bg-ink text-white" : "border-line")}>{k === "percent" ? L("Percent %", "प्रतिशत %") : L("Rupees ₹", "रुपये ₹")}</button>
+        ))}
+      </div>
+      <label className="mt-3 block text-sm font-semibold">{kind === "percent" ? L("How much %", "कितना %") : L("How many rupees", "कितने रुपये")}
+        <input className={field} type="number" inputMode="decimal" min={1} max={kind === "percent" ? 100 : undefined} step={kind === "percent" ? "0.5" : "1"} value={value} onChange={(e) => setValue(e.target.value)} />
+      </label>
+      <label className="mt-3 block text-sm font-semibold">{L("Reason", "कारण")}
+        <input className={field} value={reason} maxLength={200} onChange={(e) => setReason(e.target.value)} placeholder={L("e.g. Regular guest, birthday, late food", "जैसे रेगुलर ग्राहक, जन्मदिन, खाना देर से")} />
+      </label>
+      <p className="mt-2 text-xs text-muted">{L("Replaces any earlier discount. Can only change before anyone pays.", "पहले वाली छूट की जगह लेगी। किसी के भुगतान से पहले ही बदल सकते हैं।")}</p>
+      <div className="mt-3 flex gap-2">
+        <button type="button" className={quiet} onClick={() => setOpen(false)}>{L("Cancel", "रद्द करें")}</button>
+        <button type="submit" className={brand} disabled={!valid || disabled}>{L("Apply discount", "छूट लगाएँ")}</button>
+      </div>
+    </form>
   );
 }
