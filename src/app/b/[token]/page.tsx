@@ -2,12 +2,11 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { formatINR } from "@/domain/money";
 import { sharedBill } from "@/server/billing/bill-link";
-import { PrintButton } from "../../(guest)/r/[outlet]/t/[table]/paid/receipt/print-button";
 
 export const metadata: Metadata = { title: "Bill", robots: { index: false, follow: false } };
 
 // The bill sent on WhatsApp. Anyone with the link sees this one bill and nothing else; "Download
-// PDF" opens the phone's print sheet, where "Save as PDF" keeps a copy.
+// PDF" saves the same bill as a PDF file.
 
 const rupees = (paise: number) => `₹${formatINR(Math.abs(paise), { paise: true, prefix: false })}`;
 const METHOD: Record<string, string> = { upi: "UPI", card: "Card", wallet: "Wallet", cash: "Cash" };
@@ -78,7 +77,9 @@ export default async function SharedBillPage(props: { params: Promise<{ token: s
         <p className="mt-5 text-center text-caption text-muted">Thank you for dining with us! · Powered by TableQR</p>
       </article>
       <div className="mt-4">
-        <PrintButton label="Download PDF" />
+        <a href={`/b/${encodeURIComponent(token)}/pdf`} download className="flex min-h-12 w-full items-center justify-center rounded-cta border border-line bg-surface px-4 text-button font-semibold text-ink print:hidden focus-visible:outline-2 focus-visible:outline-brand">
+          Download PDF
+        </a>
       </div>
     </main>
   );

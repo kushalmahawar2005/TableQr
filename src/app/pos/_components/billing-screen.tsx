@@ -218,6 +218,7 @@ export function BillingScreen({ initial, realtimeUrl, embedded = false, openSess
                       <WhatsAppBill
                         key={detail.sessionId}
                         hi={hi}
+                        sendPdf={detail.pdfOnWhatsApp && detail.bill ? async (phone) => { const r = await actions.sendBillAction({ sessionId: detail.sessionId, phone }); return r.ok ? null : r.error; } : undefined}
                         onSend={(phone) => void actions.rememberCustomerAction({ sessionId: detail.sessionId, phone, name: detail.people.find((p) => p.name && !/^guest\b/i.test(p.name))?.name ?? null })}
                         text={billMessage({
                           outlet: queue.identity.outlet,
@@ -450,16 +451,46 @@ function DiscountBox({ hi, current, disabled, onApply, onClear }: {
   );
 }
 
-/** Send this bill to the guest's WhatsApp: type their number, WhatsApp opens with the bill filled in */
-function WhatsAppBill({ hi, text, onSend }: { hi: boolean; text: string; onSend?: (phone: string) => void }) {
+/**
+ * Send this bill to the guest's WhatsApp. With WhatsApp Business connected, Send delivers the bill
+ * PDF straight to their number; without it, WhatsApp opens with the bill filled in.
+ */
+function WhatsAppBill({ hi, text, onSend, sendPdf }: { hi: boolean; text: string; onSend?: (phone: string) => void; sendPdf?: (phone: string) => Promise<string | null> }) {
   const L = (en: string, hin: string) => (hi ? hin : en);
   const [open, setOpen] = useState(false);
   const [phone, setPhone] = useState("");
+  const [state, setState] = useState<{ kind: "idle" | "sending" | "sent" } | { kind: "error"; text: string }>({ kind: "idle" });
   const ok = !!whatsappNumber(phone);
-  if (!open) return <button type="button" className={quiet} onClick={() => setOpen(true)}>{L("WhatsApp bill", "WhatsApp पर बिल")}</button>;
+  if (!open)
+    return (
+      <span className="inline-flex items-center gap-2">
+        <button type="button" className={quiet} onClick={() => { setOpen(true); setState({ kind: "idle" }); }}>{L("WhatsApp bill", "WhatsApp पर बिल")}</button>
+        {state.kind === "sent" && <span role="status" className="text-sm font-semibold text-[#1f8f4e]">{L("PDF sent", "PDF भेज दी")}</span>}
+      </span>
+    );
+  const input = <input autoFocus aria-label={L("Guest's WhatsApp number", "ग्राहक का WhatsApp नंबर")} inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="98765 43210" className="h-11 w-40 rounded-input border border-line bg-surface px-3 text-body outline-none focus:border-ink" />;
+  if (sendPdf) {
+    const send = async () => {
+      if (!ok || state.kind === "sending") return;
+      setState({ kind: "sending" });
+      const error = await sendPdf(phone);
+      if (error) setState({ kind: "error", text: error });
+      else { setState({ kind: "sent" }); setOpen(false); setPhone(""); }
+    };
+    return (
+      <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+        {input}
+        <button type="button" disabled={!ok || state.kind === "sending"} onClick={() => void send()} className="inline-flex h-11 items-center gap-2 rounded-input bg-[#1f8f4e] px-4 text-sm font-semibold text-white disabled:bg-[#1f8f4e]/40">
+          {state.kind === "sending" ? L("Sending…", "भेज रहे…") : L("Send PDF", "PDF भेजें")}
+        </button>
+        <button type="button" className="h-11 px-2 text-sm font-semibold text-muted" onClick={() => setOpen(false)}>{L("Cancel", "रद्द")}</button>
+        {state.kind === "error" && <p role="alert" className="w-full text-sm font-semibold text-danger">{state.text}</p>}
+      </div>
+    );
+  }
   return (
     <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
-      <input autoFocus aria-label={L("Guest's WhatsApp number", "ग्राहक का WhatsApp नंबर")} inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="98765 43210" className="h-11 w-40 rounded-input border border-line bg-surface px-3 text-body outline-none focus:border-ink" />
+      {input}
       <a
         href={ok ? whatsappLink(text, phone) : undefined}
         target="_blank"
