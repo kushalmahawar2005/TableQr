@@ -1,7 +1,9 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { printHtml } from "@/app/pos/_components/bill-print";
 import type { DayClose } from "@/server/staff/day-close";
+import { dayCloseHtml } from "./day-close-print";
 
 // Day close: one page to count the drawer against, print, or send to the owner on WhatsApp.
 
@@ -113,7 +115,7 @@ export function DayCloseScreen({ report: r, outletName, today }: { report: DayCl
 
       <div className="mt-5 flex flex-wrap gap-2 print:hidden">
         <a className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[#1f8f4e] bg-[#1f8f4e] px-4 text-sm font-semibold text-white" href={`https://wa.me/?text=${encodeURIComponent(text)}`} target="_blank" rel="noreferrer noopener">Send on WhatsApp</a>
-        <button type="button" className={btn} onClick={() => window.print()}>Print</button>
+        <button type="button" className={btn} onClick={() => printHtml(dayCloseHtml(r, outletName))}>Print</button>
         <button type="button" className={btn} onClick={() => void navigator.clipboard?.writeText(text)}>Copy summary</button>
       </div>
     </main>

@@ -88,7 +88,7 @@ export function StaffShell({
   const role = staff.roles.map((r) => ROLE[lang][r as keyof (typeof ROLE)["en"]] ?? r).join(", ");
   return (
     <div lang={lang} className={`flex min-h-dvh flex-1 flex-col bg-paper text-ink sm:flex-row ${dark ? "theme-dark" : ""}`}>
-      <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between border-b border-line bg-surface px-4 sm:hidden">
+      <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between border-b border-line bg-surface px-4 sm:hidden print:hidden">
         <span className="flex min-w-0 items-center gap-2">
           <span className="grid size-8 shrink-0 place-items-center rounded-input bg-ink font-display text-body font-bold text-white" aria-hidden>T</span>
           <span className="min-w-0"><span className="block truncate font-display text-body font-bold leading-tight">TableQR</span><span className="block truncate text-caption leading-tight text-muted">{staff.outlet}</span></span>
@@ -104,7 +104,7 @@ export function StaffShell({
         </form>
         </span>
       </header>
-      <aside className="sticky top-0 hidden h-dvh w-16 shrink-0 flex-col border-r border-line bg-surface sm:flex lg:w-52">
+      <aside className="sticky top-0 hidden h-dvh w-16 shrink-0 flex-col border-r border-line bg-surface sm:flex lg:w-52 print:hidden">
         <div className="flex h-14 items-center gap-2 border-b border-line px-3 lg:px-4">
           <span className="grid size-9 shrink-0 place-items-center rounded-input bg-ink font-display text-section font-bold text-white" aria-hidden>
             T
@@ -155,7 +155,7 @@ export function StaffShell({
         </header>
         {children}
       </div>
-      <nav aria-label={lang === "hi" ? "स्टाफ मेन्यू" : "Staff menu"} className="fixed inset-x-0 bottom-0 z-30 flex overflow-x-auto border-t border-line bg-surface pb-[env(safe-area-inset-bottom)] sm:hidden">
+      <nav aria-label={lang === "hi" ? "स्टाफ मेन्यू" : "Staff menu"} className="fixed inset-x-0 bottom-0 z-30 flex overflow-x-auto border-t border-line bg-surface pb-[env(safe-area-inset-bottom)] sm:hidden print:hidden">
         {sections.map((s) => {
           const current = s.slug === active;
           return (
