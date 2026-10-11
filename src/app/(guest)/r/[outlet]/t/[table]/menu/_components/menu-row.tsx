@@ -4,6 +4,7 @@ import { ArrowRight01Icon, MinusSignIcon, PepperIcon, PlusSignIcon, Restaurant01
 import { HugeiconsIcon } from "@hugeicons/react";
 import { memo, useState } from "react";
 import { formatRupees } from "@/domain/menu-price";
+import { menuThumb } from "@/domain/menu-photo";
 import { MAX_QTY } from "@/domain/pricing";
 import type { Lang } from "@/lib/i18n";
 import type { MenuRowItem } from "@/server/guest/menu-screen";
@@ -120,19 +121,23 @@ export const MenuRow = memo(function MenuRow({
   );
 });
 
-/** Dish photo, or a soft tile with a plate icon when the restaurant has not added one */
+/** Dish photo (its small copy, falling back to the full photo), or a plate icon when there is none */
 export function Thumb({ photo, soldOut, size, onError }: { photo: string | null; soldOut?: boolean; size: string; onError?: () => void }) {
-  return photo ? (
+  const [smallFailed, setSmallFailed] = useState(false);
+  const small = menuThumb(photo);
+  const src = smallFailed ? photo : small;
+  const fail = () => (src !== photo ? setSmallFailed(true) : onError?.());
+  return src ? (
     // Restaurant photos can live on any host, so this stays a plain lazy image
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src={photo}
+      src={src}
       alt=""
       loading="lazy"
       decoding="async"
-      onError={onError}
+      onError={fail}
       ref={(el) => {
-        if (el?.complete && el.naturalWidth === 0) onError?.();
+        if (el?.complete && el.naturalWidth === 0) fail();
       }}
       className={`${size} shrink-0 rounded-xl bg-line/40 object-cover ${soldOut ? "opacity-60 grayscale" : ""}`}
     />

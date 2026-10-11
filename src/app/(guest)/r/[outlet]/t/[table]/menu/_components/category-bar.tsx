@@ -3,6 +3,7 @@
 import { CheckmarkCircle02Icon, Restaurant01Icon, StarIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useEffect, useRef, useState } from "react";
+import { menuThumb } from "@/domain/menu-photo";
 
 /** A section in the bar; the photo is the first dish in it that has one */
 export type CategoryLink = { id: string; label: string; photo: string | null };
@@ -79,12 +80,14 @@ export function CategoryBar({ categories, label }: { categories: CategoryLink[];
 
 function TilePhoto({ id, photo, on }: { id: string; photo: string | null; on: boolean }) {
   const [ok, setOk] = useState(true);
+  const [smallFailed, setSmallFailed] = useState(false);
+  const src = smallFailed ? photo : menuThumb(photo);
   const frame = `size-14 rounded-xl border-2 transition-colors duration-150 ${on ? "border-brand" : "border-line/80 group-hover:border-ink/30"}`;
   if (photo && ok) {
     return (
       // Restaurant photos can live on any host, so this stays a plain lazy image
       // eslint-disable-next-line @next/next/no-img-element
-      <img src={photo} alt="" loading="lazy" decoding="async" onError={() => setOk(false)} className={`${frame} bg-line/40 object-cover`} />
+      <img src={src ?? undefined} alt="" loading="lazy" decoding="async" onError={() => (src !== photo ? setSmallFailed(true) : setOk(false))} className={`${frame} bg-line/40 object-cover`} />
     );
   }
   return (

@@ -464,8 +464,9 @@ body {
 
 /* Self-hosted font family names (see src/app/layout.tsx) */
 :root {
-  --font-inter: "Inter Variable";
-  --font-manrope: "Manrope Variable";
+  /* next/font families from src/app/fonts.ts: the ₹-only cut first, then the latin font and its fallback */
+  --font-inter: var(--nf-inter-rupee), var(--nf-inter);
+  --font-manrope: var(--nf-manrope-rupee), var(--nf-manrope);
   --font-devanagari: "Hind";
   --font-devanagari-display: "Poppins";
 }
