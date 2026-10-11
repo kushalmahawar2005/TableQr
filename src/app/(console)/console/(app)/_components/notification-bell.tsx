@@ -3,8 +3,9 @@
 import { Cancel01Icon, Notification01Icon, NotificationOff01Icon, VolumeHighIcon, VolumeOffIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { ringBell } from "@/lib/bell-sound";
+import { chime } from "@/lib/bell-sound";
 import type { ConsoleNotice } from "@/server/staff/notifications";
 import { noticesAction } from "./notification-actions";
 
@@ -32,6 +33,12 @@ export function NotificationBell({ preview = false, className = "", placement = 
   const seen = useRef(new Set<string>());
   const audio = useRef<AudioContext | null>(null);
   const soundOn = useRef(true);
+  // On the Kitchen board new orders already ring the kitchen bell; the chime stays for the rest
+  const path = usePathname();
+  const onKitchen = useRef(false);
+  useEffect(() => {
+    onKitchen.current = path?.startsWith("/console/kitchen") ?? false;
+  }, [path]);
 
   // Sound preference lives on this device only
   useEffect(() => {
@@ -86,7 +93,8 @@ export function NotificationBell({ preview = false, className = "", placement = 
       setUnread((u) => u + fresh.length);
       setToasts((old) => [...fresh.slice(0, 3), ...old].slice(0, 3));
       fresh.slice(0, 3).forEach((n) => setTimeout(() => setToasts((old) => old.filter((x) => x.id !== n.id)), 6_000));
-      if (soundOn.current && audio.current?.state === "running") ringBell(audio.current, { times: 3 });
+      const ring = onKitchen.current ? fresh.filter((n) => n.kind !== "order") : fresh;
+      if (ring.length && soundOn.current && audio.current?.state === "running") chime(audio.current, { repeat: true });
       if (document.hidden && typeof Notification !== "undefined" && Notification.permission === "granted") {
         for (const n of fresh.slice(0, 3)) new Notification(n.title, { body: n.body, tag: n.id });
       }
@@ -111,7 +119,7 @@ export function NotificationBell({ preview = false, className = "", placement = 
     } catch {
       // Storage blocked: the choice lasts for this page only
     }
-    if (next && audio.current) ringBell(audio.current, { times: 1 });
+    if (next && audio.current) chime(audio.current);
   };
   const askDesktop = () => {
     if (typeof Notification !== "undefined" && Notification.permission === "default") void Notification.requestPermission();
