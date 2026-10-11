@@ -6,8 +6,14 @@ import * as s from "@/db/schema";
 // What a restaurant gets. Plans are data (admin > Plans), and the platform admin can turn the
 // kitchen screen on or off for one restaurant on top of its plan.
 
-/** The kitchen display (KDS) is included unless the plan switches it off */
-export const hasKitchenDisplay = (features: s.PlanFeatures | null | undefined) => features?.kitchenDisplay !== false;
+/**
+ * The kitchen display (KDS) is included unless the plan switches it off. Some databases hand a
+ * JSON boolean back as 0/1 or "false", so every form of "off" counts.
+ */
+export const hasKitchenDisplay = (features: s.PlanFeatures | null | undefined) => {
+  const v = features?.kitchenDisplay as unknown;
+  return !(v === false || v === 0 || v === "false" || v === "0");
+};
 
 /** The admin's choice for this restaurant when there is one, else what its plan includes */
 export const kitchenFor = (override: boolean | null | undefined, features: s.PlanFeatures | null | undefined) => override ?? hasKitchenDisplay(features);
