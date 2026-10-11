@@ -1,6 +1,7 @@
 "use client";
 import { useMemo, useState } from "react";
 import * as actions from "../actions";
+import { shrinkPhoto } from "@/lib/shrink-photo";
 import { adjustPrice } from "@/domain/price-adjust";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -78,10 +79,10 @@ function EditorForm({item,data,canEditPrice,onSaved,onPanel,seed}:{item:Data["it
  const [photo,setPhoto]=useState((draft as {imageUrl?:string|null}).imageUrl??""),[veg,setVeg]=useState(draft.isVeg),[jain,setJain]=useState(!!draft.isJain),[spice,setSpice]=useState(draft.spiceLevel==null?"":String(draft.spiceLevel));
  const [allergenMode,setAllergenMode]=useState<"unknown"|"none"|"some">(known.length===0?"unknown":known.length===1&&known[0].toLowerCase()==="none"?"none":"some");
  const [picked,setPicked]=useState<string[]>(known.filter(x=>x.toLowerCase()!=="none"));
- const [prep,setPrep]=useState(String(draft.prepMinutes)),[busy,setBusy]=useState(false),[uploading,setUploading]=useState(false);
+ const [prep,setPrep]=useState(String(draft.prepMinutes)),[busy,setBusy]=useState(false),[uploading,setUploading]=useState(false),[photoError,setPhotoError]=useState("");
  const stations=[...new Set(data.items.map(x=>x.station).filter(Boolean))];
  const override=item?data.overrides.find(x=>x.itemId===item.id):null;
- const upload=async(file:File)=>{setUploading(true);try{const bytes=new Uint8Array(await file.arrayBuffer());let binary="";bytes.forEach(x=>binary+=String.fromCharCode(x));const r=await actions.uploadImageAction(file.name,file.type,btoa(binary));if(r.ok)setPhoto(r.data.url)}finally{setUploading(false)}};
+ const upload=async(file:File)=>{setUploading(true);setPhotoError("");try{const p=await shrinkPhoto(file);const r=await actions.uploadImageAction(p.name,p.type,p.base64);if(r.ok)setPhoto(r.data.url);else setPhotoError(r.error)}catch{setPhotoError("Could not upload this photo. Try a smaller one.")}finally{setUploading(false)}};
  return <form className="space-y-4" onSubmit={async e=>{e.preventDefault();setBusy(true);const q=new FormData(e.currentTarget);
   const allergens=allergenMode==="unknown"?[]:allergenMode==="none"?["none"]:picked;
   let categoryId=String(q.get("categoryId"));
@@ -92,7 +93,7 @@ function EditorForm({item,data,canEditPrice,onSaved,onPanel,seed}:{item:Data["it
 
   <Block title="Photo" note="A good photo helps guests choose. Square photos look best.">
    <div className="flex items-center gap-4"><span className="grid size-24 shrink-0 place-items-center overflow-hidden rounded-xl border border-line bg-ink/5 text-3xl">{photo?<img src={photo} alt="" className="size-full object-cover"/>:"🍽"}</span>
-    <div className="space-y-2"><label className={`inline-flex min-h-10 cursor-pointer items-center rounded-xl border border-line px-3.5 text-sm font-semibold hover:border-ink/40 ${uploading?"opacity-60":""}`}>{uploading?"Uploading…":photo?"Change photo":"Upload photo"}<input className="sr-only" type="file" accept="image/jpeg,image/png,image/webp,image/avif" onChange={e=>{const f=e.target.files?.[0];if(f)void upload(f)}}/></label>{photo&&<button type="button" className="block text-xs font-semibold text-muted underline underline-offset-4 hover:text-ink" onClick={()=>setPhoto("")}>Remove photo</button>}</div></div>
+    <div className="space-y-2"><label className={`inline-flex min-h-10 cursor-pointer items-center rounded-xl border border-line px-3.5 text-sm font-semibold hover:border-ink/40 ${uploading?"opacity-60":""}`}>{uploading?"Uploading…":photo?"Change photo":"Upload photo"}<input className="sr-only" type="file" accept="image/jpeg,image/png,image/webp,image/avif" onChange={e=>{const f=e.target.files?.[0];if(f)void upload(f)}}/></label>{photo&&<button type="button" className="block text-xs font-semibold text-muted underline underline-offset-4 hover:text-ink" onClick={()=>setPhoto("")}>Remove photo</button>}{photoError&&<p role="alert" className="text-xs font-semibold text-danger">{photoError}</p>}</div></div>
   </Block>
 
   <Block title="Basics">

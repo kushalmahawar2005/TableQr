@@ -16,6 +16,24 @@ export type MenuImageUpload = { tenantId: string; brandId: string; filename: str
 const CACHE = "public,max-age=31536000,immutable";
 const smallKeyOf = (key: string) => key.replace(/\.webp$/, "-sm.webp");
 
+/** Whatever the owner uploads, the full photo ends up near 100 KB and the list copy near 30 KB */
+const FULL = { sizes: [1400, 1200, 1000, 800], maxBytes: 100 * 1024 };
+const SMALL = { sizes: [480, 400], maxBytes: 30 * 1024 };
+const QUALITIES = [80, 72, 64, 56];
+
+/** The largest, sharpest WebP within the byte budget: lower quality first, then fewer pixels */
+async function fitWebp(bytes: Buffer, target: { sizes: number[]; maxBytes: number }) {
+  let out: Buffer | null = null;
+  for (const size of target.sizes) {
+    const resized = await sharp(bytes).rotate().resize({ width: size, height: size, fit: "inside", withoutEnlargement: true }).toBuffer();
+    for (const quality of QUALITIES) {
+      out = await sharp(resized).webp({ quality, effort: 5 }).toBuffer();
+      if (out.byteLength <= target.maxBytes) return out;
+    }
+  }
+  return out!;
+}
+
 type Bucket = { client: S3Client; name: string; publicBase: string };
 
 /** The configured bucket, or null when photos stay on this machine */
@@ -42,8 +60,8 @@ export async function storeMenuImage(input: MenuImageUpload) {
   if (!/^image\/(jpeg|png|webp|avif)$/.test(input.contentType)) throw new AppError("invalid_state", "Upload a JPG, PNG, WebP, or AVIF image.");
   if (input.bytes.byteLength > 5 * 1024 * 1024) throw new AppError("invalid_state", "Images must be 5 MB or smaller.");
   const key = `menus/${input.tenantId}/${input.brandId}/${randomUUID()}.webp`;
-  const webp = await sharp(input.bytes).rotate().resize({ width: 1600, height: 1600, fit: "inside", withoutEnlargement: true }).webp({ quality: 82 }).toBuffer();
-  const small = await sharp(input.bytes).rotate().resize({ width: 480, height: 480, fit: "inside", withoutEnlargement: true }).webp({ quality: 76 }).toBuffer();
+  const webp = await fitWebp(input.bytes, FULL);
+  const small = await fitWebp(input.bytes, SMALL);
   if (process.env.MENU_STORAGE_DRIVER === "local") {
     const file = path.join(process.cwd(), "public", "uploads", key);
     await mkdir(path.dirname(file), { recursive: true });
