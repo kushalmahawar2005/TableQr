@@ -19,6 +19,8 @@ import { logoutAction, settingsAction, type KdsResult } from "../actions";
 import { KdsActionsProvider, useKdsActions, wallActions, type KdsActions } from "./kds-actions";
 import { kdsCopy, type KdsCopy } from "../_copy";
 import { cookable, createAnnouncer, liveCard, sortCards, type Announcer, type Connection, type KdsCard } from "./kds-logic";
+import { autoKotSaved, kotHtml, saveAutoKot } from "./kot-print";
+import { printHtml } from "@/app/pos/_components/bill-print";
 import { audioReady, playLate, playNewTicket, rememberedAnnouncements, saveAnnouncements, setSoundPref, soundPreference, subscribeSoundPref, unlockAudio } from "./sound";
 import { TicketCard, type CardAction } from "./ticket-card";
 import { useKdsSync } from "./use-kds-sync";
@@ -97,6 +99,10 @@ function KdsBoardScreen(props: { initial: KdsBoard; device: KdsDeviceView; realt
     return () => window.removeEventListener("pointerdown", wake);
   }, [preview, soundPref]);
   const sound = preview?.sound ?? (!soundPref ? "off" : unlocked ? "on" : "locked");
+  // Auto KOT: every new ticket prints a kitchen slip on this screen's printer
+  const [autoKot, setAutoKot] = useState(false);
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- read once from this device
+  useEffect(() => { setAutoKot(autoKotSaved()); }, []);
   const announcer = useRef<Announcer | null>(null);
   const lastStation = useRef(board.station);
 
@@ -111,12 +117,16 @@ function KdsBoardScreen(props: { initial: KdsBoard; device: KdsDeviceView; realt
     const heard = announcer.current.next(cookable(cards));
     if (heard.arrived.length || heard.late.length) {
       saveAnnouncements(announcer.current.snapshot());
+      if (autoKot && heard.arrived.length) {
+        const fresh = cards.filter((x) => heard.arrived.includes(x.ticketId));
+        if (fresh.length) printHtml(kotHtml(fresh));
+      }
       if (sound === "on") {
         if (heard.late.length) playLate();
         else playNewTicket();
       }
     }
-  }, [cards, board.station, preview, sound]);
+  }, [cards, board.station, preview, sound, autoKot]);
 
   function say(message: string) {
     clearTimeout(toastTimer.current);
@@ -206,6 +216,8 @@ function KdsBoardScreen(props: { initial: KdsBoard; device: KdsDeviceView; realt
           }
         }}
         onSettings={props.embedded ? undefined : () => setPanel("settings")}
+        autoKot={autoKot}
+        onAutoKot={() => { saveAutoKot(!autoKot); setAutoKot(!autoKot); }}
       />
 
       {device.expeditor && (
@@ -263,6 +275,7 @@ function KdsBoardScreen(props: { initial: KdsBoard; device: KdsDeviceView; realt
                 leaving={leaving.has(card.ticketId)}
                 onAction={onAction}
                 onBumpLine={onBumpLine}
+                onPrint={() => printHtml(kotHtml([card]))}
               />
             ))}
           </div>
@@ -294,6 +307,8 @@ function Header(props: {
   conn: Connection;
   sound: "on" | "off" | "locked";
   onSound: () => void;
+  autoKot: boolean;
+  onAutoKot: () => void;
   /** Missing inside the console: there is no wall-screen device to set up there */
   onSettings?: () => void;
 }) {
@@ -331,6 +346,9 @@ function Header(props: {
       >
         <HugeiconsIcon icon={sound === "off" ? VolumeOffIcon : VolumeHighIcon} size={22} aria-hidden />
         <span className={sound === "locked" ? "text-[16px] sm:text-[18px]" : "hidden sm:inline"}>{sound === "locked" ? c.enableSound : sound === "on" ? c.soundOn : c.soundOff}</span>
+      </button>
+      <button type="button" onClick={props.onAutoKot} aria-pressed={props.autoKot} className={`flex h-11 items-center gap-2 rounded-lg px-3 text-[18px] font-semibold sm:h-12 sm:px-4 ${props.autoKot ? "bg-kds-ok text-kds-bg" : "bg-kds-card"}`}>
+        {props.autoKot ? c.autoKotOn : c.autoKotOff}
       </button>
       <span role="status" aria-label={connLabel} className={`flex items-center gap-2 text-[18px] font-semibold ${connTone}`}>
         <HugeiconsIcon icon={conn === "offline" ? WifiOff01Icon : Wifi01Icon} size={22} aria-hidden />

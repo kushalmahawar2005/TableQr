@@ -54,9 +54,11 @@ type Props = {
   leaving: boolean;
   onAction: (card: KdsCard, action: CardAction) => void;
   onBumpLine: (card: KdsCard, lineId: string) => void;
+  /** Prints this ticket's kitchen slip (KOT) */
+  onPrint?: () => void;
 };
 
-export function TicketCard({ card, lang, c, showStation, canAct, busy, busyLines, leaving, onAction, onBumpLine }: Props) {
+export function TicketCard({ card, lang, c, showStation, canAct, busy, busyLines, leaving, onAction, onBumpLine, onPrint }: Props) {
   const name = (en: string, hi: string | null) => (lang === "hi" && hi ? hi : en);
   const fresh = isFresh(card);
   const waiting = !!card.awaitingStaff;
@@ -98,6 +100,11 @@ export function TicketCard({ card, lang, c, showStation, canAct, busy, busyLines
           </div>
           )}
         </div>
+        {onPrint && (
+          <button type="button" onClick={onPrint} className="mt-2 rounded-md bg-black/15 px-2.5 py-1 text-[16px] font-semibold">
+            {c.printKot}
+          </button>
+        )}
       </header>
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-kds-line px-4 py-2 text-[18px] leading-7 text-kds-muted">
