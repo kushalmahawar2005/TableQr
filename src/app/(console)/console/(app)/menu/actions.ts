@@ -1,7 +1,7 @@
 "use server";
 import { staffFor } from "@/server/staff/request";
 import { AppError } from "@/server/errors";
-import { menuManagerRoles, menuManagerData, saveMenuItem, archiveMenuItem, setMenuAvailability, adjustMenuPortions, saveMenuCategory, reorderCategories, archiveCategory, bulkPrice, savePairings, saveModifierGroup, setModifierGroupActive, reorderModifierGroups } from "@/server/staff/menu-manager";
+import { menuManagerRoles, menuManagerData, saveMenuItem, archiveMenuItem, setMenuAvailability, adjustMenuPortions, saveMenuCategory, reorderCategories, archiveCategory, deleteCategory, bulkPrice, savePairings, saveModifierGroup, setModifierGroupActive, reorderModifierGroups } from "@/server/staff/menu-manager";
 import { parseMenuFile, commitMenuCsv } from "@/server/staff/menu-import";
 import { storeMenuImage } from "@/server/menu-storage";
 import { addLibraryDishes, browseLibrary, ensureLibraryCategory, libraryCategoryDetail, searchLibrary, type LibraryPick } from "@/server/staff/menu-library";
@@ -17,7 +17,8 @@ export async function availabilityAction(id: string, mode: "available" | "today"
 export async function portionsAction(id: string, portions: number | null) { return run((s) => adjustMenuPortions(s, id, portions)); }
 export async function saveCategoryAction(input: Parameters<typeof saveMenuCategory>[1]) { return run((s) => saveMenuCategory(s, input)); }
 export async function reorderAction(ids: string[]) { return run((s) => reorderCategories(s, ids)); }
-export async function archiveCategoryAction(id: string, restore = false) { return run((s) => archiveCategory(s, id, restore)); }
+export async function archiveCategoryAction(id: string, restore = false, withDishes = false) { return run((s) => archiveCategory(s, id, restore, withDishes)); }
+export async function deleteCategoryAction(id: string) { return run((s) => deleteCategory(s, id)); }
 export async function bulkPriceAction(ids: string[], mode: "percent" | "fixed", amount: number) { return run((s) => bulkPrice(s, ids, mode, amount)); }
 export async function pairingsAction(source: string, paired: string[]) { return run((s) => savePairings(s, source, paired)); }
 export async function modifierAction(input: Parameters<typeof saveModifierGroup>[1]) { return run((s) => saveModifierGroup(s, input)); }

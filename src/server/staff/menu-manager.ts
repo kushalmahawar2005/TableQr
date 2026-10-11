@@ -95,7 +95,23 @@ export async function saveMenuCategory(staff: StaffSession, input: { id?: string
 
 export async function reorderCategories(staff: StaffSession, ids: string[]) { guard(staff); await db.transaction(async (tx) => { for (const [sortOrder, id] of ids.entries()) await tx.update(s.menuCategories).set({ sortOrder }).where(and(eq(s.menuCategories.tenantId, staff.tenantId), eq(s.menuCategories.id, id))); }); await db.insert(s.auditLog).values({ tenantId: staff.tenantId, outletId: staff.outletId, actorUserId: staff.userId, actorLabel: `staff:${staff.name}`, action: "menu.category_reordered", entity: "menu_category", after: { ids }, createdAt: new Date() }); }
 
-export async function archiveCategory(staff: StaffSession, categoryId: string, restore = false) { guard(staff); const [active] = await db.select({ n: sql<number>`count(*)` }).from(s.menuItems).where(and(eq(s.menuItems.tenantId, staff.tenantId), eq(s.menuItems.categoryId, categoryId), eq(s.menuItems.isActive, true))); if (!restore && Number(active?.n ?? 0) > 0) throw new AppError("conflict", `Move or archive ${active.n} active item(s) first.`); await db.update(s.menuCategories).set({ isActive: restore }).where(and(eq(s.menuCategories.tenantId, staff.tenantId), eq(s.menuCategories.id, categoryId))); await db.insert(s.auditLog).values({ tenantId: staff.tenantId, outletId: staff.outletId, actorUserId: staff.userId, actorLabel: `staff:${staff.name}`, action: restore ? "menu.category_updated" : "menu.category_archived", entity: "menu_category", entityId: categoryId, after: { isActive: restore }, createdAt: new Date() }); }
+/**
+ * Hides a category from the guest menu (or shows it again). Hiding one that still has dishes needs
+ * `withDishes`, which hides those dishes too, so nothing is left in a category guests cannot see.
+ */
+/** Deletes a category for good. Only an empty one: dishes, even hidden ones, keep it (old bills point at them). */
+export async function deleteCategory(staff: StaffSession, categoryId: string) {
+  guard(staff);
+  const [cat] = await db.select().from(s.menuCategories).where(and(eq(s.menuCategories.tenantId, staff.tenantId), eq(s.menuCategories.id, categoryId)));
+  if (!cat) throw new AppError("not_found", "Category not found.");
+  const [used] = await db.select({ n: sql<number>`count(*)` }).from(s.menuItems).where(and(eq(s.menuItems.tenantId, staff.tenantId), eq(s.menuItems.categoryId, categoryId)));
+  if (Number(used?.n ?? 0) > 0) throw new AppError("conflict", "This category still has dishes (some may be hidden). Move them to another category, or hide the category instead.", { reason: "has_dishes" });
+  await db.delete(s.menuCategories).where(and(eq(s.menuCategories.tenantId, staff.tenantId), eq(s.menuCategories.id, categoryId)));
+  await db.insert(s.auditLog).values({ tenantId: staff.tenantId, outletId: staff.outletId, actorUserId: staff.userId, actorLabel: `staff:${staff.name}`, action: "menu.category_deleted", entity: "menu_category", entityId: categoryId, before: { nameEn: cat.nameEn }, createdAt: new Date() });
+  await menuChanged(staff, "category", categoryId, "deleted");
+}
+
+export async function archiveCategory(staff: StaffSession, categoryId: string, restore = false, withDishes = false) { guard(staff); const [active] = await db.select({ n: sql<number>`count(*)` }).from(s.menuItems).where(and(eq(s.menuItems.tenantId, staff.tenantId), eq(s.menuItems.categoryId, categoryId), eq(s.menuItems.isActive, true))); if (!restore && Number(active?.n ?? 0) > 0 && !withDishes) throw new AppError("conflict", `This category has ${active.n} dish(es) on the menu. Hide them too, or move them first.`, { reason: "has_dishes", count: Number(active.n) }); if (!restore && withDishes && Number(active?.n ?? 0) > 0) { await db.update(s.menuItems).set({ isActive: false }).where(and(eq(s.menuItems.tenantId, staff.tenantId), eq(s.menuItems.categoryId, categoryId), eq(s.menuItems.isActive, true))); await menuChanged(staff, "category", categoryId, "dishes_hidden"); } await db.update(s.menuCategories).set({ isActive: restore }).where(and(eq(s.menuCategories.tenantId, staff.tenantId), eq(s.menuCategories.id, categoryId))); await db.insert(s.auditLog).values({ tenantId: staff.tenantId, outletId: staff.outletId, actorUserId: staff.userId, actorLabel: `staff:${staff.name}`, action: restore ? "menu.category_updated" : "menu.category_archived", entity: "menu_category", entityId: categoryId, after: { isActive: restore }, createdAt: new Date() }); }
 
 /** Brand prices for this outlet's brand only; results are whole rupees, rounded half up */
 export async function bulkPrice(staff: StaffSession, itemIds: string[], mode: "percent" | "fixed", amount: number) {

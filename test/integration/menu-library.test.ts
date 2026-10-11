@@ -6,6 +6,7 @@ import { searchLibraryItems } from "@/domain/menu-library";
 import { AppError } from "@/server/errors";
 import { resolveStaff, signInStaff, type StaffSession } from "@/server/staff/auth";
 import { addLibraryDishes, browseLibrary, ensureLibraryCategory, libraryCategoryDetail, searchLibrary } from "@/server/staff/menu-library";
+import { archiveCategory, deleteCategory, saveMenuCategory } from "@/server/staff/menu-manager";
 import { resetTestDb } from "./setup-db";
 
 // Menu library in the console: picked dishes land in their own category with the owner's prices.
@@ -63,5 +64,21 @@ describe("menu library", () => {
     expect((managerTry as AppError).code).toBe("forbidden");
     const noPrice = await addLibraryDishes(owner, [{ id: id("garlic bread"), pricePaise: 0 }]).then(() => null, (e: unknown) => e);
     expect((noPrice as AppError).details?.reason).toBe("price");
+  });
+
+  it("hides a category with its dishes, and deletes only an empty one", async () => {
+    const pizzaId = await ensureLibraryCategory(owner, "pizza");
+    const blocked = await archiveCategory(owner, pizzaId).then(() => null, (e: unknown) => e);
+    expect((blocked as AppError).details?.reason).toBe("has_dishes");
+    await archiveCategory(owner, pizzaId, false, true);
+    const pizzas = await env.db.select().from(s.menuItems).where(and(eq(s.menuItems.tenantId, owner.tenantId), eq(s.menuItems.categoryId, pizzaId)));
+    expect(pizzas.length).toBeGreaterThan(0);
+    expect(pizzas.every((p) => !p.isActive)).toBe(true);
+    // Hidden dishes still belong to it, so it cannot be deleted
+    expect(((await deleteCategory(owner, pizzaId).then(() => null, (e: unknown) => e)) as AppError).details?.reason).toBe("has_dishes");
+
+    const emptyId = (await saveMenuCategory(owner, { nameEn: "Empty Test Category" }))!;
+    await deleteCategory(owner, emptyId);
+    expect(await env.db.select().from(s.menuCategories).where(eq(s.menuCategories.id, emptyId))).toEqual([]);
   });
 });
