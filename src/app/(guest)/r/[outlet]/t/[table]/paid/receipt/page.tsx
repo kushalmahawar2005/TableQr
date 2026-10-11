@@ -7,7 +7,8 @@ import { DEVICE_COOKIE } from "@/lib/guest-device";
 import { LANG_COOKIE, parseLang } from "@/lib/i18n";
 import { AppError } from "@/server/errors";
 import { getReceipt } from "@/server/guest/after-visit";
-import { PrintButton } from "./print-button";
+import { billMessage } from "@/domain/bill-message";
+import { PrintButton, ShareButton } from "./print-button";
 
 export const metadata: Metadata = { title: "Receipt", robots: { index: false, follow: false } };
 
@@ -125,7 +126,25 @@ export default async function ReceiptPage(props: { params: Promise<{ outlet: str
           </>
         )}
       </article>
-      <div className="mt-4">
+      <div className="mt-4 space-y-2.5">
+        {snap && (
+          <ShareButton
+            label={lang === "hi" ? "WhatsApp पर भेजें" : "Share on WhatsApp"}
+            text={billMessage({
+              outlet: r.outlet.name,
+              table: r.table.code,
+              kind: "receipt",
+              number: inv?.number,
+              lines: snap.lines.map((l) => ({ name: l.nameEn, qty: l.qty, amountPaise: l.amountPaise })),
+              subtotalPaise: snap.subtotalPaise,
+              discountPaise: snap.discountPaise,
+              serviceChargePaise: snap.serviceChargePaise,
+              taxPaise: Object.values(snap.taxBreakup ?? {}).reduce((n, v) => n + v, 0),
+              roundOffPaise: snap.roundOffPaise,
+              totalPaise: snap.totalPaise,
+            })}
+          />
+        )}
         <PrintButton label={w.print} />
       </div>
     </main>

@@ -13,6 +13,7 @@ import { signOutAction } from "@/app/(console)/console/login/actions";
 import { AddItemsDialog } from "./add-items-dialog";
 import { billHtml, printHtml } from "./bill-print";
 import { RefundPanel } from "./refund-panel";
+import { billMessage, whatsappLink, whatsappNumber } from "@/domain/bill-message";
 
 type Card = { sessionId: string; tableCode: string; status: string; totalPaise: number; paidPaise: number; balancePaise: number; partySize: number; requestedAt: number | null; pendingOnline: boolean; payAtCounter?: boolean };
 type Sheet = { kind: "pay" } | { kind: "reopen" } | { kind: "void"; lineId: string } | null;
@@ -207,6 +208,24 @@ export function BillingScreen({ initial, realtimeUrl, embedded = false }: { init
                     <div className="flex flex-wrap gap-2">
                       {!isPaidBill && detail.status === "open" && <button type="button" className={quiet} disabled={offline} onClick={() => setAdding(true)}><PackagePlus className="size-4" aria-hidden="true" />{L("Add items", "आइटम जोड़ें")}</button>}
                       <button type="button" className={quiet} onClick={() => print(isPaidBill ? "receipt" : "bill")}><Printer className="size-4" aria-hidden="true" />{isPaidBill ? L("Print receipt", "रसीद प्रिंट") : L("Print bill", "बिल प्रिंट")}</button>
+                      <WhatsAppBill
+                        key={detail.sessionId}
+                        hi={hi}
+                        onSend={(phone) => void actions.rememberCustomerAction({ sessionId: detail.sessionId, phone, name: detail.people.find((p) => p.name && !/^guest\b/i.test(p.name))?.name ?? null })}
+                        text={billMessage({
+                          outlet: queue.identity.outlet,
+                          table: detail.tableCode,
+                          kind: isPaidBill ? "receipt" : "bill",
+                          lines: live.map((l) => ({ name: l.name, qty: l.qty, amountPaise: l.qty * l.unitPricePaise })),
+                          subtotalPaise: detail.bill?.subtotalPaise ?? live.reduce((n, l) => n + l.qty * l.unitPricePaise, 0),
+                          discountPaise: detail.bill?.discountPaise ?? 0,
+                          serviceChargePaise: detail.bill?.serviceChargePaise ?? 0,
+                          taxPaise: detail.bill?.taxPaise ?? 0,
+                          roundOffPaise: detail.bill?.roundOffPaise ?? 0,
+                          totalPaise: detail.bill?.totalPaise ?? 0,
+                          paidPaise: paidSoFar,
+                        })}
+                      />
                       {!isPaidBill && <button type="button" className={brand} disabled={!canPay} onClick={() => { setMethod("cash"); setSheet({ kind: "pay" }); }}><Banknote className="size-4" aria-hidden="true" />{L("Take payment", "भुगतान लें")}</button>}
                     </div>
                   </div>
@@ -420,5 +439,30 @@ function DiscountBox({ hi, current, disabled, onApply, onClear }: {
         <button type="submit" className={brand} disabled={!valid || disabled}>{L("Apply discount", "छूट लगाएँ")}</button>
       </div>
     </form>
+  );
+}
+
+/** Send this bill to the guest's WhatsApp: type their number, WhatsApp opens with the bill filled in */
+function WhatsAppBill({ hi, text, onSend }: { hi: boolean; text: string; onSend?: (phone: string) => void }) {
+  const L = (en: string, hin: string) => (hi ? hin : en);
+  const [open, setOpen] = useState(false);
+  const [phone, setPhone] = useState("");
+  const ok = !!whatsappNumber(phone);
+  if (!open) return <button type="button" className={quiet} onClick={() => setOpen(true)}>{L("WhatsApp bill", "WhatsApp पर बिल")}</button>;
+  return (
+    <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+      <input autoFocus aria-label={L("Guest's WhatsApp number", "ग्राहक का WhatsApp नंबर")} inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="98765 43210" className="h-11 w-40 rounded-input border border-line bg-surface px-3 text-body outline-none focus:border-ink" />
+      <a
+        href={ok ? whatsappLink(text, phone) : undefined}
+        target="_blank"
+        rel="noreferrer noopener"
+        aria-disabled={!ok}
+        onClick={() => { if (!ok) return; onSend?.(phone); setOpen(false); }}
+        className={cn("inline-flex h-11 items-center gap-2 rounded-input px-4 text-sm font-semibold text-white", ok ? "bg-[#1f8f4e]" : "pointer-events-none bg-[#1f8f4e]/40")}
+      >
+        {L("Send", "भेजें")}
+      </a>
+      <button type="button" className="h-11 px-2 text-sm font-semibold text-muted" onClick={() => setOpen(false)}>{L("Cancel", "रद्द")}</button>
+    </div>
   );
 }

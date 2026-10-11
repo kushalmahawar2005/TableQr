@@ -13,6 +13,7 @@ export const consoleSections = [
   { slug: "menu", label: "Menu", hi: "मेन्यू" },
   { slug: "pricing", label: "Pricing", hi: "प्राइसिंग" },
   { slug: "reports", label: "Reports", hi: "रिपोर्ट" },
+  { slug: "customers", label: "Customers", hi: "ग्राहक" },
   { slug: "team", label: "Team", hi: "टीम" },
   { slug: "settings", label: "Settings", hi: "सेटिंग्स" },
 ] as const;

@@ -35,6 +35,7 @@ const ICONS: Record<string, IconSvgElement> = {
   menu: MenuRestaurantIcon,
   pricing: Tag01Icon,
   reports: ChartHistogramIcon,
+  customers: UserGroupIcon,
   team: UserMultipleIcon,
   settings: Settings01Icon,
 };
