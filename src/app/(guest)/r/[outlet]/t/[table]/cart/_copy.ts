@@ -34,6 +34,8 @@ const en = {
 
   nameLabel: "First name",
   nameHelp: "Shown on your kitchen ticket",
+  orderNoteLabel: "Note for the whole order (optional)",
+  orderNotePlaceholder: "E.g. less spicy, serve together",
   nameError: "Use letters, spaces, hyphens or apostrophes.",
 
   place: (table: string) => `Place order for Table ${table}`,
@@ -102,6 +104,8 @@ const hi: G5Copy = {
 
   nameLabel: "पहला नाम",
   nameHelp: "आपकी किचन पर्ची पर दिखेगा",
+  orderNoteLabel: "पूरे ऑर्डर के लिए नोट (ज़रूरी नहीं)",
+  orderNotePlaceholder: "जैसे कम तीखा, सब साथ में लाएँ",
   nameError: "सिर्फ़ अक्षर, स्पेस, हाइफ़न (-) या अपॉस्ट्रॉफ़ी (') लिखें।",
 
   place: (table) => `टेबल ${table} के लिए ऑर्डर करें`,

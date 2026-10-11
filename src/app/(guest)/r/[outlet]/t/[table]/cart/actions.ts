@@ -86,12 +86,12 @@ function cleanQuote(raw: unknown): Record<string, number> {
 export async function placeOrderAction(
   outletCode: string,
   shortCode: string,
-  input: { requestId: string; name?: string; quote: Record<string, number> },
+  input: { requestId: string; name?: string; note?: string; quote: Record<string, number> },
 ): Promise<PlaceResult> {
   try {
     const ctx = await context(outletCode, shortCode);
     // Always compared: a missing or empty quote means nothing was reviewed, so prices must be confirmed
-    const res = await placeOrder(ctx, { requestId: String(input.requestId).slice(0, 64), name: input.name ? String(input.name) : undefined, quote: cleanQuote(input.quote) });
+    const res = await placeOrder(ctx, { requestId: String(input.requestId).slice(0, 64), name: input.name ? String(input.name) : undefined, note: input.note ? String(input.note) : undefined, quote: cleanQuote(input.quote) });
     return { ok: true, roundNo: res.roundNo };
   } catch (err) {
     if (err instanceof AppError) {

@@ -71,6 +71,8 @@ export function CartScreen({
   const [tab, setTab] = useState<"mine" | "table">(preview?.tab ?? "mine");
   const [name, setName] = useState(preview?.name ?? "");
   const [nameTouched, setNameTouched] = useState(!!preview?.name);
+  // One note for the kitchen on this whole round, printed on its ticket
+  const [orderNote, setOrderNote] = useState("");
   const [placing, setPlacing] = useState(!!preview?.placing);
   const [notice, setNotice] = useState<"failed" | "cap" | "items" | "prices" | null>(preview?.notice ?? null);
   const [toast, setToast] = useState<{ text: string; snapshot?: RemovedLine | null; lineId?: string } | null>(() => {
@@ -165,7 +167,7 @@ export function CartScreen({
     const id = requestId();
     let res: Awaited<ReturnType<typeof placeOrderAction>>;
     try {
-      res = await placeOrderAction(data.outlet.code, shortCode, { requestId: id, name: session.needsName ? name : undefined, quote: data.quote });
+      res = await placeOrderAction(data.outlet.code, shortCode, { requestId: id, name: session.needsName ? name : undefined, note: orderNote.trim() || undefined, quote: data.quote });
     } catch {
       // The order may or may not have reached the kitchen; the same id makes a retry safe
       res = { ok: false, error: "failed" };
@@ -306,6 +308,19 @@ export function CartScreen({
                     <HugeiconsIcon icon={InformationCircleIcon} size={14} aria-hidden />
                     {c.taxNote}
                   </p>
+
+                  <div className="mt-5">
+                    <TextField
+                      id="g5-order-note"
+                      label={c.orderNoteLabel}
+                      placeholder={c.orderNotePlaceholder}
+                      value={orderNote}
+                      maxLength={140}
+                      enterKeyHint="done"
+                      disabled={locked}
+                      onChange={(e) => setOrderNote(e.target.value)}
+                    />
+                  </div>
 
                   {session.needsName && (
                     <div className="mt-5">

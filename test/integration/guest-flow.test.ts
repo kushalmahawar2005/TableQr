@@ -234,6 +234,9 @@ describe("cart and place order (G4, G5)", () => {
     const res = await placeOrder(aarav, { note: "Birthday table" });
     expect(res).toMatchObject({ roundNo: 1, subtotalPaise: 76000, itemCount: 2 });
     expect(res.stations.sort()).toEqual(["Main", "Tandoor"]);
+    // The whole-order note from the cart reaches the order, where the kitchen display reads it
+    const [order] = await env.db.select({ note: s.orders.note }).from(s.orders).where(eq(s.orders.id, res.orderId));
+    expect(order.note).toBe("Birthday table");
 
     const lines = await env.db.select().from(s.orderLines).where(eq(s.orderLines.orderId, res.orderId));
     const bc = lines.find((l) => l.nameEn === "Butter Chicken")!;
