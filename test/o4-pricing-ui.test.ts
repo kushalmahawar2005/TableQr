@@ -1,4 +1,4 @@
-import { createElement } from "react";
+import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { PricingScreen } from "@/app/(console)/console/(app)/pricing/_components/pricing-screen";
@@ -11,6 +11,11 @@ import { canPrice } from "@/lib/staff-permissions";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push() {}, replace() {}, refresh() {} }) }));
 vi.mock("@/app/(console)/console/(app)/pricing/actions", () => ({}));
+// The drawers are portals in the browser; render them inline so their content is in the HTML
+vi.mock("@/components/ui/sheet", () => {
+  const Pass = ({ children }: { children?: ReactNode }) => children;
+  return { Sheet: ({ open, children }: { open: boolean; children?: ReactNode }) => (open ? children : null), SheetContent: Pass, SheetHeader: Pass, SheetTitle: Pass, SheetDescription: Pass };
+});
 
 const render = (id: string) => {
   const c = pricingCases().find((x) => x.id === id)!;
@@ -61,29 +66,31 @@ describe("price rules", () => {
 describe("pricing screen", () => {
   it("shows brand, outlet and effective prices with the source", () => {
     const html = render("mixed");
-    for (const text of ["Pricing", "Manage outlet-specific menu prices.", "Brand prices are managed in Menu Manager.", "Outlet override", "Brand price", "Effective price", "₹420", "₹59.50", "Edit price", "Bulk adjust"]) expect(html).toContain(text);
+    for (const text of ["Pricing", "Set a different price for", "Other outlets are not affected.", "Changed here", "Menu ₹380 · +₹40", "₹420", "₹59.50", "Edit", "Select all 5"]) expect(html).toContain(text);
   });
 
   it("manager sees prices but no edit actions", () => {
     const html = render("manager");
-    expect(html).toContain("View only. Only an owner can change outlet prices.");
-    expect(html).not.toContain("Edit price");
-    expect(html).not.toContain("Bulk adjust");
+    expect(html).toContain("View only. Only the owner can change prices.");
+    expect(html).not.toMatch(/>Edit</);
+    expect(html).not.toContain("Select all");
   });
 
   it("edit drawer, validation error and bulk previews", () => {
-    expect(render("edit")).toContain("Reset to brand price");
+    expect(render("edit")).toContain("Back to ₹380");
+    expect(render("edit")).toContain("Save price");
     expect(render("invalid")).toContain("Enter a whole-rupee price");
     const up = render("bulk-increase");
     expect(up).toContain("₹330"); // 300 + 10%
     expect(up).toContain("₹264"); // 240 + 10%
     expect(render("bulk-decrease")).toContain("₹240"); // 260 - 20
-    expect(render("reset")).toContain("(brand)");
+    expect(render("reset")).toContain("Reset prices");
+    expect(render("reset")).toContain("Menu price");
   });
 
   it("empty states", () => {
-    expect(render("empty")).toContain("No menu items yet.");
-    expect(render("overrides-only-empty")).toContain("No outlet overrides.");
-    expect(render("no-results")).toContain("No items match these filters.");
+    expect(render("empty")).toContain("No dishes yet.");
+    expect(render("overrides-only-empty")).toContain("No price changes yet.");
+    expect(render("no-results")).toContain("No dishes match.");
   });
 });

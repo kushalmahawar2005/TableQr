@@ -26,7 +26,7 @@ describe("deltas and days", () => {
     expect(deltaLabel(deltaOf(92, 100))).toBe("−8%");
     expect(deltaLabel(deltaOf(100, 100))).toBe("No change");
     expect(deltaLabel(deltaOf(0, 0))).toBe("No change");
-    expect(deltaLabel(deltaOf(50, 0))).toBe("No prior-day baseline");
+    expect(deltaLabel(deltaOf(50, 0))).toBe("Nothing yesterday to compare");
   });
 
   it("days are outlet-local, contiguous and seven long", () => {
@@ -63,21 +63,22 @@ describe("navigation and landing", () => {
       expect(landingSection([role])).toBe(before([role]));
     }
     expect(landingSection(["host"])).toBe("floor");
-    expect(landingSection(["cashier"])).toBeNull(); // Orders is not built yet, so cashiers use /pos
-    expect(landingSection(["accountant"])).toBeNull();
+    expect(landingSection(["cashier"])).toBe("orders");
+    expect(landingSection(["accountant"])).toBe("billing");
     expect(landingSection(["kitchen"])).toBeNull();
+    // After sign-in they still go to their own app, not the console
+    expect(homeFor(["cashier"])).toBe("/pos");
+    expect(homeFor(["accountant"])).toBe("/pos");
+    expect(homeFor(["kitchen"])).toBe("/kds");
     expect(staffRoles.filter((r) => canSee([r], "dashboard"))).toEqual(["owner", "manager"]);
   });
 });
 
-describe("sections without a screen", () => {
-  it("are hidden from the sidebar and their routes 404 until they are built", () => {
-    for (const slug of ["waitlist", "orders", "billing", "reports", "settings"]) {
-      expect(isLiveSection(slug)).toBe(false);
-      expect(visibleSections.some((s) => s.slug === slug)).toBe(false);
-    }
-    expect(visibleSections.map((s) => s.slug)).toEqual(["dashboard", "floor", "reservations", "menu", "pricing"]);
-    expect(consoleSections.length).toBe(10); // still reserved with their role rules
+describe("console sections", () => {
+  it("every section has its own screen and shows in the sidebar; unknown slugs are not sections", () => {
+    expect(visibleSections.map((s) => s.slug)).toEqual(consoleSections.map((s) => s.slug));
+    for (const s of consoleSections) expect(isLiveSection(s.slug)).toBe(true);
+    expect(isLiveSection("nope")).toBe(false);
   });
 });
 
@@ -162,13 +163,13 @@ describe("polling controller", () => {
 describe("screen", () => {
   it("shows the eight KPIs, deltas, trend, operations, attention and top items", () => {
     const html = render("busy");
-    for (const label of ["Today&#x27;s Revenue", "Orders Today", "Covers Served", "Average Bill", "Open Tables", "Upcoming Reservations", "Current Waitlist", "Outstanding Amount"]) expect(html).toContain(label);
+    for (const label of ["Today&#x27;s Sales", "Orders Today", "Guests Served", "Average Bill", "Tables in Use", "Bookings Coming Up", "Waiting List", "Unpaid Bills"]) expect(html).toContain(label);
     expect(html).toContain("₹84,625");
     expect(html).toContain("+12%");
     expect(html).toContain("No change");
-    expect(html).toContain("Net sales from paid bills");
-    expect(html).toContain("Last 7 Days Revenue");
-    expect(html).toContain("Top 5 Items Today");
+    expect(html).toContain("Money from paid bills");
+    expect(html).toContain("Sales, Last 7 Days");
+    expect(html).toContain("Top 5 Dishes Today");
     expect(html).toContain("T12");
     expect(html).toContain("No-show eligible");
     expect(html).toContain("pending refund");
@@ -177,10 +178,10 @@ describe("screen", () => {
 
   it("handles empty days, missing baselines and calm outlets", () => {
     const quiet = render("quiet");
-    expect(quiet).toContain("All clear");
+    expect(quiet).toContain("Nothing needs your attention");
     expect(quiet).toContain("No items sold yet today.");
     expect(quiet).toContain("No reservations due");
-    expect(render("no-baseline")).toContain("No prior-day baseline");
+    expect(render("no-baseline")).toContain("Nothing yesterday to compare");
     expect(alertsOf(caseOf("quiet").data)).toEqual([]);
     expect(alertsOf(caseOf("blocked").data).map((a) => a.key)).toEqual(["blocked"]);
   });
@@ -188,7 +189,7 @@ describe("screen", () => {
   it("links only to screens that exist and loads no chart library", () => {
     const html = render("busy");
     const hrefs = [...html.matchAll(/href="([^"]+)"/g)].map((m) => m[1]);
-    expect(new Set(hrefs)).toEqual(new Set(["/console/floor", "/console/reservations", "/console/menu"]));
+    expect(new Set(hrefs)).toEqual(new Set(["/console/floor", "/console/billing", "/console/orders", "/console/reservations", "/console/reports", "/console/waitlist", "/console/menu"]));
     expect(html).not.toMatch(/recharts|chart\.js|echarts|<canvas/i);
   });
 });

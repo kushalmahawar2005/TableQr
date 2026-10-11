@@ -6,7 +6,6 @@ import { brandStyle, deriveBrandTokens } from "@/domain/brand";
 import type { Lang } from "@/lib/i18n";
 import type { MenuScreenData } from "@/server/guest/menu-screen";
 import { LanguageToggle } from "../../_components/language-toggle";
-import { OutletLogo } from "../../_components/outlet-logo";
 import { g3Copy } from "../_copy";
 import { MenuClient, type MenuPreview } from "./menu-client";
 

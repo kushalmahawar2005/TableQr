@@ -41,11 +41,12 @@ describe("O3 menu manager import validation", () => {
 describe("O3 menu manager safety contracts", () => {
   it("exposes editable modifier, pairing, category, import, and price controls", async () => {
     const source = await import("node:fs/promises").then(fs => fs.readFile("src/app/(console)/console/(app)/menu/_components/menu-manager.tsx", "utf8"));
-    expect(source).toContain("Option English");
-    expect(source).toContain("Save group order");
-    expect(source).toContain("Clear time window / all day");
-    expect(source).toContain("Commit atomically");
-    expect(source).toContain("Bulk price · Owner only");
+    expect(source).toContain("Option ${i+1} name");
+    expect(source).toContain("actions.modifierOrderAction(");
+    expect(source).toContain("Save the new order");
+    expect(source).toContain('setForm({...form,availableFrom:"",availableTo:""})}>All day</button>');
+    expect(source).toContain("actions.importCommitAction(rows)");
+    expect(source).toContain('{canEditPrice&&<button className={act} onClick={()=>openPanel("bulk",null)}>Change prices</button>}');
   });
   it("keeps manager price changes forbidden server-side", async () => {
     const source = await import("node:fs/promises").then(fs => fs.readFile("src/server/staff/menu-manager.ts", "utf8"));
@@ -55,10 +56,11 @@ describe("O3 menu manager safety contracts", () => {
 });
 
 describe("phone and tablet width", () => {
-  it("the three-column grid lets its children shrink, so the 650px item table scrolls inside its own box", async () => {
+  it("dishes are a wrapping card grid, editors open in a full-width sheet, and the import table scrolls in its own box", async () => {
     const { readFileSync } = await import("node:fs");
     const src = readFileSync(new URL("../src/app/(console)/console/(app)/menu/_components/menu-manager.tsx", import.meta.url), "utf8");
-    expect(src).toContain("lg:grid-cols-[190px_minmax(0,1fr)_minmax(320px,430px)] [&>*]:min-w-0");
-    expect(src).toContain("overflow-x-auto");
+    expect(src).toContain('className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3"');
+    expect(src).toContain("<SheetContent");
+    expect(src).toContain('<div className="max-h-72 overflow-auto rounded-xl border border-line"><table');
   });
 });

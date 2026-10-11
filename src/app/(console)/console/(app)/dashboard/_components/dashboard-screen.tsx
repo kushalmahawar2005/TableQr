@@ -280,7 +280,7 @@ function Operations({ data }: { data: DashboardData }) {
         <div>
           <div className="flex items-center justify-between gap-2">
             <h3 className="text-caption font-semibold text-muted">Waitlist</h3>
-            <GoTo href="/console/floor">Floor</GoTo>
+            <GoTo href="/console/waitlist">Waitlist</GoTo>
           </div>
           <ul className="mt-1 grid grid-cols-1 gap-2 min-[480px]:grid-cols-2">
             <Count label="Waiting" value={data.operations.waitlist.waiting} tone="var(--state-held)" />

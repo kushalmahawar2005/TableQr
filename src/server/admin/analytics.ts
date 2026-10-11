@@ -52,6 +52,7 @@ export async function getAnalyticsData(range: AnalyticsRange): Promise<Analytics
     db.select({ total: countDistinct(s.diningTables.tenantId) }).from(s.diningTables),
     db.select({ total: countDistinct(s.menuItems.tenantId) }).from(s.menuItems),
     db.select({ total: countDistinct(s.orders.tenantId) }).from(s.orders),
+    // isolation-exempt: platform admin platform-wide count of restaurants with a paid bill
     db.select({ total: countDistinct(s.bills.tenantId) }).from(s.bills).where(eq(s.bills.status, "paid")),
   ]);
 

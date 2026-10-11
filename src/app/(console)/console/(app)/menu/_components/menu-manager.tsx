@@ -6,7 +6,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 type Data = Awaited<ReturnType<typeof import("@/server/staff/menu-manager").menuManagerData>>;
-const bb="min-h-11 rounded-xl border px-3 py-2 text-sm font-semibold"; const b=`${bb} border-line bg-surface`; const p=`${bb} border-brand bg-brand text-brand-on`; const f="min-h-11 w-full rounded-xl border border-line bg-surface px-3 py-2";
 export function MenuManager({initial,canEditPrice}:{initial:Data;canEditPrice:boolean}){
  const [data,setData]=useState(initial),[selected,setSelected]=useState<string|null>(null),[query,setQuery]=useState(""),[category,setCategory]=useState("all"),[panel,setPanel]=useState<"item"|"modifiers"|"pairings"|"sizes"|"import"|"bulk"|"categories">("item"),[message,setMessage]=useState(""),[open,setOpen]=useState(false);
  const item=data.items.find(x=>x.id===selected)||null; const refresh=async()=>{const r=await actions.dataAction();if(r.ok)setData(r.data)};

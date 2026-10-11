@@ -38,6 +38,7 @@ export async function getPaymentsData(): Promise<PaymentsData> {
     db.select({
       paise: sql<number>`coalesce(sum(case when ${s.refunds.status} = 'success' and ${s.refunds.createdAt} >= ${start} then ${s.refunds.amountPaise} else 0 end), 0)`.mapWith(Number),
       pending: sql<number>`coalesce(sum(case when ${s.refunds.status} = 'pending' then 1 else 0 end), 0)`.mapWith(Number),
+    // isolation-exempt: platform admin platform-wide refund totals
     }).from(s.refunds),
   ]);
 

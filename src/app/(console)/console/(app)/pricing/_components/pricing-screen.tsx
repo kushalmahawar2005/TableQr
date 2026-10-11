@@ -36,7 +36,7 @@ type BulkPlan = { kind: BulkKind; value: string };
 /** What a bulk change would do to each row; null when the value is not usable */
 function planBulk(rows: PricingRow[], plan: BulkPlan) {
   if (plan.kind === "reset") {
-    return rows.map((r) => ({ row: r, label: "Brand price", nextOutlet: null as number | null, nextPrice: r.brandPricePaise }));
+    return rows.map((r) => ({ row: r, label: "Menu price", nextOutlet: null as number | null, nextPrice: r.brandPricePaise }));
   }
   const percent = plan.kind.endsWith("percent");
   const sign = plan.kind.startsWith("increase") ? 1 : -1;
