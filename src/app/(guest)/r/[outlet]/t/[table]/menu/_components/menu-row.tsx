@@ -96,29 +96,24 @@ export const MenuRow = memo(function MenuRow({
 
   return (
     // Sold out stays readable: name in ink, price and description muted, photo faded
-    // Words on the left, photo with its action below on the right, so it fits beside the section rail
     <li className="mb-3 flex gap-3 rounded-2xl border border-line/80 bg-surface p-3 shadow-[0_1px_3px_rgb(0_0_0/0.05)]">
       {/* Tapping the dish opens its sheet once the item sheet (G4) exists; until then it is plain text */}
       {state.canOpenSheet ? (
         <button
           type="button"
           onClick={() => onOpen(item.id)}
-          className="min-w-0 flex-1 text-left focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand"
+          className="flex min-w-0 flex-1 gap-3 text-left focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand"
         >
-          {words}
+          {thumb}
+          <span className="min-w-0 flex-1">{words}</span>
         </button>
       ) : (
-        <div className="min-w-0 flex-1">{words}</div>
+        <div className="flex min-w-0 flex-1 gap-3">
+          {thumb}
+          <div className="min-w-0 flex-1">{words}</div>
+        </div>
       )}
-      <div className="flex shrink-0 flex-col items-center gap-2">
-        {state.canOpenSheet ? (
-          // The words button above is the one screen readers and keyboards use
-          <button type="button" tabIndex={-1} aria-hidden onClick={() => onOpen(item.id)}>
-            {thumb}
-          </button>
-        ) : (
-          thumb
-        )}
+      <div className="flex shrink-0 flex-col items-end justify-end">
         <RowAction item={item} name={name} state={state} c={c} onQty={onQty} onOpen={onOpen} />
       </div>
     </li>

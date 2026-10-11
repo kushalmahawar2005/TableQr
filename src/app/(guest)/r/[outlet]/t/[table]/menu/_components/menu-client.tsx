@@ -297,14 +297,12 @@ export function MenuClient({
       ) : sections.length === 0 ? (
         <Empty title={c.filteredEmpty.title} body={c.filteredEmpty.body} action={c.clearFilters} onAction={() => setFilters(NO_FILTERS)} />
       ) : (
-        <div className="mt-3 -ml-4 flex gap-3 min-[360px]:-ml-5">
-          <CategoryBar
-            categories={sections.map((s) => ({ id: s.id, label: s.label, photo: s.items.find((i) => i.imageUrl)?.imageUrl ?? null }))}
-            label={c.categoriesLabel}
-          />
-          <div className="min-w-0 flex-1 pb-4">
+        <>
+          <div className="mt-3">
+            <CategoryBar categories={sections.map((s) => ({ id: s.id, label: s.label }))} label={c.categoriesLabel} />
+          </div>
           {sections.map((s) => (
-            <section key={s.id} id={`cat-${s.id}`} aria-labelledby={`h-${s.id}`} className="scroll-mt-2 pt-3">
+            <section key={s.id} id={`cat-${s.id}`} aria-labelledby={`h-${s.id}`} className="scroll-mt-14 pt-5">
               <div className="flex items-baseline justify-between gap-3">
                 <h2 id={`h-${s.id}`} className="font-display text-title font-bold text-ink">
                   {s.label}
@@ -312,7 +310,7 @@ export function MenuClient({
                 <span className="shrink-0 rounded-full border border-line/80 bg-surface px-2.5 py-0.5 text-caption text-muted">{c.itemCount(s.items.length)}</span>
               </div>
               {s.id === "popular" ? (
-                <ul className="-mr-4 mt-3 flex gap-3 overflow-x-auto pr-4 pb-2 [scrollbar-width:none] min-[360px]:-mr-5 min-[360px]:pr-5">
+                <ul className="-mx-4 mt-3 flex gap-3 overflow-x-auto px-4 pb-2 [scrollbar-width:none] min-[360px]:-mx-5 min-[360px]:px-5">
                   {s.items.map((item) => (
                     <PopularCard key={item.id} item={item} state={rowState(item)} lang={lang} c={c} onQty={setQty} onOpen={openItem} />
                   ))}
@@ -326,8 +324,7 @@ export function MenuClient({
               )}
             </section>
           ))}
-          </div>
-        </div>
+        </>
       )}
 
       {toast && (
