@@ -277,6 +277,16 @@ export function BillScreen({
       const res = await serviceRequestAction(data.outlet.code, shortCode, "request_bill", `bill-${session.key}`.slice(0, 64));
       return res.ok ? { ok: true as const } : { ok: false as const, error: (res.error === "gone" ? "gone" : res.error === "host_only" ? "host_only" : "failed") as BillError };
     });
+  // One step for a guest in a hurry: get the bill and go straight to choosing how to pay
+  const billAndPay = async () => {
+    let asked = false;
+    await act("request", async () => {
+      const res = await serviceRequestAction(data.outlet.code, shortCode, "request_bill", `bill-${session.key}`.slice(0, 64));
+      asked = res.ok;
+      return res.ok ? { ok: true as const } : { ok: false as const, error: (res.error === "gone" ? "gone" : res.error === "host_only" ? "host_only" : "failed") as BillError };
+    });
+    if (asked) setSheet("method");
+  };
 
 
   const total = bill.totals.totalPaise;
@@ -354,6 +364,9 @@ export function BillScreen({
                   <button type="button" onClick={() => setSheet("request")} disabled={!online || !!busy || data.people.length === 0} className={`${primary} mt-4 w-full`}>
                     <HugeiconsIcon icon={Invoice01Icon} size={18} aria-hidden />
                     {c.requestBill}
+                  </button>
+                  <button type="button" onClick={() => void billAndPay()} disabled={!online || !!busy || data.people.length === 0} className="mt-2.5 min-h-12 w-full rounded-cta border border-line bg-surface px-4 text-button font-semibold text-ink focus-visible:outline-2 focus-visible:outline-brand disabled:opacity-50">
+                    {c.billAndPay}
                   </button>
                   <p className="mt-2 text-center text-caption text-muted">{c.requestBillHelp}</p>
                 </>
