@@ -244,6 +244,11 @@ export function WaiterScreen({
           <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${offline ? "bg-[var(--state-seated-soft)] text-[var(--state-seated-text)]" : "bg-[var(--state-available-soft)] text-[var(--state-available-text)]"}`}>
             <span className={`size-1.5 rounded-full ${offline ? "bg-[var(--state-seated)]" : "animate-pulse bg-[var(--state-available)]"}`} aria-hidden="true" />{offline ? L("Offline", "ऑफ़लाइन") : L("Live", "लाइव")}
           </span>
+          {/* Bell: requests and ready food waiting for this waiter; tap opens Tasks */}
+          <button type="button" aria-label={L(`${taskCount} tasks waiting`, `${taskCount} काम बाकी`)} className={`relative grid size-10 shrink-0 place-items-center rounded-lg border bg-surface ${pending.length ? "animate-pulse border-danger text-danger" : "border-line"}`} onClick={() => setTab("tasks")}>
+            {alerts ? <BellRing className="size-5" aria-hidden="true" /> : <BellOff className="size-5" aria-hidden="true" />}
+            {taskCount > 0 && <span className="absolute -right-1.5 -top-1.5 grid min-w-5 place-items-center rounded-full bg-danger px-1 text-[11px] font-bold leading-5 text-white tabular">{taskCount > 99 ? "99+" : taskCount}</span>}
+          </button>
           <button className="min-h-10 shrink-0 rounded-lg border border-line bg-surface px-3 text-sm font-semibold" onClick={() => setLanguage(hi ? "en" : "hi")}>{hi ? "EN" : "हिंदी"}</button>
         </header>
 
