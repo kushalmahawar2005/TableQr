@@ -9,7 +9,7 @@ import { hashAdminPassword, verifyAdminPassword } from "./password";
 // _PASSWORD) is written to the database at every server start, so changing it there and
 // restarting is enough: no SSH and no script. The password is only re-hashed when it changed.
 
-export async function ensurePlatformAdmin(env = process.env): Promise<"none" | "ok" | "updated" | "created" | "short_password"> {
+export async function ensurePlatformAdmin(env: Record<string, string | undefined> = process.env): Promise<"none" | "ok" | "updated" | "created" | "short_password"> {
   const email = env.PLATFORM_ADMIN_EMAIL?.trim().toLowerCase();
   const password = env.PLATFORM_ADMIN_PASSWORD;
   const name = env.PLATFORM_ADMIN_NAME?.trim() || "Admin";
