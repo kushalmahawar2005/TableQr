@@ -9,6 +9,15 @@ export async function register() {
   } catch (err) {
     console.error("[schema] could not update the database at startup", err);
   }
+  // The admin sign-in from the hosting panel's environment
+  try {
+    const { ensurePlatformAdmin } = await import("@/server/admin/ensure-admin");
+    const res = await ensurePlatformAdmin();
+    if (res === "short_password") console.error("[admin] PLATFORM_ADMIN_PASSWORD must be at least 12 characters; the admin was not updated");
+    else if (res === "created" || res === "updated") console.log(`[admin] platform admin ${res} from the environment`);
+  } catch (err) {
+    console.error("[admin] could not set up the platform admin", err);
+  }
   // Photos still on this machine go to the photo bucket once one is set up (R2); in the background
   void (async () => {
     try {
