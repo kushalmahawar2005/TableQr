@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { canSee } from "@/lib/staff-permissions";
 import { getDashboard, getRevenueTrend } from "@/server/staff/dashboard";
+import { teamDuty } from "@/server/staff/duty";
 import { currentStaff } from "@/server/staff/request";
 import { DashboardScreen } from "./_components/dashboard-screen";
 
@@ -21,6 +22,8 @@ export default async function DashboardPage() {
     );
   }
   const now = new Date();
-  const [data, trend] = await Promise.all([getDashboard(staff, now), getRevenueTrend(staff, now)]);
-  return <DashboardScreen initial={data} initialTrend={trend} />;
+  const [data, trend, duty] = await Promise.all([getDashboard(staff, now), getRevenueTrend(staff, now), canSee(staff.roles, "team") ? teamDuty(staff, now) : null]);
+  // Who is on duty, set right here by the manager or owner
+  const canChange = staff.roles.some((r) => r === "owner" || r === "manager");
+  return <DashboardScreen initial={data} initialTrend={trend} duty={duty ? { rows: duty, canChange } : undefined} />;
 }

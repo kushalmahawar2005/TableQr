@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import type { DutyRow } from "@/server/staff/duty";
+import type { DutyRow, DutyStatus } from "@/server/staff/duty";
+import { setDutyAction } from "../actions";
 
-// Who is on the floor right now: shift status each person set in the staff app, and whether
-// their app is open ("online now"). Refreshes every minute.
+// Who is on the floor right now: each person's shift, set here by the manager or owner, and
+// whether their staff app is open ("online now"). Refreshes every minute.
 
 const LABEL = { on: "On duty", break: "On break", off: "Off duty" } as const;
 const TONE = {
@@ -23,9 +24,18 @@ function ago(ms: number) {
   return h < 24 ? `${h} h ago` : `${Math.floor(h / 24)} d ago`;
 }
 
-export function WhoIsWorking({ rows }: { rows: DutyRow[] }) {
+export function WhoIsWorking({ rows, canChange = false }: { rows: DutyRow[]; canChange?: boolean }) {
   const router = useRouter();
   const [now, setNow] = useState(() => Date.now());
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const change = (id: string, status: DutyStatus) =>
+    start(async () => {
+      setError(null);
+      const r = await setDutyAction(id, status);
+      if (!r.ok) setError(r.message);
+      router.refresh();
+    });
   useEffect(() => {
     const t = setInterval(() => { setNow(Date.now()); router.refresh(); }, 60_000);
     return () => clearInterval(t);
@@ -38,6 +48,8 @@ export function WhoIsWorking({ rows }: { rows: DutyRow[] }) {
         <h2 id="who-working" className="font-display text-section font-bold text-ink">Who&apos;s working now</h2>
         <p className="text-sm text-muted">{onDuty.length} on duty · {onDuty.filter((r) => r.online).length} with the app open</p>
       </div>
+      {canChange && <p className="mt-1 text-xs text-muted">Set who is on duty. Only staff on duty get the alerts for new requests.</p>}
+      {error && <p role="alert" className="mt-2 text-sm font-semibold text-danger">{error}</p>}
       <ul className="mt-3 grid gap-2 sm:grid-cols-2">
         {rows.map((r) => (
           <li key={r.id} className="flex items-center justify-between gap-3 rounded-xl border border-line px-3 py-2.5">
@@ -50,7 +62,17 @@ export function WhoIsWorking({ rows }: { rows: DutyRow[] }) {
                 {r.roles.map((x) => ROLE[x] ?? x).join(", ")} · {r.online ? "app open" : r.lastSeenAt ? `last seen ${ago(now - r.lastSeenAt)}` : "never opened the app"}
               </p>
             </div>
-            <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${TONE[r.status]}`} title={r.since ? `Since ${ago(now - r.since)}` : undefined}>{LABEL[r.status]}</span>
+            {canChange ? (
+              <div role="radiogroup" aria-label={`Shift for ${r.name}`} className="flex shrink-0 gap-1">
+                {(["on", "break", "off"] as const).map((v) => (
+                  <button key={v} type="button" role="radio" aria-checked={r.status === v} disabled={pending} onClick={() => r.status !== v && change(r.id, v)} className={`min-h-9 rounded-full px-2.5 text-xs font-semibold disabled:opacity-60 ${r.status === v ? TONE[v] : "text-muted hover:bg-ink/5 hover:text-ink"}`}>
+                    {v === "on" ? "On" : v === "break" ? "Break" : "Off"}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${TONE[r.status]}`} title={r.since ? `Since ${ago(now - r.since)}` : undefined}>{LABEL[r.status]}</span>
+            )}
           </li>
         ))}
       </ul>

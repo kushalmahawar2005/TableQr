@@ -1,4 +1,6 @@
 "use client";
+import type { DutyRow } from "@/server/staff/duty";
+import { WhoIsWorking } from "../../team/_components/who-is-working";
 
 import { ArrowRight01Icon, Calendar03Icon, ChartHistogramIcon, CheckmarkCircle02Icon, Clock01Icon, DashboardSquare01Icon, Invoice01Icon, LockIcon, MenuRestaurantIcon, MoneyReceive01Icon, Note01Icon, RefreshIcon, UserGroupIcon, Wallet01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
@@ -26,7 +28,7 @@ const dayLabel = (date: string, opts: Intl.DateTimeFormatOptions) => new Intl.Da
 
 export type DashboardPreview = { refreshing?: boolean; error?: string };
 
-export function DashboardScreen({ initial, initialTrend, preview }: { initial: DashboardData; initialTrend: RevenueTrend; preview?: DashboardPreview }) {
+export function DashboardScreen({ initial, initialTrend, preview, duty }: { initial: DashboardData; initialTrend: RevenueTrend; preview?: DashboardPreview; duty?: { rows: DutyRow[]; canChange: boolean } }) {
   const [data, setData] = useState(initial);
   const [trend, setTrend] = useState(initialTrend);
   const [busy, setBusy] = useState(false);
@@ -91,6 +93,8 @@ export function DashboardScreen({ initial, initialTrend, preview }: { initial: D
           {shownError}
         </p>
       )}
+
+      {duty && <WhoIsWorking rows={duty.rows} canChange={duty.canChange} />}
 
       <nav aria-label="Quick links" className="mt-5 flex gap-2 overflow-x-auto pb-1">
         {([["/console/floor", "Open floor", DashboardSquare01Icon], ["/console/billing", "Take payment", Invoice01Icon], ["/console/orders", "See orders", Note01Icon], ["/console/reservations", "Reservations", Calendar03Icon], ["/console/reports", "Reports", ChartHistogramIcon], ["/console/reports/day-close", "Day close", Invoice01Icon]] as const).map(([href, label, icon]) => (

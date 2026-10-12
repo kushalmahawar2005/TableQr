@@ -7,9 +7,9 @@ import { AppError } from "../errors";
 import { audit } from "./audit";
 import type { StaffSession } from "./auth";
 
-// Who is working right now. Staff set their own status in the staff app (on duty, on a break,
-// off duty); the app checks in while it is open, which gives "online now". Managers and owners
-// see the whole team at a glance. Only people on duty are rung for new tasks.
+// Who is working right now. The manager or owner sets each person's shift (on duty, on a break,
+// off duty) from the dashboard; staff only see theirs. The staff app checks in while it is open,
+// which gives "online now". Only people on duty are rung for new tasks.
 
 export type DutyStatus = "on" | "break" | "off";
 export const DUTY: DutyStatus[] = ["on", "break", "off"];
@@ -23,12 +23,15 @@ export async function myDuty(staff: Staff): Promise<{ status: DutyStatus; since:
   return { status: u?.status ?? "on", since: u?.since?.getTime() ?? null };
 }
 
-export async function setDuty(staff: Staff, status: DutyStatus, now = new Date()) {
+/** A manager or owner sets someone's shift */
+export async function setDuty(staff: Staff, userId: string, status: DutyStatus, now = new Date()) {
+  if (!staff.roles.some((r) => r === "owner" || r === "manager")) throw new AppError("forbidden", "Only a manager or owner can change shifts.");
   if (!DUTY.includes(status)) throw new AppError("invalid_state", "Choose on duty, break or off duty.");
-  const before = await myDuty(staff);
-  if (before.status === status) return before;
-  await db.update(s.users).set({ dutyStatus: status, dutyChangedAt: now, lastSeenAt: now }).where(and(eq(s.users.tenantId, staff.tenantId), eq(s.users.id, staff.userId)));
-  await audit(db, { ...staff, outletId: staff.outletId }, { action: "staff.duty", entity: "user", entityId: staff.userId, before: { status: before.status }, after: { status }, now });
+  const member = (await teamDuty(staff, now)).find((r) => r.id === String(userId));
+  if (!member) throw new AppError("not_found", "That person is not on this outlet's floor team.");
+  if (member.status === status) return { status, since: member.since };
+  await db.update(s.users).set({ dutyStatus: status, dutyChangedAt: now }).where(and(eq(s.users.tenantId, staff.tenantId), eq(s.users.id, member.id)));
+  await audit(db, staff, { action: "staff.duty", entity: "user", entityId: member.id, before: { status: member.status }, after: { status, name: member.name }, now });
   return { status, since: now.getTime() };
 }
 

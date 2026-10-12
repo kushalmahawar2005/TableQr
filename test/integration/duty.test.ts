@@ -6,8 +6,8 @@ import { resolveStaff, signInStaff, type StaffSession } from "@/server/staff/aut
 import { waiterBoard } from "@/server/staff/waiter-read";
 import { resetTestDb } from "./setup-db";
 
-// Waiters mark themselves on duty, on a break or off duty; the manager sees who is working and
-// whose app is open.
+// The manager sets each waiter on duty, on a break or off duty and sees whose app is open; the
+// waiter only sees their own status.
 
 let env: Awaited<ReturnType<typeof resetTestDb>>;
 let waiter: StaffSession;
@@ -34,15 +34,18 @@ describe("staff duty", () => {
     expect(me).toMatchObject({ status: "on", online: true });
   });
 
-  it("switches to break and off duty; the manager sees it, the waiter cannot see the team", async () => {
-    await setDuty(waiter, "break");
+  it("is set by the manager, never by the waiter themselves", async () => {
+    await setDuty(manager, waiter.userId, "break");
     expect((await teamDuty(manager)).find((r) => r.id === waiter.userId)?.status).toBe("break");
-    await setDuty(waiter, "off");
+    expect((await waiterBoard(waiter)).identity.duty).toBe("break");
+    await setDuty(manager, waiter.userId, "off");
     const rows = await teamDuty(manager);
     expect(rows.find((r) => r.id === waiter.userId)?.status).toBe("off");
     expect(rows[rows.length - 1].status).toBe("off");
+    await expect(setDuty(waiter, waiter.userId, "on")).rejects.toBeInstanceOf(AppError);
     await expect(teamDuty(waiter)).rejects.toBeInstanceOf(AppError);
-    await expect(setDuty(waiter, "nap" as never)).rejects.toBeInstanceOf(AppError);
+    await expect(setDuty(manager, waiter.userId, "nap" as never)).rejects.toBeInstanceOf(AppError);
+    await expect(setDuty(manager, "someone-else", "on")).rejects.toBeInstanceOf(AppError);
   });
 
   it("is no longer online when the app has not checked in for a while", async () => {

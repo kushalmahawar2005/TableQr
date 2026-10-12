@@ -50,8 +50,8 @@ export function WaiterScreen({
   const [destination, setDestination] = useState(""), [reason, setReason] = useState(""), [phone, setPhone] = useState(""), [pin, setPin] = useState("");
   const [method, setMethod] = useState<"cash" | "card">("cash"), [received, setReceived] = useState(""), [reference, setReference] = useState(""), [share, setShare] = useState("");
   const [search, setSearch] = useState(""), [dark, setDark] = useState(theme === "dark");
-  // Shift status: only a waiter on duty is rung for new tasks
-  const [duty, setDuty] = useState<"on" | "break" | "off">(initial.identity.duty), dutyRef = useRef(initial.identity.duty);
+  // Shift status, set by the manager on the dashboard: only a waiter on duty is rung for new tasks
+  const dutyRef = useRef(initial.identity.duty);
   const [alerts, setAlerts] = useState(true), [awake, setAwake] = useState(false), [notifState, setNotifState] = useState<string>("default");
   const [acked, setAcked] = useState<Set<string>>(new Set());
   const alertsRef = useRef(true), pingRef = useRef<(text: string, quiet?: boolean) => void>(() => {}), audioRef = useRef<AudioContext | null>(null), seenReady = useRef(new Set(initial.ready.map((g) => g.id)));
@@ -170,6 +170,7 @@ export function WaiterScreen({
     ...board.requests.filter((r) => !acked.has(r.id) && now - r.createdAt < FRESH_MS).map((r) => ({ id: r.id, label: `${r.tableCode} · ${requestNames[r.kind]?.[hi ? 1 : 0] ?? r.kind}` })),
     ...board.ready.filter((g) => !acked.has(g.id) && now - g.readyAt < FRESH_MS).map((g) => ({ id: g.id, label: `${g.tableCode} · ${c.ready}` })),
   ];
+  const duty = board.identity.duty;
   const ringing = pending.length > 0 && alerts && duty === "on" && !preview;
   useEffect(() => {
     if (!ringing) return;
@@ -177,12 +178,7 @@ export function WaiterScreen({
     const t = setInterval(() => pingRef.current("", true), 2500);
     return () => clearInterval(t);
   }, [ringing]);
-  function changeDuty(next: "on" | "break" | "off") {
-    if (next === duty || preview) { if (preview) setDuty(next); return; }
-    const prev = duty;
-    setDuty(next); dutyRef.current = next;
-    void actions.dutyAction(next).then((r) => { if (!r.ok) { setDuty(prev); dutyRef.current = prev; setMessage(r.error); } });
-  }
+  useEffect(() => { dutyRef.current = board.identity.duty; }, [board.identity.duty]);
   function accept(ids: string[]) {
     setAcked((prev) => {
       const next = new Set([...prev, ...ids]);
@@ -484,12 +480,8 @@ export function WaiterScreen({
             </div>
             <div className={card}>
               <h3 className="font-display text-lg font-bold">{L("My shift", "मेरी शिफ़्ट")}</h3>
-              <p className="mt-1 text-sm text-muted">{L("Your manager sees this. New tasks ring only while you are on duty.", "यह आपके मैनेजर को दिखता है। नए काम की घंटी सिर्फ़ ड्यूटी पर रहते बजती है।")}</p>
-              <div role="radiogroup" aria-label={L("My shift", "मेरी शिफ़्ट")} className="mt-3 grid grid-cols-3 gap-2">
-                {([["on", L("On duty", "ड्यूटी पर")], ["break", L("Break", "ब्रेक")], ["off", L("Off duty", "ड्यूटी ख़त्म")]] as const).map(([v, label]) => (
-                  <button key={v} type="button" role="radio" aria-checked={duty === v} disabled={disabled} onClick={() => changeDuty(v)} className={`min-h-12 rounded-xl border px-2 text-sm font-semibold ${duty === v ? (v === "on" ? "border-[var(--state-available)] bg-[var(--state-available-soft)] text-[var(--state-available-text)]" : v === "break" ? "border-[var(--state-held)] bg-[var(--state-held-soft)] text-[var(--state-held-text)]" : "border-ink bg-ink/10") : "border-line bg-surface text-muted"}`}>{label}</button>
-                ))}
-              </div>
+              <p className="mt-1 text-sm text-muted">{L("Your manager sets this on the dashboard. New tasks ring only while you are on duty.", "इसे आपके मैनेजर डैशबोर्ड से बदलते हैं। नए काम की घंटी सिर्फ़ ड्यूटी पर रहते बजती है।")}</p>
+              <p className={`mt-3 inline-flex min-h-11 items-center rounded-xl px-4 text-base font-semibold ${duty === "on" ? "bg-[var(--state-available-soft)] text-[var(--state-available-text)]" : duty === "break" ? "bg-[var(--state-held-soft)] text-[var(--state-held-text)]" : "bg-ink/10 text-muted"}`}>{duty === "on" ? L("On duty", "ड्यूटी पर") : duty === "break" ? L("On break", "ब्रेक पर") : L("Off duty", "ड्यूटी ख़त्म")}</p>
             </div>
             <div className={card}>
               <p className="text-sm font-bold">{L("Alerts", "अलर्ट")}</p>
