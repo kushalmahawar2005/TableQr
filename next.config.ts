@@ -1,6 +1,9 @@
+import path from "node:path";
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // This folder is the project root, even though a stray lockfile sits in the home folder
+  turbopack: { root: path.resolve(import.meta.dirname) },
   // Menu photos come in through a Server Action, already shrunk in the browser to under ~1 MB;
   // as base64 that is about 1.3 MB, over the 1 MB default
   experimental: { serverActions: { bodySizeLimit: "3mb" } },
