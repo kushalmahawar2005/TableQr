@@ -9,7 +9,31 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { SuggestInput, type Suggestion } from "@/components/suggest-input";
+import { searchCities } from "@/domain/india-cities";
 import { createTenantAction, type TenantState } from "./actions";
+
+// City suggestions come from the built-in list; address suggestions from OpenStreetMap (Photon,
+// free, no key), kept inside India and leaning on the city typed above
+const suggestCity = (text: string): Suggestion[] => searchCities(text).map((c) => ({ value: c.name, label: c.name, hint: c.state }));
+type PhotonFeature = { properties: Record<string, string | undefined> };
+async function suggestAddress(text: string): Promise<Suggestion[]> {
+  const city = (document.getElementById("city") as HTMLInputElement | null)?.value.trim() ?? "";
+  const q = city && !text.toLowerCase().includes(city.toLowerCase()) ? `${text}, ${city}` : text;
+  const res = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=6&lang=en&bbox=68.1,6.5,97.4,35.7`);
+  if (!res.ok) return [];
+  const data = (await res.json()) as { features?: PhotonFeature[] };
+  const seen = new Set<string>();
+  return (data.features ?? []).flatMap(({ properties: p }) => {
+    if (p.countrycode && p.countrycode !== "IN") return [];
+    const street = [p.housenumber, p.street].filter(Boolean).join(" ");
+    const parts = [p.name, street, p.locality ?? p.district, p.city ?? p.county, p.state, p.postcode].filter((x, i, all): x is string => !!x && all.indexOf(x) === i);
+    const value = parts.join(", ");
+    if (!value || seen.has(value)) return [];
+    seen.add(value);
+    return [{ value, label: parts.slice(0, 2).join(", "), hint: parts.slice(2).join(", ") }];
+  });
+}
 
 type Field = { name: string; label: string; type?: string; required?: boolean; defaultValue?: string; hint?: string; full?: boolean };
 
@@ -145,7 +169,9 @@ export function CreateTenantDialog({ open, onOpenChange, plans }: { open: boolea
             : f.name === "ownerPin" ? <div className="flex gap-2">
               <Input id={f.name} name={f.name} value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))} required pattern="\d{4}" maxLength={4} inputMode="numeric" autoComplete="off" />
               <Button type="button" variant="outline" onClick={generatePin}><Dices />Generate</Button>
-            </div> : <Input id={f.name} name={f.name} type={f.type ?? "text"} required={f.required} defaultValue={f.defaultValue}
+            </div> : f.name === "city" ? <SuggestInput id="city" name="city" required placeholder="Start typing, e.g. Jai" suggest={suggestCity} />
+            : f.name === "address" ? <SuggestInput id="address" name="address" required minChars={4} placeholder="Shop, street or landmark" suggest={suggestAddress} />
+            : <Input id={f.name} name={f.name} type={f.type ?? "text"} required={f.required} defaultValue={f.defaultValue}
               min={f.name === "tableCount" ? 1 : undefined} max={f.name === "tableCount" ? 100 : undefined} />}
             {f.hint && <p className="text-xs text-muted-foreground">{f.hint}</p>}
           </div>)}</div>
