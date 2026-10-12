@@ -24,6 +24,7 @@ afterAll(async () => {
 describe("schema update at startup", () => {
   it("adds what is missing, fills the defaults, records the migrations, and does nothing the second time", async () => {
     await env.db.execute(sql`ALTER TABLE tenants DROP COLUMN kitchen_display, DROP COLUMN table_limit`);
+    await env.db.execute(sql`ALTER TABLE users DROP COLUMN duty_status, DROP COLUMN duty_changed_at, DROP COLUMN last_seen_at`);
     await env.db.execute(sql`UPDATE plans SET features = JSON_REMOVE(features, '$.kitchenDisplay')`);
     await env.db.execute(sql`DELETE FROM __drizzle_migrations WHERE created_at > 1791043208000`);
     expect(await columns()).toEqual([]);
@@ -36,12 +37,14 @@ describe("schema update at startup", () => {
     const limits = await rows<{ n: number; lim: number }>(sql`SELECT t.table_limit AS lim, (SELECT COUNT(*) FROM dining_tables d WHERE d.tenant_id = t.id AND d.is_active = 1) AS n FROM tenants t`);
     for (const l of limits) expect(Number(l.lim)).toBe(Math.max(1, Number(l.n)));
     const recorded = await rows<{ n: number }>(sql`SELECT COUNT(*) AS n FROM __drizzle_migrations WHERE created_at > 1791043208000`);
-    expect(Number(recorded[0].n)).toBe(3);
+    expect(Number(recorded[0].n)).toBe(4);
+    // Staff start on duty
+    expect((await rows<{ s: string }>(sql`SELECT DISTINCT duty_status AS s FROM users`)).map((r) => r.s)).toEqual(["on"]);
 
     // Second start: nothing changes, nothing is recorded twice
     await env.db.execute(sql`UPDATE tenants SET table_limit = 99`);
     await ensureSchema(appDb.$client);
-    expect(Number((await rows<{ n: number }>(sql`SELECT COUNT(*) AS n FROM __drizzle_migrations WHERE created_at > 1791043208000`))[0].n)).toBe(3);
+    expect(Number((await rows<{ n: number }>(sql`SELECT COUNT(*) AS n FROM __drizzle_migrations WHERE created_at > 1791043208000`))[0].n)).toBe(4);
     expect((await rows<{ lim: number }>(sql`SELECT DISTINCT table_limit AS lim FROM tenants`)).map((r) => Number(r.lim))).toEqual([99]);
   });
 });

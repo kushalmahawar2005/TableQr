@@ -134,6 +134,13 @@
       "when": 1791743842715,
       "tag": "0018_tenant_table_limit",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "5",
+      "when": 1791792326336,
+      "tag": "0019_staff_duty",
+      "breakpoints": true
     }
   ]
 }

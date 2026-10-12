@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import type { TeamMember } from "@/server/staff/team";
+import type { DutyRow } from "@/server/staff/duty";
+import { WhoIsWorking } from "./who-is-working";
 import { addMemberAction, changeRoleAction, resetPinAction, setActiveAction } from "../actions";
 
 const ALL_ROLES = [
@@ -29,7 +31,7 @@ function copy(text: string) {
   try { void navigator.clipboard.writeText(text); } catch { /* clipboard may be blocked; the details stay on screen */ }
 }
 
-export function TeamScreen({ initial, canEdit, outletCode, outletName, roles: allowed }: { initial: TeamMember[]; canEdit: boolean; outletCode: string; outletName: string; roles: readonly string[] }) {
+export function TeamScreen({ initial, canEdit, outletCode, outletName, roles: allowed, duty = [] }: { initial: TeamMember[]; canEdit: boolean; outletCode: string; outletName: string; duty?: DutyRow[]; roles: readonly string[] }) {
   const router = useRouter();
   // Only the roles this restaurant's plan allows (Kitchen comes with the kitchen screen)
   const ROLES = ALL_ROLES.filter((r) => allowed.includes(r.id));
@@ -88,6 +90,8 @@ export function TeamScreen({ initial, canEdit, outletCode, outletName, roles: al
       <div className="mt-4 grid grid-cols-3 gap-2 sm:max-w-xl sm:gap-3">
         {[["People", initial.length], ["Active", active], ["Switched off", initial.length - active]].map(([k, v]) => <div key={k as string} className="rounded-2xl border border-line bg-surface p-3"><p className="font-display text-title font-bold tabular-nums">{v}</p><p className="text-caption text-muted">{k}</p></div>)}
       </div>
+
+      <WhoIsWorking rows={duty} />
 
       <section className="mt-4 rounded-2xl border border-line bg-surface p-4">
         <p className="text-sm font-semibold">How your team signs in</p>

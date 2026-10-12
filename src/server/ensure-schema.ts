@@ -3,7 +3,7 @@ import type { Pool, RowDataPacket } from "mysql2/promise";
 
 // Brings the live database up to what this release needs, once, when the server starts.
 // Hostinger builds and starts the app straight from Git and never runs `db:migrate`, so these
-// steps mirror drizzle/0016-0018. Every step checks first, so running it again (another server
+// steps mirror drizzle/0016-0019. Every step checks first, so running it again (another server
 // instance, a restart) changes nothing. Works on MySQL and MariaDB.
 
 type Step = { tag: string; when: number; hash: string; apply: (db: Pool) => Promise<void> };
@@ -58,6 +58,16 @@ const STEPS: Step[] = [
           "UPDATE `tenants` t SET `table_limit` = GREATEST(1, (SELECT COUNT(*) FROM `dining_tables` d WHERE d.`tenant_id` = t.`id` AND d.`is_active` = 1)) WHERE t.`table_limit` IS NULL",
         );
       }
+    },
+  },
+  {
+    tag: "0019_staff_duty",
+    when: 1791792326336,
+    hash: "2043d8dcd219d46bd9ef99c13d35356ad67d38869b395cf2b9e87591ba8d8add",
+    apply: async (db) => {
+      await addColumn(db, "users", "duty_status", "enum('on','break','off') DEFAULT 'on' NOT NULL");
+      await addColumn(db, "users", "duty_changed_at", "datetime(3)");
+      await addColumn(db, "users", "last_seen_at", "datetime(3)");
     },
   },
 ];

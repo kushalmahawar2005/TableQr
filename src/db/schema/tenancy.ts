@@ -138,6 +138,11 @@ export const users = mysqlTable(
     name: varchar("name", { length: 80 }).notNull(),
     pinHash: varchar("pin_hash", { length: 255 }),
     isActive: boolean("is_active").notNull().default(true),
+    /** Shift status the person sets in the staff app: on duty, on a break, or off duty */
+    dutyStatus: mysqlEnum("duty_status", ["on", "break", "off"]).notNull().default("on"),
+    dutyChangedAt: at("duty_changed_at"),
+    /** Last time the staff app checked in, for "online now" */
+    lastSeenAt: at("last_seen_at"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
