@@ -4,6 +4,8 @@ import { db } from "@/db";
 import * as s from "@/db/schema";
 import { canSee } from "@/lib/staff-permissions";
 import { AppError } from "../errors";
+import { publish } from "../realtime/publish";
+import { topics } from "../realtime/token";
 import { audit } from "./audit";
 import type { StaffSession } from "./auth";
 
@@ -32,6 +34,8 @@ export async function setDuty(staff: Staff, userId: string, status: DutyStatus, 
   if (member.status === status) return { status, since: member.since };
   await db.update(s.users).set({ dutyStatus: status, dutyChangedAt: now }).where(and(eq(s.users.tenantId, staff.tenantId), eq(s.users.id, member.id)));
   await audit(db, staff, { action: "staff.duty", entity: "user", entityId: member.id, before: { status: member.status }, after: { status, name: member.name }, now });
+  // Staff apps and other dashboards pick the change up straight away
+  await publish({ tenantId: staff.tenantId, outletId: staff.outletId }, [{ topic: topics.tasks, type: "staff.duty", data: { userId: member.id, status } }]);
   return { status, since: now.getTime() };
 }
 

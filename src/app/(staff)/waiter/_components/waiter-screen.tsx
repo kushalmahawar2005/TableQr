@@ -147,7 +147,7 @@ export function WaiterScreen({
         clearTimeout(debounce); debounce = setTimeout(() => void refresh(), 350);
       },
     });
-    const tick = setInterval(() => setNow(Date.now()), 1000), poll = setInterval(() => void refresh(), 30000);
+    const tick = setInterval(() => setNow(Date.now()), 1000), poll = setInterval(() => void refresh(), 15000);
     const online = () => void refresh(), off = () => setOffline(true);
     window.addEventListener("online", online); window.addEventListener("offline", off);
     if (!navigator.onLine) queueMicrotask(off);

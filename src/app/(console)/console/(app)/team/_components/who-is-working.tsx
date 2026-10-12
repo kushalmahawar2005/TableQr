@@ -6,7 +6,7 @@ import type { DutyRow, DutyStatus } from "@/server/staff/duty";
 import { setDutyAction } from "../actions";
 
 // Who is on the floor right now: each person's shift, set here by the manager or owner, and
-// whether their staff app is open ("online now"). Refreshes every minute.
+// whether their staff app is open ("online now"). Refreshes every 15 seconds.
 
 const LABEL = { on: "On duty", break: "On break", off: "Off duty" } as const;
 const TONE = {
@@ -27,17 +27,26 @@ function ago(ms: number) {
 export function WhoIsWorking({ rows, canChange = false }: { rows: DutyRow[]; canChange?: boolean }) {
   const router = useRouter();
   const [now, setNow] = useState(() => Date.now());
-  const [pending, start] = useTransition();
+  const [, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const change = (id: string, status: DutyStatus) =>
+  // A tap shows at once and holds for a few seconds while the page catches up; a failed save
+  // drops it so the real status shows again
+  const [picked, setPicked] = useState<Record<string, { status: DutyStatus; at: number }>>({});
+  const change = (id: string, status: DutyStatus) => {
+    setPicked((p) => ({ ...p, [id]: { status, at: Date.now() } }));
     start(async () => {
       setError(null);
       const r = await setDutyAction(id, status);
-      if (!r.ok) setError(r.message);
+      if (!r.ok) {
+        setError(r.message);
+        setPicked((p) => { const next = { ...p }; delete next[id]; return next; });
+      }
       router.refresh();
     });
+  };
+  rows = rows.map((r) => (picked[r.id] && now - picked[r.id].at < 20_000 ? { ...r, status: picked[r.id].status } : r));
   useEffect(() => {
-    const t = setInterval(() => { setNow(Date.now()); router.refresh(); }, 60_000);
+    const t = setInterval(() => { setNow(Date.now()); router.refresh(); }, 15_000);
     return () => clearInterval(t);
   }, [router]);
   const onDuty = rows.filter((r) => r.status === "on");
@@ -65,7 +74,7 @@ export function WhoIsWorking({ rows, canChange = false }: { rows: DutyRow[]; can
             {canChange ? (
               <div role="radiogroup" aria-label={`Shift for ${r.name}`} className="flex shrink-0 gap-1">
                 {(["on", "break", "off"] as const).map((v) => (
-                  <button key={v} type="button" role="radio" aria-checked={r.status === v} disabled={pending} onClick={() => r.status !== v && change(r.id, v)} className={`min-h-9 rounded-full px-2.5 text-xs font-semibold disabled:opacity-60 ${r.status === v ? TONE[v] : "text-muted hover:bg-ink/5 hover:text-ink"}`}>
+                  <button key={v} type="button" role="radio" aria-checked={r.status === v} onClick={() => r.status !== v && change(r.id, v)} className={`min-h-9 rounded-full px-2.5 text-xs font-semibold disabled:opacity-60 ${r.status === v ? TONE[v] : "text-muted hover:bg-ink/5 hover:text-ink"}`}>
                     {v === "on" ? "On" : v === "break" ? "Break" : "Off"}
                   </button>
                 ))}
