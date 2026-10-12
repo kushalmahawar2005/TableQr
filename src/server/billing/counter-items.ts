@@ -1,0 +1,61 @@
+import "server-only";
+import { and, eq, inArray } from "drizzle-orm";
+import { db } from "@/db";
+import * as s from "@/db/schema";
+import { LOCK_THEN_READ } from "../db-types";
+import { AppError } from "../errors";
+import { syncOrderStatus, syncTickets } from "../kitchen/order-state";
+import { publish } from "../realtime/publish";
+import { topics } from "../realtime/token";
+import { audit } from "../staff/audit";
+import type { StaffSession } from "../staff/auth";
+import { posRoles } from "../staff/pos-read";
+import type { StaffDraftLine } from "../guest/order";
+import { staffPlaceOrder, waiterRequestBill } from "../staff/waiter-mutations";
+import { requireStaffRole } from "../staff/waiter";
+import { reopenBill } from "./payments";
+
+// Items added at the counter while the guest is paying: a chocolate, a bottle of water, mouth
+// freshener. The bill opens, takes the items and is asked for again in one step; the items are
+// handed over at the counter, so they are marked served and never wait on a kitchen screen.
+// Once anyone has paid part of the bill, add them as a takeaway instead.
+
+export async function addItemsAtBilling(staff: StaffSession, input: { sessionId: string; tableId: string; participantId: string; clientRequestId: string; lines: StaffDraftLine[] }, now = new Date()) {
+  await requireStaffRole(staff, [...posRoles, "waiter"]);
+  const [session] = await db
+    .select({ status: s.tableSessions.status })
+    .from(s.tableSessions)
+    .where(and(eq(s.tableSessions.tenantId, staff.tenantId), eq(s.tableSessions.outletId, staff.outletId), eq(s.tableSessions.id, String(input.sessionId))));
+  if (!session) throw new AppError("not_found", "That table is not open here.");
+  if (session.status === "closed") throw new AppError("invalid_state", "This bill is closed. Add the items as a new takeaway.", { reason: "closed" });
+  if (session.status === "open") return { ...(await staffPlaceOrder(staff, input, now)), atCounter: false };
+
+  // The bill was asked for: only while nothing is paid yet
+  const paid = await db
+    .select({ id: s.payments.id })
+    .from(s.payments)
+    .innerJoin(s.bills, and(eq(s.bills.tenantId, s.payments.tenantId), eq(s.bills.id, s.payments.billId)))
+    .where(and(eq(s.payments.tenantId, staff.tenantId), eq(s.bills.sessionId, String(input.sessionId)), inArray(s.payments.status, ["success", "pending", "initiated"])))
+    .limit(1);
+  if (paid.length) throw new AppError("invalid_state", "Part of this bill is already paid. Add these items as a new takeaway.", { reason: "part_paid" });
+
+  await reopenBill({ kind: "staff", ctx: staff, sessionId: String(input.sessionId) }, now);
+  let placed;
+  try {
+    placed = await staffPlaceOrder(staff, input, now);
+  } finally {
+    // Whatever happened, the bill goes back to "asked for" so the counter can take the money
+    await waiterRequestBill(staff, String(input.sessionId), now);
+  }
+  await db.transaction(async (tx) => {
+    await tx
+      .update(s.orderLines)
+      .set({ status: "served", servedAt: now })
+      .where(and(eq(s.orderLines.tenantId, staff.tenantId), eq(s.orderLines.orderId, placed.orderId), inArray(s.orderLines.status, ["placed", "accepted", "preparing", "ready"])));
+    await syncTickets(tx, staff.tenantId, placed.orderId, now);
+    await syncOrderStatus(tx, staff.tenantId, placed.orderId, now);
+    await audit(tx, staff, { action: "billing.counter_items", entity: "order", entityId: placed.orderId, after: { sessionId: input.sessionId, lines: input.lines.length }, now });
+  }, LOCK_THEN_READ);
+  await publish(staff, [{ topic: topics.kitchen, type: "ticket.updated", data: { orderId: placed.orderId } }]);
+  return { ...placed, atCounter: true };
+}

@@ -7,6 +7,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { priceLine } from "@/domain/pricing";
 import * as waiter from "@/app/(staff)/waiter/actions";
+import * as pos from "@/server/staff/pos-actions";
 import type { PosBillDetail } from "@/server/staff/pos-read";
 import type { WaiterMenu } from "@/server/staff/waiter-read";
 
@@ -67,7 +68,8 @@ export function AddItemsDialog({ detail, open, hi, onClose, onPlaced }: { detail
         if (!d.ok) return setError(d.error);
         participantId = d.data.id;
       }
-      const r = await waiter.orderAction({ sessionId: detail.sessionId, tableId: detail.tableId, participantId, clientRequestId: crypto.randomUUID(), lines: cart.map((l) => ({ itemId: l.item.id, qty: l.qty, modifierIds: l.mods, note: l.parcel ? "PARCEL" : undefined })) });
+      // Billing adds through its own action, which also handles a bill that was already asked for
+      const r = await pos.addItemsAction({ sessionId: detail.sessionId, tableId: detail.tableId, participantId, clientRequestId: crypto.randomUUID(), lines: cart.map((l) => ({ itemId: l.item.id, qty: l.qty, modifierIds: l.mods, note: l.parcel ? "PARCEL" : undefined })) });
       if (!r.ok) return setError(r.error);
       reset();
       await onPlaced();
@@ -81,7 +83,7 @@ export function AddItemsDialog({ detail, open, hi, onClose, onPlaced }: { detail
       <DialogContent className="no-scrollbar max-h-[92dvh] gap-3 overflow-y-auto p-5 sm:max-w-xl">
         <DialogHeader>
           <DialogTitle className="font-display text-title font-bold">{L("Add items", "आइटम जोड़ें")} · {detail.takeaway ? L("Takeaway", "पार्सल") : L("Table", "टेबल")} {detail.tableCode}</DialogTitle>
-          <DialogDescription>{L("These go to the kitchen and are added to the bill. Mark an item as parcel to have it packed.", "ये किचन को जाएँगे और बिल में जुड़ेंगे। पैक कराने के लिए पार्सल चुनें।")}</DialogDescription>
+          <DialogDescription>{detail.status === "bill_requested" ? L("Handed over at the counter (a chocolate, water, mouth freshener): added to the bill, not sent to the kitchen.", "काउंटर पर दिए जाने वाले आइटम (चॉकलेट, पानी, सौंफ): बिल में जुड़ेंगे, किचन को नहीं जाएँगे।") : L("These go to the kitchen and are added to the bill. Mark an item as parcel to have it packed.", "ये किचन को जाएँगे और बिल में जुड़ेंगे। पैक कराने के लिए पार्सल चुनें।")}</DialogDescription>
         </DialogHeader>
 
         <div>

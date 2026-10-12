@@ -216,7 +216,7 @@ export function BillingScreen({ initial, realtimeUrl, embedded = false, openSess
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      {!isPaidBill && detail.status === "open" && <button type="button" className={quiet} disabled={offline} onClick={() => setAdding(true)}><PackagePlus className="size-4" aria-hidden="true" />{L("Add items", "आइटम जोड़ें")}</button>}
+                      {!isPaidBill && (detail.status === "open" || (detail.status === "bill_requested" && paidSoFar === 0 && !pendingOnline)) && <button type="button" className={quiet} disabled={offline} onClick={() => setAdding(true)}><PackagePlus className="size-4" aria-hidden="true" />{L("Add items", "आइटम जोड़ें")}</button>}
                       <button type="button" className={quiet} onClick={() => print(isPaidBill ? "receipt" : "bill")}><Printer className="size-4" aria-hidden="true" />{isPaidBill ? L("Print receipt", "रसीद प्रिंट") : L("Print bill", "बिल प्रिंट")}</button>
                       <WhatsAppBill
                         key={detail.sessionId}
