@@ -37,6 +37,8 @@ import {
   type FloorResult,
 } from "../actions";
 import { s1Copy, type S1Copy } from "../_copy";
+import * as pos from "@/server/staff/pos-actions";
+import { billHtml, printHtml } from "@/app/pos/_components/bill-print";
 import { combinableFree } from "./floor-logic";
 import { FloorMap } from "./floor-map";
 import { useFloorSync } from "./use-floor-sync";
@@ -152,6 +154,14 @@ export function FloorScreen({ data: initial, lang, realtimeUrl, preview }: { dat
     else if (a === "ready") void run(() => readyAction(id), selected.state === "paid" ? c.toast.closed(code) : c.toast.ready(code));
     else if (a === "close") setSheet({ kind: "close", tableId: id });
     else if (a === "pay" && selected.visit) router.push(`/console/billing?session=${encodeURIComponent(selected.visit.sessionId)}`);
+    else if (a === "print" && selected.visit) {
+      // The table's bill as it stands, on the receipt printer (same slip as Billing prints)
+      const sessionId = selected.visit.sessionId;
+      void pos.detailAction(sessionId).then((r) => {
+        if (r.ok) printHtml(billHtml(r.data, data.outlet.name, r.data.bill?.status === "paid" ? "receipt" : "bill"));
+        else setNotice({ text: r.error, error: true });
+      });
+    }
     else if (a === "clear") void run(() => clearEmptyAction(id), c.toast.cleared(code));
     else if (a === "unblock") void run(() => unblockAction(id), c.toast.unblocked(code));
   }
