@@ -7,6 +7,7 @@ import { clearBillDiscount, setBillDiscount } from "../billing/discounts";
 import { rememberCustomer } from "./customers";
 import { sendBillOnWhatsApp } from "../billing/send-bill";
 import { cancelTakeaway, startTakeaway } from "../floor/takeaway";
+import { recheckOnlinePayment, releaseStuckPayment } from "../billing/stuck-payment";
 import { processRefund, reconcileRefund, requestRefund, type RefundInput } from "../billing/refunds";
 import { changeWaiterLine, managerApproval, waiterRequestBill, type Approval } from "./waiter-mutations";
 import { staffRealtimeToken, topics } from "../realtime/token";
@@ -45,6 +46,8 @@ export async function requestBillAction(sessionId: string) {
 export async function discountAction(input: { sessionId: string; kind: "percent" | "flat"; value: number; reason: string }) { return run((s) => setBillDiscount(s, input)); }
 export async function clearDiscountAction(sessionId: string) { return run((s) => clearBillDiscount(s, sessionId)); }
 /** Save the number a bill was sent to on WhatsApp in the customer list */
+export async function recheckPaymentAction(sessionId: string) { return run((s) => recheckOnlinePayment(s, sessionId)); }
+export async function releasePaymentAction(sessionId: string) { return run((s) => releaseStuckPayment(s, sessionId)); }
 export async function startTakeawayAction(name?: string | null) { return run((s) => startTakeaway(s, { name })); }
 export async function cancelTakeawayAction(sessionId: string) { return run((s) => cancelTakeaway(s, sessionId)); }
 export async function sendBillAction(input: { sessionId: string; phone: string }) { return run((s) => sendBillOnWhatsApp(s, input)); }

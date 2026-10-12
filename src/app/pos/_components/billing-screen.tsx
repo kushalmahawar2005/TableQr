@@ -260,7 +260,15 @@ export function BillingScreen({ initial, realtimeUrl, embedded = false, openSess
                       <button type="button" className={quiet} disabled={offline} onClick={() => setClosing(true)}><Check className="size-4" aria-hidden="true" />{L("Guests are done · Get the bill", "खाना हो गया · बिल लें")}</button>
                     </div>
                   )}
-                  {pendingOnline && <p className="mt-3 rounded-input bg-[var(--state-cleaning-soft)] px-3 py-2 text-body text-[var(--state-cleaning-text)]">{L("An online payment is being checked. Wait a moment before taking cash.", "ऑनलाइन भुगतान जाँच में है। नकद लेने से पहले थोड़ा रुकें।")}</p>}
+                  {pendingOnline && (
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-input bg-[var(--state-cleaning-soft)] px-3 py-2.5 text-body text-[var(--state-cleaning-text)]">
+                      <p className="min-w-0 flex-1">{L("An online payment is being checked. Wait a moment before taking cash. If it stays stuck, check the guest's UPI app: no money gone means it can be released.", "ऑनलाइन भुगतान जाँच में है। नकद लेने से पहले थोड़ा रुकें। अटका रहे तो ग्राहक का UPI ऐप देखें: पैसा नहीं कटा तो इसे हटा सकते हैं।")}</p>
+                      <div className="flex flex-wrap gap-2">
+                        <button type="button" className={quiet} disabled={busy || offline} onClick={() => void run(() => actions.recheckPaymentAction(detail.sessionId), async (v) => { setMessage({ tone: "ok", text: v === "success" ? L("The payment went through.", "भुगतान हो गया।") : v === "failed" || v === "cancelled" ? L("That payment did not go through. Take the payment again.", "वह भुगतान नहीं हुआ। फिर से भुगतान लें।") : L("No answer from the payment company yet.", "पेमेंट कंपनी से अभी जवाब नहीं आया।") }); })}>{L("Check again", "फिर जाँचें")}</button>
+                        {!detail.needsApproval && <button type="button" className={quiet} disabled={busy || offline} onClick={() => void run(() => actions.releasePaymentAction(detail.sessionId), async (r) => { setMessage({ tone: "ok", text: r.view === "success" ? L("The payment went through after all.", "भुगतान असल में हो गया था।") : L("Released. You can take the payment at the counter now.", "हटा दिया। अब काउंटर पर भुगतान ले सकते हैं।") }); })}>{L("Not paid, release", "नहीं हुआ, हटाएँ")}</button>}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
