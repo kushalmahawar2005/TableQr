@@ -43,4 +43,10 @@ describe("menu photo upload", () => {
     await removeLocalMenuImage(res.url);
     stored = null;
   }, 30_000);
+
+  it("refuses a tiny thumbnail that would look blurry", async () => {
+    process.env.MENU_STORAGE_DRIVER = "local";
+    const bytes = await sharp({ create: { width: 92, height: 92, channels: 3, background: "#c9482b" } }).jpeg().toBuffer();
+    await expect(storeMenuImage({ tenantId: "t-test", brandId: "b-test", filename: "tiny.jpg", contentType: "image/jpeg", bytes })).rejects.toThrow(/too small \(92×92 px\)/);
+  });
 });

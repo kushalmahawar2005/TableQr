@@ -20,6 +20,8 @@ const smallKeyOf = (key: string) => key.replace(/\.webp$/, "-sm.webp");
 const FULL = { sizes: [1400, 1200, 1000, 800], maxBytes: 100 * 1024 };
 const SMALL = { sizes: [480, 400], maxBytes: 30 * 1024 };
 const QUALITIES = [80, 72, 64, 56];
+/** Shortest side a menu photo needs to look sharp on a phone */
+const MIN_SIDE = 300;
 
 /** The largest, sharpest WebP within the byte budget: lower quality first, then fewer pixels */
 async function fitWebp(bytes: Buffer, target: { sizes: number[]; maxBytes: number }) {
@@ -59,6 +61,12 @@ const put = (b: Bucket, key: string, body: Buffer) => b.client.send(new PutObjec
 export async function storeMenuImage(input: MenuImageUpload) {
   if (!/^image\/(jpeg|png|webp|avif)$/.test(input.contentType)) throw new AppError("invalid_state", "Upload a JPG, PNG, WebP, or AVIF image.");
   if (input.bytes.byteLength > 5 * 1024 * 1024) throw new AppError("invalid_state", "Images must be 5 MB or smaller.");
+  // A thumbnail blown up on the dish sheet looks blurry: ask for a real photo instead
+  const meta = await sharp(input.bytes).metadata().catch(() => null);
+  if (!meta?.width || !meta.height) throw new AppError("invalid_state", "This file is not a photo we can read. Use a JPG, PNG or WebP.");
+  if (Math.min(meta.width, meta.height) < MIN_SIDE) {
+    throw new AppError("invalid_state", `This photo is too small (${meta.width}×${meta.height} px) and would look blurry. Use one at least ${MIN_SIDE} px wide. From Google, open the photo full size first, then save it.`, { reason: "too_small" });
+  }
   const key = `menus/${input.tenantId}/${input.brandId}/${randomUUID()}.webp`;
   const webp = await fitWebp(input.bytes, FULL);
   const small = await fitWebp(input.bytes, SMALL);
