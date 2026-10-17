@@ -10,4 +10,8 @@ UPDATE `plans` SET `features` = JSON_SET(`features`, '$.fullReports', IF(`code` 
 INSERT INTO `plans` (`code`, `name`, `monthly_price_paise`, `features`, `is_public`, `sort_order`, `created_at`, `updated_at`) SELECT 'custom', 'Custom', NULL, '{"maxTables":5,"maxStaff":2,"poweredBy":true,"waiterApp":false,"discounts":false,"whatsappBills":false,"groupSplit":false,"reservations":false,"kitchenDisplay":false,"pricingRules":false,"fullReports":false,"multiOutlet":false}', 1, 99, CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3) FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM `plans` WHERE `code` = 'custom');--> statement-breakpoint
 -- New plan names, only where the admin has not renamed them already
 UPDATE `plans` SET `name` = 'Lite' WHERE `code` = 'starter' AND `name` = 'Starter';--> statement-breakpoint
-UPDATE `plans` SET `name` = 'Plus' WHERE `code` = 'growth' AND `name` = 'Growth';
+UPDATE `plans` SET `name` = 'Plus' WHERE `code` = 'growth' AND `name` = 'Growth';--> statement-breakpoint
+-- New table and staff limits, only where the admin has not changed the old ones
+UPDATE `plans` SET `features` = JSON_SET(`features`, '$.maxTables', 6, '$.maxStaff', 3) WHERE `code` = 'starter' AND JSON_EXTRACT(`features`, '$.maxTables') = 15 AND JSON_EXTRACT(`features`, '$.maxStaff') = 3;--> statement-breakpoint
+UPDATE `plans` SET `features` = JSON_SET(`features`, '$.maxTables', 12, '$.maxStaff', 6) WHERE `code` = 'growth' AND JSON_EXTRACT(`features`, '$.maxTables') = 40 AND JSON_EXTRACT(`features`, '$.maxStaff') = 10;--> statement-breakpoint
+UPDATE `plans` SET `features` = JSON_SET(`features`, '$.maxTables', 20, '$.maxStaff', 20) WHERE `code` = 'pro' AND JSON_EXTRACT(`features`, '$.maxTables') = 80 AND JSON_EXTRACT(`features`, '$.maxStaff') = 25;

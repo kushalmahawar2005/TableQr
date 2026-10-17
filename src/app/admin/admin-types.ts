@@ -13,6 +13,10 @@ export type AdminTenant = {
   kitchenFromPlan: boolean;
   /** Tables the restaurant may have; null means no limit */
   tableLimit: number | null;
+  /** The admin's own table limit for this restaurant; null follows the plan */
+  tableLimitOverride: number | null;
+  /** Open asks from the restaurant to unlock a feature or change the plan */
+  requests: { id: string; feature: string | null; note: string | null; requestedBy: string; createdAt: string }[];
   /** What this restaurant gets right now: its plan or custom package, with the admin's choices */
   features: Features;
   /** Price agreed with this restaurant per outlet per month, on any plan; null uses the plan's price */

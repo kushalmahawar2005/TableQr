@@ -9,6 +9,7 @@ import { resolveStaff, signInStaff, type StaffSession } from "@/server/staff/aut
 import { getPricingData } from "@/server/staff/pricing";
 import { getReport } from "@/server/staff/reports-read";
 import { addMember, assignableRoles } from "@/server/staff/team";
+import { hasOpenRequest, requestPlanChange } from "@/server/staff/plan-request";
 import { resetTestDb } from "./setup-db";
 
 // What a plan or a custom package switches on is enforced on the server, not only hidden.
@@ -68,5 +69,18 @@ describe("plan features", () => {
       await setTenant({ planCode: "pro", customFeatures: null, customPricePaise: null });
     }
     expect((await tenantFeatures(env.demo.tenantId)).pricingRules).toBe(true);
+  });
+
+  it("owners and managers ask TableQR to unlock a feature; asking twice makes one request", async () => {
+    const first = await requestPlanChange(owner, { feature: "kitchenDisplay" });
+    const again = await requestPlanChange(owner, { feature: "kitchenDisplay" });
+    expect(again).toEqual({ id: first.id, already: true });
+    expect(await hasOpenRequest(env.demo.tenantId, "kitchenDisplay")).toBe(true);
+    await refused(requestPlanChange({ ...owner, roles: ["waiter"] }, { feature: "kitchenDisplay" }), "forbidden");
+    await refused(requestPlanChange(owner, { feature: "nonsense", note: "" }), "invalid_state");
+    const general = await requestPlanChange(owner, { note: "We opened a second branch" });
+    expect(general.already).toBe(false);
+    const rows = await env.db.select().from(s.planRequests).where(eq(s.planRequests.tenantId, env.demo.tenantId));
+    expect(rows.map((r) => r.feature ?? r.note).sort()).toEqual(["We opened a second branch", "kitchenDisplay"]);
   });
 });

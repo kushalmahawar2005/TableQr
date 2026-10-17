@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { AdminData, AdminTenant } from "./admin-types";
+import { FEATURE_LABELS } from "@/lib/plan-features";
 
 const DAY = 86_400_000;
 const PLAN_COLORS = ["#5b42f5", "#16c784", "#f59d18", "#ed5368", "#3d91ef", "#e875b1"];
@@ -22,12 +23,13 @@ const ago = (value: string, now: number) => {
   return days < 1 ? "today" : days === 1 ? "yesterday" : `${days} days ago`;
 };
 
-type AttentionKind = "trial" | "payment" | "suspended" | "inactive";
+type AttentionKind = "request" | "trial" | "payment" | "suspended" | "inactive";
 type Attention = { id: string; kind: AttentionKind; tenant: AdminTenant; label: string; detail: string; tone: "red" | "amber" | "zinc"; rank: number };
 
 function attentionItems(tenants: AdminTenant[], now: number): Attention[] {
   const items: Attention[] = [];
   for (const tenant of tenants) {
+    for (const r of tenant.requests) items.push({ id: r.id, kind: "request", tenant, label: "Asked for upgrade", detail: `${r.feature && r.feature in FEATURE_LABELS ? FEATURE_LABELS[r.feature as keyof typeof FEATURE_LABELS].label : "Plan change"} · ${ago(r.createdAt, now)}`, tone: "amber", rank: -1 });
     if (tenant.subscriptionStatus === "past_due") items.push({ id: `${tenant.id}-due`, kind: "payment", tenant, label: "Payment overdue", detail: tenant.renewalAt ? `Was due ${shortDate(tenant.renewalAt)}` : "Subscription is past due", tone: "red", rank: 0 });
     if (tenant.status === "suspended") items.push({ id: `${tenant.id}-sus`, kind: "suspended", tenant, label: "Suspended", detail: "Tenant cannot take orders", tone: "red", rank: 1 });
     if (tenant.status === "trial" && tenant.trialEndsAt) {
@@ -175,6 +177,7 @@ export function DashboardView({ data, name }: { data: AdminData; name: string })
             <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
               <TabsList variant="line" className="h-auto w-full flex-wrap justify-start">
                 <TabsTrigger value="all">All ({attention.length})</TabsTrigger>
+                <TabsTrigger value="request">Requests ({count("request")})</TabsTrigger>
                 <TabsTrigger value="trial">Trial ({count("trial")})</TabsTrigger>
                 <TabsTrigger value="payment">Payment ({count("payment")})</TabsTrigger>
                 <TabsTrigger value="suspended">Suspended ({count("suspended")})</TabsTrigger>

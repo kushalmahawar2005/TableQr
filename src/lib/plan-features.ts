@@ -72,9 +72,9 @@ const PRO = { ...PLUS, kitchenDisplay: true, pricingRules: true, fullReports: tr
  * admin's to change in Plans & Pricing; codes never change.
  */
 export const DEFAULT_PLANS: { code: string; name: string; monthlyPricePaise: number | null; sortOrder: number; features: Features }[] = [
-  { code: "starter", name: "Lite", monthlyPricePaise: 99900, sortOrder: 0, features: { ...NONE, maxTables: 15, maxStaff: 3, poweredBy: true } },
-  { code: "growth", name: "Plus", monthlyPricePaise: 249900, sortOrder: 1, features: { ...PLUS, maxTables: 40, maxStaff: 10, poweredBy: true } },
-  { code: "pro", name: "Pro", monthlyPricePaise: 499900, sortOrder: 2, features: { ...PRO, maxTables: 80, maxStaff: 25, poweredBy: false } },
+  { code: "starter", name: "Lite", monthlyPricePaise: 99900, sortOrder: 0, features: { ...NONE, maxTables: 6, maxStaff: 3, poweredBy: true } },
+  { code: "growth", name: "Plus", monthlyPricePaise: 249900, sortOrder: 1, features: { ...PLUS, maxTables: 12, maxStaff: 6, poweredBy: true } },
+  { code: "pro", name: "Pro", monthlyPricePaise: 499900, sortOrder: 2, features: { ...PRO, maxTables: 20, maxStaff: 20, poweredBy: false } },
   { code: "chain", name: "Chain", monthlyPricePaise: null, sortOrder: 3, features: { ...PRO, multiOutlet: true, maxTables: null, maxStaff: null, poweredBy: false } },
   { code: "custom", name: "Custom", monthlyPricePaise: null, sortOrder: 99, features: { ...NONE, maxTables: 5, maxStaff: 2, poweredBy: true } },
 ];

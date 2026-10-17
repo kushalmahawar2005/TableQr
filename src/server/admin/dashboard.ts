@@ -45,6 +45,12 @@ export async function getAdminData(): Promise<AdminData> {
     // isolation-exempt: authenticated platform admins inspect each tenant's latest subscription, including months paid in advance.
   }).from(s.subscriptions).as("ranked_subscriptions");
 
+  // isolation-exempt: authenticated platform admins see every restaurant's open plan requests
+  const requestRows = await db.select({ id: s.planRequests.id, tenantId: s.planRequests.tenantId, feature: s.planRequests.feature, note: s.planRequests.note, requestedBy: s.planRequests.requestedBy, createdAt: s.planRequests.createdAt })
+    .from(s.planRequests).where(eq(s.planRequests.status, "open")).orderBy(desc(s.planRequests.createdAt));
+  const requestsByTenant = new Map<string, { id: string; feature: string | null; note: string | null; requestedBy: string; createdAt: string }[]>();
+  for (const r of requestRows) requestsByTenant.set(r.tenantId, [...(requestsByTenant.get(r.tenantId) ?? []), { id: r.id, feature: r.feature, note: r.note, requestedBy: r.requestedBy, createdAt: r.createdAt.toISOString() }]);
+
   const [tenantRows, planRows, outletGroups, outletDays, [orderStats], orderDays, [revenueStats], subscriptionRows, recentOutlets, recentOrders, recentSubscriptions, tenantOrderRows, tenantBillRows, [tableStats]] = await Promise.all([
     db.select({
       id: s.tenants.id,
@@ -204,6 +210,8 @@ export async function getAdminData(): Promise<AdminData> {
         kitchenDisplay: features.kitchenDisplay,
         kitchenFromPlan: hasKitchenDisplay(plan?.features),
         tableLimit: features.maxTables,
+        tableLimitOverride: tenant.tableLimit,
+        requests: requestsByTenant.get(tenant.id) ?? [],
         createdAt: tenant.createdAt.toISOString(),
         trialEndsAt: tenant.trialEndsAt?.toISOString() ?? null,
         outletCount: outlets?.count ?? 0,

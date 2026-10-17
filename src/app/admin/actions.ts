@@ -104,7 +104,10 @@ export async function createTenantAction(_prev: TenantState, form: FormData): Pr
       const zoneId = uuidv7();
       const userId = uuidv7();
       const kitchenDisplay = kitchenChoice === null || kitchenChoice === hasKitchenDisplay(plan.features) ? null : kitchenChoice;
-      await tx.insert(s.tenants).values({ id: tenantId, name: tenantName, planCode, contactName, contactPhone, contactEmail: contactEmail || null, createdByAdminId: admin.id, kitchenDisplay, tableLimit: tableCount });
+      // The plan's table limit applies; only tables beyond it are stored as this restaurant's own limit
+      const planTables = readFeatures(plan.features).maxTables;
+      const tableLimit = planTables !== null && tableCount > planTables ? tableCount : null;
+      await tx.insert(s.tenants).values({ id: tenantId, name: tenantName, planCode, contactName, contactPhone, contactEmail: contactEmail || null, createdByAdminId: admin.id, kitchenDisplay, tableLimit });
       await tx.insert(s.brands).values({ id: brandId, tenantId, name: brandName });
       await tx.insert(s.outlets).values({ id: outletId, tenantId, brandId, code: outletCode, name: outletName, city, address });
       await tx.insert(s.users).values({ id: userId, tenantId, phone: ownerPhone, name: ownerName, pinHash: await hashPin(ownerPin) });
@@ -315,6 +318,21 @@ export async function setCustomPackageAction(tenantId: string, input: { features
   }
 }
 
+/** The admin has handled a restaurant's request (changed the plan, package or price, or said no) */
+export async function markPlanRequestDoneAction(requestId: string): Promise<TenantActionState> {
+  try {
+    const admin = await requireSuperAdmin();
+    const [request] = await db.select({ tenantId: s.planRequests.tenantId, feature: s.planRequests.feature, note: s.planRequests.note }).from(s.planRequests).where(eq(s.planRequests.id, requestId));
+    if (!request) return { error: "Request not found." };
+    await db.update(s.planRequests).set({ status: "done", doneAt: new Date() }).where(and(eq(s.planRequests.tenantId, request.tenantId), eq(s.planRequests.id, requestId)));
+    await logAdminAction(admin, request.tenantId, "admin.plan_request_done", { feature: request.feature, note: request.note }, { status: "done" });
+    revalidatePath("/admin");
+    return { error: null };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Request could not be updated." };
+  }
+}
+
 /** Charge this restaurant more or less than its plan's list price; null goes back to the plan's price */
 export async function setTenantPriceAction(tenantId: string, rupees: number | null): Promise<TenantActionState> {
   try {
@@ -333,11 +351,12 @@ export async function setTenantPriceAction(tenantId: string, rupees: number | nu
 }
 
 /** How many tables this restaurant may have on its floor (what it pays for) */
-export async function setTenantTableLimitAction(tenantId: string, limit: number): Promise<TenantActionState> {
+/** This restaurant's own table limit; null follows its plan */
+export async function setTenantTableLimitAction(tenantId: string, limit: number | null): Promise<TenantActionState> {
   try {
     const admin = await requireSuperAdmin();
-    const next = Math.floor(Number(limit));
-    if (!Number.isFinite(next) || next < 1 || next > 500) return { error: "Enter a table limit from 1 to 500." };
+    const next = limit === null ? null : Math.floor(Number(limit));
+    if (next !== null && (!Number.isFinite(next) || next < 1 || next > 500)) return { error: "Enter a table limit from 1 to 500, or leave it empty to follow the plan." };
     const [tenant] = await db.select({ tableLimit: s.tenants.tableLimit }).from(s.tenants).where(eq(s.tenants.id, tenantId));
     if (!tenant) return { error: "Tenant not found." };
     await db.update(s.tenants).set({ tableLimit: next }).where(eq(s.tenants.id, tenantId));

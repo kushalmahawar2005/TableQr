@@ -14,7 +14,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { addOutletAction, changeTenantPlanAction, setTenantPriceAction, extendTrialAction, getTenantDetailAction, resetOwnerPinAction, setCustomPackageAction, setTenantKitchenAction, setTenantStatusAction, setTenantTableLimitAction, updateTenantAction } from "./actions";
+import { addOutletAction, changeTenantPlanAction, markPlanRequestDoneAction, setTenantPriceAction, extendTrialAction, getTenantDetailAction, resetOwnerPinAction, setCustomPackageAction, setTenantKitchenAction, setTenantStatusAction, setTenantTableLimitAction, updateTenantAction } from "./actions";
 import { CreateTenantDialog } from "./create-tenant-dialog";
 import type { AdminData, AdminTenant, TenantDetail } from "./admin-types";
 import { FEATURE_KEYS, FEATURE_LABELS, type Features } from "@/lib/plan-features";
@@ -222,19 +222,28 @@ function TenantSheet({ tenant, plans, now, onClose }: { tenant: AdminTenant | nu
                 <p className="mt-2 text-xs text-muted-foreground">{tenant.status === "trial" ? "Trial ends" : "Next renewal"}: <span className="font-medium text-foreground">{date(tenant.status === "trial" ? tenant.trialEndsAt : tenant.renewalAt)}</span></p>
                 <Button variant="outline" size="sm" className="mt-3" onClick={() => setTab("manage")}>{tenant.planCode === "custom" ? "Edit custom package" : "Change plan"}</Button>
               </section>
+              {tenant.requests.length > 0 && <section className="rounded-xl border border-[#5b42f5]/40 bg-[#5b42f5]/[0.04] p-4 sm:col-span-2">
+                <h3 className="text-sm font-semibold">They asked for</h3>
+                <p className="mb-2 text-xs text-muted-foreground">Change the plan, custom package or price in Manage, then mark it done.</p>
+                <ul className="space-y-2">{tenant.requests.map((r) => <li key={r.id} className="flex items-start justify-between gap-3 text-sm">
+                  <div className="min-w-0"><p className="font-medium">{r.feature && r.feature in FEATURE_LABELS ? FEATURE_LABELS[r.feature as keyof typeof FEATURE_LABELS].label : "Plan change"}</p>
+                    <p className="text-xs text-muted-foreground">{r.note ? `“${r.note}” · ` : ""}{r.requestedBy} · {shortDay(r.createdAt)}</p></div>
+                  <div className="flex shrink-0 gap-2"><Button size="sm" variant="outline" onClick={() => setTab("manage")}>Manage</Button><Button size="sm" disabled={pending} onClick={() => run(() => markPlanRequestDoneAction(r.id), "Marked done.")}>Done</Button></div>
+                </li>)}</ul>
+              </section>}
               <section className="rounded-xl border bg-white p-4 sm:col-span-2"><h3 className="mb-2 text-sm font-semibold">What they get</h3><FeatureList features={tenant.features} /></section>
               {tenant.planCode !== "custom" && <>
               <section className="rounded-xl border bg-white p-4 sm:col-span-2">
                 <form
                   className="flex flex-wrap items-end justify-between gap-3"
-                  onSubmit={(e) => { e.preventDefault(); const n = Number(new FormData(e.currentTarget).get("tableLimit")); run(() => setTenantTableLimitAction(tenant.id, n), "Table limit saved."); }}
+                  onSubmit={(e) => { e.preventDefault(); const v = String(new FormData(e.currentTarget).get("tableLimit") ?? "").trim(); run(() => setTenantTableLimitAction(tenant.id, v === "" ? null : Number(v)), v === "" ? "Table limit follows the plan again." : "Table limit saved."); }}
                 >
                   <div>
                     <h3 className="text-sm font-semibold">Tables allowed</h3>
-                    <p className="mt-0.5 text-sm text-muted-foreground">The owner cannot add more tables than this on the floor plan; they are asked to upgrade.</p>
+                    <p className="mt-0.5 text-sm text-muted-foreground">The owner cannot add more tables than this on the floor plan; they are asked to upgrade. Leave empty to follow the {tenant.planName} plan.</p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Input key={tenant.id + String(tenant.tableLimit)} name="tableLimit" type="number" min={1} max={500} defaultValue={tenant.tableLimit ?? ""} placeholder="No limit" className="w-24" aria-label="Tables allowed" />
+                    <Input key={tenant.id + String(tenant.tableLimitOverride)} name="tableLimit" type="number" min={1} max={500} defaultValue={tenant.tableLimitOverride ?? ""} placeholder={tenant.tableLimitOverride === null && tenant.tableLimit !== null ? `Plan: ${tenant.tableLimit}` : "No limit"} className="w-28" aria-label="Tables allowed" />
                     <Button size="sm" type="submit" disabled={pending}>Save</Button>
                   </div>
                 </form>

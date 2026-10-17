@@ -3,7 +3,7 @@ import type { Pool, RowDataPacket } from "mysql2/promise";
 
 // Brings the live database up to what this release needs, once, when the server starts.
 // Hostinger builds and starts the app straight from Git and never runs `db:migrate`, so these
-// steps mirror drizzle/0016-0020. Every step checks first, so running it again (another server
+// steps mirror drizzle/0016-0021. Every step checks first, so running it again (another server
 // instance, a restart) changes nothing. Works on MySQL and MariaDB.
 
 type Step = { tag: string; when: number; hash: string; apply: (db: Pool) => Promise<void> };
@@ -13,6 +13,11 @@ const hasColumn = async (db: Pool, table: string, column: string) => {
     "SELECT COUNT(*) AS n FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?",
     [table, column],
   );
+  return Number(rows[0]?.n ?? 0) > 0;
+};
+
+const hasTable = async (db: Pool, table: string) => {
+  const [rows] = await db.query<RowDataPacket[]>("SELECT COUNT(*) AS n FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?", [table]);
   return Number(rows[0]?.n ?? 0) > 0;
 };
 
@@ -73,7 +78,7 @@ const STEPS: Step[] = [
   {
     tag: "0020_plan_features",
     when: 1792218416304,
-    hash: "6fc08dfb8d6cb15f8ecec359ebb18b221813930d52ca814f412a63876c73990b",
+    hash: "cf4cc5e2538e1fc07dd66f1f976ab5fa12893009a7e34d2ba7e7b5d047c0357d",
     apply: async (db) => {
       await addColumn(db, "tenants", "custom_features", "json");
       await addColumn(db, "tenants", "custom_price_paise", "int");
@@ -92,6 +97,24 @@ const STEPS: Step[] = [
       // New plan names, only where the admin has not renamed them already
       await db.query("UPDATE `plans` SET `name` = 'Lite' WHERE `code` = 'starter' AND `name` = 'Starter'");
       await db.query("UPDATE `plans` SET `name` = 'Plus' WHERE `code` = 'growth' AND `name` = 'Growth'");
+      // New table and staff limits, only where the admin has not changed the old ones
+      for (const [code, oldTables, oldStaff, tables, staff] of [["starter", 15, 3, 6, 3], ["growth", 40, 10, 12, 6], ["pro", 80, 25, 20, 20]] as const) {
+        await db.query(
+          "UPDATE `plans` SET `features` = JSON_SET(`features`, '$.maxTables', ?, '$.maxStaff', ?) WHERE `code` = ? AND JSON_EXTRACT(`features`, '$.maxTables') = ? AND JSON_EXTRACT(`features`, '$.maxStaff') = ?",
+          [tables, staff, code, oldTables, oldStaff],
+        );
+      }
+    },
+  },
+  {
+    tag: "0021_plan_requests",
+    when: 1792221573640,
+    hash: "d3a8f5aca0d594ff980a82a4428d38a35ad18689898f273c1a00fd96351a56a9",
+    apply: async (db) => {
+      if (await hasTable(db, "plan_requests")) return;
+      await db.query(
+        "CREATE TABLE IF NOT EXISTS `plan_requests` (`id` char(36) NOT NULL, `tenant_id` char(36) NOT NULL, `outlet_id` char(36), `requested_by` varchar(80) NOT NULL, `feature` varchar(30), `note` varchar(300), `status` enum('open','done') NOT NULL DEFAULT 'open', `created_at` datetime(3) NOT NULL, `done_at` datetime(3), CONSTRAINT `plan_requests_id` PRIMARY KEY(`id`), CONSTRAINT `plan_requests_tenant_id_tenants_id_fk` FOREIGN KEY (`tenant_id`) REFERENCES `tenants`(`id`), INDEX `plan_requests_tenant_status_idx` (`tenant_id`, `status`))",
+      );
     },
   },
 ];

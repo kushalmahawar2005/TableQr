@@ -77,6 +77,25 @@ export const subscriptions = mysqlTable(
   (t) => [index("subscriptions_tenant_idx").on(t.tenantId, t.periodStart)],
 );
 
+/** A restaurant asks TableQR for a feature or a plan change; the platform admin handles it by hand */
+export const planRequests = mysqlTable(
+  "plan_requests",
+  {
+    id: id(),
+    tenantId: tenantId().references(() => tenants.id),
+    outletId: ref("outlet_id"),
+    /** Who asked, as shown to the admin */
+    requestedBy: varchar("requested_by", { length: 80 }).notNull(),
+    /** The locked feature they tapped, or null for a general request */
+    feature: varchar("feature", { length: 30 }),
+    note: varchar("note", { length: 300 }),
+    status: mysqlEnum("status", ["open", "done"]).notNull().default("open"),
+    createdAt: createdAt(),
+    doneAt: at("done_at"),
+  },
+  (t) => [index("plan_requests_tenant_status_idx").on(t.tenantId, t.status)],
+);
+
 export const brands = mysqlTable(
   "brands",
   {
