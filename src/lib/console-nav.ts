@@ -16,6 +16,7 @@ export const consoleSections = [
   { slug: "customers", label: "Customers", hi: "ग्राहक" },
   { slug: "team", label: "Team", hi: "टीम" },
   { slug: "settings", label: "Settings", hi: "सेटिंग्स" },
+  { slug: "plan", label: "My plan", hi: "मेरा प्लान" },
 ] as const;
 
 /** Sections with a real screen. The rest stay reserved and are hidden until they are built. */

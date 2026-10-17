@@ -13,6 +13,6 @@ export default async function PosPage() {
   if (!staff.roles.some(r => posRoles.includes(r as typeof posRoles[number]))) return <main className="p-6">Permission denied. Ask a manager.</main>;
   const access = await tenantAccess(staff.tenantId);
   const canAsk = staff.roles.some((r) => r === "owner" || r === "manager");
-  if (access.state === "blocked") return <PausedScreen access={access} canAsk={canAsk} outlet={staff.outlet.name} />;
+  if (access.state === "blocked") return <PausedScreen access={access} canAsk={canAsk} staff={staff} />;
   return <><AccessBanner access={access} canAsk={canAsk} outlet={staff.outlet.name} /><BillingScreen initial={await posQueue(staff)} realtimeUrl={process.env.NEXT_PUBLIC_REALTIME_URL ?? null} /></>;
 }

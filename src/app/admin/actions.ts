@@ -1,6 +1,6 @@
 "use server";
 
-import { and, count, desc, eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
@@ -8,11 +8,11 @@ import * as s from "@/db/schema";
 import { uuidv7 } from "@/db/id";
 import { hashPin, isPin } from "@/server/staff/pin";
 import { getTenantDetail } from "@/server/admin/tenant-detail";
-import { getPaymentsData } from "@/server/admin/payments";
+import { confirmFee, feesData, recordFee, rejectFee, type FeesData } from "@/server/fees";
 import { getAnalyticsData } from "@/server/admin/analytics";
 import { getAuditData } from "@/server/admin/audit";
 import { getSettingsData } from "@/server/admin/settings";
-import type { AnalyticsData, AnalyticsRange, AuditData, PaymentsData, SettingsData, TenantDetail } from "./admin-types";
+import type { AnalyticsData, AnalyticsRange, AuditData, SettingsData, TenantDetail } from "./admin-types";
 import { requirePlatformAdmin, signInPlatformAdmin, signOutPlatformAdmin } from "@/server/admin/auth";
 import { randomInt } from "node:crypto";
 import { effectiveFeatures, hasKitchenDisplay, tenantFeatures } from "@/server/plan";
@@ -172,45 +172,59 @@ export async function extendTrialAction(tenantId: string, days: number): Promise
 const FEE_METHODS = { upi: "UPI", cash: "Cash", bank: "Bank transfer" } as const;
 export type FeeMethod = keyof typeof FEE_METHODS;
 
-/**
- * The restaurant paid its TableQR fee by hand (UPI, cash or bank): start the paid months right
- * after the current period or trial ends (or today, if that has passed) and mark the tenant active.
- * What was received is kept in the audit log.
- */
+/** The restaurant paid its TableQR fee by hand (UPI, cash or bank): record it; the paid months start right away */
 export async function recordFeePaymentAction(tenantId: string, input: { months: number; amountRupees: number; method: FeeMethod; reference: string }): Promise<TenantActionState> {
   try {
     const admin = await requireSuperAdmin();
-    const months = Math.floor(Number(input.months));
-    if (![1, 3, 6, 12].includes(months)) return { error: "Choose 1, 3, 6 or 12 months." };
-    const amountRupees = Math.floor(Number(input.amountRupees));
-    if (!Number.isFinite(amountRupees) || amountRupees < 0 || amountRupees > 10_000_000) return { error: "Enter the amount you received." };
     if (!(input.method in FEE_METHODS)) return { error: "Choose how they paid." };
-    const reference = input.reference.trim().slice(0, 60);
-    const [tenant] = await db.select({ status: s.tenants.status, planCode: s.tenants.planCode, trialEndsAt: s.tenants.trialEndsAt, customPricePaise: s.tenants.customPricePaise }).from(s.tenants).where(eq(s.tenants.id, tenantId));
-    if (!tenant) return { error: "Tenant not found." };
-    if (tenant.status === "cancelled") return { error: "This tenant is cancelled." };
-    const [plan] = await db.select({ monthlyPricePaise: s.plans.monthlyPricePaise }).from(s.plans).where(eq(s.plans.code, tenant.planCode));
-    const [latest] = await db.select({ periodEnd: s.subscriptions.periodEnd, pricePerOutletPaise: s.subscriptions.pricePerOutletPaise, status: s.subscriptions.status })
-      .from(s.subscriptions).where(eq(s.subscriptions.tenantId, tenantId)).orderBy(desc(s.subscriptions.periodEnd)).limit(1);
-    const [outlets] = await db.select({ total: count() }).from(s.outlets).where(eq(s.outlets.tenantId, tenantId));
-    const runningEnd = latest && latest.status !== "cancelled" ? latest.periodEnd.getTime() : tenant.status === "trial" ? tenant.trialEndsAt?.getTime() ?? 0 : 0;
-    const periodStart = new Date(Math.max(Date.now(), runningEnd));
-    const periodEnd = new Date(periodStart);
-    periodEnd.setUTCMonth(periodEnd.getUTCMonth() + months);
-    await db.transaction(async (tx) => {
-      await tx.insert(s.subscriptions).values({
-        id: uuidv7(), tenantId, planCode: tenant.planCode, billingCycle: months === 12 ? "annual" : "monthly",
-        pricePerOutletPaise: tenant.customPricePaise ?? latest?.pricePerOutletPaise ?? plan?.monthlyPricePaise ?? 0, outletCount: Math.max(1, Number(outlets?.total ?? 1)),
-        status: "active", periodStart, periodEnd,
-      });
-      if (tenant.status !== "active") await tx.update(s.tenants).set({ status: "active", statusReason: null }).where(eq(s.tenants.id, tenantId));
-    });
-    await logAdminAction(admin, tenantId, "admin.fee_received", { status: tenant.status }, { status: "active", months, amountPaise: amountRupees * 100, method: input.method, reference: reference || null, paidUntil: periodEnd.toISOString() },
-      `₹${amountRupees.toLocaleString("en-IN")} by ${FEE_METHODS[input.method]}${reference ? ` (${reference})` : ""} for ${months} ${months === 1 ? "month" : "months"}`);
+    const r = await recordFee(`admin:${admin.email}`, tenantId, input);
+    await logFee(admin, tenantId, r.before, r);
     revalidatePath("/admin");
     return { error: null };
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Payment could not be saved." };
+  }
+}
+
+async function logFee(admin: { email: string }, tenantId: string, before: string, r: { months: number; amountPaise: number; method: string; reference: string | null; periodEnd?: Date; paidUntil?: Date }) {
+  const until = (r.periodEnd ?? r.paidUntil)!;
+  await logAdminAction(admin, tenantId, "admin.fee_received", { status: before }, { status: "active", months: r.months, amountPaise: r.amountPaise, method: r.method, reference: r.reference, paidUntil: until.toISOString() },
+    `₹${(r.amountPaise / 100).toLocaleString("en-IN")} by ${FEE_METHODS[r.method as FeeMethod]}${r.reference ? ` (${r.reference})` : ""} for ${r.months} ${r.months === 1 ? "month" : "months"}`);
+}
+
+/** The owner said they paid and the money is in the bank: add their months */
+export async function confirmFeeAction(id: string): Promise<TenantActionState> {
+  try {
+    const admin = await requireSuperAdmin();
+    const r = await confirmFee(id);
+    const [claim] = await db.select({ method: s.feePayments.method, reference: s.feePayments.reference }).from(s.feePayments).where(and(eq(s.feePayments.tenantId, r.tenantId), eq(s.feePayments.id, id)));
+    await logFee(admin, r.tenantId, r.before, { ...r, method: claim?.method ?? "upi", reference: claim?.reference ?? null });
+    revalidatePath("/admin");
+    return { error: null };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Payment could not be confirmed." };
+  }
+}
+
+/** The money never came: the owner can say "I have paid" again */
+export async function rejectFeeAction(id: string): Promise<TenantActionState> {
+  try {
+    const admin = await requireSuperAdmin();
+    const r = await rejectFee(id);
+    await logAdminAction(admin, r.tenantId, "admin.fee_rejected", null, { feePaymentId: id });
+    revalidatePath("/admin");
+    return { error: null };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Payment could not be updated." };
+  }
+}
+
+export async function getFeesAction(): Promise<{ data: FeesData | null; error: string | null }> {
+  try {
+    await requirePlatformAdmin();
+    return { data: await feesData(), error: null };
+  } catch (error) {
+    return { data: null, error: error instanceof Error ? error.message : "Fees could not be loaded." };
   }
 }
 
@@ -452,14 +466,6 @@ export async function savePlanAction(input: PlanInput, mode: "create" | "edit"):
     return { error: null };
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Plan could not be saved." };
-  }
-}
-
-export async function getPaymentsAction(): Promise<{ data: PaymentsData | null; error: string | null }> {
-  try {
-    return { data: await getPaymentsData(), error: null };
-  } catch (error) {
-    return { data: null, error: error instanceof Error ? error.message : "Payments could not be loaded." };
   }
 }
 

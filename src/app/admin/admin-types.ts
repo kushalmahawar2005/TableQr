@@ -62,32 +62,6 @@ export type TenantDetail = {
   setup: { steps: { label: string; done: boolean }[]; percent: number };
 };
 
-export type AdminPayment = {
-  id: string;
-  createdAt: string;
-  tenantName: string;
-  outletName: string;
-  method: "upi" | "card" | "wallet" | "cash";
-  channel: string;
-  amountPaise: number;
-  tipPaise: number;
-  status: "initiated" | "pending" | "success" | "failed" | "refunded";
-  failureReason: string | null;
-  gatewayPaymentId: string | null;
-};
-export type AdminRefund = { id: string; createdAt: string; tenantName: string; amountPaise: number; reason: string; status: "pending" | "success" | "failed" };
-export type PaymentsData = {
-  collectedPaise: number;
-  previousCollectedPaise: number;
-  counts: { success: number; failed: number; pending: number; refunded: number };
-  refundedPaise: number;
-  pendingRefunds: number;
-  daily: { date: string; collectedPaise: number }[];
-  byMethod: { method: string; paise: number; count: number }[];
-  payments: AdminPayment[];
-  refunds: AdminRefund[];
-};
-
 export type AnalyticsRange = 7 | 30 | 90;
 export type AnalyticsData = {
   range: AnalyticsRange;

@@ -4,6 +4,7 @@ import {
   Calendar03Icon,
   ChartHistogramIcon,
   ChefHatIcon,
+  CreditCardIcon,
   DashboardSquare01Icon,
   Home01Icon,
   Invoice01Icon,
@@ -40,6 +41,7 @@ const ICONS: Record<string, IconSvgElement> = {
   customers: UserGroupIcon,
   team: UserMultipleIcon,
   settings: Settings01Icon,
+  plan: CreditCardIcon,
 };
 
 const ROLE = { en: { owner: "Owner", manager: "Manager", host: "Host", cashier: "Cashier", waiter: "Waiter", kitchen: "Kitchen", accountant: "Accountant" }, hi: { owner: "मालिक", manager: "मैनेजर", host: "होस्ट", cashier: "कैशियर", waiter: "वेटर", kitchen: "किचन", accountant: "अकाउंटेंट" } } as const;

@@ -7,7 +7,8 @@ import { DashboardView } from "./dashboard-view";
 import { AuditView } from "./audit-view";
 import { SettingsView } from "./settings-view";
 import { AnalyticsView } from "./analytics-view";
-import { PaymentsView } from "./payments-view";
+import { FeesView } from "./fees-view";
+import { feesUpiId } from "@/lib/support";
 import { PlansView } from "./plans-view";
 import { SubscriptionsView } from "./subscriptions-view";
 import { TenantsView } from "./tenants-view";
@@ -30,7 +31,7 @@ export default async function AdminPage() {
       Tenants: <TenantsView data={data} />,
       Subscriptions: <SubscriptionsView data={data} />,
       "Plans & Pricing": <PlansView data={data} />,
-      Payments: <PaymentsView />,
+      Fees: <FeesView data={data} upiId={feesUpiId()} />,
       Analytics: <AnalyticsView data={data} />,
       "Audit Logs": <AuditView />,
       Settings: <SettingsView />,

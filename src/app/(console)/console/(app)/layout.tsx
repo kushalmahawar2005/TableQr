@@ -22,7 +22,7 @@ export default async function ConsoleLayout({ children }: LayoutProps<"/console"
   // Sections outside the plan stay in the menu with a lock, so the owner knows they exist
   const [features, outlets, access] = await Promise.all([tenantFeatures(staff.tenantId), outletsFor(staff), tenantAccess(staff.tenantId)]);
   const canAsk = staff.roles.some((r) => r === "owner" || r === "manager");
-  if (access.state === "blocked") return <PausedScreen access={access} canAsk={canAsk} outlet={staff.outlet.name} />;
+  if (access.state === "blocked") return <PausedScreen access={access} canAsk={canAsk} staff={staff} />;
   const sections = visibleSections
     .filter((s) => s.slug !== "kitchen" && canSee(staff.roles, s.slug))
     .map((s) => {

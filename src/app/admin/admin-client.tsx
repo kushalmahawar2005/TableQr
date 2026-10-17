@@ -24,7 +24,7 @@ export function AdminLogin() {
 const navGroups: { title: string; items: { label: string; icon: LucideIcon }[] }[] = [
   { title: "Overview", items: [{ label: "Dashboard", icon: LayoutGrid }] },
   { title: "Tenants", items: [{ label: "Tenants", icon: Store }, { label: "Subscriptions", icon: Repeat }] },
-  { title: "Business", items: [{ label: "Plans & Pricing", icon: Tag }, { label: "Payments", icon: CreditCard }, { label: "Analytics", icon: BarChart3 }] },
+  { title: "Business", items: [{ label: "Plans & Pricing", icon: Tag }, { label: "Fees", icon: CreditCard }, { label: "Analytics", icon: BarChart3 }] },
   { title: "System", items: [{ label: "Audit Logs", icon: ScrollText }, { label: "Settings", icon: Settings }] },
 ];
 

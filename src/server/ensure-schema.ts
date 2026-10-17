@@ -3,7 +3,7 @@ import type { Pool, RowDataPacket } from "mysql2/promise";
 
 // Brings the live database up to what this release needs, once, when the server starts.
 // Hostinger builds and starts the app straight from Git and never runs `db:migrate`, so these
-// steps mirror drizzle/0016-0021. Every step checks first, so running it again (another server
+// steps mirror drizzle/0016-0022. Every step checks first, so running it again (another server
 // instance, a restart) changes nothing. Works on MySQL and MariaDB.
 
 type Step = { tag: string; when: number; hash: string; apply: (db: Pool) => Promise<void> };
@@ -114,6 +114,17 @@ const STEPS: Step[] = [
       if (await hasTable(db, "plan_requests")) return;
       await db.query(
         "CREATE TABLE IF NOT EXISTS `plan_requests` (`id` char(36) NOT NULL, `tenant_id` char(36) NOT NULL, `outlet_id` char(36), `requested_by` varchar(80) NOT NULL, `feature` varchar(30), `note` varchar(300), `status` enum('open','done') NOT NULL DEFAULT 'open', `created_at` datetime(3) NOT NULL, `done_at` datetime(3), CONSTRAINT `plan_requests_id` PRIMARY KEY(`id`), CONSTRAINT `plan_requests_tenant_id_tenants_id_fk` FOREIGN KEY (`tenant_id`) REFERENCES `tenants`(`id`), INDEX `plan_requests_tenant_status_idx` (`tenant_id`, `status`))",
+      );
+    },
+  },
+  {
+    tag: "0022_fee_payments",
+    when: 1792232890499,
+    hash: "fe67ace1fd5382abef26fd448fdcac8e0d4ba2b6445be4032d6666fb160c7917",
+    apply: async (db) => {
+      if (await hasTable(db, "fee_payments")) return;
+      await db.query(
+        "CREATE TABLE IF NOT EXISTS `fee_payments` (`id` char(36) NOT NULL, `tenant_id` char(36) NOT NULL, `months` int NOT NULL, `amount_paise` int NOT NULL, `method` enum('upi','cash','bank') NOT NULL DEFAULT 'upi', `reference` varchar(60), `status` enum('claimed','confirmed','rejected') NOT NULL, `claimed_by` varchar(80) NOT NULL, `subscription_id` char(36), `paid_until` datetime(3), `created_at` datetime(3) NOT NULL, `decided_at` datetime(3), CONSTRAINT `fee_payments_id` PRIMARY KEY(`id`), CONSTRAINT `fee_payments_tenant_id_tenants_id_fk` FOREIGN KEY (`tenant_id`) REFERENCES `tenants`(`id`), INDEX `fee_payments_tenant_created_idx` (`tenant_id`, `created_at`), INDEX `fee_payments_status_idx` (`status`))",
       );
     },
   },

@@ -96,6 +96,32 @@ export const planRequests = mysqlTable(
   (t) => [index("plan_requests_tenant_status_idx").on(t.tenantId, t.status)],
 );
 
+/**
+ * TableQR fees a restaurant paid by hand (UPI to the operator, cash, bank). The owner can say
+ * "I have paid" (claimed); the platform admin confirms it, which extends the paid period.
+ */
+export const feePayments = mysqlTable(
+  "fee_payments",
+  {
+    id: id(),
+    tenantId: tenantId().references(() => tenants.id),
+    months: int("months").notNull(),
+    amountPaise: int("amount_paise").notNull(),
+    method: mysqlEnum("method", ["upi", "cash", "bank"]).notNull().default("upi"),
+    /** UPI reference (UTR) or a note */
+    reference: varchar("reference", { length: 60 }),
+    status: mysqlEnum("status", ["claimed", "confirmed", "rejected"]).notNull(),
+    /** Who said it was paid, or who recorded it */
+    claimedBy: varchar("claimed_by", { length: 80 }).notNull(),
+    /** The subscription period it paid for, once confirmed */
+    subscriptionId: ref("subscription_id"),
+    paidUntil: at("paid_until"),
+    createdAt: createdAt(),
+    decidedAt: at("decided_at"),
+  },
+  (t) => [index("fee_payments_tenant_created_idx").on(t.tenantId, t.createdAt), index("fee_payments_status_idx").on(t.status)],
+);
+
 export const brands = mysqlTable(
   "brands",
   {

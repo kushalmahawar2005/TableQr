@@ -21,6 +21,8 @@ export const consoleSectionRoles = {
   customers: ["manager", "owner"],
   team: ["manager", "owner"],
   settings: ["manager", "owner"],
+  /** What the restaurant pays TableQR, and paying it */
+  plan: ["manager", "owner"],
 } as const satisfies Record<string, readonly StaffRole[]>;
 
 export type ConsoleSectionSlug = keyof typeof consoleSectionRoles;
