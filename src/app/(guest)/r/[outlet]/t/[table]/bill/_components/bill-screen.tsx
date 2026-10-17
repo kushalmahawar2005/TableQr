@@ -277,7 +277,8 @@ export function BillScreen({
       const res = await serviceRequestAction(data.outlet.code, shortCode, "request_bill", `bill-${session.key}`.slice(0, 64));
       return res.ok ? { ok: true as const } : { ok: false as const, error: (res.error === "gone" ? "gone" : res.error === "host_only" ? "host_only" : "failed") as BillError };
     });
-  // One step for a guest in a hurry: get the bill and go straight to choosing how to pay
+  // One step for a guest in a hurry: get the bill and go straight to choosing how to pay,
+  // or straight to the counter while online payment is off
   const billAndPay = async () => {
     let asked = false;
     await act("request", async () => {
@@ -285,7 +286,8 @@ export function BillScreen({
       asked = res.ok;
       return res.ok ? { ok: true as const } : { ok: false as const, error: (res.error === "gone" ? "gone" : res.error === "host_only" ? "host_only" : "failed") as BillError };
     });
-    if (asked) setSheet("method");
+    if (asked && data.onlinePayment) setSheet("method");
+    else if (asked && !data.payAtCounter) await counter();
   };
 
 
@@ -366,7 +368,7 @@ export function BillScreen({
                     {c.requestBill}
                   </button>
                   <button type="button" onClick={() => void billAndPay()} disabled={!online || !!busy || data.people.length === 0} className="mt-2.5 min-h-12 w-full rounded-cta border border-line bg-surface px-4 text-button font-semibold text-ink focus-visible:outline-2 focus-visible:outline-brand disabled:opacity-50">
-                    {c.billAndPay}
+                    {data.onlinePayment ? c.billAndPay : c.billAndCounter}
                   </button>
                   <p className="mt-2 text-center text-caption text-muted">{c.requestBillHelp}</p>
                 </>
@@ -547,8 +549,19 @@ export function BillScreen({
               </section>
             )}
 
+            {/* No online payment: everyone settles at the counter */}
+            {!data.onlinePayment && remainingTotal > 0 && (
+              <section aria-label={c.counter} className="mt-6">
+                <button type="button" onClick={() => void counter()} disabled={!online || !!busy || !!data.payAtCounter} className={`${primary} min-h-14 w-full text-section`}>
+                  <HugeiconsIcon icon={Store01Icon} size={20} aria-hidden />
+                  {c.counter}
+                </button>
+                <p className="mt-2 text-center text-caption text-muted">{data.payAtCounter ? c.counterDone : c.counterHelp}</p>
+              </section>
+            )}
+
             {/* Tip and pay */}
-            {(selected.length > 0 || others.length > 0) && (
+            {data.onlinePayment && (selected.length > 0 || others.length > 0) && (
               <section aria-label={c.pay("")} className="mt-6">
                 {selected.length > 0 && (
                   <>

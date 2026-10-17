@@ -299,6 +299,11 @@ export function gatewayFor(): PaymentGateway | null {
   return configuredRazorpay() ?? (mockAllowed() ? mockGateway : null);
 }
 
+/** Guests pay their bill at the counter for now; GUEST_ONLINE_PAY=1 turns online bill payment back on */
+export function guestGateway(): PaymentGateway | null {
+  return process.env.GUEST_ONLINE_PAY === "1" ? gatewayFor() : null;
+}
+
 /** The gateway an existing payment went through, for status checks, webhooks and refunds */
 export function gatewayByName(name: string): PaymentGateway | null {
   if (name === "razorpay") return configuredRazorpay();

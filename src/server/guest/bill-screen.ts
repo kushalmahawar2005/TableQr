@@ -4,7 +4,7 @@ import { db } from "@/db";
 import * as s from "@/db/schema";
 import { isPlaceholderName } from "@/domain/guest-name";
 import { ATTEMPT_WINDOW_MS, computeDraft, isBillLocked, loadBillInputs } from "../billing/bill";
-import { gatewayFor } from "../payments/gateway";
+import { guestGateway } from "../payments/gateway";
 import { guestContextForDevice } from "./menu-screen";
 
 // Everything G8 Bill shows, in one server call, computed live from order lines. Before the bill
@@ -175,7 +175,7 @@ export async function getBillScreen(outletCode: string, shortCode: string, devic
     lines,
     eligibleIds: eligible,
     tipPresetsBp: inputs.outlet.tipPresetsBp?.length ? inputs.outlet.tipPresetsBp : DEFAULT_TIP_PRESETS_BP,
-    onlinePayment: !!gatewayFor(),
+    onlinePayment: !!guestGateway(),
     latestPayment: latest
       ? { id: latest.id, status: viewOf(latest.status, latest.failureReason), amountPaise: latest.amountPaise, tipPaise: latest.tipPaise }
       : null,

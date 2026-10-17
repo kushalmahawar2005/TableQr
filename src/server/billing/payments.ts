@@ -9,7 +9,7 @@ import { amountInWords } from "@/domain/words";
 import { LOCK_THEN_READ, type Tx } from "../db-types";
 import { AppError } from "../errors";
 import type { GuestContext } from "../guest/context";
-import { gatewayByName, gatewayFor, type GatewayStatus } from "../payments/gateway";
+import { gatewayByName, guestGateway, type GatewayStatus } from "../payments/gateway";
 import { publish, type RealtimeEvent } from "../realtime/publish";
 import { topics } from "../realtime/token";
 import { requireStaffRole } from "../staff/waiter";
@@ -170,7 +170,7 @@ export async function startPayment(
   if (!["upi", "card", "wallet"].includes(input.method)) throw new AppError("invalid_state", "Choose a way to pay.");
   const requestId = typeof input.requestId === "string" ? input.requestId.trim() : "";
   if (!/^[a-zA-Z0-9_-]{8,64}$/.test(requestId)) throw new AppError("invalid_state", "This payment request is not valid.");
-  const gateway = gatewayFor();
+  const gateway = guestGateway();
   if (!gateway) throw new AppError("invalid_state", "Online payment is not available here. Please pay at the counter.", { reason: "no_gateway" });
 
   const payment = await db.transaction(async (tx) => {
