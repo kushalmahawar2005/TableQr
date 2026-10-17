@@ -19,7 +19,7 @@ export default async function ConsoleLayout({ children }: LayoutProps<"/console"
   const lang = parseLang(jar.get(LANG_COOKIE)?.value);
   const theme = jar.get("tq_theme")?.value === "dark" ? "dark" : "light";
   // The kitchen board is a button in the top bar, not a sidebar row
-  // Sections outside the plan stay in the menu with a lock, so the owner knows they exist
+  // Sections outside the plan are left out of the menu; My plan shows what more there is
   const [features, outlets, access] = await Promise.all([tenantFeatures(staff.tenantId), outletsFor(staff), tenantAccess(staff.tenantId)]);
   const canAsk = staff.roles.some((r) => r === "owner" || r === "manager");
   if (access.state === "blocked") return <PausedScreen access={access} canAsk={canAsk} staff={staff} />;
@@ -27,8 +27,10 @@ export default async function ConsoleLayout({ children }: LayoutProps<"/console"
     .filter((s) => s.slug !== "kitchen" && canSee(staff.roles, s.slug))
     .map((s) => {
       const needs = SECTION_FEATURE[s.slug];
-      return { slug: s.slug, label: lang === "hi" ? s.hi : s.label, locked: !!needs && !features[needs] };
-    });
+      return { slug: s.slug, label: lang === "hi" ? s.hi : s.label, inPlan: !needs || features[needs] };
+    })
+    .filter((s) => s.inPlan)
+    .map(({ slug, label }) => ({ slug, label }));
   const kitchen = canSee(staff.roles, "kitchen");
   return (
     <StaffShell theme={theme} lang={lang} sections={sections} kitchen={kitchen} outlets={outlets.map((o) => ({ id: o.id, name: o.name, current: o.id === staff.outletId }))} staff={{ name: staff.name, roles: staff.roles, outlet: staff.outlet.name, shiftEnds: staff.expiresAt }}>
