@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Cancel01Icon, CheckmarkCircle02Icon, Copy01Icon, SmartPhone01Icon, Tick02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { FEATURE_KEYS, FEATURE_LABELS, type Features } from "@/lib/plan-features";
@@ -148,7 +148,25 @@ export function PayCard({ plan, upiId }: { plan: PlanView; upiId: string | null 
   const [state, setState] = useState<"idle" | "busy" | "sent">(plan.waiting ? "sent" : "idle");
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  // Back from the UPI app: ask straight away whether the payment went through
+  const [askPaid, setAskPaid] = useState(false);
+  const openedApp = useRef(false);
+  useEffect(() => {
+    const back = () => { if (document.visibilityState === "visible" && openedApp.current) { openedApp.current = false; setAskPaid(true); } };
+    document.addEventListener("visibilitychange", back);
+    return () => document.removeEventListener("visibilitychange", back);
+  }, []);
   const amount = plan.fee.totalPaise * months;
+  const claim = async () => {
+    setState("busy");
+    setError(null);
+    const r = await claimFeeAction({ months, method, reference });
+    if (r.ok) setState("sent");
+    else {
+      setError(r.error);
+      setState("idle");
+    }
+  };
   const payUrl = upiId && amount > 0 ? upiPayUrl(upiId, amount / 100, `TableQR ${plan.outlet} ${months}m`) : null;
   const qr = useMemo(() => (payUrl ? qrSvg(payUrl, 220) : null), [payUrl]);
 
@@ -156,8 +174,8 @@ export function PayCard({ plan, upiId }: { plan: PlanView; upiId: string | null 
     return (
       <section className={`${card} p-6 text-center`} aria-label="Pay TableQR">
         <HugeiconsIcon icon={CheckmarkCircle02Icon} size={44} className="mx-auto text-success" aria-hidden />
-        <h2 className="mt-3 font-display text-section font-bold text-ink">Payment sent for checking</h2>
-        <p className="mt-1 text-body text-muted">TableQR will confirm it soon. Your plan updates by itself once it is confirmed.</p>
+        <h2 className="mt-3 font-display text-section font-bold text-ink">Thank you! Payment received for checking</h2>
+        <p className="mt-1 text-body text-muted">Your plan will be active within 24 hours, as soon as TableQR confirms the payment. Usually much sooner.</p>
       </section>
     );
   }
@@ -202,7 +220,7 @@ export function PayCard({ plan, upiId }: { plan: PlanView; upiId: string | null 
               <span className="sr-only">Copy UPI ID</span>
             </button>
             {copied && <span role="status" className="mt-1 text-caption text-success">Copied</span>}
-            <a href={payUrl} className={`mt-4 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-cta bg-brand px-5 text-button font-semibold text-brand-on hover:bg-brand-hover ${focus}`}>
+            <a href={payUrl} onClick={() => { openedApp.current = true; setTimeout(() => setAskPaid(true), 4000); }} className={`mt-4 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-cta bg-brand px-5 text-button font-semibold text-brand-on hover:bg-brand-hover ${focus}`}>
               <HugeiconsIcon icon={SmartPhone01Icon} size={18} aria-hidden />
               Pay {money(amount)} in UPI app
             </a>
@@ -213,23 +231,28 @@ export function PayCard({ plan, upiId }: { plan: PlanView; upiId: string | null 
         )}
       </div>
 
+      {askPaid && (
+        <div role="alertdialog" aria-label="Did the payment go through?" className="border-t border-brand-border bg-brand-soft p-5">
+          <p className="font-display text-section font-bold text-ink">Payment done?</p>
+          <p className="mt-0.5 text-body text-muted">If {money(amount)} went from your UPI app, tell TableQR now.</p>
+          <div className="mt-3 flex gap-2">
+            <button type="button" disabled={state === "busy"} onClick={() => void claim()} className={`inline-flex min-h-12 flex-1 items-center justify-center rounded-cta bg-brand px-4 text-button font-semibold text-brand-on disabled:opacity-60 ${focus}`}>
+              {state === "busy" ? "Sending…" : "Yes, I have paid"}
+            </button>
+            <button type="button" onClick={() => setAskPaid(false)} className={`inline-flex min-h-12 items-center justify-center rounded-cta border border-line px-4 text-button font-semibold text-ink ${focus}`}>Not yet</button>
+          </div>
+        </div>
+      )}
       <form
         className="space-y-3 border-t border-line bg-ink/[0.02] p-5"
-        onSubmit={async (e) => {
+        onSubmit={(e) => {
           e.preventDefault();
-          setState("busy");
-          setError(null);
-          const r = await claimFeeAction({ months, method, reference });
-          if (r.ok) setState("sent");
-          else {
-            setError(r.error);
-            setState("idle");
-          }
+          void claim();
         }}
       >
         <div>
           <p className="text-body font-semibold text-ink">Paid already?</p>
-          <p className="text-caption text-muted">Tell TableQR so we can confirm it.</p>
+          <p className="text-caption text-muted">Tell TableQR. Your plan starts within 24 hours, once we confirm it.</p>
         </div>
         <div role="radiogroup" aria-label="How you paid" className="flex gap-2">
           {(["upi", "cash", "bank"] as const).map((m) => (
@@ -248,14 +271,14 @@ export function PayCard({ plan, upiId }: { plan: PlanView; upiId: string | null 
         <input
           value={reference}
           onChange={(e) => setReference(e.target.value.slice(0, 60))}
-          placeholder={method === "upi" ? "UPI reference (UTR), 12 digits" : "Note (optional)"}
+          placeholder={method === "upi" ? "UPI reference / UTR (optional)" : "Note (optional)"}
           aria-label={method === "upi" ? "UPI reference number" : "Note"}
           inputMode={method === "upi" ? "numeric" : "text"}
           className={`h-12 w-full rounded-input border border-line bg-surface px-3 text-body text-ink placeholder:text-muted ${focus}`}
         />
         <button
           type="submit"
-          disabled={state === "busy" || (method === "upi" && reference.trim().length < 6)}
+          disabled={state === "busy"}
           className={`inline-flex min-h-12 w-full items-center justify-center rounded-cta bg-ink px-5 text-button font-semibold text-paper disabled:opacity-50 ${focus}`}
         >
           {state === "busy" ? "Sending…" : `I have paid ${money(amount)}`}

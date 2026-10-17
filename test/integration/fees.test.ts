@@ -35,7 +35,6 @@ describe("fees paid by hand", () => {
   it("the owner claims, the admin confirms, and the restaurant opens with the months added", async () => {
     expect((await tenantAccess(env.demo.tenantId)).state).toBe("blocked");
     expect((await monthlyFee(appDb, env.demo.tenantId)).totalPaise).toBe(120000);
-    await refused(claimFee(owner(), { months: 3, method: "upi", reference: "" }), "invalid_state");
     await refused(claimFee({ ...owner(), roles: ["waiter"] as never }, { months: 1, method: "cash", reference: "" }), "forbidden");
     const claim = await claimFee(owner(), { months: 3, method: "upi", reference: "412345678901" });
     expect(claim.amountPaise).toBe(360000);

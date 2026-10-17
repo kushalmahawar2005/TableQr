@@ -7,6 +7,7 @@ import { accessFrom, tenantAccess } from "./access";
 import { AppError } from "./errors";
 import { tenantFeatures } from "./plan";
 import type { StaffSession } from "./staff/auth";
+import { emailAdmin } from "./admin-alerts";
 
 // TableQR's own fees, paid by hand: the owner pays the operator's UPI (or cash, or bank) and says
 // "I have paid"; the platform admin checks the bank and confirms, which adds the paid months.
@@ -84,12 +85,18 @@ export async function recordFee(adminLabel: string, tenantId: string, input: { m
 export async function claimFee(staff: Pick<StaffSession, "tenantId" | "roles" | "name">, input: { months: number; reference: string; method?: string }, now = new Date()) {
   if (!staff.roles.some((r) => r === "owner" || r === "manager")) throw new AppError("forbidden", "Ask the owner or a manager to do this.");
   const { months, method, reference } = cleanInput(input);
-  if (method === "upi" && !reference) throw new AppError("invalid_state", "Enter the UPI reference (UTR) from your payment app.");
   const [waiting] = await db.select({ id: s.feePayments.id }).from(s.feePayments).where(and(eq(s.feePayments.tenantId, staff.tenantId), eq(s.feePayments.status, "claimed")));
   if (waiting) throw new AppError("invalid_state", "Your last payment is still being checked by TableQR.");
   const fee = await monthlyFee(db, staff.tenantId);
   const id = uuidv7();
   await db.insert(s.feePayments).values({ id, tenantId: staff.tenantId, months, amountPaise: fee.totalPaise * months, method, reference, status: "claimed", claimedBy: staff.name.slice(0, 80), createdAt: now });
+  const [t] = await db.select({ name: s.tenants.name, phone: s.tenants.contactPhone }).from(s.tenants).where(eq(s.tenants.id, staff.tenantId));
+  const rupees = `₹${((fee.totalPaise * months) / 100).toLocaleString("en-IN")}`;
+  emailAdmin(`${t?.name ?? "A restaurant"} says they paid ${rupees}`, [
+    `${t?.name ?? "A restaurant"} says they paid ${rupees} for ${months} ${months === 1 ? "month" : "months"} by ${method.toUpperCase()}.`,
+    `Reference: ${reference ?? "not given"} · by ${staff.name} · phone ${t?.phone ?? "—"}`,
+    "Check your bank or UPI app, then confirm it in Admin → Fees.",
+  ]);
   return { id, amountPaise: fee.totalPaise * months };
 }
 
@@ -140,6 +147,8 @@ export type FeesData = {
   receivedThisMonthPaise: number;
   receivedLastMonthPaise: number;
   claims: (FeeRow & { tenant: FeesTenant })[];
+  /** Open asks to unlock a feature or renew, newest first */
+  requests: { id: string; tenant: FeesTenant; feature: string | null; note: string | null; requestedBy: string; createdAt: string }[];
   due: FeesTenant[];
   history: (FeeRow & { tenantName: string })[];
 };
@@ -149,12 +158,14 @@ export async function feesData(now = new Date()): Promise<FeesData> {
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   const lastMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
   // isolation-exempt: authenticated platform admins see every restaurant's fees
-  const [tenants, subs, claims, history] = await Promise.all([
+  const [tenants, subs, claims, history, requests] = await Promise.all([
     db.select({ id: s.tenants.id, name: s.tenants.name, contactName: s.tenants.contactName, contactPhone: s.tenants.contactPhone, status: s.tenants.status, trialEndsAt: s.tenants.trialEndsAt, planName: s.plans.name, customPricePaise: s.tenants.customPricePaise, planPricePaise: s.plans.monthlyPricePaise })
       .from(s.tenants).innerJoin(s.plans, eq(s.plans.code, s.tenants.planCode)),
     db.select({ tenantId: s.subscriptions.tenantId, periodEnd: s.subscriptions.periodEnd, price: s.subscriptions.pricePerOutletPaise }).from(s.subscriptions).where(ne(s.subscriptions.status, "cancelled")).orderBy(desc(s.subscriptions.periodEnd)),
     db.select().from(s.feePayments).where(eq(s.feePayments.status, "claimed")).orderBy(desc(s.feePayments.createdAt)),
     db.select({ fee: s.feePayments, tenantName: s.tenants.name }).from(s.feePayments).innerJoin(s.tenants, eq(s.tenants.id, s.feePayments.tenantId)).where(inArray(s.feePayments.status, ["confirmed", "rejected"])).orderBy(desc(s.feePayments.createdAt)).limit(200),
+    // isolation-exempt: authenticated platform admins see every restaurant's open requests
+    db.select().from(s.planRequests).where(eq(s.planRequests.status, "open")).orderBy(desc(s.planRequests.createdAt)),
   ]);
   const outletRows = await db.select({ tenantId: s.outlets.tenantId, n: count() }).from(s.outlets).groupBy(s.outlets.tenantId);
   const outlets = new Map(outletRows.map((o) => [o.tenantId, Number(o.n)]));
@@ -183,6 +194,7 @@ export async function feesData(now = new Date()): Promise<FeesData> {
     receivedThisMonthPaise: sum(monthStart, new Date(8.64e15)),
     receivedLastMonthPaise: sum(lastMonthStart, monthStart),
     claims: claims.filter((c) => view.has(c.tenantId)).map((c) => ({ ...feeRow(c), tenant: view.get(c.tenantId)! })),
+    requests: requests.filter((r) => view.has(r.tenantId)).map((r) => ({ id: r.id, tenant: view.get(r.tenantId)!, feature: r.feature, note: r.note, requestedBy: r.requestedBy, createdAt: r.createdAt.toISOString() })),
     due,
     history: history.map((h) => ({ ...feeRow(h.fee), tenantName: h.tenantName })),
   };

@@ -75,6 +75,7 @@ export function DashboardView({ data, name }: { data: AdminData; name: string })
   }, [data.tenants, now]);
 
   const attention = useMemo(() => attentionItems(data.tenants, now), [data.tenants, now]);
+  const waiting = { claims: data.tenants.filter((t) => t.feeClaim).length, requests: data.tenants.reduce((n, t) => n + t.requests.length, 0) };
 
   const [months, setMonths] = useState("12");
   const monthly = useMemo(() => {
@@ -103,6 +104,15 @@ export function DashboardView({ data, name }: { data: AdminData; name: string })
 
   return <div className="space-y-6">
     <div><h1 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">Welcome back, {name} 👋</h1><p className="mt-1 text-sm text-muted-foreground">Here&apos;s how your TableQR business is doing.</p></div>
+
+    {(waiting.claims > 0 || waiting.requests > 0) && <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#5b42f5]/40 bg-[#5b42f5]/10 px-4 py-3">
+      <p className="text-sm font-medium">
+        <span className="mr-1.5 inline-block size-2 animate-pulse rounded-full bg-[#5b42f5] align-middle" aria-hidden="true" />
+        {[waiting.claims > 0 && `${waiting.claims} ${waiting.claims === 1 ? "payment" : "payments"} to confirm`, waiting.requests > 0 && `${waiting.requests} ${waiting.requests === 1 ? "request" : "requests"} from restaurants`].filter(Boolean).join(" · ")}
+        <span className="ml-1 font-normal text-muted-foreground">Restaurants are waiting for you.</span>
+      </p>
+      <button type="button" onClick={() => openAdminPage("Fees")} className="h-9 rounded-lg bg-[#5b42f5] px-4 text-sm font-semibold text-white hover:bg-[#4a33e0]">Check now</button>
+    </div>}
 
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4 [&>*]:min-w-0">
       <Kpi icon={IndianRupee} label="Monthly recurring revenue" value={money(stats.mrrPaise)} hint="From active subscriptions" tone="#5b42f5" />

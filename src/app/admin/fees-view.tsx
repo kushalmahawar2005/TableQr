@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CircleCheck, Clock, IndianRupee, Loader2, MessageCircle, Search, XCircle } from "lucide-react";
+import { CircleCheck, Clock, IndianRupee, Loader2, MessageCircle, Phone, Search, XCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,7 +10,9 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { whatsAppTo } from "@/lib/support";
 import type { FeesData, FeesTenant } from "@/server/fees";
-import { confirmFeeAction, getFeesAction, recordFeePaymentAction, rejectFeeAction } from "./actions";
+import { FEATURE_LABELS } from "@/lib/plan-features";
+import { confirmFeeAction, getFeesAction, markPlanRequestDoneAction, recordFeePaymentAction, rejectFeeAction } from "./actions";
+import { openAdminPage } from "./admin-nav";
 import type { AdminData } from "./admin-types";
 import { FeeForm } from "./subscriptions-view";
 
@@ -19,6 +21,16 @@ import { FeeForm } from "./subscriptions-view";
 const money = (paise: number) => `₹${Math.round(paise / 100).toLocaleString("en-IN")}`;
 const date = (v: string | null) => (v ? new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" }).format(new Date(v)) : "—");
 const METHOD = { upi: "UPI", cash: "Cash", bank: "Bank" } as const;
+const when = (v: string) => new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" }).format(new Date(v));
+const linkBtn = "inline-flex h-8 items-center gap-1.5 rounded-lg border px-3 text-sm font-medium hover:bg-muted";
+
+/** WhatsApp and call the restaurant's contact */
+function Reach({ t, message }: { t: FeesTenant; message: string }) {
+  return <>
+    <a href={whatsAppTo(t.contactPhone, message)} target="_blank" rel="noopener noreferrer" className={linkBtn}><MessageCircle className="size-4" aria-hidden="true" />WhatsApp</a>
+    <a href={`tel:+91${t.contactPhone.replace(/\D/g, "").slice(-10)}`} className={linkBtn}><Phone className="size-4" aria-hidden="true" />Call</a>
+  </>;
+}
 
 function Stat({ icon: Icon, label, value, note, tone }: { icon: typeof IndianRupee; label: string; value: string; note: string; tone: string }) {
   return <Card size="sm"><CardContent className="flex items-center gap-3">
@@ -83,7 +95,7 @@ export function FeesView({ data, upiId }: { data: AdminData; upiId: string | nul
 
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4 [&>*]:min-w-0">
       <Stat icon={IndianRupee} label="Received this month" value={money(fees.receivedThisMonthPaise)} note={`Last month ${money(fees.receivedLastMonthPaise)}`} tone="#16c784" />
-      <Stat icon={Clock} label="To check" value={String(fees.claims.length)} note="Owners said they paid" tone="#5b42f5" />
+      <Stat icon={Clock} label="To check" value={String(fees.claims.length + fees.requests.length)} note={`${fees.claims.length} paid · ${fees.requests.length} ${fees.requests.length === 1 ? "request" : "requests"}`} tone="#5b42f5" />
       <Stat icon={IndianRupee} label="Due this week or late" value={money(dueTotal)} note={`${fees.due.length} ${fees.due.length === 1 ? "restaurant" : "restaurants"}`} tone="#f08b18" />
       <Stat icon={XCircle} label="Paused for fees" value={String(fees.due.filter((t) => t.access.state === "blocked").length)} note="Stopped until they pay" tone="#ed5368" />
     </div>
@@ -94,13 +106,36 @@ export function FeesView({ data, upiId }: { data: AdminData; upiId: string | nul
         {fees.claims.length ? <ul className="divide-y">{fees.claims.map((c) => <li key={c.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
           <div className="min-w-0">
             <p className="font-medium">{c.tenant.name} <span className="font-normal text-muted-foreground">· {money(c.amountPaise)} for {c.months} {c.months === 1 ? "month" : "months"}</span></p>
-            <p className="text-xs text-muted-foreground">{METHOD[c.method]}{c.reference ? ` · Ref ${c.reference}` : ""} · {c.claimedBy} · {date(c.createdAt)}</p>
+            <p className="text-xs text-muted-foreground">{METHOD[c.method]} · {c.reference ? `Ref ${c.reference}` : "no reference given"} · by {c.claimedBy} · {when(c.createdAt)}</p>
+            <p className="text-xs text-muted-foreground">{c.tenant.planName} · {c.tenant.contactName} · {c.tenant.contactPhone}</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            <Reach t={c.tenant} message={`Hi ${c.tenant.contactName}, this is TableQR about your ${money(c.amountPaise)} payment.`} />
             <Button size="sm" variant="outline" disabled={pending} onClick={() => run(() => rejectFeeAction(c.id), "Marked not received. The owner can try again.")}>Not received</Button>
             <Button size="sm" disabled={pending} onClick={() => run(() => confirmFeeAction(c.id), `Confirmed. ${c.tenant.name} is paid for ${c.months} ${c.months === 1 ? "month" : "months"}.`)}>{pending && <Loader2 className="animate-spin" />}<CircleCheck />Confirm</Button>
           </div>
         </li>)}</ul> : <p className="py-6 text-center text-sm text-muted-foreground">Nothing to check.</p>}
+      </CardContent>
+    </Card>
+
+    <Card>
+      <CardHeader><CardTitle>Requests from restaurants</CardTitle><CardDescription>They asked to unlock a feature or renew. Change their plan in Tenants, then mark it done.</CardDescription></CardHeader>
+      <CardContent>
+        {fees.requests.length ? <ul className="divide-y">{fees.requests.map((r) => {
+          const what = r.feature && r.feature in FEATURE_LABELS ? FEATURE_LABELS[r.feature as keyof typeof FEATURE_LABELS].label : r.note ?? "Plan change";
+          return <li key={r.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+            <div className="min-w-0">
+              <p className="font-medium">{r.tenant.name} <span className="font-normal text-muted-foreground">· {what}</span></p>
+              <p className="text-xs text-muted-foreground">{r.feature && r.note ? `“${r.note}” · ` : ""}by {r.requestedBy} · {when(r.createdAt)}</p>
+              <p className="text-xs text-muted-foreground">{r.tenant.planName} · {money(r.tenant.monthlyPaise)}/month · {r.tenant.contactName} · {r.tenant.contactPhone}</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Reach t={r.tenant} message={`Hi ${r.tenant.contactName}, this is TableQR about your request: ${what}.`} />
+              <Button size="sm" variant="outline" onClick={() => openAdminPage("Tenants", r.tenant.id)}>Open</Button>
+              <Button size="sm" disabled={pending} onClick={() => run(() => markPlanRequestDoneAction(r.id), "Marked done.")}>Done</Button>
+            </div>
+          </li>;
+        })}</ul> : <p className="py-6 text-center text-sm text-muted-foreground">No requests.</p>}
       </CardContent>
     </Card>
 
