@@ -411,6 +411,26 @@ body {
   background: var(--paper);
   color: var(--ink);
 }
+/* Paper is white: printing from the dark console uses the light palette, so text stays black and sharp */
+@media print {
+  .theme-dark, html.console-ui {
+    color-scheme: light;
+    --ink: #1f2937; --paper: #ffffff; --surface: #ffffff; --line: #ddd6ca; --muted: #4b5260;
+    --success: #237a68; --warning: #8a5a00; --danger: #b83a3a; --info: #315e9e;
+    --brand-soft: #faedea; --brand-border: #efc8bf;
+    --state-available: #237a68; --state-available-text: #237a68; --state-available-soft: #e8f3ef;
+    --state-held: #a86a00; --state-held-text: #946000; --state-held-soft: #fff3d6;
+    --state-reserved: #c18400; --state-reserved-text: #8f6400; --state-reserved-soft: #fff0c2;
+    --state-seated: #b83a3a; --state-seated-text: #b83a3a; --state-seated-soft: #fbe9e9;
+    --state-bill: #a74608; --state-bill-text: #a74608; --state-bill-soft: #fdeedc;
+    --state-paid: #6b7280; --state-paid-text: #5b616b; --state-paid-soft: #f0f1f3;
+    --state-cleaning: #315e9e; --state-cleaning-text: #315e9e; --state-cleaning-soft: #eaf0f8;
+    --state-blocked: #343a40; --state-blocked-text: #343a40; --state-blocked-soft: #e8eaec;
+    background: #ffffff;
+    color: #1f2937;
+  }
+}
+
 /* Solid ink surfaces flip to light in dark mode, so their label must flip to dark */
 .theme-dark .bg-ink { color: var(--paper); }
 .theme-dark .bg-ink\/90:hover { color: var(--paper); }

@@ -64,7 +64,7 @@ export function GstScreen({ report: r }: { report: GstReport }) {
         <Link href="/console/reports/day-close" className={btn}>Day close</Link>
       </div>
 
-      <section className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4" aria-label="Month totals">
+      <section className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4 print:grid-cols-4" aria-label="Month totals">
         <Stat label="Taxable value" value={rs(s.taxablePaise)} note={`${s.invoices} ${s.invoices === 1 ? "invoice" : "invoices"}`} />
         <Stat label="CGST" value={rs(s.cgstPaise)} />
         <Stat label="SGST" value={rs(s.sgstPaise)} />
@@ -91,7 +91,7 @@ export function GstScreen({ report: r }: { report: GstReport }) {
             </div>
           </section>
 
-          <div className="mt-5 grid gap-5 md:grid-cols-2">
+          <div className="mt-5 grid gap-5 md:grid-cols-2 print:grid-cols-2">
             <section className={`${card} p-5`} aria-label="Documents issued">
               <h2 className="font-display text-section font-bold">Invoices issued</h2>
               <p className="text-caption text-muted">For the documents table of GSTR-1</p>
