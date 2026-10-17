@@ -5,7 +5,7 @@ import { feesUpiId } from "@/lib/support";
 import { currentStaff } from "@/server/staff/request";
 import { ContactTableQR } from "../_components/contact-tableqr";
 import { planViewFor } from "../_components/plan-data";
-import { PlanPanel } from "../_components/plan-panel";
+import { PayCard, PlanIncludes, PlanPayments, PlanSummary } from "../_components/plan-panel";
 
 export const metadata: Metadata = { title: "My plan", robots: { index: false, follow: false } };
 
@@ -22,15 +22,24 @@ export default async function PlanPage() {
   }
   const plan = await planViewFor(staff);
   return (
-    <main className="space-y-5 p-4 lg:p-8">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <main className="mx-auto w-full max-w-[1200px] px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
+      <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="font-display text-title font-bold text-ink">My plan</h1>
-          <p className="text-body text-muted">What you pay TableQR, and how to pay.</p>
+          <p className="mt-1 text-body text-muted">What you pay TableQR, and how to pay.</p>
         </div>
         <ContactTableQR message={`Hi TableQR, this is ${staff.outlet.name}. I have a question about our plan.`} />
+      </header>
+      <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,400px)]">
+        <div className="grid min-w-0 content-start gap-6">
+          <PlanSummary plan={plan} />
+          <PlanIncludes plan={plan} />
+          <PlanPayments plan={plan} />
+        </div>
+        <div className="min-w-0 lg:sticky lg:top-20 lg:self-start">
+          <PayCard plan={plan} upiId={feesUpiId()} />
+        </div>
       </div>
-      <PlanPanel plan={plan} upiId={feesUpiId()} />
     </main>
   );
 }

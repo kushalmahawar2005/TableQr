@@ -19,6 +19,7 @@ import { CreateTenantDialog } from "./create-tenant-dialog";
 import { FeeForm } from "./subscriptions-view";
 import type { AdminData, AdminTenant, TenantDetail } from "./admin-types";
 import { FEATURE_KEYS, FEATURE_LABELS, type Features } from "@/lib/plan-features";
+import { takePendingTenant } from "./admin-nav";
 
 const detailChart = { orders: { label: "Orders", color: "#5b42f5" }, revenue: { label: "Revenue (₹)", color: "#a78bfa" } } satisfies ChartConfig;
 const shortDay = (v: string) => new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", timeZone: "UTC" }).format(new Date(v));
@@ -393,7 +394,8 @@ export function TenantsView({ data }: { data: AdminData }) {
   const [status, setStatus] = useState("all");
   const [plan, setPlan] = useState("all");
   const [adding, setAdding] = useState(false);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // A link from the dashboard or Fees may ask for one tenant's panel
+  const [selectedId, setSelectedId] = useState<string | null>(() => takePendingTenant());
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: "createdAt", dir: -1 });
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(10);

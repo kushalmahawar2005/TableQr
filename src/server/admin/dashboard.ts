@@ -49,6 +49,9 @@ export async function getAdminData(): Promise<AdminData> {
   // isolation-exempt: authenticated platform admins see every restaurant's open plan requests
   const requestRows = await db.select({ id: s.planRequests.id, tenantId: s.planRequests.tenantId, feature: s.planRequests.feature, note: s.planRequests.note, requestedBy: s.planRequests.requestedBy, createdAt: s.planRequests.createdAt })
     .from(s.planRequests).where(eq(s.planRequests.status, "open")).orderBy(desc(s.planRequests.createdAt));
+  // isolation-exempt: authenticated platform admins see every restaurant's "I have paid" waiting to be checked
+  const claimRows = await db.select({ tenantId: s.feePayments.tenantId, amountPaise: s.feePayments.amountPaise, createdAt: s.feePayments.createdAt }).from(s.feePayments).where(eq(s.feePayments.status, "claimed"));
+  const claimByTenant = new Map(claimRows.map((c) => [c.tenantId, { amountPaise: c.amountPaise, createdAt: c.createdAt.toISOString() }]));
   const requestsByTenant = new Map<string, { id: string; feature: string | null; note: string | null; requestedBy: string; createdAt: string }[]>();
   for (const r of requestRows) requestsByTenant.set(r.tenantId, [...(requestsByTenant.get(r.tenantId) ?? []), { id: r.id, feature: r.feature, note: r.note, requestedBy: r.requestedBy, createdAt: r.createdAt.toISOString() }]);
 
@@ -213,6 +216,7 @@ export async function getAdminData(): Promise<AdminData> {
         tableLimit: features.maxTables,
         tableLimitOverride: tenant.tableLimit,
         requests: requestsByTenant.get(tenant.id) ?? [],
+        feeClaim: claimByTenant.get(tenant.id) ?? null,
         access: (() => {
           const a = accessFrom({ status: tenant.status, trialEndsAt: tenant.trialEndsAt, paidUntil: subscription && subscription.status !== "cancelled" ? subscription.periodEnd : null }, now);
           return { state: a.state, reason: a.reason, endsAt: a.endsAt === null ? null : new Date(a.endsAt).toISOString(), stopsAt: a.state === "grace" ? new Date(a.stopsAt).toISOString() : null };

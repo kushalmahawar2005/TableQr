@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Bar, CartesianGrid, Cell, ComposedChart, Line, Pie, PieChart, XAxis, YAxis } from "recharts";
-import { AlertTriangle, ArrowDownRight, ArrowUpRight, Ban, IndianRupee, LayoutGrid, Receipt, Store, TrendingUp, UserPlus, Wallet } from "lucide-react";
+import { AlertTriangle, ArrowDownRight, ArrowUpRight, Ban, IndianRupee, LayoutGrid, Receipt, Store, TrendingUp, UserPlus, Wallet, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
@@ -11,6 +11,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { AdminData, AdminTenant } from "./admin-types";
 import { FEATURE_LABELS } from "@/lib/plan-features";
+import { openAdminPage } from "./admin-nav";
 
 const DAY = 86_400_000;
 const PLAN_COLORS = ["#5b42f5", "#16c784", "#f59d18", "#ed5368", "#3d91ef", "#e875b1"];
@@ -24,11 +25,12 @@ const ago = (value: string, now: number) => {
 };
 
 type AttentionKind = "request" | "trial" | "payment" | "suspended" | "inactive";
-type Attention = { id: string; kind: AttentionKind; tenant: AdminTenant; label: string; detail: string; tone: "red" | "amber" | "zinc"; rank: number };
+type Attention = { id: string; kind: AttentionKind; tenant: AdminTenant; label: string; detail: string; tone: "red" | "amber" | "zinc"; rank: number; page?: string };
 
 function attentionItems(tenants: AdminTenant[], now: number): Attention[] {
   const items: Attention[] = [];
   for (const tenant of tenants) {
+    if (tenant.feeClaim) items.push({ id: `${tenant.id}-claim`, kind: "payment", tenant, label: "Says they paid", detail: `₹${Math.round(tenant.feeClaim.amountPaise / 100).toLocaleString("en-IN")} · check it in Fees`, tone: "amber", rank: -2, page: "Fees" });
     for (const r of tenant.requests) items.push({ id: r.id, kind: "request", tenant, label: "Asked for upgrade", detail: `${r.feature && r.feature in FEATURE_LABELS ? FEATURE_LABELS[r.feature as keyof typeof FEATURE_LABELS].label : "Plan change"} · ${ago(r.createdAt, now)}`, tone: "amber", rank: -1 });
     if (tenant.subscriptionStatus === "past_due") items.push({ id: `${tenant.id}-due`, kind: "payment", tenant, label: "Payment overdue", detail: tenant.renewalAt ? `Was due ${shortDate(tenant.renewalAt)}` : "Subscription is past due", tone: "red", rank: 0 });
     if (tenant.status === "suspended") items.push({ id: `${tenant.id}-sus`, kind: "suspended", tenant, label: "Suspended", detail: "Tenant cannot take orders", tone: "red", rank: 1 });
@@ -175,7 +177,7 @@ export function DashboardView({ data, name }: { data: AdminData; name: string })
           </CardHeader>
           <CardContent className="space-y-3">
             <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
-              <TabsList variant="line" className="h-auto w-full flex-wrap justify-start">
+              <TabsList variant="line" className="h-auto w-full flex-wrap justify-start gap-x-1 gap-y-1 group-data-horizontal/tabs:h-auto [&>*]:h-8">
                 <TabsTrigger value="all">All ({attention.length})</TabsTrigger>
                 <TabsTrigger value="request">Requests ({count("request")})</TabsTrigger>
                 <TabsTrigger value="trial">Trial ({count("trial")})</TabsTrigger>
@@ -184,9 +186,12 @@ export function DashboardView({ data, name }: { data: AdminData; name: string })
                 <TabsTrigger value="inactive">Inactive ({count("inactive")})</TabsTrigger>
               </TabsList>
             </Tabs>
-            {shownAttention.length ? <ul className="space-y-3">{shownAttention.slice(0, 6).map((item) => <li key={item.id} className="flex items-start gap-3">
-              <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{item.tenant.name}</p><p className="truncate text-xs text-muted-foreground">{item.detail}</p></div>
-              <Badge variant="secondary" className={toneClass[item.tone]}>{item.label}</Badge>
+            {shownAttention.length ? <ul className="-mx-2 space-y-1">{shownAttention.slice(0, 8).map((item) => <li key={item.id}>
+              <button type="button" onClick={() => openAdminPage(item.page ?? "Tenants", item.page ? undefined : item.tenant.id)} className="flex w-full items-start gap-3 rounded-lg px-2 py-2 text-left hover:bg-muted focus-visible:outline-2 focus-visible:outline-[#5b42f5]">
+                <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{item.tenant.name}</p><p className="truncate text-xs text-muted-foreground">{item.detail}</p></div>
+                <Badge variant="secondary" className={toneClass[item.tone]}>{item.label}</Badge>
+                <ChevronRight className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+              </button>
             </li>)}</ul> : <div className="grid h-40 place-items-center text-center text-sm text-muted-foreground"><div><TrendingUp className="mx-auto mb-2 size-6 text-emerald-600" aria-hidden="true" /><p className="font-medium text-foreground">All good</p><p>Nothing needs your attention here.</p></div></div>}
           </CardContent>
         </Card>

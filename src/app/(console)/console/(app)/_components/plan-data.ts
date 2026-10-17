@@ -14,5 +14,6 @@ export async function planViewFor(staff: Pick<StaffSession, "tenantId" | "outlet
     features: p.features,
     waiting: p.waiting,
     payments: p.payments,
+    now: Date.now(),
   };
 }
