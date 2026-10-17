@@ -7,6 +7,7 @@ import { isPlaceholderName } from "@/domain/guest-name";
 import { isOpenAt, openingInfo } from "@/domain/hours";
 import { AppError } from "../errors";
 import type { Runner } from "../db-types";
+import { tenantAccess } from "../access";
 
 // Resolving a table QR (/r/<outlet>/t/<code>) and deciding what the guest sees first (PS 3.2).
 
@@ -64,7 +65,8 @@ async function resolveQr(run: Runner, outletCode: string, shortCode: string) {
   return row ?? null;
 }
 
-const isUnavailable = (t: ResolvedTable) => t.tenantStatus === "suspended" || t.tenantStatus === "cancelled";
+/** Suspended, cancelled, or past the end of its trial or paid period plus the grace days */
+const isUnavailable = async (t: ResolvedTable) => (await tenantAccess(t.outlet.tenantId)).state === "blocked";
 
 /** The QR's outlet and table, refusing unknown or revoked codes and suspended restaurants */
 export async function findTableByQr(run: Runner, outletCode: string, shortCode: string) {
@@ -72,7 +74,7 @@ export async function findTableByQr(run: Runner, outletCode: string, shortCode: 
   if (!row) throw new AppError("not_found", "We could not find this table. Please ask staff for help.");
   if (row.qrRevokedAt) throw new AppError("qr_revoked", "This code is no longer active. Please ask staff for help.");
   if (!row.table.active) throw new AppError("not_found", "This table is no longer available. Please ask staff for help.");
-  if (isUnavailable(row)) {
+  if (await isUnavailable(row)) {
     throw new AppError("outlet_unavailable", "Ordering from the table is not available right now. Please ask staff.");
   }
   return row;
@@ -233,7 +235,7 @@ export async function getTableLanding(outletCode: string, shortCode: string, dev
   const table = { code: t.table.code, maxSeats: t.table.maxSeats, zone: t.zoneName, state: t.table.state };
 
   if (t.qrRevokedAt) return { outlet, table, landing: { kind: "revoked" } as Landing };
-  if (isUnavailable(t)) return { outlet, table, landing: { kind: "unavailable" } as Landing };
+  if (await isUnavailable(t)) return { outlet, table, landing: { kind: "unavailable" } as Landing };
 
   const here = await findOpenSession(db, t.outlet.tenantId, t.table.id);
   // A phone whose party the host moved to another table goes back into its own visit

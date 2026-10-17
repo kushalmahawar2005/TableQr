@@ -44,6 +44,7 @@ const sections: { title: string; help: string; fields: Field[] }[] = [
     { name: "contactName", label: "Contact person", required: true },
     { name: "contactPhone", label: "Contact phone", type: "tel", required: true },
     { name: "contactEmail", label: "Contact email", type: "email" },
+    { name: "trialDays", label: "Free trial (days)", type: "number", required: true, defaultValue: "14", hint: "Everything works for these days. Then 3 more days with a warning, then the app stops until you record their fees" },
   ] },
   { title: "Location", help: "Where it is and how many tables", fields: [
     { name: "outletName", label: "Outlet name", required: true, hint: "This location, e.g. Spice Route - Jaipur" },
@@ -172,7 +173,7 @@ export function CreateTenantDialog({ open, onOpenChange, plans }: { open: boolea
             </div> : f.name === "city" ? <SuggestInput id="city" name="city" required placeholder="Start typing, e.g. Jai" suggest={suggestCity} />
             : f.name === "address" ? <SuggestInput id="address" name="address" required minChars={4} placeholder="Shop, street or landmark" suggest={suggestAddress} />
             : <Input id={f.name} name={f.name} type={f.type ?? "text"} required={f.required} defaultValue={f.defaultValue}
-              min={f.name === "tableCount" ? 1 : undefined} max={f.name === "tableCount" ? 100 : undefined} />}
+              min={f.name === "tableCount" || f.name === "trialDays" ? 1 : undefined} max={f.name === "tableCount" ? 100 : f.name === "trialDays" ? 90 : undefined} />}
             {f.hint && <p className="text-xs text-muted-foreground">{f.hint}</p>}
           </div>)}</div>
         </fieldset>)}

@@ -21,8 +21,8 @@ export async function requestPlanChange(staff: Staff, input: { feature?: string 
   const [open] = await db
     .select({ id: s.planRequests.id })
     .from(s.planRequests)
-    .where(and(eq(s.planRequests.tenantId, staff.tenantId), eq(s.planRequests.status, "open"), feature ? eq(s.planRequests.feature, feature) : isNull(s.planRequests.feature)));
-  if (open && feature) return { id: open.id, already: true };
+    .where(and(eq(s.planRequests.tenantId, staff.tenantId), eq(s.planRequests.status, "open"), feature ? eq(s.planRequests.feature, feature) : and(isNull(s.planRequests.feature), eq(s.planRequests.note, note!))));
+  if (open) return { id: open.id, already: true };
   const id = uuidv7();
   await db.insert(s.planRequests).values({ id, tenantId: staff.tenantId, outletId: staff.outletId, requestedBy: staff.name.slice(0, 80), feature, note, createdAt: now });
   return { id, already: false };

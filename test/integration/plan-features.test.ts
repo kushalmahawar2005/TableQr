@@ -10,6 +10,9 @@ import { getPricingData } from "@/server/staff/pricing";
 import { getReport } from "@/server/staff/reports-read";
 import { addMember, assignableRoles } from "@/server/staff/team";
 import { hasOpenRequest, requestPlanChange } from "@/server/staff/plan-request";
+import { getTableLanding } from "@/server/guest/table";
+import { requireStaff } from "@/server/staff/auth";
+import { tenantAccess } from "@/server/access";
 import { resetTestDb } from "./setup-db";
 
 // What a plan or a custom package switches on is enforced on the server, not only hidden.
@@ -82,5 +85,25 @@ describe("plan features", () => {
     expect(general.already).toBe(false);
     const rows = await env.db.select().from(s.planRequests).where(eq(s.planRequests.tenantId, env.demo.tenantId));
     expect(rows.map((r) => r.feature ?? r.note).sort()).toEqual(["We opened a second branch", "kitchenDisplay"]);
+  });
+
+  it("a trial past its grace days pauses staff and guests; extending it brings them back", async () => {
+    const { token } = await signInStaff({ outletCode: env.demo.outletCode, phone: "9000000001", pin: "1111" });
+    const [sub] = await env.db.select({ id: s.subscriptions.id }).from(s.subscriptions).where(eq(s.subscriptions.tenantId, env.demo.tenantId));
+    await env.db.update(s.subscriptions).set({ status: "cancelled" }).where(eq(s.subscriptions.id, sub.id));
+    await setTenant({ status: "trial", trialEndsAt: new Date(Date.now() - 5 * 86_400_000) });
+    try {
+      expect((await tenantAccess(env.demo.tenantId)).state).toBe("blocked");
+      await refused(requireStaff(token, ["owner"]), "forbidden");
+      const tableQr = env.demo.tableQr.T12;
+      expect((await getTableLanding(env.demo.outletCode, tableQr, "device-paused")).landing.kind).toBe("unavailable");
+      // The owner can still ask to renew while paused
+      expect((await requestPlanChange(owner, { note: "Please renew our plan" })).already).toBe(false);
+      await setTenant({ trialEndsAt: new Date(Date.now() + 7 * 86_400_000) });
+      expect((await requireStaff(token, ["owner"])).tenantId).toBe(env.demo.tenantId);
+    } finally {
+      await setTenant({ status: "active", trialEndsAt: null });
+      await env.db.update(s.subscriptions).set({ status: "active" }).where(eq(s.subscriptions.id, sub.id));
+    }
   });
 });

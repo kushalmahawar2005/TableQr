@@ -154,9 +154,11 @@ export async function seedDemo(db: Db, opts: { adminId?: string; openAllDay?: bo
     tenantId,
     planCode: "pro",
     pricePerOutletPaise: rupees(4999),
+    // Paid for the year, so the demo never pauses (see src/server/access.ts)
+    billingCycle: "annual",
     status: "active",
     periodStart: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)),
-    periodEnd: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)),
+    periodEnd: new Date(Date.UTC(now.getUTCFullYear() + 1, now.getUTCMonth(), 1)),
   });
   await db.insert(s.brands).values({ id: brandId, tenantId, name: "Spice Route" });
   await db.insert(s.outlets).values({

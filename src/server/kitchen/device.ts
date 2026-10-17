@@ -9,6 +9,7 @@ import { AppError } from "../errors";
 import { hashToken, verifyStaffPin } from "../staff/auth";
 import { audit } from "../staff/audit";
 import { KITCHEN_NOT_IN_PLAN, tenantHasKitchen } from "../plan";
+import { tenantAccess } from "../access";
 
 // Trusted kitchen screens (S2). A manager or owner sets the screen up once with their phone and
 // PIN; it then holds its own 30-day credential, pinned to one station or to the expeditor's All
@@ -104,6 +105,8 @@ export async function resolveKdsDevice(token: string | null | undefined, now = n
   if (!row) return null;
   // Switching the kitchen screen off (plan or admin) turns existing screens off too
   if (!(await tenantHasKitchen(row.d.tenantId))) return null;
+  // A paused restaurant's screens stop too, until the plan is renewed
+  if ((await tenantAccess(row.d.tenantId, now)).state === "blocked") return null;
   if (!row.d.lastSeenAt || now.getTime() - row.d.lastSeenAt.getTime() > 5 * 60_000) {
     await db.update(s.kdsDevices).set({ lastSeenAt: now }).where(and(eq(s.kdsDevices.tenantId, row.d.tenantId), eq(s.kdsDevices.id, row.d.id)));
   }

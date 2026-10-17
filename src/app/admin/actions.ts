@@ -87,6 +87,7 @@ export async function createTenantAction(_prev: TenantState, form: FormData): Pr
     const ownerName = text(form, "ownerName");
     const ownerPin = text(form, "ownerPin");
     const tableCount = Math.min(100, Math.max(1, Number(text(form, "tableCount") || 4)));
+    const trialDays = Math.min(90, Math.max(1, Math.floor(Number(text(form, "trialDays") || 14))));
     // Kitchen screen chosen at onboarding: stored only when it differs from the plan
     const kitchenChoice = form.get("kitchenDisplay") === null ? null : text(form, "kitchenDisplay") === "on";
     if (!tenantName || !contactName || !contactPhone || !planCode || !outletName || !city || !address || !ownerPhone || !ownerName || !isPin(ownerPin)) {
@@ -107,7 +108,7 @@ export async function createTenantAction(_prev: TenantState, form: FormData): Pr
       // The plan's table limit applies; only tables beyond it are stored as this restaurant's own limit
       const planTables = readFeatures(plan.features).maxTables;
       const tableLimit = planTables !== null && tableCount > planTables ? tableCount : null;
-      await tx.insert(s.tenants).values({ id: tenantId, name: tenantName, planCode, contactName, contactPhone, contactEmail: contactEmail || null, createdByAdminId: admin.id, kitchenDisplay, tableLimit });
+      await tx.insert(s.tenants).values({ id: tenantId, name: tenantName, planCode, contactName, contactPhone, contactEmail: contactEmail || null, createdByAdminId: admin.id, kitchenDisplay, tableLimit, trialEndsAt: new Date(Date.now() + trialDays * 86_400_000) });
       await tx.insert(s.brands).values({ id: brandId, tenantId, name: brandName });
       await tx.insert(s.outlets).values({ id: outletId, tenantId, brandId, code: outletCode, name: outletName, city, address });
       await tx.insert(s.users).values({ id: userId, tenantId, phone: ownerPhone, name: ownerName, pinHash: await hashPin(ownerPin) });

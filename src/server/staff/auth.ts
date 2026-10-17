@@ -7,6 +7,7 @@ import * as s from "@/db/schema";
 import { can, canUse, type FloorPermission, type StaffRole } from "@/lib/staff-permissions";
 import { AppError } from "../errors";
 import type { StaffContext } from "./context";
+import { ACCESS_STOPPED, tenantAccess } from "../access";
 
 // Staff sign-in (S1): phone and a 4-digit PIN at one outlet. The device keeps a random token in an
 // httpOnly cookie; the server stores only its hash. Roles and outlet scope are read from the
@@ -142,6 +143,7 @@ export async function requireStaff(token: string | null | undefined, allowed: re
   const staff = await resolveStaff(token, now);
   if (!staff) throw new AppError("staff_signed_out", "Please sign in again.");
   if (!canUse(staff.roles, allowed)) throw new AppError("forbidden", "Your role can't do this. Ask a manager.");
+  if ((await tenantAccess(staff.tenantId, now)).state === "blocked") throw new AppError("forbidden", ACCESS_STOPPED, { reason: "paused" });
   return staff;
 }
 
