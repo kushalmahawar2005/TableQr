@@ -14,8 +14,9 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { addOutletAction, changeTenantPlanAction, markPlanRequestDoneAction, setTenantPriceAction, extendTrialAction, getTenantDetailAction, resetOwnerPinAction, setCustomPackageAction, setTenantKitchenAction, setTenantStatusAction, setTenantTableLimitAction, updateTenantAction } from "./actions";
+import { addOutletAction, changeTenantPlanAction, markPlanRequestDoneAction, recordFeePaymentAction, setTenantPriceAction, extendTrialAction, getTenantDetailAction, resetOwnerPinAction, setCustomPackageAction, setTenantKitchenAction, setTenantStatusAction, setTenantTableLimitAction, updateTenantAction } from "./actions";
 import { CreateTenantDialog } from "./create-tenant-dialog";
+import { FeeForm } from "./subscriptions-view";
 import type { AdminData, AdminTenant, TenantDetail } from "./admin-types";
 import { FEATURE_KEYS, FEATURE_LABELS, type Features } from "@/lib/plan-features";
 
@@ -54,6 +55,32 @@ function healthOf(t: AdminTenant, now: number): Health {
   return "At risk";
 }
 const mrr = (t: AdminTenant) => t.status === "active" ? (t.monthlyPricePaise ?? 0) * t.outletCount : 0;
+
+/** Status in words: trial days left, trial ended, fees due, or paused */
+function accessBadge(t: AdminTenant, now: number): { label: string; tone: string } {
+  const days = (iso: string | null) => (iso ? Math.max(0, Math.ceil((new Date(iso).getTime() - now) / 86_400_000)) : 0);
+  const red = "bg-red-100 text-red-700";
+  const amber = "bg-amber-100 text-amber-700";
+  const { state, reason } = t.access;
+  if (reason === "suspended") return { label: "Suspended", tone: red };
+  if (reason === "cancelled") return { label: "Cancelled", tone: statusTone.cancelled };
+  if (state === "blocked") return { label: reason === "trial" ? "Trial ended · paused" : "Fees due · paused", tone: red };
+  if (state === "grace") return { label: `${reason === "trial" ? "Trial ended" : "Fees due"} · stops in ${days(t.access.stopsAt)}d`, tone: red };
+  if (reason === "trial") return { label: `Trial · ${days(t.access.endsAt)}d left`, tone: amber };
+  // A trial made before end dates existed never ends until the admin extends it
+  if (t.status === "trial") return { label: "Trial · no end date", tone: amber };
+  return { label: "Active", tone: statusTone.active };
+}
+
+/** More free days, from today or from the current trial end, whichever is later */
+function ExtendTrial({ pending, onExtend }: { pending: boolean; onExtend: (days: number) => void }) {
+  const [custom, setCustom] = useState("");
+  return <div className="flex flex-wrap items-center gap-2">
+    {[7, 14, 30].map((d) => <Button key={d} variant="outline" size="sm" disabled={pending} onClick={() => onExtend(d)}>+{d} days</Button>)}
+    <Input inputMode="numeric" value={custom} onChange={(e) => setCustom(e.target.value.replace(/\D/g, "").slice(0, 2))} placeholder="Days" aria-label="Extend trial by days" className="h-8 w-20" />
+    <Button size="sm" disabled={pending || !custom || Number(custom) < 1 || Number(custom) > 90} onClick={() => onExtend(Number(custom))}>Extend</Button>
+  </div>;
+}
 
 /** What the restaurant can use right now, as ticks and crosses */
 function FeatureList({ features }: { features: Features }) {
@@ -160,7 +187,7 @@ function TenantSheet({ tenant, plans, now, onClose }: { tenant: AdminTenant | nu
           <div className="flex items-center gap-4 pr-8">
             <span className="grid size-12 shrink-0 place-items-center rounded-xl bg-[#5b42f5] text-sm font-bold text-white">{tenant.name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase()}</span>
             <div className="min-w-0 flex-1">
-              <SheetTitle className="flex flex-wrap items-center gap-2 text-lg">{tenant.name}<Badge variant="secondary" className={`capitalize ${statusTone[tenant.status]}`}>{tenant.status}</Badge></SheetTitle>
+              <SheetTitle className="flex flex-wrap items-center gap-2 text-lg">{tenant.name}<Badge variant="secondary" className={accessBadge(tenant, now).tone}>{accessBadge(tenant, now).label}</Badge></SheetTitle>
               <SheetDescription className="truncate">{[tenant.contactEmail ?? tenant.contactPhone, tenant.cities.join(", ")].filter(Boolean).join(" · ")}</SheetDescription>
             </div>
             <Badge variant="secondary">{tenant.planName}</Badge>
@@ -271,7 +298,7 @@ function TenantSheet({ tenant, plans, now, onClose }: { tenant: AdminTenant | nu
                 <div className="flex flex-wrap gap-2">
                   <Button variant="outline" size="sm" onClick={() => setTab("edit")}>Edit details</Button>
                   <Button variant="outline" size="sm" onClick={() => setTab("manage")}>Reset owner PIN</Button>
-                  {tenant.status === "trial" && <Button variant="outline" size="sm" disabled={pending} onClick={() => run(() => extendTrialAction(tenant.id, 7), "Trial extended by 7 days.")}>Extend trial</Button>}
+                  {tenant.status !== "cancelled" && <Button variant="outline" size="sm" onClick={() => setTab("manage")}>{tenant.status === "trial" ? "Extend trial / fees" : "Record fees"}</Button>}
                   {tenant.status === "suspended" || tenant.status === "cancelled"
                     ? <Button size="sm" disabled={pending} onClick={() => run(() => setTenantStatusAction(tenant.id, "active"), "Tenant activated.")}>Activate</Button>
                     : <Button variant="destructive" size="sm" disabled={pending} onClick={() => { if (window.confirm(`Suspend ${tenant.name}? Their staff will lose access.`)) run(() => setTenantStatusAction(tenant.id, "suspended"), "Tenant suspended."); }}>Suspend</Button>}
@@ -324,6 +351,14 @@ function TenantSheet({ tenant, plans, now, onClose }: { tenant: AdminTenant | nu
             {tenant.planCode !== "custom" && <PriceForm key={`${tenant.id}-${tenant.customPricePaise}`} tenant={tenant} planPricePaise={plans.find((p) => p.code === tenant.planCode)?.monthlyPricePaise ?? null} pending={pending}
               onSave={(rupees) => run(() => setTenantPriceAction(tenant.id, rupees), rupees === null ? "Back to the plan's price." : "Price saved.")} />}
             {tenant.planCode === "custom" && <CustomPackageForm key={tenant.id} tenant={tenant} pending={pending} onSave={(input) => run(() => setCustomPackageAction(tenant.id, input), "Custom package saved.")} />}
+            {tenant.status !== "cancelled" && <section className="space-y-3">
+              <div>
+                <h3 className="text-sm font-semibold">Trial and fees</h3>
+                <p className="text-xs text-muted-foreground">{tenant.access.state === "blocked" && tenant.access.reason !== "suspended" ? "Paused now. Give more free days or record their fees, and it opens again at once." : tenant.access.state === "grace" ? "Ended; it pauses when the grace days run out. Give more free days or record their fees." : "Give more free days, or record fees when they pay."}</p>
+              </div>
+              {tenant.status === "trial" && <ExtendTrial pending={pending} onExtend={(days) => run(() => extendTrialAction(tenant.id, days), `Trial extended by ${days} days.`)} />}
+              <FeeForm key={tenant.id} t={tenant} pending={pending} onSave={(input) => run(() => recordFeePaymentAction(tenant.id, input), `Saved. Paid for ${input.months} ${input.months === 1 ? "month" : "months"}.`)} />
+            </section>}
             <section className="space-y-2">
               <h3 className="text-sm font-semibold">Reset owner PIN</h3>
               <div className="flex gap-2">
@@ -334,7 +369,7 @@ function TenantSheet({ tenant, plans, now, onClose }: { tenant: AdminTenant | nu
             <section className="space-y-2">
               <h3 className="text-sm font-semibold">Access</h3>
               <div className="flex flex-wrap gap-2">
-                {tenant.status === "trial" && <Button variant="outline" disabled={pending} onClick={() => run(() => extendTrialAction(tenant.id, 7), "Trial extended by 7 days.")}>{busy}Extend trial 7 days</Button>}
+                {null}
                 {tenant.status === "suspended" || tenant.status === "cancelled"
                   ? <Button disabled={pending} onClick={() => run(() => setTenantStatusAction(tenant.id, "active"), "Tenant activated.")}>{busy}Activate tenant</Button>
                   : <Button variant="destructive" disabled={pending} onClick={() => { if (window.confirm(`Suspend ${tenant.name}? Their staff will lose access.`)) run(() => setTenantStatusAction(tenant.id, "suspended"), "Tenant suspended."); }}>{busy}Suspend tenant</Button>}
@@ -463,7 +498,7 @@ export function TenantsView({ data }: { data: AdminData }) {
             <TableCell className="text-muted-foreground">{t.cities.join(", ") || "—"}</TableCell>
             <TableCell><Badge variant="secondary">{t.planName}</Badge></TableCell>
             <TableCell className="text-right">{t.outletCount}</TableCell>
-            <TableCell className="pl-6"><Badge variant="secondary" className={`capitalize ${statusTone[t.status]}`}>{t.status}</Badge></TableCell>
+            <TableCell className="pl-6"><Badge variant="secondary" className={accessBadge(t, now).tone}>{accessBadge(t, now).label}</Badge></TableCell>
             <TableCell className="text-right">{t.status === "active" ? money(mrr(t)) : "—"}</TableCell>
             <TableCell className="text-right">{t.orders30d.toLocaleString("en-IN")}</TableCell>
             <TableCell className="pl-6 text-muted-foreground">{date(t.createdAt)}</TableCell>

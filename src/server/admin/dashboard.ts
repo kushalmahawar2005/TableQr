@@ -7,6 +7,7 @@ import type { AdminActivity, AdminData, AdminGrowthPoint } from "@/app/admin/adm
 import { requirePlatformAdmin } from "./auth";
 import { readFeatures } from "@/lib/plan-features";
 import { effectiveFeatures, hasKitchenDisplay } from "../plan";
+import { accessFrom } from "../access";
 
 const DAY = 86_400_000;
 
@@ -212,6 +213,10 @@ export async function getAdminData(): Promise<AdminData> {
         tableLimit: features.maxTables,
         tableLimitOverride: tenant.tableLimit,
         requests: requestsByTenant.get(tenant.id) ?? [],
+        access: (() => {
+          const a = accessFrom({ status: tenant.status, trialEndsAt: tenant.trialEndsAt, paidUntil: subscription && subscription.status !== "cancelled" ? subscription.periodEnd : null }, now);
+          return { state: a.state, reason: a.reason, endsAt: a.endsAt === null ? null : new Date(a.endsAt).toISOString(), stopsAt: a.state === "grace" ? new Date(a.stopsAt).toISOString() : null };
+        })(),
         createdAt: tenant.createdAt.toISOString(),
         trialEndsAt: tenant.trialEndsAt?.toISOString() ?? null,
         outletCount: outlets?.count ?? 0,

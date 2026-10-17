@@ -72,7 +72,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 const FEE_METHODS: Record<FeeMethod, string> = { upi: "UPI", cash: "Cash", bank: "Bank transfer" };
 
 /** The restaurant paid its fee by hand: how many months, how much, and how */
-function FeeForm({ t, pending, onSave }: { t: AdminTenant; pending: boolean; onSave: (input: { months: number; amountRupees: number; method: FeeMethod; reference: string }) => void }) {
+export function FeeForm({ t, pending, onSave }: { t: AdminTenant; pending: boolean; onSave: (input: { months: number; amountRupees: number; method: FeeMethod; reference: string }) => void }) {
   const [months, setMonths] = useState(1);
   const [amount, setAmount] = useState(String(Math.round((perMonth(t) * 1) / 100)));
   const [method, setMethod] = useState<FeeMethod>("upi");
