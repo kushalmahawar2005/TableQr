@@ -22,7 +22,7 @@ export default async function ConsoleLayout({ children }: LayoutProps<"/console"
   // Sections outside the plan stay in the menu with a lock, so the owner knows they exist
   const [features, outlets, access] = await Promise.all([tenantFeatures(staff.tenantId), outletsFor(staff), tenantAccess(staff.tenantId)]);
   const canAsk = staff.roles.some((r) => r === "owner" || r === "manager");
-  if (access.state === "blocked") return <PausedScreen access={access} canAsk={canAsk} />;
+  if (access.state === "blocked") return <PausedScreen access={access} canAsk={canAsk} outlet={staff.outlet.name} />;
   const sections = visibleSections
     .filter((s) => s.slug !== "kitchen" && canSee(staff.roles, s.slug))
     .map((s) => {
@@ -32,7 +32,7 @@ export default async function ConsoleLayout({ children }: LayoutProps<"/console"
   const kitchen = canSee(staff.roles, "kitchen");
   return (
     <StaffShell theme={theme} lang={lang} sections={sections} kitchen={kitchen} outlets={outlets.map((o) => ({ id: o.id, name: o.name, current: o.id === staff.outletId }))} staff={{ name: staff.name, roles: staff.roles, outlet: staff.outlet.name, shiftEnds: staff.expiresAt }}>
-      <AccessBanner access={access} canAsk={canAsk} />
+      <AccessBanner access={access} canAsk={canAsk} outlet={staff.outlet.name} />
       {children}
     </StaffShell>
   );

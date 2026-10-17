@@ -1,5 +1,6 @@
 import type { Access } from "@/server/access";
 import { signOutAction } from "../../login/actions";
+import { ContactTableQR } from "./contact-tableqr";
 import { RenewButton } from "./request-upgrade";
 
 // What staff see when the free trial or paid period ends: a warning first, then a paused screen.
@@ -9,7 +10,7 @@ const day = (ms: number) => new Intl.DateTimeFormat("en-IN", { day: "numeric", m
 const what = (reason: string) => (reason === "trial" ? "free trial" : "TableQR plan");
 
 /** Replaces every staff screen once the grace days are over, or when TableQR has paused the restaurant */
-export function PausedScreen({ access, canAsk }: { access: Extract<Access, { state: "blocked" }>; canAsk: boolean }) {
+export function PausedScreen({ access, canAsk, outlet }: { access: Extract<Access, { state: "blocked" }>; canAsk: boolean; outlet: string }) {
   const paused = access.reason === "suspended" || access.reason === "cancelled";
   return (
     <main className="grid min-h-dvh place-items-center bg-paper p-6 text-center">
@@ -20,7 +21,7 @@ export function PausedScreen({ access, canAsk }: { access: Extract<Access, { sta
           {access.endsAt ? `It ended on ${day(access.endsAt)}. ` : ""}Orders, billing and the QR menu are stopped. Your menu, bills and customers are safe; once TableQR renews your plan, everything comes back at once.
         </p>
         <div className="mt-6 flex flex-col items-center gap-3">
-          {canAsk ? <RenewButton /> : <p className="text-body font-semibold text-ink">Please tell the owner.</p>}
+          {canAsk ? <><RenewButton /><ContactTableQR message={`Hi TableQR, this is ${outlet}. Please renew our plan.`} /></> : <p className="text-body font-semibold text-ink">Please tell the owner.</p>}
           <form action={signOutAction}><button type="submit" className="min-h-11 text-body font-semibold text-muted underline underline-offset-4">Sign out</button></form>
         </div>
       </div>
@@ -29,7 +30,7 @@ export function PausedScreen({ access, canAsk }: { access: Extract<Access, { sta
 }
 
 /** A strip above staff screens: the trial or plan ends soon, or has ended and is in its grace days */
-export function AccessBanner({ access, canAsk }: { access: Access; canAsk: boolean }) {
+export function AccessBanner({ access, canAsk, outlet }: { access: Access; canAsk: boolean; outlet: string }) {
   if (access.state === "ok" && (!access.warn || access.endsAt === null)) return null;
   if (access.state === "blocked") return null;
   const grace = access.state === "grace";
@@ -40,7 +41,7 @@ export function AccessBanner({ access, canAsk }: { access: Access; canAsk: boole
           ? `Your ${what(access.reason)} ended on ${day(access.endsAt)}. Orders and billing stop on ${day(access.stopsAt)}.`
           : `Your ${what(access.reason)} ends on ${day(access.endsAt!)}.`}
       </span>
-      {canAsk && <RenewButton compact />}
+      {canAsk && <><RenewButton compact /><ContactTableQR compact message={`Hi TableQR, this is ${outlet}. Please renew our plan.`} /></>}
     </div>
   );
 }
