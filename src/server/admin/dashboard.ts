@@ -41,8 +41,8 @@ export async function getAdminData(): Promise<AdminData> {
     periodEnd: s.subscriptions.periodEnd,
     status: s.subscriptions.status,
     rank: sql<number>`row_number() over (partition by ${s.subscriptions.tenantId} order by ${s.subscriptions.periodStart} desc, ${s.subscriptions.createdAt} desc, ${s.subscriptions.id} desc)`.as("period_rank"),
-    // isolation-exempt: authenticated platform admins inspect each tenant's latest started subscription.
-  }).from(s.subscriptions).where(lte(s.subscriptions.periodStart, now)).as("ranked_subscriptions");
+    // isolation-exempt: authenticated platform admins inspect each tenant's latest subscription, including months paid in advance.
+  }).from(s.subscriptions).as("ranked_subscriptions");
 
   const [tenantRows, planRows, outletGroups, outletDays, [orderStats], orderDays, [revenueStats], subscriptionRows, recentOutlets, recentOrders, recentSubscriptions, tenantOrderRows, tenantBillRows, [tableStats]] = await Promise.all([
     db.select({

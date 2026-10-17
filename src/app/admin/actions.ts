@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq } from "drizzle-orm";
+import { and, count, desc, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
@@ -151,6 +151,51 @@ export async function extendTrialAction(tenantId: string, days: number): Promise
     return { error: null };
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Trial could not be extended." };
+  }
+}
+
+const FEE_METHODS = { upi: "UPI", cash: "Cash", bank: "Bank transfer" } as const;
+export type FeeMethod = keyof typeof FEE_METHODS;
+
+/**
+ * The restaurant paid its TableQR fee by hand (UPI, cash or bank): start the paid months right
+ * after the current period or trial ends (or today, if that has passed) and mark the tenant active.
+ * What was received is kept in the audit log.
+ */
+export async function recordFeePaymentAction(tenantId: string, input: { months: number; amountRupees: number; method: FeeMethod; reference: string }): Promise<TenantActionState> {
+  try {
+    const admin = await requireSuperAdmin();
+    const months = Math.floor(Number(input.months));
+    if (![1, 3, 6, 12].includes(months)) return { error: "Choose 1, 3, 6 or 12 months." };
+    const amountRupees = Math.floor(Number(input.amountRupees));
+    if (!Number.isFinite(amountRupees) || amountRupees < 0 || amountRupees > 10_000_000) return { error: "Enter the amount you received." };
+    if (!(input.method in FEE_METHODS)) return { error: "Choose how they paid." };
+    const reference = input.reference.trim().slice(0, 60);
+    const [tenant] = await db.select({ status: s.tenants.status, planCode: s.tenants.planCode, trialEndsAt: s.tenants.trialEndsAt }).from(s.tenants).where(eq(s.tenants.id, tenantId));
+    if (!tenant) return { error: "Tenant not found." };
+    if (tenant.status === "cancelled") return { error: "This tenant is cancelled." };
+    const [plan] = await db.select({ monthlyPricePaise: s.plans.monthlyPricePaise }).from(s.plans).where(eq(s.plans.code, tenant.planCode));
+    const [latest] = await db.select({ periodEnd: s.subscriptions.periodEnd, pricePerOutletPaise: s.subscriptions.pricePerOutletPaise, status: s.subscriptions.status })
+      .from(s.subscriptions).where(eq(s.subscriptions.tenantId, tenantId)).orderBy(desc(s.subscriptions.periodEnd)).limit(1);
+    const [outlets] = await db.select({ total: count() }).from(s.outlets).where(eq(s.outlets.tenantId, tenantId));
+    const runningEnd = latest && latest.status !== "cancelled" ? latest.periodEnd.getTime() : tenant.status === "trial" ? tenant.trialEndsAt?.getTime() ?? 0 : 0;
+    const periodStart = new Date(Math.max(Date.now(), runningEnd));
+    const periodEnd = new Date(periodStart);
+    periodEnd.setUTCMonth(periodEnd.getUTCMonth() + months);
+    await db.transaction(async (tx) => {
+      await tx.insert(s.subscriptions).values({
+        id: uuidv7(), tenantId, planCode: tenant.planCode, billingCycle: months === 12 ? "annual" : "monthly",
+        pricePerOutletPaise: latest?.pricePerOutletPaise ?? plan?.monthlyPricePaise ?? 0, outletCount: Math.max(1, Number(outlets?.total ?? 1)),
+        status: "active", periodStart, periodEnd,
+      });
+      if (tenant.status !== "active") await tx.update(s.tenants).set({ status: "active", statusReason: null }).where(eq(s.tenants.id, tenantId));
+    });
+    await logAdminAction(admin, tenantId, "admin.fee_received", { status: tenant.status }, { status: "active", months, amountPaise: amountRupees * 100, method: input.method, reference: reference || null, paidUntil: periodEnd.toISOString() },
+      `₹${amountRupees.toLocaleString("en-IN")} by ${FEE_METHODS[input.method]}${reference ? ` (${reference})` : ""} for ${months} ${months === 1 ? "month" : "months"}`);
+    revalidatePath("/admin");
+    return { error: null };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Payment could not be saved." };
   }
 }
 

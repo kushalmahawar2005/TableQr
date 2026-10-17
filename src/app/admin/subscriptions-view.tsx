@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { changeTenantPlanAction, extendTrialAction } from "./actions";
+import { changeTenantPlanAction, extendTrialAction, recordFeePaymentAction, type FeeMethod } from "./actions";
 import type { AdminData, AdminTenant } from "./admin-types";
 
 const DAY = 86_400_000;
@@ -67,6 +67,33 @@ function Stat({ icon: Icon, label, value, note, tone }: { icon: typeof FileText;
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return <div className="flex items-center justify-between gap-3 py-2 text-sm"><dt className="text-muted-foreground">{label}</dt><dd className="min-w-0 truncate text-right font-medium">{children}</dd></div>;
+}
+
+const FEE_METHODS: Record<FeeMethod, string> = { upi: "UPI", cash: "Cash", bank: "Bank transfer" };
+
+/** The restaurant paid its fee by hand: how many months, how much, and how */
+function FeeForm({ t, pending, onSave }: { t: AdminTenant; pending: boolean; onSave: (input: { months: number; amountRupees: number; method: FeeMethod; reference: string }) => void }) {
+  const [months, setMonths] = useState(1);
+  const [amount, setAmount] = useState(String(Math.round((perMonth(t) * 1) / 100)));
+  const [method, setMethod] = useState<FeeMethod>("upi");
+  const [reference, setReference] = useState("");
+  const pickMonths = (m: number) => { setMonths(m); setAmount(String(Math.round((perMonth(t) * m) / 100))); };
+  return <div className="space-y-2 rounded-lg border p-3">
+    <p className="text-sm font-semibold">Fees received</p>
+    <p className="text-xs text-muted-foreground">They paid you? Save it here. The paid months start when the current period ends.</p>
+    <div className="grid grid-cols-4 gap-1.5">{[1, 3, 6, 12].map((m) => <Button key={m} type="button" size="sm" variant={months === m ? "default" : "outline"} aria-pressed={months === m} onClick={() => pickMonths(m)}>{m} mo</Button>)}</div>
+    <div className="grid grid-cols-2 gap-2">
+      <label className="space-y-1 text-xs text-muted-foreground">Amount (₹)<Input inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value.replace(/\D/g, "").slice(0, 8))} /></label>
+      <label className="space-y-1 text-xs text-muted-foreground">Paid by
+        <Select value={method} onValueChange={(m) => m && setMethod(m as FeeMethod)}>
+          <SelectTrigger className="w-full" aria-label="Paid by"><SelectValue>{FEE_METHODS[method]}</SelectValue></SelectTrigger>
+          <SelectContent>{(Object.keys(FEE_METHODS) as FeeMethod[]).map((m) => <SelectItem key={m} value={m}>{FEE_METHODS[m]}</SelectItem>)}</SelectContent>
+        </Select>
+      </label>
+    </div>
+    <Input value={reference} onChange={(e) => setReference(e.target.value.slice(0, 60))} placeholder="UPI reference (optional)" aria-label="UPI reference" />
+    <Button className="w-full" disabled={pending || amount === ""} onClick={() => onSave({ months, amountRupees: Number(amount), method, reference })}>{pending && <Loader2 className="animate-spin" />}Save payment</Button>
+  </div>;
 }
 
 export function SubscriptionsView({ data }: { data: AdminData }) {
@@ -222,6 +249,7 @@ export function SubscriptionsView({ data }: { data: AdminData }) {
                 </Select>
                 {(kind === "trial" || kind === "expired") && t.status === "trial" && <Button className="w-full" disabled={pending} onClick={() => run(() => extendTrialAction(t.id, 7), "Trial extended by 7 days.")}>{pending && <Loader2 className="animate-spin" />}Give 7 more days</Button>}
               </div>
+              {t.status !== "cancelled" && <FeeForm key={t.id} t={t} pending={pending} onSave={(input) => run(() => recordFeePaymentAction(t.id, input), `Saved. Paid for ${input.months} ${input.months === 1 ? "month" : "months"}.`)} />}
             </>;
           })() : <p className="py-10 text-center text-sm text-muted-foreground">Select a subscription to see its details.</p>}
         </CardContent>
