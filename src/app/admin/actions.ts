@@ -15,7 +15,7 @@ import { getSettingsData } from "@/server/admin/settings";
 import type { AnalyticsData, AnalyticsRange, AuditData, PaymentsData, SettingsData, TenantDetail } from "./admin-types";
 import { requirePlatformAdmin, signInPlatformAdmin, signOutPlatformAdmin } from "@/server/admin/auth";
 import { randomInt } from "node:crypto";
-import { effectiveFeatures, hasKitchenDisplay } from "@/server/plan";
+import { effectiveFeatures, hasKitchenDisplay, tenantFeatures } from "@/server/plan";
 import { FEATURE_KEYS, readFeatures, type Features } from "@/lib/plan-features";
 
 export type AdminLoginState = { error: string | null };
@@ -40,6 +40,33 @@ const text = (form: FormData, key: string) => String(form.get(key) ?? "").trim()
 const BASE62 = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
 const shortCode = () => Array.from({ length: 4 }, () => BASE62[randomInt(BASE62.length)]).join("");
 const joinCode = () => String(randomInt(1000, 10000));
+
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/** The typed outlet code if free, else the outlet name's first letters plus two digits (Spice Route -> SPI42) */
+async function pickOutletCode(tx: Tx, typed: string, outletName: string) {
+  const taken = async (code: string) => (await tx.select({ id: s.outlets.id }).from(s.outlets).where(eq(s.outlets.code, code))).length > 0;
+  if (typed) {
+    if (await taken(typed)) throw new Error("That outlet code is already in use.");
+    return typed;
+  }
+  const prefix = outletName.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 3).padEnd(3, "X");
+  for (let attempt = 0; attempt < 30; attempt++) {
+    const candidate = `${prefix}${String(randomInt(100)).padStart(2, "0")}`;
+    if (!(await taken(candidate))) return candidate;
+  }
+  throw new Error("Could not generate an outlet code. Please type one.");
+}
+
+/** One "Main Hall" with tables T1..Tn, each with its own QR code */
+async function addStarterFloor(tx: Tx, tenantId: string, outletId: string, zoneId: string, tableCount: number) {
+  await tx.insert(s.zones).values({ id: zoneId, tenantId, outletId, name: "Main Hall" });
+  for (let i = 1; i <= tableCount; i++) {
+    const tableId = uuidv7();
+    await tx.insert(s.diningTables).values({ id: tableId, tenantId, outletId, zoneId, code: `T${i}`, maxSeats: 4, tableClass: "4-top", joinCode: joinCode() });
+    await tx.insert(s.qrCodes).values({ id: uuidv7(), tenantId, outletId, tableId, type: "table", shortCode: shortCode() });
+  }
+}
 
 export async function createTenantAction(_prev: TenantState, form: FormData): Promise<TenantState> {
   try {
@@ -70,19 +97,7 @@ export async function createTenantAction(_prev: TenantState, form: FormData): Pr
     const result = await db.transaction(async (tx) => {
       const [plan] = await tx.select({ code: s.plans.code, features: s.plans.features }).from(s.plans).where(and(eq(s.plans.code, planCode), eq(s.plans.isPublic, true)));
       if (!plan) throw new Error("Selected plan does not exist.");
-      const taken = async (code: string) => (await tx.select({ id: s.outlets.id }).from(s.outlets).where(eq(s.outlets.code, code))).length > 0;
-      let outletCode = typedCode;
-      if (outletCode) {
-        if (await taken(outletCode)) throw new Error("That outlet code is already in use.");
-      } else {
-        // First letters of the outlet name plus two digits, e.g. "Spice Route" -> SPI42.
-        const prefix = outletName.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 3).padEnd(3, "X");
-        for (let attempt = 0; attempt < 30 && !outletCode; attempt++) {
-          const candidate = `${prefix}${String(randomInt(100)).padStart(2, "0")}`;
-          if (!(await taken(candidate))) outletCode = candidate;
-        }
-        if (!outletCode) throw new Error("Could not generate an outlet code. Please type one.");
-      }
+      const outletCode = await pickOutletCode(tx, typedCode, outletName);
       const tenantId = uuidv7();
       const brandId = uuidv7();
       const outletId = uuidv7();
@@ -94,12 +109,7 @@ export async function createTenantAction(_prev: TenantState, form: FormData): Pr
       await tx.insert(s.outlets).values({ id: outletId, tenantId, brandId, code: outletCode, name: outletName, city, address });
       await tx.insert(s.users).values({ id: userId, tenantId, phone: ownerPhone, name: ownerName, pinHash: await hashPin(ownerPin) });
       await tx.insert(s.staffRoles).values({ id: uuidv7(), tenantId, userId, outletId, role: "owner" });
-      await tx.insert(s.zones).values({ id: zoneId, tenantId, outletId, name: "Main Hall" });
-      for (let i = 1; i <= tableCount; i++) {
-        const tableId = uuidv7();
-        await tx.insert(s.diningTables).values({ id: tableId, tenantId, outletId, zoneId, code: `T${i}`, maxSeats: 4, tableClass: "4-top", joinCode: joinCode() });
-        await tx.insert(s.qrCodes).values({ id: uuidv7(), tenantId, outletId, tableId, type: "table", shortCode: shortCode() });
-      }
+      await addStarterFloor(tx, tenantId, outletId, zoneId, tableCount);
       return { tenantId, outletCode };
     });
     await logAdminAction(admin, result.tenantId, "admin.tenant_created", null, { name: tenantName, planCode, outlet: result.outletCode });
@@ -242,6 +252,47 @@ export async function changeTenantPlanAction(tenantId: string, planCode: string)
 }
 
 const CUSTOM_PLAN = "custom";
+
+/**
+ * Another outlet for a restaurant whose plan (or custom package) has Multiple outlets. It shares
+ * the restaurant's menu; the owners can sign in there and switch between outlets in the console.
+ */
+export async function addOutletAction(tenantId: string, input: { name: string; city: string; address: string; code: string; tableCount: number }): Promise<TenantActionState & { outletCode?: string }> {
+  try {
+    const admin = await requireSuperAdmin();
+    const name = input.name.trim().slice(0, 80);
+    const city = input.city.trim().slice(0, 60);
+    const address = input.address.trim().slice(0, 300);
+    const typed = input.code.trim().toUpperCase();
+    const tableCount = Math.floor(Number(input.tableCount));
+    if (!name || !city || !address) return { error: "Enter the outlet name, city and address." };
+    if (typed && !/^[A-Z0-9]{2,12}$/.test(typed)) return { error: "Outlet code must be 2-12 letters or numbers." };
+    if (!Number.isFinite(tableCount) || tableCount < 1 || tableCount > 100) return { error: "Tables must be from 1 to 100." };
+    const features = await tenantFeatures(tenantId);
+    if (!features.multiOutlet) return { error: "Multiple outlets is not in this restaurant's plan. Change the plan, or tick it in the Custom package." };
+    if (features.maxTables !== null && tableCount > features.maxTables) return { error: `This plan allows ${features.maxTables} tables per outlet.` };
+    const outletCode = await db.transaction(async (tx) => {
+      const [brand] = await tx.select({ id: s.brands.id }).from(s.brands).where(eq(s.brands.tenantId, tenantId)).orderBy(s.brands.createdAt).limit(1);
+      if (!brand) throw new Error("Tenant not found.");
+      const code = await pickOutletCode(tx, typed, name);
+      const outletId = uuidv7();
+      await tx.insert(s.outlets).values({ id: outletId, tenantId, brandId: brand.id, code, name, city, address });
+      await addStarterFloor(tx, tenantId, outletId, uuidv7(), tableCount);
+      // Owners tied to one outlet get the new one too; an owner for every outlet needs nothing
+      const owners = await tx.select({ userId: s.staffRoles.userId, outletId: s.staffRoles.outletId }).from(s.staffRoles).where(and(eq(s.staffRoles.tenantId, tenantId), eq(s.staffRoles.role, "owner")));
+      const everywhere = new Set(owners.filter((o) => o.outletId === null).map((o) => o.userId));
+      for (const userId of new Set(owners.map((o) => o.userId))) {
+        if (!everywhere.has(userId)) await tx.insert(s.staffRoles).values({ id: uuidv7(), tenantId, userId, outletId, role: "owner" });
+      }
+      return code;
+    });
+    await logAdminAction(admin, tenantId, "admin.outlet_added", null, { name, city, outletCode, tables: tableCount });
+    revalidatePath("/admin");
+    return { error: null, outletCode };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Outlet could not be added." };
+  }
+}
 
 /** Custom package: the platform admin picks this restaurant's features, limits and price by hand */
 export async function setCustomPackageAction(tenantId: string, input: { features: Features; priceRupees: number }): Promise<TenantActionState> {

@@ -14,7 +14,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { changeTenantPlanAction, extendTrialAction, getTenantDetailAction, resetOwnerPinAction, setCustomPackageAction, setTenantKitchenAction, setTenantStatusAction, setTenantTableLimitAction, updateTenantAction } from "./actions";
+import { addOutletAction, changeTenantPlanAction, extendTrialAction, getTenantDetailAction, resetOwnerPinAction, setCustomPackageAction, setTenantKitchenAction, setTenantStatusAction, setTenantTableLimitAction, updateTenantAction } from "./actions";
 import { CreateTenantDialog } from "./create-tenant-dialog";
 import type { AdminData, AdminTenant, TenantDetail } from "./admin-types";
 import { FEATURE_KEYS, FEATURE_LABELS, type Features } from "@/lib/plan-features";
@@ -61,6 +61,25 @@ function FeatureList({ features }: { features: Features }) {
     <li className="flex justify-between gap-2 sm:col-span-2"><span className="text-muted-foreground">Tables · Staff</span><span className="font-medium">{features.maxTables ?? "No limit"} · {features.maxStaff ?? "No limit"}</span></li>
     {FEATURE_KEYS.map((k) => <li key={k} className={`flex items-center gap-2 ${features[k] ? "" : "text-muted-foreground line-through decoration-zinc-300"}`}><span aria-hidden="true">{features[k] ? "✓" : "✕"}</span>{FEATURE_LABELS[k].label}<span className="sr-only">{features[k] ? "included" : "not included"}</span></li>)}
   </ul>;
+}
+
+/** Another outlet: it shares the menu; the owner switches to it at the top of the console */
+function AddOutletForm({ pending, maxTables, onSave }: { pending: boolean; maxTables: number | null; onSave: (input: { name: string; city: string; address: string; code: string; tableCount: number }) => void }) {
+  return <form className="space-y-3 rounded-xl border bg-white p-4" onSubmit={(e) => {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget);
+    onSave({ name: String(f.get("name") ?? ""), city: String(f.get("city") ?? ""), address: String(f.get("address") ?? ""), code: String(f.get("code") ?? ""), tableCount: Number(f.get("tables") || 4) });
+  }}>
+    <div><h3 className="text-sm font-semibold">Add outlet</h3><p className="text-xs text-muted-foreground">Same menu as the first outlet. Prices can still be changed per outlet in Pricing.</p></div>
+    <div className="grid gap-3 sm:grid-cols-2">
+      <div className="space-y-1.5"><Label htmlFor="outlet-name">Outlet name</Label><Input id="outlet-name" name="name" required maxLength={80} placeholder="e.g. Spice Route, MI Road" /></div>
+      <div className="space-y-1.5"><Label htmlFor="outlet-city">City</Label><Input id="outlet-city" name="city" required maxLength={60} /></div>
+      <div className="space-y-1.5 sm:col-span-2"><Label htmlFor="outlet-address">Address</Label><Input id="outlet-address" name="address" required maxLength={300} /></div>
+      <div className="space-y-1.5"><Label htmlFor="outlet-code">Sign-in code</Label><Input id="outlet-code" name="code" maxLength={12} placeholder="Made for you if empty" className="uppercase" /></div>
+      <div className="space-y-1.5"><Label htmlFor="outlet-tables">Tables</Label><Input id="outlet-tables" name="tables" type="number" min={1} max={maxTables ?? 100} defaultValue={Math.min(4, maxTables ?? 4)} /></div>
+    </div>
+    <Button type="submit" disabled={pending}>{pending && <Loader2 className="animate-spin" />}Add outlet</Button>
+  </form>;
 }
 
 /** Custom plan: tick what this restaurant gets, set its limits and its price */
@@ -237,10 +256,19 @@ function TenantSheet({ tenant, plans, now, onClose }: { tenant: AdminTenant | nu
             </div>
           </TabsContent>
 
-          <TabsContent value="outlets" className="rounded-xl border bg-white p-4">
-            {detail ? <Table><TableHeader><TableRow><TableHead>Outlet</TableHead><TableHead>Code</TableHead><TableHead>City</TableHead><TableHead className="text-right">Tables</TableHead></TableRow></TableHeader>
-              <TableBody>{detail.outlets.map((o) => <TableRow key={o.id}><TableCell className="font-medium">{o.name}</TableCell><TableCell>{o.code}</TableCell><TableCell className="text-muted-foreground">{o.city}</TableCell><TableCell className="text-right">{o.tables}</TableCell></TableRow>)}</TableBody></Table>
-              : <p className="text-sm text-muted-foreground">{detailError ?? "Loading…"}</p>}
+          <TabsContent value="outlets" className="space-y-4">
+            <section className="rounded-xl border bg-white p-4">
+              {detail ? <Table><TableHeader><TableRow><TableHead>Outlet</TableHead><TableHead>Sign-in code</TableHead><TableHead>City</TableHead><TableHead className="text-right">Tables</TableHead></TableRow></TableHeader>
+                <TableBody>{detail.outlets.map((o) => <TableRow key={o.id}><TableCell className="font-medium">{o.name}</TableCell><TableCell className="font-mono">{o.code}</TableCell><TableCell className="text-muted-foreground">{o.city}</TableCell><TableCell className="text-right">{o.tables}</TableCell></TableRow>)}</TableBody></Table>
+                : <p className="text-sm text-muted-foreground">{detailError ?? "Loading…"}</p>}
+            </section>
+            {tenant.features.multiOutlet
+              ? <AddOutletForm key={tenant.id} pending={pending} maxTables={tenant.features.maxTables} onSave={(input) => run(async () => {
+                  const r = await addOutletAction(tenant.id, input);
+                  if (!r.error) { const d = await getTenantDetailAction(tenant.id); setLoaded({ id: tenant.id, detail: d.detail, error: d.error }); }
+                  return r;
+                }, `Outlet added. The owner signs in there with its sign-in code, or switches outlet at the top of the console.`)} />
+              : <section className="rounded-xl border border-dashed bg-white p-4 text-sm text-muted-foreground">Multiple outlets is not in the {tenant.planName} plan. Change the plan, or pick Custom and tick “Multiple outlets”, to add another outlet.</section>}
           </TabsContent>
 
           <TabsContent value="staff" className="rounded-xl border bg-white p-4">

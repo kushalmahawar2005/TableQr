@@ -5,6 +5,7 @@ import { LANG_COOKIE, parseLang } from "@/lib/i18n";
 import { SECTION_FEATURE } from "@/lib/plan-features";
 import { canSee } from "@/lib/staff-permissions";
 import { tenantFeatures } from "@/server/plan";
+import { outletsFor } from "@/server/staff/auth";
 import { currentStaff } from "@/server/staff/request";
 import { StaffShell } from "./_components/staff-shell";
 
@@ -17,7 +18,7 @@ export default async function ConsoleLayout({ children }: LayoutProps<"/console"
   const theme = jar.get("tq_theme")?.value === "dark" ? "dark" : "light";
   // The kitchen board is a button in the top bar, not a sidebar row
   // Sections outside the plan stay in the menu with a lock, so the owner knows they exist
-  const features = await tenantFeatures(staff.tenantId);
+  const [features, outlets] = await Promise.all([tenantFeatures(staff.tenantId), outletsFor(staff)]);
   const sections = visibleSections
     .filter((s) => s.slug !== "kitchen" && canSee(staff.roles, s.slug))
     .map((s) => {
@@ -26,7 +27,7 @@ export default async function ConsoleLayout({ children }: LayoutProps<"/console"
     });
   const kitchen = canSee(staff.roles, "kitchen");
   return (
-    <StaffShell theme={theme} lang={lang} sections={sections} kitchen={kitchen} staff={{ name: staff.name, roles: staff.roles, outlet: staff.outlet.name, shiftEnds: staff.expiresAt }}>
+    <StaffShell theme={theme} lang={lang} sections={sections} kitchen={kitchen} outlets={outlets.map((o) => ({ id: o.id, name: o.name, current: o.id === staff.outletId }))} staff={{ name: staff.name, roles: staff.roles, outlet: staff.outlet.name, shiftEnds: staff.expiresAt }}>
       {children}
     </StaffShell>
   );

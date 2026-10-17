@@ -24,6 +24,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import type { Lang } from "@/lib/i18n";
 import { signOutAction } from "../../login/actions";
 import { NotificationBell } from "./notification-bell";
+import { switchOutletAction } from "./outlet-actions";
 
 const ICONS: Record<string, IconSvgElement> = {
   dashboard: Home01Icon,
@@ -56,6 +57,7 @@ export function StaffShell({
   preview = false,
   theme = "light",
   kitchen = false,
+  outlets = [],
 }: {
   lang: Lang;
   sections: { slug: string; label: string; locked?: boolean }[];
@@ -66,6 +68,8 @@ export function StaffShell({
   theme?: "light" | "dark";
   /** Show the Kitchen button in the top bar */
   kitchen?: boolean;
+  /** Other outlets this person can work at; a switcher shows when there is more than one */
+  outlets?: { id: string; name: string; current: boolean }[];
 }) {
   const [dark, setDark] = useState(theme === "dark");
   // Dialogs and menus render in a portal on <body>, outside this wrapper, so the console theme must also be on <html> while the console is open.
@@ -151,7 +155,7 @@ export function StaffShell({
       <div className="flex min-w-0 flex-1 flex-col pb-[calc(4rem+env(safe-area-inset-bottom))] sm:pb-0">
         {/* Top bar on tablets and computers, level with the sidebar's logo row */}
         <header className="sticky top-0 z-20 hidden h-14 shrink-0 print:hidden items-center justify-end gap-2 border-b border-line bg-surface/95 px-4 backdrop-blur-[2px] sm:flex lg:px-6">
-          <span className="mr-auto truncate text-caption text-muted">{staff.outlet}</span>
+          {outlets.length > 1 && !preview ? <OutletSwitcher outlets={outlets} lang={lang} /> : <span className="mr-auto truncate text-caption text-muted">{staff.outlet}</span>}
           {kitchen && <KitchenButton lang={lang} active={active === "kitchen"} preview={preview} />}
           {wide && <NotificationBell preview={preview} placement="header" />}
         </header>
@@ -169,6 +173,32 @@ export function StaffShell({
         })}
       </nav>
     </div>
+  );
+}
+
+/** Owners and managers of several outlets move between them here, without signing in again */
+function OutletSwitcher({ outlets, lang }: { outlets: { id: string; name: string; current: boolean }[]; lang: Lang }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <label className="mr-auto flex min-w-0 items-center gap-2 text-caption text-muted">
+      <span className="hidden md:inline">{lang === "hi" ? "आउटलेट" : "Outlet"}</span>
+      <select
+        aria-label={lang === "hi" ? "आउटलेट बदलें" : "Switch outlet"}
+        disabled={busy}
+        value={outlets.find((o) => o.current)?.id}
+        onChange={async (e) => {
+          setBusy(true);
+          setError(null);
+          const r = await switchOutletAction(e.target.value);
+          if (r?.error) { setError(r.error); setBusy(false); }
+        }}
+        className="h-9 min-w-0 max-w-56 truncate rounded-input border border-line bg-surface px-2 text-body font-semibold text-ink"
+      >
+        {outlets.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+      </select>
+      {error && <span role="alert" className="truncate text-danger">{error}</span>}
+    </label>
   );
 }
 

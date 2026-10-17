@@ -107,6 +107,36 @@ export async function resolveStaff(token: string | null | undefined, now = new D
   };
 }
 
+/** Outlets of this restaurant where the signed-in person has a role, for the outlet switcher */
+export async function outletsFor(staff: Pick<StaffSession, "tenantId" | "userId">) {
+  const rows = await db
+    .selectDistinct({ id: s.outlets.id, name: s.outlets.name, code: s.outlets.code })
+    .from(s.outlets)
+    .innerJoin(s.staffRoles, and(eq(s.staffRoles.tenantId, s.outlets.tenantId), eq(s.staffRoles.userId, staff.userId), or(isNull(s.staffRoles.outletId), eq(s.staffRoles.outletId, s.outlets.id))))
+    .where(eq(s.outlets.tenantId, staff.tenantId));
+  return rows.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * Moves a signed-in person to another outlet of the same restaurant where they also have a role:
+ * a new session starts there and the old one ends. Returns the new cookie token.
+ */
+export async function switchOutlet(token: string | null | undefined, outletId: string, now = new Date()) {
+  const staff = await resolveStaff(token, now);
+  if (!staff) throw new AppError("staff_signed_out", "Please sign in again.");
+  const target = (await outletsFor(staff)).find((o) => o.id === outletId);
+  if (!target) throw new AppError("forbidden", "You don't have access to that outlet.");
+  const scope = { tenantId: staff.tenantId, outletId: target.id };
+  const fresh = randomBytes(32).toString("base64url");
+  const expiresAt = new Date(now.getTime() + STAFF_SESSION_HOURS * 3600_000);
+  await db.transaction(async (tx) => {
+    await tx.insert(s.staffSessions).values({ id: uuidv7(), tenantId: scope.tenantId, userId: staff.userId, outletId: scope.outletId, tokenHash: hashToken(fresh), createdAt: now, expiresAt, lastSeenAt: now });
+    await tx.update(s.staffSessions).set({ revokedAt: now }).where(and(eq(s.staffSessions.tenantId, staff.tenantId), eq(s.staffSessions.id, staff.sessionId)));
+    await tx.insert(s.auditLog).values({ tenantId: scope.tenantId, outletId: scope.outletId, actorUserId: staff.userId, actorLabel: `staff:${staff.name}`, action: "staff.outlet_switched", entity: "outlet", entityId: target.id, createdAt: now });
+  });
+  return { token: fresh, expiresAt, outletCode: target.code };
+}
+
 /** The staff member, who must hold one of `allowed` at this outlet */
 export async function requireStaff(token: string | null | undefined, allowed: readonly StaffRole[], now = new Date()): Promise<StaffSession> {
   const staff = await resolveStaff(token, now);
