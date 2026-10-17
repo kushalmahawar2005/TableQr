@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { CircleCheck, Clock, IndianRupee, Loader2, MessageCircle, Phone, Search, XCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -21,8 +21,12 @@ import { FeeForm } from "./subscriptions-view";
 const money = (paise: number) => `₹${Math.round(paise / 100).toLocaleString("en-IN")}`;
 const date = (v: string | null) => (v ? new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" }).format(new Date(v)) : "—");
 const METHOD = { upi: "UPI", cash: "Cash", bank: "Bank" } as const;
-const when = (v: string) => new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" }).format(new Date(v));
-const linkBtn = "inline-flex h-8 items-center gap-1.5 rounded-lg border px-3 text-sm font-medium hover:bg-muted";
+/** "just now", "12 min ago", "3 h ago", "2 days ago" */
+const ago = (iso: string, now: number) => {
+  const m = Math.max(0, Math.round((now - new Date(iso).getTime()) / 60_000));
+  return m < 1 ? "just now" : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} days ago`;
+};
+const linkBtn = buttonVariants({ variant: "outline" });
 
 /** WhatsApp and call the restaurant's contact */
 function Reach({ t, message }: { t: FeesTenant; message: string }) {
@@ -82,6 +86,7 @@ export function FeesView({ data, upiId }: { data: AdminData; upiId: string | nul
   if (!fees) return <div className="grid min-h-[50vh] place-items-center text-sm text-muted-foreground">{loadError ?? <Loader2 className="size-5 animate-spin" aria-label="Loading" />}</div>;
 
   const dueTotal = fees.due.reduce((n, t) => n + t.monthlyPaise, 0);
+  const waitingCount = fees.claims.length + fees.requests.length;
   const history = fees.history.filter((h) => !query.trim() || h.tenantName.toLowerCase().includes(query.trim().toLowerCase()));
   const tenantFor = (id: string) => data.tenants.find((t) => t.id === id);
 
@@ -100,44 +105,54 @@ export function FeesView({ data, upiId }: { data: AdminData; upiId: string | nul
       <Stat icon={XCircle} label="Paused for fees" value={String(fees.due.filter((t) => t.access.state === "blocked").length)} note="Stopped until they pay" tone="#ed5368" />
     </div>
 
-    <Card>
-      <CardHeader><CardTitle>Check these payments</CardTitle><CardDescription>The owner tapped “I have paid”. Find the money in your bank or UPI app, then confirm.</CardDescription></CardHeader>
-      <CardContent>
-        {fees.claims.length ? <ul className="divide-y">{fees.claims.map((c) => <li key={c.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
-          <div className="min-w-0">
-            <p className="font-medium">{c.tenant.name} <span className="font-normal text-muted-foreground">· {money(c.amountPaise)} for {c.months} {c.months === 1 ? "month" : "months"}</span></p>
-            <p className="text-xs text-muted-foreground">{METHOD[c.method]} · {c.reference ? `Ref ${c.reference}` : "no reference given"} · by {c.claimedBy} · {when(c.createdAt)}</p>
-            <p className="text-xs text-muted-foreground">{c.tenant.planName} · {c.tenant.contactName} · {c.tenant.contactPhone}</p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Reach t={c.tenant} message={`Hi ${c.tenant.contactName}, this is TableQR about your ${money(c.amountPaise)} payment.`} />
-            <Button size="sm" variant="outline" disabled={pending} onClick={() => run(() => rejectFeeAction(c.id), "Marked not received. The owner can try again.")}>Not received</Button>
-            <Button size="sm" disabled={pending} onClick={() => run(() => confirmFeeAction(c.id), `Confirmed. ${c.tenant.name} is paid for ${c.months} ${c.months === 1 ? "month" : "months"}.`)}>{pending && <Loader2 className="animate-spin" />}<CircleCheck />Confirm</Button>
-          </div>
-        </li>)}</ul> : <p className="py-6 text-center text-sm text-muted-foreground">Nothing to check.</p>}
-      </CardContent>
-    </Card>
-
-    <Card>
-      <CardHeader><CardTitle>Requests from restaurants</CardTitle><CardDescription>They asked to unlock a feature or renew. Change their plan in Tenants, then mark it done.</CardDescription></CardHeader>
-      <CardContent>
-        {fees.requests.length ? <ul className="divide-y">{fees.requests.map((r) => {
-          const what = r.feature && r.feature in FEATURE_LABELS ? FEATURE_LABELS[r.feature as keyof typeof FEATURE_LABELS].label : r.note ?? "Plan change";
-          return <li key={r.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
-            <div className="min-w-0">
-              <p className="font-medium">{r.tenant.name} <span className="font-normal text-muted-foreground">· {what}</span></p>
-              <p className="text-xs text-muted-foreground">{r.feature && r.note ? `“${r.note}” · ` : ""}by {r.requestedBy} · {when(r.createdAt)}</p>
-              <p className="text-xs text-muted-foreground">{r.tenant.planName} · {money(r.tenant.monthlyPaise)}/month · {r.tenant.contactName} · {r.tenant.contactPhone}</p>
+    {/* Everything a restaurant is waiting on, first and highlighted */}
+    {waitingCount === 0 ? <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm font-medium text-emerald-700 dark:text-emerald-300">
+      <CircleCheck className="size-4" aria-hidden="true" />All caught up. No payments or requests waiting.
+    </div> : <section aria-label="Waiting for you" className="rounded-2xl border border-[#5b42f5]/50 bg-[#5b42f5]/[0.06] p-4 sm:p-5">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="relative flex size-2.5"><span className="absolute inline-flex size-full animate-ping rounded-full bg-[#5b42f5] opacity-60" /><span className="relative inline-flex size-2.5 rounded-full bg-[#5b42f5]" /></span>
+        <h2 className="text-base font-semibold">Waiting for you</h2>
+        <Badge className="bg-[#5b42f5] text-white">{waitingCount}</Badge>
+        <p className="w-full text-sm text-muted-foreground sm:ml-2 sm:w-auto">Restaurants start working again as soon as you act.</p>
+      </div>
+      <ul className="mt-4 space-y-3">
+        {fees.claims.map((c) => <li key={c.id} className="rounded-xl border border-l-4 border-l-emerald-500 bg-card p-4 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="min-w-0 space-y-1">
+              <div className="flex flex-wrap items-center gap-2"><Badge variant="secondary" className="bg-emerald-100 text-emerald-700">Payment</Badge><span className="text-xs text-muted-foreground">{ago(c.createdAt, now)}</span></div>
+              <p className="text-lg font-semibold leading-tight">{c.tenant.name}</p>
+              <p className="text-2xl font-bold tracking-tight">{money(c.amountPaise)} <span className="text-sm font-normal text-muted-foreground">for {c.months === 12 ? "1 year" : `${c.months} ${c.months === 1 ? "month" : "months"}`} · {METHOD[c.method]}</span></p>
+              <p className="text-sm text-muted-foreground">{c.reference ? <>Ref <span className="font-mono text-foreground">{c.reference}</span></> : "No reference given"} · sent by {c.claimedBy}</p>
+              <p className="text-xs text-muted-foreground">{c.tenant.planName} plan · {c.tenant.contactName} · {c.tenant.contactPhone}</p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <Reach t={r.tenant} message={`Hi ${r.tenant.contactName}, this is TableQR about your request: ${what}.`} />
-              <Button size="sm" variant="outline" onClick={() => openAdminPage("Tenants", r.tenant.id)}>Open</Button>
-              <Button size="sm" disabled={pending} onClick={() => run(() => markPlanRequestDoneAction(r.id), "Marked done.")}>Done</Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <Reach t={c.tenant} message={`Hi ${c.tenant.contactName}, this is TableQR about your ${money(c.amountPaise)} payment.`} />
+              <Button variant="outline" disabled={pending} onClick={() => run(() => rejectFeeAction(c.id), "Marked not received. The owner can try again.")}>Not received</Button>
+              <Button disabled={pending} className="bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => run(() => confirmFeeAction(c.id), `Confirmed. ${c.tenant.name} is paid for ${c.months} ${c.months === 1 ? "month" : "months"}.`)}>{pending ? <Loader2 className="animate-spin" /> : <CircleCheck />}Confirm payment</Button>
+            </div>
+          </div>
+        </li>)}
+        {fees.requests.map((r) => {
+          const what = r.feature && r.feature in FEATURE_LABELS ? FEATURE_LABELS[r.feature as keyof typeof FEATURE_LABELS].label : r.note ?? "Plan change";
+          return <li key={r.id} className="rounded-xl border border-l-4 border-l-[#5b42f5] bg-card p-4 shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="min-w-0 space-y-1">
+                <div className="flex flex-wrap items-center gap-2"><Badge variant="secondary" className="bg-[#5b42f5]/15 text-[#5b42f5] dark:text-[#a99bff]">Request</Badge><span className="text-xs text-muted-foreground">{ago(r.createdAt, now)}</span></div>
+                <p className="text-lg font-semibold leading-tight">{r.tenant.name}</p>
+                <p className="text-base font-medium">{what}</p>
+                {r.feature && r.note && <p className="text-sm text-muted-foreground">“{r.note}”</p>}
+                <p className="text-xs text-muted-foreground">Asked by {r.requestedBy} · {r.tenant.planName} plan · {money(r.tenant.monthlyPaise)}/month · {r.tenant.contactName} · {r.tenant.contactPhone}</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Reach t={r.tenant} message={`Hi ${r.tenant.contactName}, this is TableQR about your request: ${what}.`} />
+                <Button variant="outline" onClick={() => openAdminPage("Tenants", r.tenant.id)}>Open restaurant</Button>
+                <Button disabled={pending} onClick={() => run(() => markPlanRequestDoneAction(r.id), "Marked done.")}><CircleCheck />Done</Button>
+              </div>
             </div>
           </li>;
-        })}</ul> : <p className="py-6 text-center text-sm text-muted-foreground">No requests.</p>}
-      </CardContent>
-    </Card>
+        })}
+      </ul>
+    </section>}
 
     <Card>
       <CardHeader><CardTitle>Due this week or late</CardTitle><CardDescription>Send a reminder on WhatsApp, or record the fees when they pay you.</CardDescription></CardHeader>
@@ -150,8 +165,8 @@ export function FeesView({ data, upiId }: { data: AdminData; upiId: string | nul
               <div className="min-w-0"><p className="font-medium">{t.name} <span className="font-normal text-muted-foreground">· {t.planName} · {money(t.monthlyPaise)}/month</span></p><p className="text-xs text-muted-foreground">{t.contactName} · {t.contactPhone}</p></div>
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="secondary" className={d.tone}>{d.text}</Badge>
-                <a href={whatsAppTo(t.contactPhone, reminder(t, upiId))} target="_blank" rel="noopener noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-lg border px-3 text-sm font-medium hover:bg-muted"><MessageCircle className="size-4" aria-hidden="true" />WhatsApp reminder</a>
-                {admin && <Button size="sm" variant={recording === t.id ? "secondary" : "default"} onClick={() => setRecording(recording === t.id ? null : t.id)}>Record fees</Button>}
+                <a href={whatsAppTo(t.contactPhone, reminder(t, upiId))} target="_blank" rel="noopener noreferrer" className={linkBtn}><MessageCircle className="size-4" aria-hidden="true" />WhatsApp reminder</a>
+                {admin && <Button variant={recording === t.id ? "secondary" : "default"} onClick={() => setRecording(recording === t.id ? null : t.id)}>Record fees</Button>}
               </div>
             </div>
             {admin && recording === t.id && <FeeForm t={admin} pending={pending} onSave={(input) => run(() => recordFeePaymentAction(t.id, input), `Saved. ${t.name} is paid for ${input.months} ${input.months === 1 ? "month" : "months"}.`)} />}
