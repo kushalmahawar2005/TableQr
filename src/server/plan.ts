@@ -35,6 +35,12 @@ export async function tenantFeatures(tenantId: string): Promise<Features> {
   return row ? effectiveFeatures(row) : { ...NOTHING };
 }
 
+/** The plan's name as staff see it, e.g. "Lite" */
+export async function tenantPlanName(tenantId: string): Promise<string | null> {
+  const [row] = await db.select({ name: s.plans.name }).from(s.tenants).innerJoin(s.plans, eq(s.plans.code, s.tenants.planCode)).where(eq(s.tenants.id, tenantId));
+  return row?.name ?? null;
+}
+
 /** Stops a server action the restaurant's plan does not include */
 export async function requireFeature(tenantId: string, key: FeatureKey) {
   if (!(await tenantFeatures(tenantId))[key]) throw new AppError("forbidden", notInPlanMessage(key));

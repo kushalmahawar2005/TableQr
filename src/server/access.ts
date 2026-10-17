@@ -9,8 +9,8 @@ import * as s from "@/db/schema";
 // Nothing is deleted.
 
 export const GRACE_DAYS = 3;
-/** The warning starts this many days before the end */
-export const WARN_DAYS = 3;
+/** The warning strip starts a week before the end, matching "we will remind you a week before" on My plan */
+export const WARN_DAYS = 7;
 const DAY = 86_400_000;
 
 export type Access =

@@ -62,4 +62,16 @@ describe("fees paid by hand", () => {
     expect(r.periodEnd.getTime()).toBeGreaterThan(before + 360 * DAY);
     expect((await ownerPlan(owner())).payments.map((p) => p.status)).toEqual(["confirmed", "rejected", "confirmed"]);
   });
+
+  it("UPI needs the 12-digit reference; an upgrade is paid at the new plan's price and switches the plan once confirmed", async () => {
+    await refused(claimFee(owner(), { months: 1, method: "upi", reference: "12345" }), "invalid_state");
+    const claim = await claimFee(owner(), { months: 1, method: "upi", reference: "4123 4567 8902", planCode: "growth" });
+    expect(claim.amountPaise).toBe(249900);
+    await confirmFee(claim.id);
+    const [t] = await env.db.select({ planCode: s.tenants.planCode, customPricePaise: s.tenants.customPricePaise }).from(s.tenants).where(eq(s.tenants.id, env.demo.tenantId));
+    expect(t).toEqual({ planCode: "growth", customPricePaise: null });
+    expect((await monthlyFee(appDb, env.demo.tenantId)).totalPaise).toBe(249900);
+    const [row] = await env.db.select({ reference: s.feePayments.reference }).from(s.feePayments).where(eq(s.feePayments.id, claim.id));
+    expect(row.reference).toBe("412345678902");
+  });
 });

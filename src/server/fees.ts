@@ -3,6 +3,7 @@ import { and, count, desc, eq, inArray, ne } from "drizzle-orm";
 import { db } from "@/db";
 import { uuidv7 } from "@/db/id";
 import * as s from "@/db/schema";
+import { readFeatures } from "@/lib/plan-features";
 import { accessFrom, tenantAccess } from "./access";
 import { AppError } from "./errors";
 import { tenantFeatures } from "./plan";
@@ -21,14 +22,16 @@ const DAY = 86_400_000;
 /** What the restaurant pays per month for all its outlets: its own price, else the latest period's, else the plan's */
 export async function monthlyFee(run: Pick<typeof db, "select">, tenantId: string) {
   const [t] = await run
-    .select({ customPricePaise: s.tenants.customPricePaise, planPricePaise: s.plans.monthlyPricePaise })
+    .select({ customPricePaise: s.tenants.customPricePaise, planPricePaise: s.plans.monthlyPricePaise, planCode: s.tenants.planCode })
     .from(s.tenants)
     .innerJoin(s.plans, eq(s.plans.code, s.tenants.planCode))
     .where(eq(s.tenants.id, tenantId));
   if (!t) throw new AppError("not_found", "Restaurant not found.");
-  const [latest] = await run.select({ price: s.subscriptions.pricePerOutletPaise }).from(s.subscriptions).where(eq(s.subscriptions.tenantId, tenantId)).orderBy(desc(s.subscriptions.periodEnd)).limit(1);
+  const [latest] = await run.select({ price: s.subscriptions.pricePerOutletPaise, planCode: s.subscriptions.planCode }).from(s.subscriptions).where(eq(s.subscriptions.tenantId, tenantId)).orderBy(desc(s.subscriptions.periodEnd)).limit(1);
   const [outlets] = await run.select({ n: count() }).from(s.outlets).where(eq(s.outlets.tenantId, tenantId));
-  const perOutletPaise = t.customPricePaise ?? latest?.price ?? t.planPricePaise ?? 0;
+  // An agreed price from an earlier period counts only while the restaurant stays on that plan
+  const earlier = latest && latest.planCode === t.planCode ? latest.price : null;
+  const perOutletPaise = t.customPricePaise ?? earlier ?? t.planPricePaise ?? 0;
   const outletCount = Math.max(1, Number(outlets?.n ?? 1));
   return { perOutletPaise, outletCount, totalPaise: perOutletPaise * outletCount };
 }
@@ -81,23 +84,52 @@ export async function recordFee(adminLabel: string, tenantId: string, input: { m
   });
 }
 
+/** Plans a restaurant can move to by itself: public, with a list price, and not Custom */
+export async function upgradePlans() {
+  const rows = await db.select({ code: s.plans.code, name: s.plans.name, monthlyPricePaise: s.plans.monthlyPricePaise, features: s.plans.features, sortOrder: s.plans.sortOrder }).from(s.plans).where(eq(s.plans.isPublic, true));
+  return rows
+    .filter((p) => p.code !== "custom")
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map((p) => ({ code: p.code, name: p.name, monthlyPricePaise: p.monthlyPricePaise, features: readFeatures(p.features) }));
+}
+
+/** The plan an owner chose to upgrade to, checked; null when they are renewing */
+async function upgradeTarget(tenantId: string, planCode: string | null | undefined) {
+  if (!planCode) return null;
+  const [t] = await db.select({ planCode: s.tenants.planCode }).from(s.tenants).where(eq(s.tenants.id, tenantId));
+  if (!t || t.planCode === planCode) return null;
+  const plan = (await upgradePlans()).find((p) => p.code === planCode);
+  if (!plan || plan.monthlyPricePaise === null) throw new AppError("invalid_state", "This plan is set up by TableQR. Please call or WhatsApp us.");
+  return { code: plan.code, name: plan.name, monthlyPricePaise: plan.monthlyPricePaise };
+}
+
 /** Owner or manager says they paid; one claim waits at a time */
-export async function claimFee(staff: Pick<StaffSession, "tenantId" | "roles" | "name">, input: { months: number; reference: string; method?: string }, now = new Date()) {
+export async function claimFee(staff: Pick<StaffSession, "tenantId" | "roles" | "name">, input: { months: number; reference: string; method?: string; planCode?: string | null }, now = new Date()) {
   if (!staff.roles.some((r) => r === "owner" || r === "manager")) throw new AppError("forbidden", "Ask the owner or a manager to do this.");
-  const { months, method, reference } = cleanInput(input);
+  const { months, method } = cleanInput(input);
+  let { reference } = cleanInput(input);
+  // A UPI payment is matched in the bank by its 12-digit reference (UTR), so it is required
+  if (method === "upi") {
+    const utr = (reference ?? "").replace(/\s/g, "");
+    if (!/^\d{12}$/.test(utr)) throw new AppError("invalid_state", "Enter the 12-digit UPI reference (UTR). You find it in your UPI app under this payment.");
+    reference = utr;
+  }
   const [waiting] = await db.select({ id: s.feePayments.id }).from(s.feePayments).where(and(eq(s.feePayments.tenantId, staff.tenantId), eq(s.feePayments.status, "claimed")));
   if (waiting) throw new AppError("invalid_state", "Your last payment is still being checked by TableQR.");
   const fee = await monthlyFee(db, staff.tenantId);
+  // Upgrading: the new plan's list price for every outlet
+  const target = await upgradeTarget(staff.tenantId, input.planCode);
+  const perMonth = target ? target.monthlyPricePaise * fee.outletCount : fee.totalPaise;
   const id = uuidv7();
-  await db.insert(s.feePayments).values({ id, tenantId: staff.tenantId, months, amountPaise: fee.totalPaise * months, method, reference, status: "claimed", claimedBy: staff.name.slice(0, 80), createdAt: now });
+  await db.insert(s.feePayments).values({ id, tenantId: staff.tenantId, months, amountPaise: perMonth * months, method, reference, planCode: target?.code ?? null, status: "claimed", claimedBy: staff.name.slice(0, 80), createdAt: now });
   const [t] = await db.select({ name: s.tenants.name, phone: s.tenants.contactPhone }).from(s.tenants).where(eq(s.tenants.id, staff.tenantId));
-  const rupees = `₹${((fee.totalPaise * months) / 100).toLocaleString("en-IN")}`;
-  emailAdmin(`${t?.name ?? "A restaurant"} says they paid ${rupees}`, [
-    `${t?.name ?? "A restaurant"} says they paid ${rupees} for ${months} ${months === 1 ? "month" : "months"} by ${method.toUpperCase()}.`,
+  const rupees = `₹${((perMonth * months) / 100).toLocaleString("en-IN")}`;
+  emailAdmin(`${t?.name ?? "A restaurant"} says they paid ${rupees}${target ? ` to upgrade to ${target.name}` : ""}`, [
+    `${t?.name ?? "A restaurant"} says they paid ${rupees} for ${months} ${months === 1 ? "month" : "months"} by ${method.toUpperCase()}${target ? `, to upgrade to the ${target.name} plan` : ""}.`,
     `Reference: ${reference ?? "not given"} · by ${staff.name} · phone ${t?.phone ?? "—"}`,
     "Check your bank or UPI app, then confirm it in Admin → Fees.",
   ]);
-  return { id, amountPaise: fee.totalPaise * months };
+  return { id, amountPaise: perMonth * months };
 }
 
 /** The admin found the money in the bank: the claim adds its months */
@@ -107,6 +139,8 @@ export async function confirmFee(id: string, now = new Date()) {
     const [claim] = await tx.select().from(s.feePayments).where(eq(s.feePayments.id, id)).for("update");
     if (!claim) throw new AppError("not_found", "Payment not found.");
     if (claim.status !== "claimed") throw new AppError("invalid_state", "This payment was already handled.");
+    // An upgrade: move to the plan they paid for, dropping any custom package or special price
+    if (claim.planCode) await tx.update(s.tenants).set({ planCode: claim.planCode, customFeatures: null, customPricePaise: null }).where(eq(s.tenants.id, claim.tenantId));
     const paid = await addPaidMonths(tx, claim.tenantId, claim.months, now);
     await tx.update(s.feePayments).set({ status: "confirmed", subscriptionId: paid.subscriptionId, paidUntil: paid.periodEnd, decidedAt: now }).where(and(eq(s.feePayments.tenantId, claim.tenantId), eq(s.feePayments.id, id)));
     return { tenantId: claim.tenantId, months: claim.months, amountPaise: claim.amountPaise, paidUntil: paid.periodEnd, before: paid.before };
@@ -123,23 +157,24 @@ export async function rejectFee(id: string, now = new Date()) {
   return { tenantId: claim.tenantId };
 }
 
-export type FeeRow = { id: string; months: number; amountPaise: number; method: FeeMethod; reference: string | null; status: "claimed" | "confirmed" | "rejected"; claimedBy: string; createdAt: string; paidUntil: string | null };
+export type FeeRow = { id: string; planCode: string | null; months: number; amountPaise: number; method: FeeMethod; reference: string | null; status: "claimed" | "confirmed" | "rejected"; claimedBy: string; createdAt: string; paidUntil: string | null };
 const feeRow = (r: typeof s.feePayments.$inferSelect): FeeRow => ({
-  id: r.id, months: r.months, amountPaise: r.amountPaise, method: r.method, reference: r.reference, status: r.status, claimedBy: r.claimedBy,
+  id: r.id, planCode: r.planCode, months: r.months, amountPaise: r.amountPaise, method: r.method, reference: r.reference, status: r.status, claimedBy: r.claimedBy,
   createdAt: r.createdAt.toISOString(), paidUntil: r.paidUntil?.toISOString() ?? null,
 });
 
 /** The owner's "My plan" screen: what they pay, until when, and how to pay */
 export async function ownerPlan(staff: Pick<StaffSession, "tenantId">, now = new Date()) {
-  const [tenant] = await db.select({ planName: s.plans.name, status: s.tenants.status }).from(s.tenants).innerJoin(s.plans, eq(s.plans.code, s.tenants.planCode)).where(eq(s.tenants.id, staff.tenantId));
+  const [tenant] = await db.select({ planName: s.plans.name, planCode: s.tenants.planCode, status: s.tenants.status }).from(s.tenants).innerJoin(s.plans, eq(s.plans.code, s.tenants.planCode)).where(eq(s.tenants.id, staff.tenantId));
   if (!tenant) throw new AppError("not_found", "Restaurant not found.");
-  const [fee, access, features, rows] = await Promise.all([
+  const [fee, access, features, rows, plans] = await Promise.all([
     monthlyFee(db, staff.tenantId),
     tenantAccess(staff.tenantId, now),
     tenantFeatures(staff.tenantId),
     db.select().from(s.feePayments).where(eq(s.feePayments.tenantId, staff.tenantId)).orderBy(desc(s.feePayments.createdAt)).limit(24),
+    upgradePlans(),
   ]);
-  return { planName: tenant.planName, status: tenant.status, fee, access, features, payments: rows.map(feeRow), waiting: rows.some((r) => r.status === "claimed") };
+  return { planName: tenant.planName, planCode: tenant.planCode, status: tenant.status, fee, access, features, plans, payments: rows.map(feeRow), waiting: rows.some((r) => r.status === "claimed") };
 }
 
 export type FeesTenant = { id: string; name: string; contactName: string; contactPhone: string; planName: string; monthlyPaise: number; access: { state: string; reason: string; endsAt: string | null } };

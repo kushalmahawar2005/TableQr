@@ -3,7 +3,7 @@ import type { Pool, RowDataPacket } from "mysql2/promise";
 
 // Brings the live database up to what this release needs, once, when the server starts.
 // Hostinger builds and starts the app straight from Git and never runs `db:migrate`, so these
-// steps mirror drizzle/0016-0022. Every step checks first, so running it again (another server
+// steps mirror drizzle/0016-0023. Every step checks first, so running it again (another server
 // instance, a restart) changes nothing. Works on MySQL and MariaDB.
 
 type Step = { tag: string; when: number; hash: string; apply: (db: Pool) => Promise<void> };
@@ -126,6 +126,14 @@ const STEPS: Step[] = [
       await db.query(
         "CREATE TABLE IF NOT EXISTS `fee_payments` (`id` char(36) NOT NULL, `tenant_id` char(36) NOT NULL, `months` int NOT NULL, `amount_paise` int NOT NULL, `method` enum('upi','cash','bank') NOT NULL DEFAULT 'upi', `reference` varchar(60), `status` enum('claimed','confirmed','rejected') NOT NULL, `claimed_by` varchar(80) NOT NULL, `subscription_id` char(36), `paid_until` datetime(3), `created_at` datetime(3) NOT NULL, `decided_at` datetime(3), CONSTRAINT `fee_payments_id` PRIMARY KEY(`id`), CONSTRAINT `fee_payments_tenant_id_tenants_id_fk` FOREIGN KEY (`tenant_id`) REFERENCES `tenants`(`id`), INDEX `fee_payments_tenant_created_idx` (`tenant_id`, `created_at`), INDEX `fee_payments_status_idx` (`status`))",
       );
+    },
+  },
+  {
+    tag: "0023_fee_plan",
+    when: 1792235439635,
+    hash: "3c5d9abc10da754e73fb16c033c06492a8497f1d6fe7168f2c1b1be8355b28de",
+    apply: async (db) => {
+      await addColumn(db, "fee_payments", "plan_code", "varchar(20)");
     },
   },
 ];

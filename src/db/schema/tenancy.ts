@@ -110,6 +110,8 @@ export const feePayments = mysqlTable(
     method: mysqlEnum("method", ["upi", "cash", "bank"]).notNull().default("upi"),
     /** UPI reference (UTR) or a note */
     reference: varchar("reference", { length: 60 }),
+    /** The plan paid for when the owner upgrades from My plan; null keeps the current plan */
+    planCode: varchar("plan_code", { length: 20 }),
     status: mysqlEnum("status", ["claimed", "confirmed", "rejected"]).notNull(),
     /** Who said it was paid, or who recorded it */
     claimedBy: varchar("claimed_by", { length: 80 }).notNull(),

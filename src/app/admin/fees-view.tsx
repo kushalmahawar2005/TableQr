@@ -119,7 +119,7 @@ export function FeesView({ data, upiId }: { data: AdminData; upiId: string | nul
         {fees.claims.map((c) => <li key={c.id} className="rounded-xl border border-l-4 border-l-emerald-500 bg-card p-4 shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0 space-y-1">
-              <div className="flex flex-wrap items-center gap-2"><Badge variant="secondary" className="bg-emerald-100 text-emerald-700">Payment</Badge><span className="text-xs text-muted-foreground">{ago(c.createdAt, now)}</span></div>
+              <div className="flex flex-wrap items-center gap-2"><Badge variant="secondary" className="bg-emerald-100 text-emerald-700">Payment</Badge>{c.planCode && <Badge variant="secondary" className="bg-[#5b42f5]/15 text-[#5b42f5] dark:text-[#a99bff]">Upgrade to {data.plans.find((p) => p.code === c.planCode)?.name ?? c.planCode}</Badge>}<span className="text-xs text-muted-foreground">{ago(c.createdAt, now)}</span></div>
               <p className="text-lg font-semibold leading-tight">{c.tenant.name}</p>
               <p className="text-2xl font-bold tracking-tight">{money(c.amountPaise)} <span className="text-sm font-normal text-muted-foreground">for {c.months === 12 ? "1 year" : `${c.months} ${c.months === 1 ? "month" : "months"}`} · {METHOD[c.method]}</span></p>
               <p className="text-sm text-muted-foreground">{c.reference ? <>Ref <span className="font-mono text-foreground">{c.reference}</span></> : "No reference given"} · sent by {c.claimedBy}</p>
@@ -128,7 +128,7 @@ export function FeesView({ data, upiId }: { data: AdminData; upiId: string | nul
             <div className="flex flex-wrap items-center gap-2">
               <Reach t={c.tenant} message={`Hi ${c.tenant.contactName}, this is TableQR about your ${money(c.amountPaise)} payment.`} />
               <Button variant="outline" disabled={pending} onClick={() => run(() => rejectFeeAction(c.id), "Marked not received. The owner can try again.")}>Not received</Button>
-              <Button disabled={pending} className="bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => run(() => confirmFeeAction(c.id), `Confirmed. ${c.tenant.name} is paid for ${c.months} ${c.months === 1 ? "month" : "months"}.`)}>{pending ? <Loader2 className="animate-spin" /> : <CircleCheck />}Confirm payment</Button>
+              <Button disabled={pending} className="bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => run(() => confirmFeeAction(c.id), `Confirmed. ${c.tenant.name} is paid for ${c.months} ${c.months === 1 ? "month" : "months"}${c.planCode ? ` and moved to ${data.plans.find((p) => p.code === c.planCode)?.name ?? c.planCode}` : ""}.`)}>{pending ? <Loader2 className="animate-spin" /> : <CircleCheck />}Confirm payment</Button>
             </div>
           </div>
         </li>)}

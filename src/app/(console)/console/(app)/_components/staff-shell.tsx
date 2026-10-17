@@ -59,6 +59,7 @@ export function StaffShell({
   theme = "light",
   kitchen = false,
   outlets = [],
+  plan,
 }: {
   lang: Lang;
   sections: { slug: string; label: string }[];
@@ -71,6 +72,8 @@ export function StaffShell({
   kitchen?: boolean;
   /** Other outlets this person can work at; a switcher shows when there is more than one */
   outlets?: { id: string; name: string; current: boolean }[];
+  /** The restaurant's plan, shown under the person's name; owners and managers get an Upgrade link */
+  plan?: { name: string; canManage: boolean };
 }) {
   const [dark, setDark] = useState(theme === "dark");
   // Dialogs and menus render in a portal on <body>, outside this wrapper, so the console theme must also be on <html> while the console is open.
@@ -142,6 +145,12 @@ export function StaffShell({
           <div className="hidden px-2 pb-2 lg:block">
             <p className="truncate text-body font-semibold">{staff.name}</p>
             <p className="truncate text-caption text-muted">{role}</p>
+            {plan && (
+              <div className="mt-2 flex items-center justify-between gap-2 rounded-input border border-line px-2.5 py-1.5">
+                <span className="min-w-0 truncate text-caption"><span className="text-muted">{lang === "hi" ? "प्लान" : "Plan"} · </span><span className="font-semibold text-ink">{plan.name}</span></span>
+                {plan.canManage && !preview && <Link href="/console/plan" className="shrink-0 rounded-full bg-brand-soft px-2 py-0.5 text-[11px] font-semibold text-brand-strong hover:bg-brand-soft/70">{lang === "hi" ? "अपग्रेड" : "Upgrade"}</Link>}
+              </div>
+            )}
           </div>
           <ThemeToggle dark={dark} onChange={setDark} showLabel className="flex min-h-11 w-full items-center gap-3 rounded-input px-3 text-body font-semibold text-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-2 focus-visible:outline-ink [&>span]:hidden lg:[&>span]:inline" />
           <form action={preview ? undefined : signOutAction}>

@@ -8,6 +8,8 @@ export async function planViewFor(staff: Pick<StaffSession, "tenantId" | "outlet
   const p = await ownerPlan(staff);
   return {
     planName: p.planName,
+    planCode: p.planCode,
+    plans: p.plans,
     outlet: staff.outlet.name,
     fee: p.fee,
     access: { state: p.access.state, reason: p.access.reason, endsAt: p.access.endsAt },

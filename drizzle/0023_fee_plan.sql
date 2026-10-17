@@ -1,0 +1,1 @@
+ALTER TABLE `fee_payments` ADD `plan_code` varchar(20);

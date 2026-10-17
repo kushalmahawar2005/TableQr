@@ -19,7 +19,7 @@ export async function requestPlanChangeAction(input: { feature?: string | null; 
 }
 
 /** Owner or manager paid TableQR by hand and says so; TableQR checks the bank and confirms */
-export async function claimFeeAction(input: { months: number; method: string; reference: string }): Promise<{ ok: true } | { ok: false; error: string }> {
+export async function claimFeeAction(input: { months: number; method: string; reference: string; planCode?: string | null }): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
     // Works while the restaurant is paused too: paying is how it comes back
     const staff = await currentStaff();

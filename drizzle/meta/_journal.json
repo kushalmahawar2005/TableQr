@@ -162,6 +162,13 @@
       "when": 1792232890499,
       "tag": "0022_fee_payments",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "5",
+      "when": 1792235439635,
+      "tag": "0023_fee_plan",
+      "breakpoints": true
     }
   ]
 }

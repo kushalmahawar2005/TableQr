@@ -5,7 +5,7 @@ import { feesUpiId } from "@/lib/support";
 import { currentStaff } from "@/server/staff/request";
 import { ContactTableQR } from "../_components/contact-tableqr";
 import { planViewFor } from "../_components/plan-data";
-import { PayCard, PlanIncludes, PlanPayments, PlanSummary } from "../_components/plan-panel";
+import { PayOrPaid, PlanIncludes, PlanPayments, PlanSummary, UpgradePlans } from "../_components/plan-panel";
 
 export const metadata: Metadata = { title: "My plan", robots: { index: false, follow: false } };
 
@@ -34,11 +34,14 @@ export default async function PlanPage() {
         <div className="grid min-w-0 content-start gap-6">
           <PlanSummary plan={plan} />
           <PlanIncludes plan={plan} />
-          <PlanPayments plan={plan} />
         </div>
         <div className="min-w-0 lg:sticky lg:top-20 lg:self-start">
-          <PayCard plan={plan} upiId={feesUpiId()} />
+          <PayOrPaid plan={plan} upiId={feesUpiId()} />
         </div>
+      </div>
+      <div className="mt-6 grid gap-6">
+        <UpgradePlans plan={plan} upiId={feesUpiId()} />
+        <PlanPayments plan={plan} />
       </div>
     </main>
   );
