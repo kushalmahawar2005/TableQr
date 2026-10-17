@@ -6,7 +6,7 @@ import { ContactTableQR } from "./contact-tableqr";
 import { RequestUpgrade } from "./request-upgrade";
 
 /** Shown in place of a screen the restaurant's plan does not include */
-export async function FeatureLocked({ feature, extra }: { feature: FeatureKey; extra?: { href: string; label: string } }) {
+export async function FeatureLocked({ feature, extra }: { feature: FeatureKey; extra?: { href: string; label: string } | { href: string; label: string }[] }) {
   const { label, hint } = FEATURE_LABELS[feature];
   const staff = await currentStaff();
   // Owners and managers can ask for it; TableQR then changes the plan by hand
@@ -21,9 +21,13 @@ export async function FeatureLocked({ feature, extra }: { feature: FeatureKey; e
         {canAsk && <RequestUpgrade feature={feature} asked={asked} />}
         {canAsk && <div className="mt-3"><ContactTableQR message={`Hi TableQR, this is ${staff.outlet.name}. We want ${label}.`} /></div>}
         {extra && (
-          <Link href={extra.href} className="mt-5 inline-flex min-h-11 items-center rounded-cta border border-line px-4 text-button font-semibold text-ink hover:bg-ink/5">
-            {extra.label}
-          </Link>
+          <div className="mt-5 flex flex-wrap justify-center gap-2">
+            {(Array.isArray(extra) ? extra : [extra]).map((x) => (
+              <Link key={x.href} href={x.href} className="inline-flex min-h-11 items-center rounded-cta border border-line px-4 text-button font-semibold text-ink hover:bg-ink/5">
+                {x.label}
+              </Link>
+            ))}
+          </div>
         )}
       </div>
     </main>

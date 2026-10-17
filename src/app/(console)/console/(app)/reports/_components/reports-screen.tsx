@@ -154,6 +154,7 @@ export function ReportsScreen({ report, outlet }: { report: Report; outlet: stri
         </div>
         <div className="flex flex-wrap items-center gap-2 print:hidden">
           <Link href="/console/reports/day-close" className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-line bg-surface px-3.5 text-sm font-semibold text-ink hover:border-ink/40"><Receipt className="size-4" aria-hidden="true" />Day close</Link>
+          <Link href="/console/reports/gst" className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-line bg-surface px-3.5 text-sm font-semibold text-ink hover:border-ink/40"><Receipt className="size-4" aria-hidden="true" />GST report</Link>
           <nav aria-label="Period" className="flex overflow-hidden rounded-xl border border-line bg-surface">
             {([7, 30, 90] as const).map((d) => (
               <Link key={d} href={`/console/reports?days=${d}`} aria-current={report.range === d ? "page" : undefined} className={`flex min-h-11 items-center px-3.5 text-sm font-semibold ${report.range === d ? "bg-ink text-paper" : "text-muted hover:text-ink"}`}>{d} days</Link>

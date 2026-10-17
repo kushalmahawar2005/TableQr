@@ -20,7 +20,7 @@ export default async function ReportsPage(props: PageProps<"/console/reports">) 
       </main>
     );
   }
-  if (!(await tenantFeatures(staff.tenantId)).fullReports) return <FeatureLocked feature="fullReports" extra={{ href: "/console/reports/day-close", label: "Open Day close" }} />;
+  if (!(await tenantFeatures(staff.tenantId)).fullReports) return <FeatureLocked feature="fullReports" extra={[{ href: "/console/reports/day-close", label: "Open Day close" }, { href: "/console/reports/gst", label: "Open GST report" }]} />;
   const raw = Number((await props.searchParams).days);
   const range: ReportRange = raw === 7 || raw === 90 ? raw : 30;
   const report = await getReport(staff, range, new Date());
