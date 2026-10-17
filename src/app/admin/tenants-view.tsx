@@ -14,7 +14,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { addOutletAction, changeTenantPlanAction, extendTrialAction, getTenantDetailAction, resetOwnerPinAction, setCustomPackageAction, setTenantKitchenAction, setTenantStatusAction, setTenantTableLimitAction, updateTenantAction } from "./actions";
+import { addOutletAction, changeTenantPlanAction, setTenantPriceAction, extendTrialAction, getTenantDetailAction, resetOwnerPinAction, setCustomPackageAction, setTenantKitchenAction, setTenantStatusAction, setTenantTableLimitAction, updateTenantAction } from "./actions";
 import { CreateTenantDialog } from "./create-tenant-dialog";
 import type { AdminData, AdminTenant, TenantDetail } from "./admin-types";
 import { FEATURE_KEYS, FEATURE_LABELS, type Features } from "@/lib/plan-features";
@@ -61,6 +61,21 @@ function FeatureList({ features }: { features: Features }) {
     <li className="flex justify-between gap-2 sm:col-span-2"><span className="text-muted-foreground">Tables · Staff</span><span className="font-medium">{features.maxTables ?? "No limit"} · {features.maxStaff ?? "No limit"}</span></li>
     {FEATURE_KEYS.map((k) => <li key={k} className={`flex items-center gap-2 ${features[k] ? "" : "text-muted-foreground line-through decoration-zinc-300"}`}><span aria-hidden="true">{features[k] ? "✓" : "✕"}</span>{FEATURE_LABELS[k].label}<span className="sr-only">{features[k] ? "included" : "not included"}</span></li>)}
   </ul>;
+}
+
+/** What this restaurant pays: the plan's price, or more or less as agreed with them */
+function PriceForm({ tenant, planPricePaise, pending, onSave }: { tenant: AdminTenant; planPricePaise: number | null; pending: boolean; onSave: (rupees: number | null) => void }) {
+  const [price, setPrice] = useState(tenant.customPricePaise === null ? "" : String(tenant.customPricePaise / 100));
+  const list = planPricePaise === null ? "no list price" : `₹${(planPricePaise / 100).toLocaleString("en-IN")}`;
+  return <section className="space-y-2">
+    <h3 className="text-sm font-semibold">Price for this restaurant</h3>
+    <p className="text-xs text-muted-foreground">Per outlet per month. Leave empty to charge the {tenant.planName} plan&apos;s price ({list}).</p>
+    <div className="flex gap-2">
+      <Input inputMode="numeric" value={price} onChange={(e) => setPrice(e.target.value.replace(/\D/g, "").slice(0, 7))} placeholder={planPricePaise === null ? "₹ per month" : String(planPricePaise / 100)} aria-label="Price per outlet per month in rupees" />
+      <Button variant="outline" disabled={pending} onClick={() => onSave(price === "" ? null : Number(price))}>Save</Button>
+    </div>
+    {tenant.customPricePaise !== null && <p className="text-xs text-[#5b42f5]">Special price: ₹{(tenant.customPricePaise / 100).toLocaleString("en-IN")} instead of {list}.</p>}
+  </section>;
 }
 
 /** Another outlet: it shares the menu; the owner switches to it at the top of the console */
@@ -297,6 +312,8 @@ function TenantSheet({ tenant, plans, now, onClose }: { tenant: AdminTenant | nu
               </Select>
               {tenant.planCode !== "custom" && <p className="text-xs text-muted-foreground">Pick Custom to choose features and price for this restaurant alone.</p>}
             </section>
+            {tenant.planCode !== "custom" && <PriceForm key={`${tenant.id}-${tenant.customPricePaise}`} tenant={tenant} planPricePaise={plans.find((p) => p.code === tenant.planCode)?.monthlyPricePaise ?? null} pending={pending}
+              onSave={(rupees) => run(() => setTenantPriceAction(tenant.id, rupees), rupees === null ? "Back to the plan's price." : "Price saved.")} />}
             {tenant.planCode === "custom" && <CustomPackageForm key={tenant.id} tenant={tenant} pending={pending} onSave={(input) => run(() => setCustomPackageAction(tenant.id, input), "Custom package saved.")} />}
             <section className="space-y-2">
               <h3 className="text-sm font-semibold">Reset owner PIN</h3>

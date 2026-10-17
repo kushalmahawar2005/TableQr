@@ -15,7 +15,7 @@ export type AdminTenant = {
   tableLimit: number | null;
   /** What this restaurant gets right now: its plan or custom package, with the admin's choices */
   features: Features;
-  /** Custom package price per outlet per month; null when not on a custom package */
+  /** Price agreed with this restaurant per outlet per month, on any plan; null uses the plan's price */
   customPricePaise: number | null;
   status: "trial" | "active" | "suspended" | "cancelled";
   createdAt: string;

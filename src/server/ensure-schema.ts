@@ -73,7 +73,7 @@ const STEPS: Step[] = [
   {
     tag: "0020_plan_features",
     when: 1792218416304,
-    hash: "05adb0e662aad08058fda1f9d7b3f8efc1dc023b71261d5ff7b511f2484d3e0f",
+    hash: "6fc08dfb8d6cb15f8ecec359ebb18b221813930d52ca814f412a63876c73990b",
     apply: async (db) => {
       await addColumn(db, "tenants", "custom_features", "json");
       await addColumn(db, "tenants", "custom_price_paise", "int");
@@ -89,6 +89,9 @@ const STEPS: Step[] = [
       await db.query(
         `INSERT INTO \`plans\` (\`code\`, \`name\`, \`monthly_price_paise\`, \`features\`, \`is_public\`, \`sort_order\`, \`created_at\`, \`updated_at\`) SELECT 'custom', 'Custom', NULL, '{"maxTables":5,"maxStaff":2,"poweredBy":true,"waiterApp":false,"discounts":false,"whatsappBills":false,"groupSplit":false,"reservations":false,"kitchenDisplay":false,"pricingRules":false,"fullReports":false,"multiOutlet":false}', 1, 99, CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3) FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM \`plans\` WHERE \`code\` = 'custom')`,
       );
+      // New plan names, only where the admin has not renamed them already
+      await db.query("UPDATE `plans` SET `name` = 'Lite' WHERE `code` = 'starter' AND `name` = 'Starter'");
+      await db.query("UPDATE `plans` SET `name` = 'Plus' WHERE `code` = 'growth' AND `name` = 'Growth'");
     },
   },
 ];

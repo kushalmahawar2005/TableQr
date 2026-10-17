@@ -44,7 +44,7 @@ export const tenants = mysqlTable(
     tableLimit: int("table_limit"),
     /** Custom package: the features picked for this restaurant alone; null follows the plan */
     customFeatures: json("custom_features").$type<PlanFeatures>(),
-    /** Custom package: the agreed price per outlet per month; null uses the plan's price */
+    /** The price agreed with this restaurant per outlet per month, on any plan; null uses the plan's price */
     customPricePaise: int("custom_price_paise"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),

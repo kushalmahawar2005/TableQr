@@ -6,6 +6,7 @@ import { randomInt } from "node:crypto";
 import { uuidv7 } from "../src/db/id";
 import * as s from "../src/db/schema";
 import { hashPin } from "../src/server/staff/pin";
+import { DEFAULT_PLANS } from "../src/lib/plan-features";
 
 export type Db = MySql2Database<typeof s>;
 
@@ -29,16 +30,7 @@ export async function wipeAll(db: Db) {
 }
 
 export async function seedPlatform(db: Db) {
-  const none = { waiterApp: false, discounts: false, whatsappBills: false, groupSplit: false, reservations: false, kitchenDisplay: false, pricingRules: false, fullReports: false, multiOutlet: false };
-  const growth = { ...none, waiterApp: true, discounts: true, whatsappBills: true, groupSplit: true, reservations: true };
-  const pro = { ...growth, kitchenDisplay: true, pricingRules: true, fullReports: true };
-  await db.insert(s.plans).values([
-    { code: "starter", name: "Starter", monthlyPricePaise: rupees(999), sortOrder: 0, features: { ...none, maxTables: 15, maxStaff: 3, poweredBy: true } },
-    { code: "growth", name: "Growth", monthlyPricePaise: rupees(2499), sortOrder: 1, features: { ...growth, maxTables: 40, maxStaff: 10, poweredBy: true } },
-    { code: "pro", name: "Pro", monthlyPricePaise: rupees(4999), sortOrder: 2, features: { ...pro, maxTables: 80, maxStaff: 25, poweredBy: false } },
-    { code: "chain", name: "Chain", monthlyPricePaise: null, sortOrder: 3, features: { ...pro, multiOutlet: true, maxTables: null, maxStaff: null, poweredBy: false } },
-    { code: "custom", name: "Custom", monthlyPricePaise: null, sortOrder: 99, features: { ...none, maxTables: 5, maxStaff: 2, poweredBy: true } },
-  ]);
+  await db.insert(s.plans).values(DEFAULT_PLANS);
   const adminId = uuidv7();
   await db.insert(s.platformAdmins).values({ id: adminId, email: "admin@tableqr.local", name: "Platform Owner", role: "super_admin" });
   return { adminId };

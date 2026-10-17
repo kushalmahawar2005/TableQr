@@ -315,6 +315,23 @@ export async function setCustomPackageAction(tenantId: string, input: { features
   }
 }
 
+/** Charge this restaurant more or less than its plan's list price; null goes back to the plan's price */
+export async function setTenantPriceAction(tenantId: string, rupees: number | null): Promise<TenantActionState> {
+  try {
+    const admin = await requireSuperAdmin();
+    const price = rupees === null ? null : Math.floor(Number(rupees));
+    if (price !== null && (!Number.isFinite(price) || price < 0 || price > 1_000_000)) return { error: "Enter the price per month in rupees." };
+    const [tenant] = await db.select({ customPricePaise: s.tenants.customPricePaise }).from(s.tenants).where(eq(s.tenants.id, tenantId));
+    if (!tenant) return { error: "Tenant not found." };
+    await db.update(s.tenants).set({ customPricePaise: price === null ? null : price * 100 }).where(eq(s.tenants.id, tenantId));
+    await logAdminAction(admin, tenantId, "admin.price_set", { pricePaise: tenant.customPricePaise }, { pricePaise: price === null ? null : price * 100 });
+    revalidatePath("/admin");
+    return { error: null };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Price could not be saved." };
+  }
+}
+
 /** How many tables this restaurant may have on its floor (what it pays for) */
 export async function setTenantTableLimitAction(tenantId: string, limit: number): Promise<TenantActionState> {
   try {
