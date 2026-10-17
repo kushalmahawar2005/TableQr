@@ -66,7 +66,7 @@ function Stat({ icon: Icon, label, value, note, tone }: { icon: typeof FileText;
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return <div className="flex items-center justify-between gap-3 py-2 text-sm"><dt className="text-muted-foreground">{label}</dt><dd className="min-w-0 truncate text-right font-medium">{children}</dd></div>;
+  return <div className="flex items-center justify-between gap-3 px-3.5 py-2 text-sm odd:bg-muted/60"><dt className="text-muted-foreground">{label}</dt><dd className="min-w-0 truncate text-right font-medium">{children}</dd></div>;
 }
 
 const FEE_METHODS: Record<FeeMethod, string> = { upi: "UPI", cash: "Cash", bank: "Bank transfer" };
@@ -230,7 +230,7 @@ export function SubscriptionsView({ data }: { data: AdminData }) {
                 <div className="min-w-0 flex-1"><p className="truncate font-semibold">{t.name}</p><p className="truncate text-xs text-muted-foreground">{t.contactEmail ?? t.contactPhone}</p></div>
                 <Badge variant="secondary" className={KIND[kind].tone}>{KIND[kind].label}</Badge>
               </div>
-              <dl className="divide-y border-y">
+              <dl className="overflow-hidden rounded-xl border">
                 <Field label="Plan">{t.planName}</Field>
                 <Field label="Subscription ID">{t.subscriptionId ? `sub_${t.subscriptionId.slice(-8)}` : "—"}</Field>
                 <Field label="Amount">{kind === "trial" ? "Free trial" : `${money(perMonth(t))} / month`}</Field>

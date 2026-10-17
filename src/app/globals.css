@@ -436,6 +436,12 @@ body {
 .dark .bg-emerald-50 { background-color: rgb(16 185 129 / 0.12); }
 .dark .text-emerald-800 { color: #a7f3d0; }
 
+/* Platform admin: borders without a colour of their own take the soft border tone, never black.
+   .admin-ui sits on <html> while the admin is open, so dialogs and side panels get it too. */
+.admin-ui *, .admin-ui ::before, .admin-ui ::after { border-color: var(--border); }
+/* Side panels and dialogs render outside .admin-scope, so the soft grey surfaces must be set here too */
+.admin-ui:not(.dark) { --muted: oklch(0.97 0 0); --accent: oklch(0.97 0 0); }
+
 /* Scrolls as usual, but without a visible scrollbar */
 .no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
 .no-scrollbar::-webkit-scrollbar { display: none; }

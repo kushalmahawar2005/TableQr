@@ -100,6 +100,10 @@ export function AdminShell(props: { email: string; pages: Record<string, React.R
     document.documentElement.classList.toggle("dark", dark);
     return () => document.documentElement.classList.remove("dark");
   }, [dark]);
+  useEffect(() => {
+    document.documentElement.classList.add("admin-ui");
+    return () => document.documentElement.classList.remove("admin-ui");
+  }, []);
   return <Sidebar>
     <div className={`flex min-h-svh flex-col bg-[var(--admin-bg)] text-[var(--admin-fg)] md:flex-row ${dark ? "dark" : ""}`}>
       <AdminSidebar active={active} onSelect={setActive} email={props.email} logout={props.logout} dark={dark} onTheme={setDark} />

@@ -146,7 +146,7 @@ function CustomPackageForm({ tenant, pending, onSave }: { tenant: AdminTenant; p
 }
 
 function Detail({ label, children }: { label: string; children: React.ReactNode }) {
-  return <div className="flex items-start justify-between gap-3 py-2 text-sm"><dt className="shrink-0 text-muted-foreground">{label}</dt><dd className="min-w-0 break-words text-right font-medium">{children}</dd></div>;
+  return <div className="flex items-start justify-between gap-3 px-3 py-2 text-sm odd:bg-muted/60"><dt className="shrink-0 text-muted-foreground">{label}</dt><dd className="min-w-0 break-words text-right font-medium">{children}</dd></div>;
 }
 
 function TenantSheet({ tenant, plans, now, onClose }: { tenant: AdminTenant | null; plans: AdminData["plans"]; now: number; onClose: () => void }) {
@@ -221,7 +221,7 @@ function TenantSheet({ tenant, plans, now, onClose }: { tenant: AdminTenant | nu
             </section>}
             <div className="grid gap-4 sm:grid-cols-2">
               <section className="rounded-xl border bg-white p-4"><h3 className="mb-1 text-sm font-semibold">Tenant details</h3>
-                <dl className="divide-y"><Detail label="Contact">{tenant.contactName}</Detail><Detail label="Phone">{tenant.contactPhone}</Detail><Detail label="Email">{tenant.contactEmail ?? "—"}</Detail><Detail label="Last order">{date(tenant.lastOrderAt)}</Detail><Detail label="Joined">{date(tenant.createdAt)}</Detail></dl>
+                <dl className="overflow-hidden rounded-lg border"><Detail label="Contact">{tenant.contactName}</Detail><Detail label="Phone">{tenant.contactPhone}</Detail><Detail label="Email">{tenant.contactEmail ?? "—"}</Detail><Detail label="Last order">{date(tenant.lastOrderAt)}</Detail><Detail label="Joined">{date(tenant.createdAt)}</Detail></dl>
               </section>
               {detail ? <section className="space-y-3 rounded-xl border bg-white p-4"><h3 className="text-sm font-semibold">Usage vs plan limits</h3>
                 <UsageBar label="Tables" used={detail.usage.tables} max={detail.usage.maxTables} />
