@@ -2,8 +2,10 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { canSee } from "@/lib/staff-permissions";
 import { getFloor } from "@/server/floor/read";
+import { tenantFeatures } from "@/server/plan";
 import { currentStaff } from "@/server/staff/request";
 import { WaitlistScreen } from "./_components/waitlist-screen";
+import { FeatureLocked } from "../_components/feature-locked";
 
 export const metadata: Metadata = { title: "Waitlist", robots: { index: false, follow: false } };
 
@@ -18,6 +20,7 @@ export default async function WaitlistPage() {
       </main>
     );
   }
+  if (!(await tenantFeatures(staff.tenantId)).reservations) return <FeatureLocked feature="reservations" />;
   const data = await getFloor(staff);
   const tables = data.tables.filter((t) => t.state === "available").map((t) => ({ id: t.id, code: t.code, seats: t.maxSeats })).sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
   return <WaitlistScreen entries={data.waitlist} outlet={staff.outlet.name} outletCode={staff.outlet.code} freeTables={tables} canManage={data.may.waitlist} />;

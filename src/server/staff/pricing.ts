@@ -11,6 +11,7 @@ import { publish } from "../realtime/publish";
 import { topics } from "../realtime/token";
 import { audit } from "./audit";
 import type { StaffSession } from "./auth";
+import { requireFeature } from "../plan";
 
 // O4 Pricing: per-outlet absolute price overrides on top of the brand menu. O3 owns the brand price
 // (menu_items.price_paise); O4 owns outlet_item_overrides.price_paise only. Availability, sold-out
@@ -49,6 +50,7 @@ export type PricingRow = {
 /** Everything /console/pricing shows: active items of this outlet's brand with brand, outlet and effective prices */
 export async function getPricingData(staff: Staff) {
   assertPricing(staff, "pricing.view");
+  await requireFeature(staff.tenantId, "pricingRules");
   const brandId = await brandOf(db, staff);
   const [categories, items] = await Promise.all([
     db
@@ -149,6 +151,7 @@ const snapshot = (x: { outletPricePaise: number | null; effective: { pricePaise:
  */
 export async function setOutletPrice(staff: Staff, itemId: string, pricePaise: number, opts: { expectedOutletPricePaise?: number | null } = {}, now = new Date()) {
   assertPricing(staff, "pricing.edit");
+  await requireFeature(staff.tenantId, "pricingRules");
   const price = Number(pricePaise);
   if (!isValidNewPrice(price)) throw new AppError("invalid_state", "Enter a whole-rupee price of ₹0 or more.", { reason: "price" });
   const result = await db.transaction(async (tx) => {
@@ -166,6 +169,7 @@ export async function setOutletPrice(staff: Staff, itemId: string, pricePaise: n
 /** Back to the brand price for one item. Clears price_paise only; the row and its availability stay. */
 export async function clearOutletPrice(staff: Staff, itemId: string, opts: { expectedOutletPricePaise?: number | null } = {}, now = new Date()) {
   assertPricing(staff, "pricing.edit");
+  await requireFeature(staff.tenantId, "pricingRules");
   const result = await db.transaction(async (tx) => {
     const [item] = await lockItems(tx, staff, [String(itemId)]);
     if (opts.expectedOutletPricePaise !== undefined && item.outletPricePaise !== opts.expectedOutletPricePaise) stale();
@@ -191,6 +195,7 @@ export type BulkChange = { itemId: string; nameEn: string; brandPricePaise: numb
  */
 export async function bulkOutletPrice(staff: Staff, input: BulkInput, now = new Date()) {
   assertPricing(staff, "pricing.edit");
+  await requireFeature(staff.tenantId, "pricingRules");
   const itemIds = [...new Set((input.itemIds ?? []).map(String))];
   if (itemIds.length === 0) throw new AppError("invalid_state", "Select at least one item.", { reason: "selection" });
   if (itemIds.length > MAX_BULK_ITEMS) throw new AppError("invalid_state", `Select at most ${MAX_BULK_ITEMS} items at a time.`, { reason: "selection" });

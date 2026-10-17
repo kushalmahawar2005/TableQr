@@ -5,6 +5,7 @@ import * as s from "@/db/schema";
 import { canSee } from "@/lib/staff-permissions";
 import { AppError } from "../errors";
 import type { StaffSession } from "./auth";
+import { requireFeature } from "../plan";
 
 // Reports (read-only): the signed-in outlet over 7, 30 or 90 days. Revenue is net sales from paid
 // bills (bills.total_paise, tips excluded), the same definition as the dashboard. Days are IST.
@@ -39,6 +40,7 @@ const istDay = (d: Date) => new Date(d.getTime() + IST).toISOString().slice(0, 1
 
 export async function getReport(staff: Staff, range: ReportRange, now: Date): Promise<Report> {
   if (!canSee(staff.roles, "reports")) throw new AppError("forbidden", "Your role cannot view reports.");
+  await requireFeature(staff.tenantId, "fullReports");
   if (![7, 30, 90].includes(range)) range = 30;
   const todayStartUtc = new Date(Math.floor((now.getTime() + IST) / DAY) * DAY - IST);
   const from = new Date(todayStartUtc.getTime() - (range - 1) * DAY);

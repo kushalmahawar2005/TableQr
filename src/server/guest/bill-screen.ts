@@ -6,6 +6,7 @@ import { isPlaceholderName } from "@/domain/guest-name";
 import { ATTEMPT_WINDOW_MS, computeDraft, isBillLocked, loadBillInputs } from "../billing/bill";
 import { guestGateway } from "../payments/gateway";
 import { guestContextForDevice } from "./menu-screen";
+import { tenantFeatures } from "../plan";
 
 // Everything G8 Bill shows, in one server call, computed live from order lines. Before the bill
 // is requested it is a read-only preview; after, the split, tip and pay controls open.
@@ -17,7 +18,7 @@ export type PaymentView = "pending" | "success" | "failed" | "cancelled" | "unkn
 export async function getBillScreen(outletCode: string, shortCode: string, deviceId: string | null, now = new Date()) {
   const { t, open, ctx } = await guestContextForDevice(outletCode, shortCode, deviceId);
   const scope = { tenantId: ctx.tenantId, outletId: ctx.outletId, sessionId: ctx.sessionId };
-  const inputs = await loadBillInputs(db, scope);
+  const [inputs, features] = await Promise.all([loadBillInputs(db, scope), tenantFeatures(ctx.tenantId)]);
   const draft = computeDraft(inputs);
   const session = open.session;
   const requested = session.status === "bill_requested";
@@ -176,6 +177,7 @@ export async function getBillScreen(outletCode: string, shortCode: string, devic
     eligibleIds: eligible,
     tipPresetsBp: inputs.outlet.tipPresetsBp?.length ? inputs.outlet.tipPresetsBp : DEFAULT_TIP_PRESETS_BP,
     onlinePayment: !!guestGateway(),
+    groupSplit: features.groupSplit,
     latestPayment: latest
       ? { id: latest.id, status: viewOf(latest.status, latest.failureReason), amountPaise: latest.amountPaise, tipPaise: latest.tipPaise }
       : null,

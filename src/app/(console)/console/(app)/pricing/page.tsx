@@ -2,8 +2,10 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { canPrice } from "@/lib/staff-permissions";
 import { getPricingData } from "@/server/staff/pricing";
+import { tenantFeatures } from "@/server/plan";
 import { currentStaff } from "@/server/staff/request";
 import { PricingScreen } from "./_components/pricing-screen";
+import { FeatureLocked } from "../_components/feature-locked";
 
 export const metadata: Metadata = { title: "Pricing", robots: { index: false, follow: false } };
 
@@ -20,5 +22,6 @@ export default async function PricingPage() {
       </main>
     );
   }
+  if (!(await tenantFeatures(staff.tenantId)).pricingRules) return <FeatureLocked feature="pricingRules" />;
   return <PricingScreen initial={await getPricingData(staff)} />;
 }

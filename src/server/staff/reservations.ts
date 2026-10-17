@@ -8,6 +8,7 @@ import { createReservation } from "../floor/reservations";
 import { loadPolicy } from "../floor/policy";
 import { audit } from "./audit";
 import type { StaffSession } from "./auth";
+import { requireFeature } from "../plan";
 
 // Reservation Calendar read model and guest-detail edits. Every range is the outlet's own calendar
 // day or week; the browser's clock and time zone never decide what is shown or stored.
@@ -199,6 +200,7 @@ export async function createCalendarReservation(
   now = new Date(),
 ) {
   guard(staff);
+  await requireFeature(staff.tenantId, "reservations");
   const startAt = parseLocalDateTime(input.localDateTime, staff.outlet.timezone);
   if (!startAt) throw new AppError("invalid_state", "Choose a valid date and time.", { reason: "start" });
   const { name, phone, partySize, tableIds, occasion, notes, source } = input;

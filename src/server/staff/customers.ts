@@ -5,6 +5,7 @@ import * as s from "@/db/schema";
 import { canSee } from "@/lib/staff-permissions";
 import { AppError } from "../errors";
 import type { StaffSession } from "./auth";
+import { requireFeature } from "../plan";
 
 // Customers: everyone this restaurant has a phone number for, from table verification, bookings,
 // the waitlist and bills sent on WhatsApp, joined up by phone. Shows how often they come and when
@@ -32,6 +33,7 @@ const normal = (phone: string | null | undefined) => {
 
 export async function getCustomers(staff: Staff): Promise<Customer[]> {
   if (!canSee(staff.roles, "customers")) throw new AppError("forbidden", "Your role cannot see customers.");
+  await requireFeature(staff.tenantId, "whatsappBills");
   const [guests, visits, reservations, waitlist] = await Promise.all([
     db.select().from(s.guests).where(eq(s.guests.tenantId, staff.tenantId)),
     // One row per guest per visit, with that table's paid total

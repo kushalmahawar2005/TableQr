@@ -8,15 +8,18 @@ import { markServed } from "@/server/kitchen/actions";
 import { addPhonelessDiner, staffPlaceOrder, waiterRequestBill, waiterReopenBill, changeWaiterLine, type Approval } from "@/server/staff/waiter-mutations";
 import { settleAtCounter } from "@/server/billing/payments";
 import { markReady } from "@/server/floor/table-actions";
+import { requireFeature } from "@/server/plan";
 const roles=["waiter","manager","owner"] as const;
+/** Signed-in waiter, manager or owner of a restaurant whose plan has the waiter app */
+async function waiterStaff(){const staff=await staffFor(roles);await requireFeature(staff.tenantId,"waiterApp");return staff;}
 async function run<T>(work:(staff:Awaited<ReturnType<typeof staffFor>>)=>Promise<T>) {
-  try{return {ok:true as const,data:await work(await staffFor(roles))};}
+  try{return {ok:true as const,data:await work(await waiterStaff())};}
   catch(e){return {ok:false as const,error:e instanceof AppError?e.message:"Could not complete this action. Try again.",code:e instanceof AppError?e.code:"unknown"};}
 }
 export async function boardAction(){return run(waiterBoard);}
 export async function detailAction(sessionId:string){return run(s=>waiterDetail(s,sessionId));}
 export async function menuAction(){return run(waiterMenu);}
-export async function tokenAction(){return waiterRealtimeToken(await staffFor(roles));}
+export async function tokenAction(){return waiterRealtimeToken(await waiterStaff());}
 export async function doneAction(id:string){return run(s=>completeServiceRequest(s,id));}
 export async function servedAction(ids:string[]){return run(s=>markServed(s,ids));}
 export async function addDinerAction(sessionId:string,name:string){return run(s=>addPhonelessDiner(s,sessionId,name));}

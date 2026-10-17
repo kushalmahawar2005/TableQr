@@ -9,6 +9,7 @@ import { localClock, type WeeklyHours } from "@/domain/hours";
 import { diningMinutesFor, localTime, overlaps, parseLocalDateTime, serviceDate, type BookingPolicy } from "@/domain/booking-policy";
 import { LOCK_THEN_READ, type Runner } from "../db-types";
 import { AppError } from "../errors";
+import { requireFeature } from "../plan";
 import { loadPolicy } from "../floor/policy";
 import { syncEvents, syncTableHolds } from "../floor/sync";
 import { publish } from "../realtime/publish";
@@ -51,6 +52,7 @@ async function outletScope(run: Runner, outletCode: string): Promise<OutletScope
 
 export async function getBookingZones(outletCode: string) {
   const scope = await outletScope(db, outletCode);
+  await requireFeature(scope.tenantId, "reservations");
   return db.select({ id: s.zones.id, name: s.zones.name }).from(s.zones).where(and(eq(s.zones.tenantId, scope.tenantId), eq(s.zones.outletId, scope.outletId), eq(s.zones.isActive, true))).orderBy(asc(s.zones.sortOrder), asc(s.zones.name));
 }
 
@@ -159,6 +161,7 @@ function creditFor(policy: BookingPolicy, claims: { startAt: Date }[], startAt: 
 
 export async function getBookingAvailability(outletCode: string, input: { date: string; partySize: number; preference?: BookingPreference }, now = new Date()) {
   const scope = await outletScope(db, outletCode);
+  await requireFeature(scope.tenantId, "reservations");
   await validateZone(db, scope, input.preference?.zoneId);
   const policy = policyWithFallback(await loadPolicy(db, scope));
   const date = String(input.date);
@@ -187,6 +190,7 @@ export async function getBookingAvailability(outletCode: string, input: { date: 
 
 export async function createBookingHold(outletCode: string, input: { date: string; startAt: number; partySize: number; preference?: BookingPreference; requestId: string; holdToken: string }, now = new Date()) {
   const scope = await outletScope(db, outletCode);
+  await requireFeature(scope.tenantId, "reservations");
   await validateZone(db, scope, input.preference?.zoneId);
   const policy = policyWithFallback(await loadPolicy(db, scope));
   const startAt = new Date(Number(input.startAt));
@@ -353,6 +357,7 @@ export async function arriveBookingPublic(outletCode: string, token: string, now
 
 export async function createGroupRequest(outletCode: string, input: { requestId: string; name: string; phone: string; partySize: number; desiredDate: string; desiredStartAt: number; notes?: string | null }) {
   const scope = await outletScope(db, outletCode); const partySize = Number(input.partySize);
+  await requireFeature(scope.tenantId, "reservations");
   if (partySize <= 12 || partySize > 100 || !input.name.trim() || !input.phone.trim()) throw new AppError("invalid_state", "Group requests are for parties above 12 guests.");
   const existing = await db.select({ id: s.groupRequests.id, publicReference: s.groupRequests.publicReference }).from(s.groupRequests).where(and(eq(s.groupRequests.tenantId, scope.tenantId), eq(s.groupRequests.requestId, input.requestId))).limit(1);
   if (existing[0]) return existing[0];

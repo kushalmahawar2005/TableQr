@@ -3,7 +3,7 @@ import type { Pool, RowDataPacket } from "mysql2/promise";
 
 // Brings the live database up to what this release needs, once, when the server starts.
 // Hostinger builds and starts the app straight from Git and never runs `db:migrate`, so these
-// steps mirror drizzle/0016-0019. Every step checks first, so running it again (another server
+// steps mirror drizzle/0016-0020. Every step checks first, so running it again (another server
 // instance, a restart) changes nothing. Works on MySQL and MariaDB.
 
 type Step = { tag: string; when: number; hash: string; apply: (db: Pool) => Promise<void> };
@@ -68,6 +68,27 @@ const STEPS: Step[] = [
       await addColumn(db, "users", "duty_status", "enum('on','break','off') DEFAULT 'on' NOT NULL");
       await addColumn(db, "users", "duty_changed_at", "datetime(3)");
       await addColumn(db, "users", "last_seen_at", "datetime(3)");
+    },
+  },
+  {
+    tag: "0020_plan_features",
+    when: 1792218416304,
+    hash: "05adb0e662aad08058fda1f9d7b3f8efc1dc023b71261d5ff7b511f2484d3e0f",
+    apply: async (db) => {
+      await addColumn(db, "tenants", "custom_features", "json");
+      await addColumn(db, "tenants", "custom_price_paise", "int");
+      // Plans saved before these switches existed: Starter gets none, Growth all but full reports
+      for (const key of ["waiterApp", "discounts", "whatsappBills", "reservations"]) {
+        await db.query(
+          `UPDATE \`plans\` SET \`features\` = JSON_SET(\`features\`, '$.${key}', IF(\`code\` = 'starter', JSON_EXTRACT('false', '$'), JSON_EXTRACT('true', '$'))) WHERE JSON_EXTRACT(\`features\`, '$.${key}') IS NULL`,
+        );
+      }
+      await db.query(
+        "UPDATE `plans` SET `features` = JSON_SET(`features`, '$.fullReports', IF(`code` IN ('starter', 'growth'), JSON_EXTRACT('false', '$'), JSON_EXTRACT('true', '$'))) WHERE JSON_EXTRACT(`features`, '$.fullReports') IS NULL",
+      );
+      await db.query(
+        `INSERT INTO \`plans\` (\`code\`, \`name\`, \`monthly_price_paise\`, \`features\`, \`is_public\`, \`sort_order\`, \`created_at\`, \`updated_at\`) SELECT 'custom', 'Custom', NULL, '{"maxTables":5,"maxStaff":2,"poweredBy":true,"waiterApp":false,"discounts":false,"whatsappBills":false,"groupSplit":false,"reservations":false,"kitchenDisplay":false,"pricingRules":false,"fullReports":false,"multiOutlet":false}', 1, 99, CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3) FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM \`plans\` WHERE \`code\` = 'custom')`,
+      );
     },
   },
 ];

@@ -10,6 +10,7 @@ import { billDiscount } from "../billing/discounts";
 import { billToken } from "../billing/bill-link";
 import { whatsappReady } from "../whatsapp/cloud";
 import { TAKEAWAY_CLASS } from "../floor/takeaway-class";
+import { tenantFeatures } from "../plan";
 
 export const posRoles = ["cashier", "manager", "owner", "accountant"] as const;
 async function guard(staff: StaffSession) { await requireStaffRole(staff, posRoles); return staff; }
@@ -69,7 +70,7 @@ export async function posBillDetail(staff: StaffSession, sessionId: string) {
     row.bill ? db.select().from(s.billShares).where(and(eq(s.billShares.tenantId, staff.tenantId), eq(s.billShares.billId, row.bill.id))) : Promise.resolve([]),
     row.bill ? db.select().from(s.payments).where(and(eq(s.payments.tenantId, staff.tenantId), eq(s.payments.billId, row.bill.id))).orderBy(desc(s.payments.createdAt)) : Promise.resolve([]),
   ]);
-  const refundState = await loadRefundState(staff.tenantId, payments);
-  return { sessionId, tableId: row.table.id, tableCode: row.table.code, takeaway: row.table.tableClass === TAKEAWAY_CLASS, guestName: row.session.guestName, status: row.session.status, bill: row.bill ? { id: row.bill.id, status: row.bill.status, subtotalPaise: row.bill.subtotalPaise, discountPaise: row.bill.discountPaise, discount: await billDiscount(staff, row.bill.id), taxPaise: row.bill.taxPaise, serviceChargePaise: row.bill.serviceChargePaise, roundOffPaise: row.bill.roundOffPaise, totalPaise: row.bill.totalPaise, shareToken: billToken(row.bill.id) } : null, people, lines, shares: shares.map(x => ({ id: x.id, participantId: x.participantId, amountPaise: x.amountPaise, paidPaise: x.paidPaise, status: x.status, frozenAt: x.frozenAt?.getTime() ?? null })), pdfOnWhatsApp: whatsappReady(), needsApproval: !staff.roles.some(r => r === "manager" || r === "owner"), payments: payments.map(x => ({ id: x.id, method: x.method, amountPaise: x.amountPaise, tipPaise: x.tipPaise, status: x.status, channel: x.channel, createdAt: x.createdAt.getTime(), refund: refundState.get(x.id)! })) };
+  const [refundState, features] = await Promise.all([loadRefundState(staff.tenantId, payments), tenantFeatures(staff.tenantId)]);
+  return { sessionId, tableId: row.table.id, tableCode: row.table.code, takeaway: row.table.tableClass === TAKEAWAY_CLASS, guestName: row.session.guestName, status: row.session.status, bill: row.bill ? { id: row.bill.id, status: row.bill.status, subtotalPaise: row.bill.subtotalPaise, discountPaise: row.bill.discountPaise, discount: await billDiscount(staff, row.bill.id), taxPaise: row.bill.taxPaise, serviceChargePaise: row.bill.serviceChargePaise, roundOffPaise: row.bill.roundOffPaise, totalPaise: row.bill.totalPaise, shareToken: billToken(row.bill.id) } : null, people, lines, shares: shares.map(x => ({ id: x.id, participantId: x.participantId, amountPaise: x.amountPaise, paidPaise: x.paidPaise, status: x.status, frozenAt: x.frozenAt?.getTime() ?? null })), pdfOnWhatsApp: whatsappReady() && features.whatsappBills, discounts: features.discounts, needsApproval: !staff.roles.some(r => r === "manager" || r === "owner"), payments: payments.map(x => ({ id: x.id, method: x.method, amountPaise: x.amountPaise, tipPaise: x.tipPaise, status: x.status, channel: x.channel, createdAt: x.createdAt.getTime(), refund: refundState.get(x.id)! })) };
 }
 export type PosBillDetail = Awaited<ReturnType<typeof posBillDetail>>;

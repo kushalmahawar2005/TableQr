@@ -15,7 +15,8 @@ import { getSettingsData } from "@/server/admin/settings";
 import type { AnalyticsData, AnalyticsRange, AuditData, PaymentsData, SettingsData, TenantDetail } from "./admin-types";
 import { requirePlatformAdmin, signInPlatformAdmin, signOutPlatformAdmin } from "@/server/admin/auth";
 import { randomInt } from "node:crypto";
-import { hasKitchenDisplay } from "@/server/plan";
+import { effectiveFeatures, hasKitchenDisplay } from "@/server/plan";
+import { FEATURE_KEYS, readFeatures, type Features } from "@/lib/plan-features";
 
 export type AdminLoginState = { error: string | null };
 export type TenantState = { error: string | null; success: string | null; outletCode?: string };
@@ -171,7 +172,7 @@ export async function recordFeePaymentAction(tenantId: string, input: { months: 
     if (!Number.isFinite(amountRupees) || amountRupees < 0 || amountRupees > 10_000_000) return { error: "Enter the amount you received." };
     if (!(input.method in FEE_METHODS)) return { error: "Choose how they paid." };
     const reference = input.reference.trim().slice(0, 60);
-    const [tenant] = await db.select({ status: s.tenants.status, planCode: s.tenants.planCode, trialEndsAt: s.tenants.trialEndsAt }).from(s.tenants).where(eq(s.tenants.id, tenantId));
+    const [tenant] = await db.select({ status: s.tenants.status, planCode: s.tenants.planCode, trialEndsAt: s.tenants.trialEndsAt, customPricePaise: s.tenants.customPricePaise }).from(s.tenants).where(eq(s.tenants.id, tenantId));
     if (!tenant) return { error: "Tenant not found." };
     if (tenant.status === "cancelled") return { error: "This tenant is cancelled." };
     const [plan] = await db.select({ monthlyPricePaise: s.plans.monthlyPricePaise }).from(s.plans).where(eq(s.plans.code, tenant.planCode));
@@ -185,7 +186,7 @@ export async function recordFeePaymentAction(tenantId: string, input: { months: 
     await db.transaction(async (tx) => {
       await tx.insert(s.subscriptions).values({
         id: uuidv7(), tenantId, planCode: tenant.planCode, billingCycle: months === 12 ? "annual" : "monthly",
-        pricePerOutletPaise: latest?.pricePerOutletPaise ?? plan?.monthlyPricePaise ?? 0, outletCount: Math.max(1, Number(outlets?.total ?? 1)),
+        pricePerOutletPaise: tenant.customPricePaise ?? latest?.pricePerOutletPaise ?? plan?.monthlyPricePaise ?? 0, outletCount: Math.max(1, Number(outlets?.total ?? 1)),
         status: "active", periodStart, periodEnd,
       });
       if (tenant.status !== "active") await tx.update(s.tenants).set({ status: "active", statusReason: null }).where(eq(s.tenants.id, tenantId));
@@ -224,14 +225,42 @@ export async function changeTenantPlanAction(tenantId: string, planCode: string)
     const admin = await requireSuperAdmin();
     const [plan] = await db.select({ code: s.plans.code }).from(s.plans).where(eq(s.plans.code, planCode));
     if (!plan) return { error: "Selected plan does not exist." };
-    const [tenant] = await db.select({ planCode: s.tenants.planCode }).from(s.tenants).where(eq(s.tenants.id, tenantId));
+    const [tenant] = await db.select({ planCode: s.tenants.planCode, features: s.plans.features, customFeatures: s.tenants.customFeatures, kitchenOverride: s.tenants.kitchenDisplay, tableLimit: s.tenants.tableLimit, customPricePaise: s.tenants.customPricePaise, planPricePaise: s.plans.monthlyPricePaise })
+      .from(s.tenants).innerJoin(s.plans, eq(s.plans.code, s.tenants.planCode)).where(eq(s.tenants.id, tenantId));
     if (!tenant) return { error: "Tenant not found." };
-    await db.update(s.tenants).set({ planCode }).where(eq(s.tenants.id, tenantId));
+    // Moving to Custom starts from what the restaurant has today, so nothing is lost; leaving it
+    // hands everything back to the new plan
+    await db.update(s.tenants).set(planCode === CUSTOM_PLAN
+      ? { planCode, customFeatures: effectiveFeatures(tenant), customPricePaise: tenant.customPricePaise ?? tenant.planPricePaise, kitchenDisplay: null, tableLimit: null }
+      : { planCode, customFeatures: null, customPricePaise: null }).where(eq(s.tenants.id, tenantId));
     await logAdminAction(admin, tenantId, "admin.plan_changed", { planCode: tenant.planCode }, { planCode });
     revalidatePath("/admin");
     return { error: null };
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Plan could not be changed." };
+  }
+}
+
+const CUSTOM_PLAN = "custom";
+
+/** Custom package: the platform admin picks this restaurant's features, limits and price by hand */
+export async function setCustomPackageAction(tenantId: string, input: { features: Features; priceRupees: number }): Promise<TenantActionState> {
+  try {
+    const admin = await requireSuperAdmin();
+    const price = Math.floor(Number(input.priceRupees));
+    if (!Number.isFinite(price) || price < 0 || price > 1_000_000) return { error: "Enter the price per month in rupees." };
+    if (input.features.maxTables !== null && !(input.features.maxTables >= 1 && input.features.maxTables <= 500)) return { error: "Tables must be from 1 to 500, or empty for no limit." };
+    if (input.features.maxStaff !== null && !(input.features.maxStaff >= 1 && input.features.maxStaff <= 500)) return { error: "Staff must be from 1 to 500, or empty for no limit." };
+    const [tenant] = await db.select({ planCode: s.tenants.planCode, customFeatures: s.tenants.customFeatures, customPricePaise: s.tenants.customPricePaise }).from(s.tenants).where(eq(s.tenants.id, tenantId));
+    if (!tenant) return { error: "Tenant not found." };
+    if (tenant.planCode !== CUSTOM_PLAN) return { error: "Put this restaurant on the Custom plan first." };
+    const features = cleanFeatures(input.features);
+    await db.update(s.tenants).set({ customFeatures: features, customPricePaise: price * 100, kitchenDisplay: null, tableLimit: null }).where(eq(s.tenants.id, tenantId));
+    await logAdminAction(admin, tenantId, "admin.custom_package_saved", { features: tenant.customFeatures ? readFeatures(tenant.customFeatures) : null, pricePaise: tenant.customPricePaise }, { features, pricePaise: price * 100 });
+    revalidatePath("/admin");
+    return { error: null };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Custom package could not be saved." };
   }
 }
 
@@ -297,21 +326,16 @@ export type PlanInput = {
   /** Rupees per outlet per month; null for custom-priced plans */
   priceRupees: number | null;
   isPublic: boolean;
-  features: {
-    maxTables: number | null;
-    maxStaff: number | null;
-    bookings: "reservations_only" | "full";
-    groupSplit: boolean;
-    pricingRules: boolean;
-    suggestions: boolean;
-    guestCampaigns: boolean;
-    multiOutlet: boolean;
-    poweredBy: boolean;
-    kitchenDisplay: boolean;
-  };
+  features: Features;
+
 };
 
 const limit = (value: number | null) => (value === null ? null : Math.max(1, Math.floor(value)));
+/** Only the switches TableQR knows, as true/false, with whole-number limits */
+const cleanFeatures = (f: Features): Features => ({
+  ...(Object.fromEntries(FEATURE_KEYS.map((k) => [k, f[k] === true])) as Record<(typeof FEATURE_KEYS)[number], boolean>),
+  maxTables: limit(f.maxTables), maxStaff: limit(f.maxStaff), poweredBy: f.poweredBy === true,
+});
 
 export async function savePlanAction(input: PlanInput, mode: "create" | "edit"): Promise<TenantActionState> {
   try {
@@ -325,7 +349,7 @@ export async function savePlanAction(input: PlanInput, mode: "create" | "edit"):
       name,
       monthlyPricePaise: input.priceRupees === null ? null : Math.round(input.priceRupees * 100),
       isPublic: input.isPublic,
-      features: { ...input.features, maxTables: limit(input.features.maxTables), maxStaff: limit(input.features.maxStaff) },
+      features: cleanFeatures(input.features),
     };
     const [existing] = await db.select({ code: s.plans.code }).from(s.plans).where(eq(s.plans.code, code));
     if (mode === "create") {

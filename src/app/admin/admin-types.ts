@@ -1,3 +1,4 @@
+import type { Features } from "@/lib/plan-features";
 export type AdminTenant = {
   id: string;
   name: string;
@@ -12,6 +13,10 @@ export type AdminTenant = {
   kitchenFromPlan: boolean;
   /** Tables the restaurant may have; null means no limit */
   tableLimit: number | null;
+  /** What this restaurant gets right now: its plan or custom package, with the admin's choices */
+  features: Features;
+  /** Custom package price per outlet per month; null when not on a custom package */
+  customPricePaise: number | null;
   status: "trial" | "active" | "suspended" | "cancelled";
   createdAt: string;
   trialEndsAt: string | null;
@@ -28,18 +33,7 @@ export type AdminTenant = {
   paidBills30dPaise: number;
 };
 
-export type AdminPlanFeatures = {
-  maxTables: number | null;
-  maxStaff: number | null;
-  bookings: "reservations_only" | "full";
-  groupSplit: boolean;
-  pricingRules: boolean;
-  suggestions: boolean;
-  guestCampaigns: boolean;
-  multiOutlet: boolean;
-  kitchenDisplay?: boolean;
-  poweredBy: boolean;
-};
+export type AdminPlanFeatures = Features;
 export type AdminPlan = { code: string; name: string; monthlyPricePaise: number | null; isPublic: boolean; tenantCount: number; features: AdminPlanFeatures; sortOrder: number };
 export type AdminGrowthPoint = { date: string; tenants: number; restaurants: number; orders: number };
 export type AdminActivity = { id: string; kind: "tenant" | "restaurant" | "subscription" | "order"; title: string; description: string; createdAt: string };

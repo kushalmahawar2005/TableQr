@@ -8,14 +8,14 @@ import { AppError } from "../errors";
 import { audit } from "./audit";
 import type { StaffSession } from "./auth";
 import { hashPin, isPin } from "./pin";
-import { tenantHasKitchen } from "../plan";
+import { staffLimitMessage, tenantFeatures } from "../plan";
 
 // Team: the people who can sign in at this outlet. Managers see the list; only the owner adds
 // people, changes a role, resets a PIN or switches someone off. The owner role itself is never
 // handed out here, and a person can never change their own access.
 
 type Staff = Pick<StaffSession, "tenantId" | "outletId" | "roles" | "userId" | "name">;
-/** Roles the owner can give. Kitchen only when the restaurant has the kitchen screen (plan or admin). */
+/** Roles the owner can give. Kitchen only with the kitchen screen, Waiter only with the waiter app (plan or admin). */
 export const TEAM_ROLES = ["manager", "waiter", "accountant", "kitchen"] as const satisfies readonly StaffRole[];
 export type TeamRole = (typeof TEAM_ROLES)[number];
 /** Older roles (cashier, host) are no longer handed out; people who already have them keep working */
@@ -23,8 +23,21 @@ const LIST_ORDER = ["owner", "manager", "waiter", "accountant", "kitchen", "cash
 
 /** The roles this restaurant's owner may give, from its plan */
 export async function assignableRoles(tenantId: string): Promise<TeamRole[]> {
-  const kitchen = await tenantHasKitchen(tenantId);
-  return TEAM_ROLES.filter((r) => r !== "kitchen" || kitchen);
+  const f = await tenantFeatures(tenantId);
+  return TEAM_ROLES.filter((r) => (r !== "kitchen" || f.kitchenDisplay) && (r !== "waiter" || f.waiterApp));
+}
+
+/** Stops the owner going past the plan's staff logins; the owner's own login does not count */
+async function assertRoomForStaff(tx: Pick<typeof db, "selectDistinct">, staff: Staff, joining: string | null) {
+  const { maxStaff } = await tenantFeatures(staff.tenantId);
+  if (maxStaff === null) return;
+  const rows = await tx.selectDistinct({ id: s.users.id }).from(s.users)
+    .innerJoin(s.staffRoles, and(eq(s.staffRoles.tenantId, s.users.tenantId), eq(s.staffRoles.userId, s.users.id)))
+    .where(and(eq(s.users.tenantId, staff.tenantId), eq(s.users.isActive, true)));
+  const owners = await tx.selectDistinct({ id: s.staffRoles.userId }).from(s.staffRoles).where(and(eq(s.staffRoles.tenantId, staff.tenantId), eq(s.staffRoles.role, "owner")));
+  const ownerIds = new Set(owners.map((o) => o.id));
+  const counted = rows.filter((r) => !ownerIds.has(r.id) && r.id !== joining).length;
+  if (counted >= maxStaff) throw bad(staffLimitMessage(maxStaff));
 }
 
 export type TeamMember = { id: string; name: string; phone: string; isActive: boolean; roles: StaffRole[]; isMe: boolean; locked: boolean };
@@ -73,6 +86,7 @@ export async function addMember(staff: Staff, input: { name: string; phone: stri
   if (!(await assignableRoles(staff.tenantId)).includes(role)) throw bad("Pick a role.");
   return db.transaction(async (tx) => {
     const [existing] = await tx.select().from(s.users).where(and(eq(s.users.tenantId, staff.tenantId), eq(s.users.phone, phone)));
+    await assertRoomForStaff(tx, staff, existing?.isActive ? existing.id : null);
     let userId = existing?.id;
     if (existing) {
       const [has] = await tx.select({ id: s.staffRoles.id }).from(s.staffRoles).where(and(eq(s.staffRoles.tenantId, staff.tenantId), eq(s.staffRoles.userId, existing.id), or(isNull(s.staffRoles.outletId), eq(s.staffRoles.outletId, staff.outletId))));
@@ -116,6 +130,7 @@ export async function setMemberActive(staff: Staff, userId: string, active: bool
   ownerOnly(staff);
   await db.transaction(async (tx) => {
     await target(tx, staff, userId);
+    if (active) await assertRoomForStaff(tx, staff, userId);
     await tx.update(s.users).set({ isActive: !!active }).where(and(eq(s.users.tenantId, staff.tenantId), inArray(s.users.id, [userId])));
     if (!active) await revokeSessions(tx, staff, userId, now);
     await audit(tx, staff, { action: active ? "team.member_on" : "team.member_off", entity: "user", entityId: userId, now });

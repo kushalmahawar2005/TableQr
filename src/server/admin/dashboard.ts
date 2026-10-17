@@ -5,7 +5,8 @@ import { db } from "@/db";
 import * as s from "@/db/schema";
 import type { AdminActivity, AdminData, AdminGrowthPoint } from "@/app/admin/admin-types";
 import { requirePlatformAdmin } from "./auth";
-import { hasKitchenDisplay, kitchenFor } from "../plan";
+import { readFeatures } from "@/lib/plan-features";
+import { effectiveFeatures, hasKitchenDisplay } from "../plan";
 
 const DAY = 86_400_000;
 
@@ -57,6 +58,8 @@ export async function getAdminData(): Promise<AdminData> {
       trialEndsAt: s.tenants.trialEndsAt,
       kitchenOverride: s.tenants.kitchenDisplay,
       tableLimit: s.tenants.tableLimit,
+      customFeatures: s.tenants.customFeatures,
+      customPricePaise: s.tenants.customPricePaise,
     }).from(s.tenants).orderBy(desc(s.tenants.createdAt)),
     db.select({
       code: s.plans.code,
@@ -192,17 +195,20 @@ export async function getAdminData(): Promise<AdminData> {
       const plan = planByCode.get(tenant.planCode);
       const subscription = subscriptionByTenant.get(tenant.id);
       const outlets = outletsByTenant.get(tenant.id);
+      const { customFeatures, ...row } = tenant;
+      const features = effectiveFeatures({ features: plan?.features, customFeatures, kitchenOverride: tenant.kitchenOverride, tableLimit: tenant.tableLimit });
       return {
-        ...tenant,
+        ...row,
+        features,
         planName: plan?.name ?? tenant.planCode,
-        kitchenDisplay: kitchenFor(tenant.kitchenOverride, plan?.features),
+        kitchenDisplay: features.kitchenDisplay,
         kitchenFromPlan: hasKitchenDisplay(plan?.features),
-        tableLimit: tenant.tableLimit ?? plan?.features.maxTables ?? null,
+        tableLimit: features.maxTables,
         createdAt: tenant.createdAt.toISOString(),
         trialEndsAt: tenant.trialEndsAt?.toISOString() ?? null,
         outletCount: outlets?.count ?? 0,
         cities: outlets?.cities.sort((a, b) => a.localeCompare(b)) ?? [],
-        monthlyPricePaise: subscription?.pricePerOutletPaise ?? plan?.monthlyPricePaise ?? null,
+        monthlyPricePaise: tenant.customPricePaise ?? subscription?.pricePerOutletPaise ?? plan?.monthlyPricePaise ?? null,
         billingCycle: subscription?.billingCycle ?? null,
         renewalAt: subscription?.status === "cancelled" ? null : subscription?.periodEnd.toISOString() ?? tenant.trialEndsAt?.toISOString() ?? null,
         subscriptionStatus: subscription?.status ?? null,
@@ -213,7 +219,7 @@ export async function getAdminData(): Promise<AdminData> {
         paidBills30dPaise: billsByTenant.get(tenant.id) ?? 0,
       };
     }),
-    plans: planRows.map((plan) => ({ ...plan, tenantCount: activePlanCounts.get(plan.code) ?? 0 })),
+    plans: planRows.map((plan) => ({ ...plan, features: readFeatures(plan.features), tenantCount: activePlanCounts.get(plan.code) ?? 0 })),
     totals: { tenants: tenantRows.length, restaurants: restaurantTotal, tables: Number(tableStats.total), orders: Number(orderStats.total), revenuePaise: Number(revenueStats.total) },
     changes: {
       tenants: percentageChange(currentTenants, previousTenants),

@@ -66,7 +66,7 @@ async function createRestaurant(db: Db, key: string, name: string, outletCode: s
   const userId = uuidv7();
   const tableId = uuidv7();
   const tableQr = `iso${key}`;
-  await db.insert(s.tenants).values({ id: tenantId, name: `${name} Pvt Ltd`, planCode: "growth", status: "active", contactName: `${name} Owner`, contactPhone: ownerPhone });
+  await db.insert(s.tenants).values({ id: tenantId, name: `${name} Pvt Ltd`, planCode: "pro", status: "active", contactName: `${name} Owner`, contactPhone: ownerPhone });
   await db.insert(s.brands).values({ id: brandId, tenantId, name });
   await db.insert(s.outlets).values({ id: outletId, tenantId, brandId, code: outletCode, name, city: "Jaipur", address: `${name} Road` });
   await db.insert(s.users).values({ id: userId, tenantId, phone: ownerPhone, name: `${name} Owner`, pinHash: await hashPin(ownerPin) });

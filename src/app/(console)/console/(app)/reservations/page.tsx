@@ -2,8 +2,10 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { canSee } from "@/lib/staff-permissions";
 import { getReservationCalendar } from "@/server/staff/reservations";
+import { tenantFeatures } from "@/server/plan";
 import { currentStaff } from "@/server/staff/request";
 import { ReservationCalendar } from "./_components/reservation-calendar";
+import { FeatureLocked } from "../_components/feature-locked";
 
 export const metadata: Metadata = { title: "Reservations", robots: { index: false, follow: false } };
 
@@ -20,6 +22,7 @@ export default async function ReservationsPage() {
       </main>
     );
   }
+  if (!(await tenantFeatures(staff.tenantId)).reservations) return <FeatureLocked feature="reservations" />;
   const data = await getReservationCalendar(staff);
   return <ReservationCalendar initial={data} realtimeUrl={process.env.REALTIME_URL?.replace(/^http/, "ws") ?? null} />;
 }

@@ -10,6 +10,7 @@ import { AppError } from "../errors";
 import { publish } from "../realtime/publish";
 import { topics, waitlistRealtimeToken } from "../realtime/token";
 import { outletScope } from "./waitlist-internal";
+import { requireFeature } from "../plan";
 import { queueBookingNotification } from "./notifications";
 
 export async function estimateWait(run: Runner, scope: { tenantId: string; outletId: string }, partySize: number, seatingPreference?: string | null, now = new Date()) {
@@ -35,6 +36,7 @@ const token = () => randomBytes(32).toString("base64url");
 
 export async function joinPublicWaitlist(outletCode: string, input: { name: string; phone: string; partySize: number; seatingPreference?: string | null }) {
   const scope = await outletScope(db, outletCode);
+  await requireFeature(scope.tenantId, "reservations");
   const name = input.name.trim().slice(0, 80); const partySize = Number(input.partySize);
   const now = new Date();
   if (!name || !/^[0-9+ ()-]{7,20}$/.test(input.phone) || !Number.isInteger(partySize) || partySize < 1 || partySize > 12) throw new AppError("invalid_state", "Enter a name, phone and party size from 1 to 12.");

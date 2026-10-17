@@ -11,6 +11,7 @@ import { posRoles } from "../staff/pos-read";
 import { sendWhatsAppPdf, whatsappReady } from "../whatsapp/cloud";
 import { billToken, sharedBill } from "./bill-link";
 import { billPdf, billPdfName } from "./bill-pdf";
+import { requireFeature } from "../plan";
 
 // "Send" on the billing screen: the bill goes to the guest's WhatsApp as a PDF, with no chat
 // opened on the cashier's phone. Every send is kept with its outcome, the number masked.
@@ -19,6 +20,7 @@ const mask = (to: string) => `+${to.slice(0, 4)}xxxxxx${to.slice(-2)}`;
 
 export async function sendBillOnWhatsApp(staff: StaffSession, input: { sessionId: string; phone: string }) {
   await requireStaffRole(staff, posRoles);
+  await requireFeature(staff.tenantId, "whatsappBills");
   if (!whatsappReady()) throw new AppError("invalid_state", "WhatsApp is not connected yet.", { reason: "not_connected" });
   const to = whatsappNumber(String(input.phone ?? ""));
   if (!to) throw new AppError("invalid_state", "Enter a 10-digit mobile number.", { reason: "phone" });

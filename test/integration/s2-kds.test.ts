@@ -116,7 +116,8 @@ describe("trusted kitchen screen", () => {
       await failsWith(setupKdsDevice({ ...MANAGER, station: "Main", expeditor: false }), "forbidden", "plan");
       expect(await resolveKdsDevice(tandoorToken)).toBeNull();
       // And the owner cannot hand out the Kitchen role on that plan
-      expect(await assignableRoles(env.demo.tenantId)).toEqual(["manager", "waiter", "accountant"]);
+      // (Starter has no waiter app either)
+      expect(await assignableRoles(env.demo.tenantId)).toEqual(["manager", "accountant"]);
     } finally {
       await env.db.update(s.tenants).set({ planCode: tenant.planCode }).where(eq(s.tenants.id, env.demo.tenantId));
     }

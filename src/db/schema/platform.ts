@@ -7,25 +7,19 @@ import {
   uniqueIndex,
   varchar,
 } from "drizzle-orm/mysql-core";
+import type { Features } from "../../lib/plan-features";
 import { at, createdAt, id, updatedAt } from "./_columns";
 
 // Platform level: owned by the TableQR operator, not by any restaurant (PS 11).
 // Nothing here carries a tenant_id.
 
-export type PlanFeatures = {
-  /** null means no limit */
-  maxTables: number | null;
-  maxStaff: number | null;
-  bookings: "reservations_only" | "full";
-  groupSplit: boolean;
-  pricingRules: boolean;
-  suggestions: boolean;
-  guestCampaigns: boolean;
-  multiOutlet: boolean;
-  /** Small "powered by TableQR" line on the guest page (lower plans) */
-  poweredBy: boolean;
-  /** Kitchen display screen (KDS). Missing on older plan rows means included. */
-  kitchenDisplay?: boolean;
+/**
+ * What a plan includes, as stored. Rows saved before a switch existed may lack it; read them with
+ * readFeatures (src/lib/plan-features.ts), never field by field.
+ */
+export type PlanFeatures = Partial<Features> & {
+  /** Older rows: "full" meant reservations plus waitlist */
+  bookings?: "reservations_only" | "full";
 };
 
 /** Plans and prices are data, so the operator can change them without a release */

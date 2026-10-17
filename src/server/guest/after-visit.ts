@@ -9,6 +9,7 @@ import { publish } from "../realtime/publish";
 import { topics } from "../realtime/token";
 import { configuredReceiptChannels } from "../receipts/channels";
 import { findTableByQr } from "./table";
+import { tenantFeatures } from "../plan";
 
 // G9 Paid, receipt and next visit (PS 3.8). The same phone that sat at the table can come back to
 // this for 24 hours after the table is settled, read-only: success, progress, the receipt, one
@@ -16,8 +17,6 @@ import { findTableByQr } from "./table";
 // to its participant row; no ids or tokens appear in any URL, so nothing here can be guessed.
 
 export const AFTER_VISIT_HOURS = 24;
-/** "Book your next visit" links only to a real booking flow; B1 is still a placeholder */
-export const BOOKING_AVAILABLE = true;
 
 export type Visit = {
   tenantId: string;
@@ -131,7 +130,8 @@ export async function getAfterVisit(outletCode: string, shortCode: string, devic
     channels,
     rating: (feedback?.rating ?? null) as number | null,
     reviewUrl: outletRow?.reviewUrl ?? null,
-    bookingUrl: BOOKING_AVAILABLE ? `/r/${encodeURIComponent(outlet.code)}/book` : null,
+    // "Book your next visit" only when the restaurant's plan has reservations
+    bookingUrl: (await tenantFeatures(v.tenantId)).reservations ? `/r/${encodeURIComponent(outlet.code)}/book` : null,
   };
 }
 

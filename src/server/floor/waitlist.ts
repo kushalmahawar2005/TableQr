@@ -14,6 +14,7 @@ import { tableStateEvents, visitChanged } from "./assignments";
 import { loadPolicy } from "./policy";
 import { queueBookingNotification } from "../booking/notifications";
 import type { FloorActor } from "./table-actions";
+import { requireFeature } from "../plan";
 import { assertCombinable, assertFreeForSeating, assertSeats, bookingConflictError, bookingConflicts, lockTables, openVisit, type Scope } from "./visits";
 
 // Waitlist (PS 4.6): an ordered queue of walk-in parties. Waiting → Notified → Seated, or Skipped /
@@ -45,6 +46,7 @@ async function lockEntry(tx: Tx, scope: Scope, id: string) {
 export async function addToWaitlist(staff: FloorActor, input: { name: string; phone?: string | null; partySize: number; quotedMinutes?: number | null; notes?: string | null; seatingPreference?: string | null }, now = new Date()) {
   assertMay(staff, "waitlist.manage");
   const scope = scopeOf(staff);
+  await requireFeature(scope.tenantId, "reservations");
   const name = String(input.name ?? "").trim().slice(0, 80);
   if (!name) throw new AppError("invalid_state", "Enter the party's name.", { reason: "name" });
   const partySize = Number(input.partySize);

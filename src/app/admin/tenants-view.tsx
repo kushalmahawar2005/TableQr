@@ -14,9 +14,10 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { changeTenantPlanAction, extendTrialAction, getTenantDetailAction, resetOwnerPinAction, setTenantKitchenAction, setTenantStatusAction, setTenantTableLimitAction, updateTenantAction } from "./actions";
+import { changeTenantPlanAction, extendTrialAction, getTenantDetailAction, resetOwnerPinAction, setCustomPackageAction, setTenantKitchenAction, setTenantStatusAction, setTenantTableLimitAction, updateTenantAction } from "./actions";
 import { CreateTenantDialog } from "./create-tenant-dialog";
 import type { AdminData, AdminTenant, TenantDetail } from "./admin-types";
+import { FEATURE_KEYS, FEATURE_LABELS, type Features } from "@/lib/plan-features";
 
 const detailChart = { orders: { label: "Orders", color: "#5b42f5" }, revenue: { label: "Revenue (₹)", color: "#a78bfa" } } satisfies ChartConfig;
 const shortDay = (v: string) => new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", timeZone: "UTC" }).format(new Date(v));
@@ -53,6 +54,34 @@ function healthOf(t: AdminTenant, now: number): Health {
   return "At risk";
 }
 const mrr = (t: AdminTenant) => t.status === "active" ? (t.monthlyPricePaise ?? 0) * t.outletCount : 0;
+
+/** What the restaurant can use right now, as ticks and crosses */
+function FeatureList({ features }: { features: Features }) {
+  return <ul className="grid gap-1.5 text-sm sm:grid-cols-2">
+    <li className="flex justify-between gap-2 sm:col-span-2"><span className="text-muted-foreground">Tables · Staff</span><span className="font-medium">{features.maxTables ?? "No limit"} · {features.maxStaff ?? "No limit"}</span></li>
+    {FEATURE_KEYS.map((k) => <li key={k} className={`flex items-center gap-2 ${features[k] ? "" : "text-muted-foreground line-through decoration-zinc-300"}`}><span aria-hidden="true">{features[k] ? "✓" : "✕"}</span>{FEATURE_LABELS[k].label}<span className="sr-only">{features[k] ? "included" : "not included"}</span></li>)}
+  </ul>;
+}
+
+/** Custom plan: tick what this restaurant gets, set its limits and its price */
+function CustomPackageForm({ tenant, pending, onSave }: { tenant: AdminTenant; pending: boolean; onSave: (input: { features: Features; priceRupees: number }) => void }) {
+  const [f, setF] = useState<Features>(tenant.features);
+  const [price, setPrice] = useState(String(Math.round((tenant.customPricePaise ?? tenant.monthlyPricePaise ?? 0) / 100)));
+  const limit = (v: string) => (v === "" ? null : Math.max(1, Number(v.replace(/\D/g, "")) || 1));
+  return <section className="space-y-3 rounded-xl border border-[#5b42f5]/40 bg-[#5b42f5]/[0.03] p-4">
+    <div><h3 className="text-sm font-semibold">Custom package</h3><p className="text-xs text-muted-foreground">Tick what this restaurant gets and set its price. It applies as soon as you save.</p></div>
+    <div className="grid gap-2.5 sm:grid-cols-2">
+      {FEATURE_KEYS.map((k) => <label key={k} className="flex items-start gap-2 text-sm"><input type="checkbox" checked={f[k]} onChange={(e) => setF({ ...f, [k]: e.target.checked })} className="mt-0.5 size-4 accent-[#5b42f5]" /><span>{FEATURE_LABELS[k].label}<span className="block text-xs text-muted-foreground">{FEATURE_LABELS[k].hint}</span></span></label>)}
+      <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={f.poweredBy} onChange={(e) => setF({ ...f, poweredBy: e.target.checked })} className="mt-0.5 size-4 accent-[#5b42f5]" /><span>Show “Powered by TableQR”<span className="block text-xs text-muted-foreground">A small line on the guest page</span></span></label>
+    </div>
+    <div className="grid grid-cols-3 gap-2">
+      <div className="space-y-1"><Label htmlFor="custom-tables" className="text-xs">Tables</Label><Input id="custom-tables" inputMode="numeric" value={f.maxTables ?? ""} placeholder="No limit" onChange={(e) => setF({ ...f, maxTables: limit(e.target.value) })} /></div>
+      <div className="space-y-1"><Label htmlFor="custom-staff" className="text-xs">Staff logins</Label><Input id="custom-staff" inputMode="numeric" value={f.maxStaff ?? ""} placeholder="No limit" onChange={(e) => setF({ ...f, maxStaff: limit(e.target.value) })} /></div>
+      <div className="space-y-1"><Label htmlFor="custom-price" className="text-xs">Price / month (₹)</Label><Input id="custom-price" inputMode="numeric" value={price} onChange={(e) => setPrice(e.target.value.replace(/\D/g, "").slice(0, 7))} /></div>
+    </div>
+    <Button disabled={pending || price === ""} onClick={() => onSave({ features: f, priceRupees: Number(price) })}>{pending && <Loader2 className="animate-spin" />}Save custom package</Button>
+  </section>;
+}
 
 function Detail({ label, children }: { label: string; children: React.ReactNode }) {
   return <div className="flex items-start justify-between gap-3 py-2 text-sm"><dt className="shrink-0 text-muted-foreground">{label}</dt><dd className="min-w-0 break-words text-right font-medium">{children}</dd></div>;
@@ -157,8 +186,10 @@ function TenantSheet({ tenant, plans, now, onClose }: { tenant: AdminTenant | nu
                 <p className="text-lg font-bold">{tenant.planName}</p>
                 <p className="text-sm text-muted-foreground">{tenant.monthlyPricePaise ? `${money(tenant.monthlyPricePaise)} / outlet / month` : "Custom pricing"}{tenant.billingCycle ? ` · ${tenant.billingCycle}` : ""}</p>
                 <p className="mt-2 text-xs text-muted-foreground">{tenant.status === "trial" ? "Trial ends" : "Next renewal"}: <span className="font-medium text-foreground">{date(tenant.status === "trial" ? tenant.trialEndsAt : tenant.renewalAt)}</span></p>
-                <Button variant="outline" size="sm" className="mt-3" onClick={() => setTab("manage")}>Change plan</Button>
+                <Button variant="outline" size="sm" className="mt-3" onClick={() => setTab("manage")}>{tenant.planCode === "custom" ? "Edit custom package" : "Change plan"}</Button>
               </section>
+              <section className="rounded-xl border bg-white p-4 sm:col-span-2"><h3 className="mb-2 text-sm font-semibold">What they get</h3><FeatureList features={tenant.features} /></section>
+              {tenant.planCode !== "custom" && <>
               <section className="rounded-xl border bg-white p-4 sm:col-span-2">
                 <form
                   className="flex flex-wrap items-end justify-between gap-3"
@@ -192,6 +223,7 @@ function TenantSheet({ tenant, plans, now, onClose }: { tenant: AdminTenant | nu
                   </div>
                 </div>
               </section>
+              </>}
               <section className="rounded-xl border bg-white p-4"><h3 className="mb-2 text-sm font-semibold">Quick actions</h3>
                 <div className="flex flex-wrap gap-2">
                   <Button variant="outline" size="sm" onClick={() => setTab("edit")}>Edit details</Button>
@@ -235,7 +267,9 @@ function TenantSheet({ tenant, plans, now, onClose }: { tenant: AdminTenant | nu
                 <SelectTrigger className="w-full" aria-label="Change plan"><SelectValue>{tenant.planName}</SelectValue></SelectTrigger>
                 <SelectContent>{plans.map((p) => <SelectItem key={p.code} value={p.code}>{p.name}</SelectItem>)}</SelectContent>
               </Select>
+              {tenant.planCode !== "custom" && <p className="text-xs text-muted-foreground">Pick Custom to choose features and price for this restaurant alone.</p>}
             </section>
+            {tenant.planCode === "custom" && <CustomPackageForm key={tenant.id} tenant={tenant} pending={pending} onSave={(input) => run(() => setCustomPackageAction(tenant.id, input), "Custom package saved.")} />}
             <section className="space-y-2">
               <h3 className="text-sm font-semibold">Reset owner PIN</h3>
               <div className="flex gap-2">

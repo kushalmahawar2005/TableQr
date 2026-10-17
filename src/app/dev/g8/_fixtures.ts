@@ -81,6 +81,7 @@ export const g8Base: BillScreenData = {
   eligibleIds: ["A", "B", "C", "D"],
   tipPresetsBp: [500, 1000],
   onlinePayment: true,
+  groupSplit: true,
   latestPayment: null,
   refundPendingPaise: 0,
   payAtCounter: null,

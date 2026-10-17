@@ -413,6 +413,7 @@ export function BillScreen({
             </section>
 
             {/* Split mode */}
+            {data.groupSplit && (
             <section aria-labelledby="g8-split" className="mt-6">
               <h2 id="g8-split" className="font-display text-section font-bold text-ink">
                 {c.split}
@@ -440,6 +441,7 @@ export function BillScreen({
               )}
               {bill.mode === "custom" && !bill.custom.valid && !customEditing && <p className="mt-2 rounded-guest bg-[var(--state-held-soft)] px-3.5 py-2.5 text-caption text-[var(--state-held-text)]">{c.customStale(session.hostName)}</p>}
             </section>
+            )}
 
             {customEditing ? (
               <CustomAmounts

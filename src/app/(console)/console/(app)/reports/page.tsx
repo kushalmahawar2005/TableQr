@@ -2,8 +2,10 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { canSee } from "@/lib/staff-permissions";
 import { getReport, type ReportRange } from "@/server/staff/reports-read";
+import { tenantFeatures } from "@/server/plan";
 import { currentStaff } from "@/server/staff/request";
 import { ReportsScreen } from "./_components/reports-screen";
+import { FeatureLocked } from "../_components/feature-locked";
 
 export const metadata: Metadata = { title: "Reports", robots: { index: false, follow: false } };
 
@@ -18,6 +20,7 @@ export default async function ReportsPage(props: PageProps<"/console/reports">) 
       </main>
     );
   }
+  if (!(await tenantFeatures(staff.tenantId)).fullReports) return <FeatureLocked feature="fullReports" extra={{ href: "/console/reports/day-close", label: "Open Day close" }} />;
   const raw = Number((await props.searchParams).days);
   const range: ReportRange = raw === 7 || raw === 90 ? raw : 30;
   const report = await getReport(staff, range, new Date());

@@ -2,6 +2,7 @@ import "server-only";
 import { and, desc, eq, isNotNull, isNull, ne } from "drizzle-orm";
 import { db } from "@/db";
 import * as s from "@/db/schema";
+import { readFeatures } from "@/lib/plan-features";
 import { isPlaceholderName } from "@/domain/guest-name";
 import { isOpenAt, openingInfo } from "@/domain/hours";
 import { AppError } from "../errors";
@@ -21,6 +22,7 @@ async function resolveQr(run: Runner, outletCode: string, shortCode: string) {
     .select({
       tenantStatus: s.tenants.status,
       planFeatures: s.plans.features,
+      customFeatures: s.tenants.customFeatures,
       logoUrl: s.brands.logoUrl,
       outlet: {
         id: s.outlets.id,
@@ -226,7 +228,7 @@ export async function getTableLanding(outletCode: string, shortCode: string, dev
     isOpen: hours.isOpen,
     closesAt: hours.closesAt,
     nextOpen: hours.nextOpen,
-    poweredBy: t.planFeatures.poweredBy,
+    poweredBy: readFeatures(t.customFeatures ?? t.planFeatures).poweredBy,
   };
   const table = { code: t.table.code, maxSeats: t.table.maxSeats, zone: t.zoneName, state: t.table.state };
 

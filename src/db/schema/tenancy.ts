@@ -10,7 +10,7 @@ import {
   varchar,
 } from "drizzle-orm/mysql-core";
 import { at, createdAt, id, ref, sameTenant, tenantId, tenantKey, updatedAt } from "./_columns";
-import { plans, platformAdmins } from "./platform";
+import { plans, platformAdmins, type PlanFeatures } from "./platform";
 
 // Tenant > Brand > Outlet (PS 7.2), plus staff and their roles (PS 7.5).
 
@@ -42,6 +42,10 @@ export const tenants = mysqlTable(
     kitchenDisplay: boolean("kitchen_display"),
     /** Tables this restaurant pays for (set at onboarding, changed by the platform admin); null uses the plan's limit */
     tableLimit: int("table_limit"),
+    /** Custom package: the features picked for this restaurant alone; null follows the plan */
+    customFeatures: json("custom_features").$type<PlanFeatures>(),
+    /** Custom package: the agreed price per outlet per month; null uses the plan's price */
+    customPricePaise: int("custom_price_paise"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

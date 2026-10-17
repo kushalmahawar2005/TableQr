@@ -304,7 +304,7 @@ export function BillingScreen({ initial, realtimeUrl, embedded = false, openSess
                       </dl>
                     </div>
 
-                    {!isPaidBill && paidSoFar === 0 && (
+                    {!isPaidBill && paidSoFar === 0 && detail.discounts && (
                       <DiscountBox
                         key={detail.sessionId}
                         hi={hi}

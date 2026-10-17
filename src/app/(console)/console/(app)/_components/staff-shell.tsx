@@ -7,6 +7,7 @@ import {
   DashboardSquare01Icon,
   Home01Icon,
   Invoice01Icon,
+  LockIcon,
   Logout01Icon,
   MenuRestaurantIcon,
   Note01Icon,
@@ -57,7 +58,7 @@ export function StaffShell({
   kitchen = false,
 }: {
   lang: Lang;
-  sections: { slug: string; label: string }[];
+  sections: { slug: string; label: string; locked?: boolean }[];
   staff: { name: string; roles: string[]; outlet: string; shiftEnds: number | null };
   children: ReactNode;
   activeSlug?: string;
@@ -128,6 +129,7 @@ export function StaffShell({
               >
                 <HugeiconsIcon icon={ICONS[s.slug] ?? DashboardSquare01Icon} size={20} className="shrink-0" aria-hidden />
                 <span className="hidden truncate lg:inline">{s.label}</span>
+                {s.locked && <HugeiconsIcon icon={LockIcon} size={14} className="ml-auto hidden shrink-0 opacity-60 lg:inline" aria-label={lang === "hi" ? "प्लान में नहीं" : "Not in plan"} />}
               </Link>
             );
           })}

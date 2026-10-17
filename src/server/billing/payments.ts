@@ -20,6 +20,7 @@ import type { StaffRole } from "@/lib/staff-permissions";
 import { ATTEMPT_WINDOW_MS, computeDraft, isBillLocked, loadBillInputs, lockSession, lockShares, syncBill, type BillScope, type CreatedRefund, type SplitMode } from "./bill";
 import { nextInvoiceNumber } from "./invoice-number";
 import { releaseVisitTables, setVisitTablesState, tableStateEvents, visitChanged } from "../floor/assignments";
+import { requireFeature } from "../plan";
 
 // Paying the bill (PS 3.6, 3.8, 6.2, 6.4). Rules that keep money right:
 // - amounts come from the server; the phone only says whose shares and how much tip
@@ -90,6 +91,8 @@ async function lockForSplitChange(tx: Tx, ctx: GuestContext, now: Date) {
 /** Host changes how the bill is split; allowed until the first payment starts */
 export async function setSplitMode(ctx: GuestContext, mode: SplitMode, now = new Date()) {
   if (!["my_items", "equal", "custom"].includes(mode)) throw new AppError("invalid_state", "Choose a split.");
+  // Without group split everyone pays for their own items
+  if (mode !== "my_items") await requireFeature(ctx.tenantId, "groupSplit");
   const shares = await db.transaction(async (tx) => {
     const inputs = await lockForSplitChange(tx, ctx, now);
     // Custom starts from what My items would charge each person, so it already adds up; the

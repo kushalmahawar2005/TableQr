@@ -8,6 +8,7 @@ import { audit } from "../staff/audit";
 import type { StaffSession } from "../staff/auth";
 import { announceBill } from "./payments";
 import { computeDraft, loadBillInputs, lockSession, syncBill, type BillScope } from "./bill";
+import { requireFeature } from "../plan";
 
 // A discount on the whole bill, given by billing staff: a percent or a rupee amount, always with a
 // reason, recorded in the audit log. One bill-level discount at a time (giving another replaces it),
@@ -40,6 +41,7 @@ async function openBill(tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
 
 export async function setBillDiscount(staff: Staff, input: DiscountInput, now = new Date()) {
   guard(staff);
+  await requireFeature(staff.tenantId, "discounts");
   const kind = input.kind === "flat" ? "flat" : "percent";
   const value = Number(input.value);
   const reason = String(input.reason ?? "").trim().slice(0, 200);

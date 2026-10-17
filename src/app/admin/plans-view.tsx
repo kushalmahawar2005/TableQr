@@ -10,19 +10,13 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { savePlanAction, type PlanInput } from "./actions";
-import type { AdminData, AdminPlan, AdminPlanFeatures } from "./admin-types";
+import { FEATURE_KEYS, FEATURE_LABELS } from "@/lib/plan-features";
+import type { AdminData, AdminPlan } from "./admin-types";
 
 const money = (paise: number) => `₹${Math.round(paise / 100).toLocaleString("en-IN")}`;
 const TONES = ["#5b42f5", "#16c784", "#f08b18", "#ed5368", "#3d91ef", "#e875b1"];
 
-const FEATURES: { key: keyof Pick<AdminPlanFeatures, "groupSplit" | "pricingRules" | "suggestions" | "guestCampaigns" | "multiOutlet" | "kitchenDisplay">; label: string }[] = [
-  { key: "kitchenDisplay", label: "Kitchen display (KDS)" },
-  { key: "multiOutlet", label: "Multiple outlets" },
-  { key: "groupSplit", label: "Group bill split" },
-  { key: "pricingRules", label: "Pricing rules" },
-  { key: "suggestions", label: "Smart suggestions" },
-  { key: "guestCampaigns", label: "Guest campaigns" },
-];
+const FEATURES = FEATURE_KEYS.map((key) => ({ key, ...FEATURE_LABELS[key] }));
 
 function Stat({ icon: Icon, label, value, note, tone }: { icon: typeof Layers; label: string; value: string; note: string; tone: string }) {
   return <Card size="sm"><CardContent className="flex items-center gap-3">
@@ -47,11 +41,8 @@ function PlanDialog({ plan, onClose }: { plan: AdminPlan | "new" | null; onClose
       priceRupees: num("price"),
       isPublic: f.get("isPublic") === "on",
       features: {
-        maxTables: num("maxTables"), maxStaff: num("maxStaff"),
-        bookings: f.get("bookings") === "full" ? "full" : "reservations_only",
-        groupSplit: f.get("groupSplit") === "on", pricingRules: f.get("pricingRules") === "on", suggestions: f.get("suggestions") === "on",
-        guestCampaigns: f.get("guestCampaigns") === "on", multiOutlet: f.get("multiOutlet") === "on", poweredBy: f.get("poweredBy") === "on",
-        kitchenDisplay: f.get("kitchenDisplay") === "on",
+        ...Object.fromEntries(FEATURE_KEYS.map((k) => [k, f.get(k) === "on"])) as Record<(typeof FEATURE_KEYS)[number], boolean>,
+        maxTables: num("maxTables"), maxStaff: num("maxStaff"), poweredBy: f.get("poweredBy") === "on",
       },
     };
     setError(null);
@@ -72,13 +63,11 @@ function PlanDialog({ plan, onClose }: { plan: AdminPlan | "new" | null; onClose
           <div className="space-y-1.5"><Label htmlFor="plan-name">Plan name</Label><Input id="plan-name" name="name" defaultValue={editing?.name} required maxLength={40} /></div>
           {!editing && <div className="space-y-1.5"><Label htmlFor="plan-code">Plan code</Label><Input id="plan-code" name="code" required placeholder="e.g. growth" pattern="[a-z0-9_]{2,20}" /><p className="text-xs text-muted-foreground">Lowercase, cannot be changed later.</p></div>}
           <div className="space-y-1.5"><Label htmlFor="plan-price">Price per outlet / month (₹)</Label><Input id="plan-price" name="price" type="number" min={0} step="1" defaultValue={editing?.monthlyPricePaise != null ? editing.monthlyPricePaise / 100 : ""} /><p className="text-xs text-muted-foreground">Leave empty for custom pricing.</p></div>
-          <div className="space-y-1.5"><Label htmlFor="plan-bookings">Table bookings</Label>
-            <select id="plan-bookings" name="bookings" defaultValue={f?.bookings ?? "reservations_only"} className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"><option value="reservations_only">Reservations only</option><option value="full">Full (waitlist, groups)</option></select></div>
           <div className="space-y-1.5"><Label htmlFor="plan-tables">Max tables</Label><Input id="plan-tables" name="maxTables" type="number" min={1} defaultValue={f?.maxTables ?? ""} /><p className="text-xs text-muted-foreground">Empty = unlimited.</p></div>
           <div className="space-y-1.5"><Label htmlFor="plan-staff">Max staff</Label><Input id="plan-staff" name="maxStaff" type="number" min={1} defaultValue={f?.maxStaff ?? ""} /><p className="text-xs text-muted-foreground">Empty = unlimited.</p></div>
         </div>
         <fieldset className="space-y-2.5"><legend className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Included features</legend>
-          <div className="grid gap-2.5 sm:grid-cols-2">{FEATURES.map((x) => check(x.key, x.label, f?.[x.key] ?? (!!f && x.key === "kitchenDisplay")))}</div>
+          <div className="grid gap-2.5 sm:grid-cols-2">{FEATURES.map((x) => check(x.key, x.label, f?.[x.key] ?? false, x.hint))}</div>
           {check("poweredBy", "Show “Powered by TableQR”", f?.poweredBy ?? false, "A small line on the guest page. Usually on for lower plans.")}
         </fieldset>
         {check("isPublic", "Available for new tenants", editing?.isPublic ?? true, "Turn off to hide this plan. Existing tenants on it are not affected.")}
@@ -123,13 +112,13 @@ export function PlansView({ data }: { data: AdminData }) {
             {!p.isPublic && <Badge variant="secondary" className="gap-1 bg-zinc-100 text-zinc-600"><EyeOff className="size-3" />Hidden</Badge>}
           </div>
           <div><p className="text-3xl font-bold tracking-tight">{p.monthlyPricePaise != null ? money(p.monthlyPricePaise) : "Custom"}</p><p className="text-xs text-muted-foreground">{p.monthlyPricePaise != null ? "per outlet / month" : "price agreed per tenant"}</p></div>
+          {p.code === "custom" && <p className="rounded-lg border border-dashed p-3 text-xs text-muted-foreground">Features and price are picked for each restaurant. Open the restaurant in Tenants, then Manage. The list below is only the starting point.</p>}
           <div className="rounded-lg bg-muted/60 p-3 text-sm"><p><span className="font-semibold">{tenants}</span> {tenants === 1 ? "tenant" : "tenants"} · <span className="font-semibold">{money(income)}</span> / month</p></div>
           <ul className="space-y-1.5 text-sm">
             <li className="flex justify-between"><span className="text-muted-foreground">Tables</span><span className="font-medium">{p.features.maxTables ? `Up to ${p.features.maxTables}` : "Unlimited"}</span></li>
             <li className="flex justify-between"><span className="text-muted-foreground">Staff</span><span className="font-medium">{p.features.maxStaff ? `Up to ${p.features.maxStaff}` : "Unlimited"}</span></li>
-            <li className="flex justify-between"><span className="text-muted-foreground">Bookings</span><span className="font-medium">{p.features.bookings === "full" ? "Full" : "Reservations only"}</span></li>
           </ul>
-          <ul className="space-y-1.5 border-t pt-3 text-sm">{FEATURES.map((x) => { const on = p.features[x.key] ?? x.key === "kitchenDisplay"; return <li key={x.key} className={`flex items-center gap-2 ${on ? "" : "text-muted-foreground"}`}>{on ? <Check className="size-4 text-emerald-600" aria-label="Included" /> : <X className="size-4 text-zinc-300" aria-label="Not included" />}{x.label}</li>; })}</ul>
+          <ul className="space-y-1.5 border-t pt-3 text-sm">{FEATURES.map((x) => { const on = p.features[x.key]; return <li key={x.key} className={`flex items-center gap-2 ${on ? "" : "text-muted-foreground"}`}>{on ? <Check className="size-4 text-emerald-600" aria-label="Included" /> : <X className="size-4 text-zinc-300" aria-label="Not included" />}{x.label}</li>; })}</ul>
           <Button variant="outline" className="mt-auto" onClick={() => setDialog(p)}><Pencil />Edit plan</Button>
         </CardContent>
       </Card>;
