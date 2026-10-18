@@ -14,6 +14,7 @@ import { AddItemsDialog } from "./add-items-dialog";
 import { billHtml, printHtml } from "./bill-print";
 import { RefundPanel } from "./refund-panel";
 import { billMessage, whatsappLink, whatsappNumber } from "@/domain/bill-message";
+import { isRoomCode } from "@/domain/rooms";
 
 type Card = { sessionId: string; tableCode: string; takeaway?: boolean; guestName?: string | null; status: string; totalPaise: number; paidPaise: number; balancePaise: number; partySize: number; requestedAt: number | null; pendingOnline: boolean; payAtCounter?: boolean };
 type Sheet = { kind: "pay" } | { kind: "reopen" } | { kind: "void"; lineId: string } | null;
@@ -174,7 +175,7 @@ export function BillingScreen({ initial, realtimeUrl, embedded = false, openSess
                   <li key={c.sessionId}>
                     <button type="button" onClick={() => open(c.sessionId)} aria-pressed={sel} className={`block w-full rounded-card border bg-surface p-4 text-left transition-colors hover:border-ink/30 focus-visible:outline-2 focus-visible:outline-brand ${sel ? "border-brand ring-2 ring-brand/30" : "border-line"}`}>
                       <div className="flex items-start justify-between gap-3">
-                        <div><p className="font-display text-section font-bold">{c.takeaway ? <><ShoppingBag className="mr-1.5 inline size-4 align-[-2px]" aria-hidden="true" />{L("Takeaway", "पार्सल")}</> : L("Table", "टेबल")} {c.tableCode}{c.guestName ? <span className="ml-1.5 text-body font-semibold text-muted">· {c.guestName}</span> : null}</p><p className="mt-0.5 flex items-center gap-1.5 text-caption text-muted"><Users className="size-3.5" aria-hidden="true" />{c.partySize} {L("guests", "लोग")}{tab === "due" && mins !== null ? ` · ${L("bill asked", "बिल माँगा")} ${mins < 1 ? L("just now", "अभी") : `${mins} min`}` : ""}</p></div>
+                        <div><p className="font-display text-section font-bold">{c.takeaway ? <><ShoppingBag className="mr-1.5 inline size-4 align-[-2px]" aria-hidden="true" />{L("Takeaway", "पार्सल")}</> : (isRoomCode(c.tableCode) ? "" : L("Table", "टेबल"))} {c.tableCode}{c.guestName ? <span className="ml-1.5 text-body font-semibold text-muted">· {c.guestName}</span> : null}</p><p className="mt-0.5 flex items-center gap-1.5 text-caption text-muted"><Users className="size-3.5" aria-hidden="true" />{c.partySize} {L("guests", "लोग")}{tab === "due" && mins !== null ? ` · ${L("bill asked", "बिल माँगा")} ${mins < 1 ? L("just now", "अभी") : `${mins} min`}` : ""}</p></div>
                         <p className="font-display text-section font-bold tabular">{tab === "due" ? rs(c.balancePaise) : rs(c.totalPaise)}</p>
                       </div>
                       <div className="mt-2 flex flex-wrap gap-1.5">
@@ -209,7 +210,7 @@ export function BillingScreen({ initial, realtimeUrl, embedded = false, openSess
                   <button type="button" className="mb-3 inline-flex items-center gap-1.5 text-body font-semibold text-muted hover:text-ink lg:hidden" onClick={() => setDetail(null)}><ArrowLeft className="size-4" aria-hidden="true" />{L("All bills", "सभी बिल")}</button>
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <h2 className="font-display text-title font-bold">{detail.takeaway ? L("Takeaway", "पार्सल") : L("Table", "टेबल")} {detail.tableCode}</h2>
+                      <h2 className="font-display text-title font-bold">{detail.takeaway ? L("Takeaway", "पार्सल") : (isRoomCode(detail.tableCode) ? "" : L("Table", "टेबल"))} {detail.tableCode}</h2>
                       <p className="mt-0.5 flex flex-wrap items-center gap-2 text-body text-muted">
                         <span className={`rounded-full px-2.5 py-0.5 text-caption font-semibold ${isPaidBill ? "bg-[var(--state-paid-soft)] text-[var(--state-paid-text)]" : detail.status === "bill_requested" ? "bg-[var(--state-bill-soft)] text-[var(--state-bill-text)]" : "bg-[var(--state-seated-soft)] text-[var(--state-seated-text)]"}`}>{isPaidBill ? L("Paid", "भुगतान हुआ") : detail.status === "bill_requested" ? L("Bill asked", "बिल माँगा") : L("Still eating", "अभी खा रहे हैं")}</span>
                         {detail.people.length > 0 && <span>{detail.people.map((p) => p.name).join(", ")}</span>}
@@ -361,7 +362,7 @@ export function BillingScreen({ initial, realtimeUrl, embedded = false, openSess
               <>
                 <DialogHeader>
                   <DialogTitle className="font-display text-title font-bold">{sheet.kind === "pay" ? L("Take payment", "भुगतान लें") : sheet.kind === "reopen" ? L("Reopen the bill", "बिल फिर खोलें") : L("Remove this item", "यह आइटम हटाएँ")}</DialogTitle>
-                  <DialogDescription>{L("Table", "टेबल")} {detail.tableCode}</DialogDescription>
+                  <DialogDescription>{(isRoomCode(detail.tableCode) ? "" : L("Table", "टेबल"))} {detail.tableCode}</DialogDescription>
                 </DialogHeader>
 
                 {sheet.kind === "pay" && (

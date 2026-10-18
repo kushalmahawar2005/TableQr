@@ -42,7 +42,7 @@ function PlanDialog({ plan, onClose }: { plan: AdminPlan | "new" | null; onClose
       isPublic: f.get("isPublic") === "on",
       features: {
         ...Object.fromEntries(FEATURE_KEYS.map((k) => [k, f.get(k) === "on"])) as Record<(typeof FEATURE_KEYS)[number], boolean>,
-        maxTables: num("maxTables"), maxStaff: num("maxStaff"), poweredBy: f.get("poweredBy") === "on",
+        maxTables: num("maxTables"), maxStaff: num("maxStaff"), maxRooms: num("maxRooms"), poweredBy: f.get("poweredBy") === "on",
       },
     };
     setError(null);
@@ -65,6 +65,7 @@ function PlanDialog({ plan, onClose }: { plan: AdminPlan | "new" | null; onClose
           <div className="space-y-1.5"><Label htmlFor="plan-price">Price per outlet / month (₹)</Label><Input id="plan-price" name="price" type="number" min={0} step="1" defaultValue={editing?.monthlyPricePaise != null ? editing.monthlyPricePaise / 100 : ""} /><p className="text-xs text-muted-foreground">Leave empty for custom pricing.</p></div>
           <div className="space-y-1.5"><Label htmlFor="plan-tables">Max tables</Label><Input id="plan-tables" name="maxTables" type="number" min={1} defaultValue={f?.maxTables ?? ""} /><p className="text-xs text-muted-foreground">Empty = unlimited.</p></div>
           <div className="space-y-1.5"><Label htmlFor="plan-staff">Max staff</Label><Input id="plan-staff" name="maxStaff" type="number" min={1} defaultValue={f?.maxStaff ?? ""} /><p className="text-xs text-muted-foreground">Empty = unlimited.</p></div>
+          <div className="space-y-1.5"><Label htmlFor="plan-rooms">Max rooms</Label><Input id="plan-rooms" name="maxRooms" type="number" min={1} defaultValue={f?.maxRooms ?? ""} /><p className="text-xs text-muted-foreground">Hotel plans only. Empty = unlimited.</p></div>
         </div>
         <fieldset className="space-y-2.5"><legend className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Included features</legend>
           <div className="grid gap-2.5 sm:grid-cols-2">{FEATURES.map((x) => check(x.key, x.label, f?.[x.key] ?? false, x.hint))}</div>
@@ -117,6 +118,7 @@ export function PlansView({ data }: { data: AdminData }) {
           <ul className="space-y-1.5 text-sm">
             <li className="flex justify-between"><span className="text-muted-foreground">Tables</span><span className="font-medium">{p.features.maxTables ? `Up to ${p.features.maxTables}` : "Unlimited"}</span></li>
             <li className="flex justify-between"><span className="text-muted-foreground">Staff</span><span className="font-medium">{p.features.maxStaff ? `Up to ${p.features.maxStaff}` : "Unlimited"}</span></li>
+            {p.features.rooms && <li className="flex justify-between"><span className="text-muted-foreground">Rooms</span><span className="font-medium">{p.features.maxRooms ? `Up to ${p.features.maxRooms}` : "Unlimited"}</span></li>}
           </ul>
           <ul className="space-y-1.5 border-t pt-3 text-sm">{FEATURES.map((x) => { const on = p.features[x.key]; return <li key={x.key} className={`flex items-center gap-2 ${on ? "" : "text-muted-foreground"}`}>{on ? <Check className="size-4 text-emerald-600" aria-label="Included" /> : <X className="size-4 text-zinc-300" aria-label="Not included" />}{x.label}</li>; })}</ul>
           <Button variant="outline" className="mt-auto" onClick={() => setDialog(p)}><Pencil />Edit plan</Button>

@@ -1,4 +1,5 @@
 import "server-only";
+import { ROOM_CLASS } from "@/domain/rooms";
 import { TAKEAWAY_CLASS } from "../floor/takeaway-class";
 import { and, eq, inArray, isNull, notInArray, sql } from "drizzle-orm";
 import { db } from "@/db";
@@ -21,6 +22,7 @@ import { ATTEMPT_WINDOW_MS, computeDraft, isBillLocked, loadBillInputs, lockSess
 import { nextInvoiceNumber } from "./invoice-number";
 import { releaseVisitTables, setVisitTablesState, tableStateEvents, visitChanged } from "../floor/assignments";
 import { requireFeature } from "../plan";
+import { takeStockForBill } from "../staff/inventory";
 
 // Paying the bill (PS 3.6, 3.8, 6.2, 6.4). Rules that keep money right:
 // - amounts come from the server; the phone only says whose shares and how much tip
@@ -604,7 +606,7 @@ async function closeBill(tx: Tx, bill: typeof s.bills.$inferSelect, now: Date): 
       .innerJoin(s.diningTables, eq(s.diningTables.id, s.tableSessions.tableId))
       .where(and(eq(s.tableSessions.tenantId, t), eq(s.tableSessions.id, bill.sessionId))),
     tx
-      .select({ nameEn: s.orderLines.nameEn, qty: s.orderLines.qty, unitPricePaise: s.orderLines.unitPricePaise, taxRateBp: s.orderLines.taxRateBp })
+      .select({ itemId: s.orderLines.itemId, nameEn: s.orderLines.nameEn, qty: s.orderLines.qty, unitPricePaise: s.orderLines.unitPricePaise, taxRateBp: s.orderLines.taxRateBp })
       .from(s.orderLines)
       .where(and(eq(s.orderLines.tenantId, t), eq(s.orderLines.sessionId, bill.sessionId), notInArray(s.orderLines.status, ["cancelled", "voided"])))
       .orderBy(s.orderLines.id),
@@ -645,7 +647,7 @@ async function closeBill(tx: Tx, bill: typeof s.bills.$inferSelect, now: Date): 
       docType: outlet.gstin ? "tax_invoice" : "receipt",
       seller: { name: outlet.name, city: outlet.city, address: outlet.address, gstin: outlet.gstin, fssai: outlet.fssai },
       table: session.tableCode,
-      lines: lines.map((l) => ({ ...l, amountPaise: l.unitPricePaise * l.qty })),
+      lines: lines.map((l) => ({ nameEn: l.nameEn, qty: l.qty, unitPricePaise: l.unitPricePaise, taxRateBp: l.taxRateBp, amountPaise: l.unitPricePaise * l.qty })),
       subtotalPaise: bill.subtotalPaise,
       discountPaise: bill.discountPaise,
       serviceChargePaise: bill.serviceChargePaise,
@@ -660,18 +662,21 @@ async function closeBill(tx: Tx, bill: typeof s.bills.$inferSelect, now: Date): 
     },
   });
 
+  // What the dishes used comes off the stock, in this same transaction
+  await takeStockForBill(tx, t, outlet.id, bill.id, lines.map((l) => ({ itemId: l.itemId, qty: l.qty })));
+
   await tx.update(s.bills).set({ status: "paid", closedAt: now }).where(and(eq(s.bills.tenantId, t), eq(s.bills.id, bill.id)));
   await tx.update(s.tableSessions).set({ status: "closed", openKey: null, closedAt: now }).where(and(eq(s.tableSessions.tenantId, t), eq(s.tableSessions.id, bill.sessionId)));
   // Every table of the visit waits in Paid until staff mark it for cleaning (S1); the visit lets go
   // of them now, so nothing open still claims a table that is about to be reset
   const tableIds = await setVisitTablesState(tx, t, bill.sessionId, "paid", now);
   await releaseVisitTables(tx, t, bill.sessionId, now);
-  // A takeaway counter has nobody to clear away: it is free for the next parcel at once
+  // A takeaway counter or a room has no table to clear away: it is free for the next order at once
   if (tableIds.length) {
     await tx
       .update(s.diningTables)
       .set({ state: "available", stateChangedAt: now })
-      .where(and(eq(s.diningTables.tenantId, t), inArray(s.diningTables.id, tableIds), eq(s.diningTables.tableClass, TAKEAWAY_CLASS)));
+      .where(and(eq(s.diningTables.tenantId, t), inArray(s.diningTables.id, tableIds), inArray(s.diningTables.tableClass, [TAKEAWAY_CLASS, ROOM_CLASS])));
   }
   await tx
     .update(s.reservations)

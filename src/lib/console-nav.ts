@@ -5,12 +5,14 @@ import { canSee, type StaffRole } from "./staff-permissions";
 export const consoleSections = [
   { slug: "dashboard", label: "Dashboard", hi: "डैशबोर्ड" },
   { slug: "floor", label: "Floor", hi: "फ़्लोर" },
+  { slug: "rooms", label: "Rooms", hi: "रूम" },
   { slug: "reservations", label: "Reservations", hi: "बुकिंग" },
   { slug: "waitlist", label: "Waitlist", hi: "वेटलिस्ट" },
   { slug: "orders", label: "Orders", hi: "ऑर्डर" },
   { slug: "kitchen", label: "Kitchen", hi: "किचन" },
   { slug: "billing", label: "Billing", hi: "बिलिंग" },
   { slug: "menu", label: "Menu", hi: "मेन्यू" },
+  { slug: "inventory", label: "Inventory", hi: "स्टॉक" },
   { slug: "pricing", label: "Pricing", hi: "प्राइसिंग" },
   { slug: "reports", label: "Reports", hi: "रिपोर्ट" },
   { slug: "customers", label: "Customers", hi: "ग्राहक" },
@@ -35,13 +37,14 @@ export function landingSection(roles: readonly StaffRole[]): ConsoleSection | nu
 
 /**
  * Where a person goes right after signing in: the dashboard for owners and managers, the waiter
- * app for waiters, the POS for cashiers and accountants, the console kitchen board for kitchen staff, and
+ * app for waiters, Rooms for the front desk, the POS for cashiers and accountants, the console kitchen board for kitchen staff, and
  * the floor for hosts. A person with several roles gets the first that applies, in that order.
  */
 export function homeFor(roles: readonly StaffRole[]): string {
   if (landingSection(roles) === "dashboard") return "/console/dashboard";
   const has = (...r: StaffRole[]) => roles.some((x) => r.includes(x));
   if (has("host")) return "/console/floor";
+  if (has("reception")) return "/console/rooms";
   if (has("waiter")) return "/waiter";
   if (has("cashier", "accountant")) return "/pos";
   if (has("kitchen")) return "/console/kitchen";

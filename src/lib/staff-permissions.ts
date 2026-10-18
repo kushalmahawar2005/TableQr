@@ -1,20 +1,24 @@
 // Who may see and do what on the staff console (PS 7.5). Pure data, shared by the server, which
 // enforces it, and the sidebar, which hides what a role cannot use. Never trusted from a client.
 
-export const staffRoles = ["owner", "manager", "cashier", "host", "waiter", "kitchen", "accountant"] as const;
+export const staffRoles = ["owner", "manager", "cashier", "host", "waiter", "kitchen", "accountant", "reception"] as const;
 export type StaffRole = (typeof staffRoles)[number];
 
 export const consoleSectionRoles = {
   /** O1 Owner Dashboard: read-only, the current outlet only */
   dashboard: ["manager", "owner"],
   floor: ["host", "manager", "owner"],
+  /** Hotel rooms: the front desk checks guests in and out and answers room requests */
+  rooms: ["reception", "manager", "owner"],
   reservations: ["host", "manager", "owner"],
   waitlist: ["host", "manager", "owner"],
   orders: ["cashier", "waiter", "manager", "owner"],
   /** The kitchen board inside the console, on every plan (the separate wall screen is a plan feature) */
   kitchen: ["kitchen", "manager", "owner"],
-  billing: ["cashier", "manager", "owner", "accountant"],
+  billing: ["cashier", "manager", "owner", "accountant", "reception"],
   menu: ["manager", "owner"],
+  /** Stock and recipes */
+  inventory: ["manager", "owner"],
   pricing: ["manager", "owner"],
   reports: ["manager", "owner", "accountant"],
   /** Phone numbers of guests: owners and managers only */

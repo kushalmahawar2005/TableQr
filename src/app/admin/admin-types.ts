@@ -57,7 +57,7 @@ export type AdminData = {
 
 export type TenantDetail = {
   daily: { date: string; orders: number; revenuePaise: number }[];
-  usage: { outlets: number; tables: number; maxTables: number | null; staff: number; maxStaff: number | null; qrCodes: number; menuItems: number };
+  usage: { outlets: number; tables: number; maxTables: number | null; staff: number; maxStaff: number | null; rooms: number; maxRooms: number | null; qrCodes: number; menuItems: number };
   outlets: { id: string; name: string; code: string; city: string; tables: number }[];
   staff: { id: string; name: string; phone: string; role: string; isActive: boolean }[];
   activity: { id: string; title: string; description: string; createdAt: string }[];

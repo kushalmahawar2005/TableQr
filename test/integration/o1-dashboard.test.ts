@@ -348,7 +348,7 @@ describe("alerts", () => {
   it("AA/AB: blocked active tables are counted; a calm outlet has no alerts", async () => {
     await env.db.update(s.outletItemOverrides).set({ isAvailable: true }).where(eq(s.outletItemOverrides.itemId, item("Mutton Curry")));
     const calm = await dash();
-    expect(calm.alerts).toEqual({ slowBills: [], soldOut: 0, late: [], pendingRefunds: { count: 0, paise: 0 }, blockedTables: 0 });
+    expect(calm.alerts).toEqual({ slowBills: [], soldOut: 0, late: [], pendingRefunds: { count: 0, paise: 0 }, blockedTables: 0, lowStock: [] });
     await setTable("T1", { state: "blocked" });
     await setTable("T2", { state: "blocked" });
     await setTable("T3", { state: "blocked", isActive: false });

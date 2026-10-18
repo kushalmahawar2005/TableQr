@@ -1,0 +1,123 @@
+TableQR — brand film voiceover script (Hindi)
+Video: tableqr-brand-film.mp4 · 36.0s · 1080x1920 · 30fps
+=========================================================
+
+HOW TO READ THIS
+Timings are from the start of the video. Each line has room to
+breathe — don't rush to fill the whole window. The on-screen text
+is English and says something DIFFERENT from the voice, so never
+read the on-screen words out loud.
+
+TONE
+Calm restaurant owner talking to another restaurant owner.
+Not a hyped ad read, not a news anchor. Slightly dry in the
+problem half (0-9s), warmer and steadier from 10s on.
+Slow down on the last line.
+
+
+---------------------------------------------------------
+ 1   0.6 - 3.0s        [on screen: timer climbing to 09:12]
+---------------------------------------------------------
+HI   टेबल बारह. नौ मिनट से इंतज़ार.
+ROM  Table baarah. Nau minute se intezaar.
+DIR  Flat, matter-of-fact. This is a complaint, not a joke.
+
+
+---------------------------------------------------------
+ 2   3.3 - 7.1s        [on screen: three stamped paper slips]
+---------------------------------------------------------
+HI   पर्ची पढ़ी नहीं जाती. ऑर्डर दोबारा लग गया. रेट पुराने.
+ROM  Parchi padhi nahi jaati. Order dobara lag gaya. Rate purane.
+DIR  Three separate hits. Full stop between each — one slip
+     lands on screen per clause. Don't run them together.
+
+
+---------------------------------------------------------
+ 3   7.4 - 9.2s        [on screen: the pile, then it collapses]
+---------------------------------------------------------
+HI   काग़ज़ सब भूल जाता है.
+ROM  Kaagaz sab bhool jaata hai.
+DIR  Drop the energy. This is the line that lands the problem.
+
+
+         ( 9.2 - 10.2s  no voice — the slips shatter into the QR )
+
+
+---------------------------------------------------------
+ 4   10.2 - 13.4s      [on screen: QR builds, then TableQR logo]
+---------------------------------------------------------
+HI   बस एक QR, टेबल पर. यही पूरा setup है.
+ROM  Bas ek QR, table par. Yahi poora setup hai.
+DIR  The turn. Lift here. Small pause after "table par".
+     "setup" stays English — say it the normal Indian way.
+
+
+---------------------------------------------------------
+ 5   14.3 - 17.5s      [on screen: guest menu loading]
+---------------------------------------------------------
+HI   गेस्ट scan करे, मेन्यू खुल गया. कोई app नहीं.
+ROM  Guest scan kare, menu khul gaya. Koi app nahi.
+DIR  "Koi app nahi" is the selling point — land it clean.
+
+
+---------------------------------------------------------
+ 6   17.9 - 20.5s      [on screen: cart, then Order placed]
+---------------------------------------------------------
+HI   ऑर्डर टेबल से सीधा किचन में.
+ROM  Order table se seedha kitchen mein.
+DIR  Quick and plain. One breath.
+
+
+---------------------------------------------------------
+ 7   21.3 - 24.3s      [on screen: kitchen display, live timers]
+---------------------------------------------------------
+HI   हर ticket किचन स्क्रीन पर, टाइमर के साथ.
+ROM  Har ticket kitchen screen par, timer ke saath.
+DIR  Slight emphasis on "har".
+
+
+---------------------------------------------------------
+ 8   25.0 - 27.9s      [on screen: bill, Paid-UPI, receipt prints]
+---------------------------------------------------------
+HI   बिल, UPI पेमेंट, रसीद — सब टेबल पर.
+ROM  Bill, UPI payment, raseed — sab table par.
+DIR  List rhythm on the first three, then settle on
+     "sab table par".
+
+
+---------------------------------------------------------
+ 9   28.4 - 30.9s      [on screen: day close, numbers counting]
+---------------------------------------------------------
+HI   दिन का हिसाब और GST, अपने आप.
+ROM  Din ka hisaab aur GST, apne aap.
+DIR  "Apne aap" is the payoff. Say it like it's a relief.
+
+
+---------------------------------------------------------
+10   31.1 - 33.6s      [on screen: 16 module names flashing]
+---------------------------------------------------------
+HI   फ़्लोर से रिपोर्ट तक — एक ही जगह.
+ROM  Floor se report tak — ek hi jagah.
+DIR  Faster, to match the chips snapping in.
+
+
+---------------------------------------------------------
+11   33.8 - 35.9s      [on screen: TableQR logo + tagline]
+---------------------------------------------------------
+HI   TableQR. फ़्लोर संभालिए, काग़ज़ नहीं.
+ROM  TableQR. Floor sambhaaliye, kaagaz nahi.
+DIR  Slowest line in the film. Clear pause after "TableQR".
+
+
+=========================================================
+MUSIC NOTES
+- 100-110 BPM, light percussion, no vocals.
+- Two moments to hit: 9.5s (paper shatters into the QR) and
+  31.0s (the module names start snapping in).
+- Keep music about 18 dB under the voice; lift it to full in
+  the gaps at 9.2-10.2s and after 35.9s.
+- The video has no audio track at all, so the whole 36s is yours.
+
+WORD COUNT
+~80 words of Hindi across 36s. That is a relaxed pace on purpose —
+if the read comes in short, add the pause rather than more words.

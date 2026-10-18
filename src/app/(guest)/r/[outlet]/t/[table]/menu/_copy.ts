@@ -1,11 +1,12 @@
 import type { Lang } from "@/lib/i18n";
+import { placeEn, placeHi } from "@/domain/rooms";
 
 // Every interface word on G3 in English and Hindi. Restaurant content (dish and category names,
 // descriptions) is shown as the restaurant entered it, never translated by us.
 
 const en = {
   language: "Language",
-  tableLine: (code: string, people: number) => `Table ${code} · ${people === 1 ? "Just you" : `${people} here`}`,
+  tableLine: (code: string, people: number) => `${placeEn(code)} · ${people === 1 ? "Just you" : `${people} here`}`,
 
   searchLabel: "Search the menu",
   searchPlaceholder: "Search for dishes…",
@@ -80,7 +81,7 @@ export type G3Copy = typeof en;
 
 const hi: G3Copy = {
   language: "भाषा",
-  tableLine: (code, people) => `टेबल ${code} · ${people === 1 ? "सिर्फ़ आप" : `${people} लोग`}`,
+  tableLine: (code, people) => `${placeHi(code)} · ${people === 1 ? "सिर्फ़ आप" : `${people} लोग`}`,
 
   searchLabel: "मेन्यू में खोजें",
   searchPlaceholder: "डिश खोजें…",

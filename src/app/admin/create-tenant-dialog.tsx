@@ -60,7 +60,7 @@ const sections: { title: string; help: string; fields: Field[] }[] = [
   ] },
 ];
 
-export function CreateTenantDialog({ open, onOpenChange, plans }: { open: boolean; onOpenChange: (open: boolean) => void; plans: { code: string; name: string; kitchen: boolean }[] }) {
+export function CreateTenantDialog({ open, onOpenChange, plans }: { open: boolean; onOpenChange: (open: boolean) => void; plans: { code: string; name: string; kitchen: boolean; rooms: boolean; dineIn: boolean }[] }) {
   const router = useRouter();
   const [state, action, pending] = useActionState<TenantState, FormData>(createTenantAction, { error: null, success: null });
 
@@ -90,6 +90,8 @@ export function CreateTenantDialog({ open, onOpenChange, plans }: { open: boolea
   // Kitchen screen follows the chosen plan until the admin sets it themselves
   const [kitchen, setKitchen] = useState<boolean | null>(null);
   const kitchenOn = kitchen ?? plans.find((p) => p.code === planCode)?.kitchen ?? false;
+  const chosen = plans.find((p) => p.code === planCode);
+  const [roomCount, setRoomCount] = useState("10");
   const [review, setReview] = useState<Record<string, string>>({});
   const form = useRef<HTMLFormElement>(null);
   const last = sections.length; // the plan and review step comes after the field sections
@@ -183,16 +185,21 @@ export function CreateTenantDialog({ open, onOpenChange, plans }: { open: boolea
             {plans.map((p) => <label key={p.code} className="flex cursor-pointer items-center gap-3 rounded-xl border p-3 text-sm transition-colors hover:bg-muted/50 has-[:checked]:border-primary has-[:checked]:bg-primary/5 has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring/50">
               <input type="radio" name="planCode" value={p.code} checked={planCode === p.code} onChange={() => setPlanCode(p.code)} required className="size-4 accent-[var(--primary)]" />
               <span className="font-medium">{p.name}</span>
-              {p.kitchen && <span className="ml-auto text-xs text-muted-foreground">Kitchen included</span>}
+              <span className="ml-auto text-xs text-muted-foreground">{p.rooms ? (p.dineIn ? "Hotel + restaurant" : "Hotel") : p.kitchen ? "Kitchen included" : ""}</span>
             </label>)}
           </div>
+          {chosen?.rooms && <div className="space-y-1.5 rounded-xl border p-3">
+            <Label htmlFor="roomCount">Number of rooms</Label>
+            <Input id="roomCount" name="roomCount" type="number" min={0} max={200} value={roomCount} onChange={(e) => setRoomCount(e.target.value)} />
+            <p className="text-xs text-muted-foreground">Made with a QR code each, numbered 101, 102 … The owner can change numbers in Rooms.{chosen.dineIn ? "" : " This plan has no restaurant tables, so no tables are made."}</p>
+          </div>}
           <label className="flex cursor-pointer items-start gap-3 rounded-xl border p-3 text-sm has-[:checked]:border-primary has-[:checked]:bg-primary/5">
             <input type="checkbox" checked={kitchenOn} onChange={(e) => setKitchen(e.target.checked)} className="mt-0.5 size-4 accent-[var(--primary)]" />
             <input type="hidden" name="kitchenDisplay" value={kitchenOn ? "on" : "off"} />
             <span><span className="block font-medium">Kitchen screen</span><span className="block text-xs text-muted-foreground">Gives the Kitchen staff role and the wall kitchen screen. Comes with the plan when ticked by default; you can change it for this restaurant.</span></span>
           </label>
           <dl className="divide-y rounded-xl border text-sm">
-            {([["Brand", review.brandName], ["Contact", [review.contactName, review.contactPhone].filter(Boolean).join(" · ")], ["Outlet", [review.outletName, review.city].filter(Boolean).join(", ")], ["Outlet code", review.outletCode || "Made when created"], ["Tables", review.tableCount], ["Owner", [review.ownerName, review.ownerPhone].filter(Boolean).join(" · ")], ["Kitchen screen", kitchenOn ? "Yes" : "No"]] as const).map(([k, v]) => <div key={k} className="flex items-center justify-between gap-4 px-4 py-2.5"><dt className="text-muted-foreground">{k}</dt><dd className="min-w-0 break-words text-right font-medium">{v}</dd></div>)}
+            {([["Brand", review.brandName], ["Contact", [review.contactName, review.contactPhone].filter(Boolean).join(" · ")], ["Outlet", [review.outletName, review.city].filter(Boolean).join(", ")], ["Outlet code", review.outletCode || "Made when created"], ["Tables", chosen && !chosen.dineIn ? "None" : review.tableCount], ...(chosen?.rooms ? [["Rooms", roomCount]] as const : []), ["Owner", [review.ownerName, review.ownerPhone].filter(Boolean).join(" · ")], ["Kitchen screen", kitchenOn ? "Yes" : "No"]] as const).map(([k, v]) => <div key={k} className="flex items-center justify-between gap-4 px-4 py-2.5"><dt className="text-muted-foreground">{k}</dt><dd className="min-w-0 break-words text-right font-medium">{v}</dd></div>)}
           </dl>
         </fieldset>
         {state.error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{state.error}</p>}

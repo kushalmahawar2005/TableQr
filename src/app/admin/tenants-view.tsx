@@ -86,7 +86,7 @@ function ExtendTrial({ pending, onExtend }: { pending: boolean; onExtend: (days:
 /** What the restaurant can use right now, as ticks and crosses */
 function FeatureList({ features }: { features: Features }) {
   return <ul className="grid gap-1.5 text-sm sm:grid-cols-2">
-    <li className="flex justify-between gap-2 sm:col-span-2"><span className="text-muted-foreground">Tables · Staff</span><span className="font-medium">{features.maxTables ?? "No limit"} · {features.maxStaff ?? "No limit"}</span></li>
+    <li className="flex justify-between gap-2 sm:col-span-2"><span className="text-muted-foreground">Tables · Staff{features.rooms ? " · Rooms" : ""}</span><span className="font-medium">{features.maxTables ?? "No limit"} · {features.maxStaff ?? "No limit"}{features.rooms ? ` · ${features.maxRooms ?? "No limit"}` : ""}</span></li>
     {FEATURE_KEYS.map((k) => <li key={k} className={`flex items-center gap-2 ${features[k] ? "" : "text-muted-foreground line-through decoration-zinc-300"}`}><span aria-hidden="true">{features[k] ? "✓" : "✕"}</span>{FEATURE_LABELS[k].label}<span className="sr-only">{features[k] ? "included" : "not included"}</span></li>)}
   </ul>;
 }
@@ -136,9 +136,10 @@ function CustomPackageForm({ tenant, pending, onSave }: { tenant: AdminTenant; p
       {FEATURE_KEYS.map((k) => <label key={k} className="flex items-start gap-2 text-sm"><input type="checkbox" checked={f[k]} onChange={(e) => setF({ ...f, [k]: e.target.checked })} className="mt-0.5 size-4 accent-[#5b42f5]" /><span>{FEATURE_LABELS[k].label}<span className="block text-xs text-muted-foreground">{FEATURE_LABELS[k].hint}</span></span></label>)}
       <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={f.poweredBy} onChange={(e) => setF({ ...f, poweredBy: e.target.checked })} className="mt-0.5 size-4 accent-[#5b42f5]" /><span>Show “Powered by TableQR”<span className="block text-xs text-muted-foreground">A small line on the guest page</span></span></label>
     </div>
-    <div className="grid grid-cols-3 gap-2">
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
       <div className="space-y-1"><Label htmlFor="custom-tables" className="text-xs">Tables</Label><Input id="custom-tables" inputMode="numeric" value={f.maxTables ?? ""} placeholder="No limit" onChange={(e) => setF({ ...f, maxTables: limit(e.target.value) })} /></div>
       <div className="space-y-1"><Label htmlFor="custom-staff" className="text-xs">Staff logins</Label><Input id="custom-staff" inputMode="numeric" value={f.maxStaff ?? ""} placeholder="No limit" onChange={(e) => setF({ ...f, maxStaff: limit(e.target.value) })} /></div>
+      <div className="space-y-1"><Label htmlFor="custom-rooms" className="text-xs">Rooms</Label><Input id="custom-rooms" inputMode="numeric" value={f.maxRooms ?? ""} placeholder="No limit" onChange={(e) => setF({ ...f, maxRooms: limit(e.target.value) })} /></div>
       <div className="space-y-1"><Label htmlFor="custom-price" className="text-xs">Price / month (₹)</Label><Input id="custom-price" inputMode="numeric" value={price} onChange={(e) => setPrice(e.target.value.replace(/\D/g, "").slice(0, 7))} /></div>
     </div>
     <Button disabled={pending || price === ""} onClick={() => onSave({ features: f, priceRupees: Number(price) })}>{pending && <Loader2 className="animate-spin" />}Save custom package</Button>
@@ -226,6 +227,7 @@ function TenantSheet({ tenant, plans, now, onClose }: { tenant: AdminTenant | nu
               {detail ? <section className="space-y-3 rounded-xl border bg-white p-4"><h3 className="text-sm font-semibold">Usage vs plan limits</h3>
                 <UsageBar label="Tables" used={detail.usage.tables} max={detail.usage.maxTables} />
                 <UsageBar label="Staff" used={detail.usage.staff} max={detail.usage.maxStaff} />
+                {(tenant.features.rooms || detail.usage.rooms > 0) && <UsageBar label="Rooms" used={detail.usage.rooms} max={detail.usage.maxRooms} />}
                 <UsageBar label="Outlets" used={detail.usage.outlets} max={null} />
                 <p className="flex justify-between text-xs"><span className="text-muted-foreground">QR codes</span><span className="font-medium">{detail.usage.qrCodes}</span></p>
                 <p className="flex justify-between text-xs"><span className="text-muted-foreground">Menu items</span><span className="font-medium">{detail.usage.menuItems}</span></p>
@@ -532,7 +534,7 @@ export function TenantsView({ data }: { data: AdminData }) {
       </CardContent>
     </Card>
 
-    <CreateTenantDialog key={String(adding)} open={adding} onOpenChange={setAdding} plans={data.plans.filter((p) => p.isPublic).map((p) => ({ code: p.code, name: p.name, kitchen: p.features.kitchenDisplay !== false }))} />
+    <CreateTenantDialog key={String(adding)} open={adding} onOpenChange={setAdding} plans={data.plans.filter((p) => p.isPublic).map((p) => ({ code: p.code, name: p.name, kitchen: p.features.kitchenDisplay !== false, rooms: p.features.rooms === true, dineIn: p.features.dineIn !== false }))} />
     <TenantSheet tenant={selected} plans={data.plans} now={now} onClose={() => setSelectedId(null)} />
   </div>;
 }

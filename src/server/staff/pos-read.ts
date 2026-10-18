@@ -12,7 +12,7 @@ import { whatsappReady } from "../whatsapp/cloud";
 import { TAKEAWAY_CLASS } from "../floor/takeaway-class";
 import { tenantFeatures } from "../plan";
 
-export const posRoles = ["cashier", "manager", "owner", "accountant"] as const;
+export const posRoles = ["cashier", "manager", "owner", "accountant", "reception"] as const;
 async function guard(staff: StaffSession) { await requireStaffRole(staff, posRoles); return staff; }
 
 /** Bills settled in the last 24 hours, whose table is already closed: the way back to a paid bill to refund it */

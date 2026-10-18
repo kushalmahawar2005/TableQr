@@ -27,7 +27,7 @@ async function pendingPaymentOf(staff: StaffSession, sessionId: string) {
 
 /** "Check again": asks the gateway now */
 export async function recheckOnlinePayment(staff: StaffSession, sessionId: string, now = new Date()): Promise<PaymentView | "none"> {
-  await requireStaffRole(staff, ["cashier", "manager", "owner", "accountant"]);
+  await requireStaffRole(staff, ["cashier", "manager", "owner", "accountant", "reception"]);
   const row = await pendingPaymentOf(staff, sessionId);
   if (!row) return "none";
   return reconcilePayment({ tenantId: staff.tenantId }, row.payment.id, now);

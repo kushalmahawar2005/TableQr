@@ -13,13 +13,14 @@ import { addMemberAction, changeRoleAction, resetPinAction, setActiveAction } fr
 
 const ALL_ROLES = [
   { id: "manager", label: "Manager", does: "Runs the outlet: floor, menu, billing, reports, approvals", opens: "Dashboard", path: "/console/dashboard" },
+  { id: "reception", label: "Reception", does: "Hotel front desk: checks guests in and out, room requests and room bills", opens: "Rooms", path: "/console/rooms" },
   { id: "waiter", label: "Waiter", does: "Takes orders at tables, serves, requests the bill", opens: "Waiter app", path: "/waiter" },
   { id: "accountant", label: "Accountant", does: "Takes payments, views bills and reports", opens: "Billing", path: "/pos" },
   { id: "kitchen", label: "Kitchen", does: "Sees orders and marks food ready. Signs in on the kitchen screen with this phone and PIN", opens: "Kitchen", path: "/console/kitchen" },
 ] as const;
 // Older roles still shown on people who have them
 const LABEL: Record<string, string> = { owner: "Owner", cashier: "Cashier", host: "Host", ...Object.fromEntries(ALL_ROLES.map((r) => [r.id, r.label])) };
-const TONE: Record<string, string> = { owner: "#c9482b", manager: "#315e9e", waiter: "#237a68", kitchen: "#a74608", cashier: "#8a5a00", host: "#6d5bd0", accountant: "#64748b" };
+const TONE: Record<string, string> = { owner: "#c9482b", manager: "#315e9e", waiter: "#237a68", kitchen: "#a74608", cashier: "#8a5a00", host: "#6d5bd0", accountant: "#64748b", reception: "#0f766e" };
 const field = "h-11 rounded-xl";
 
 function Avatar({ name, role }: { name: string; role: string }) {

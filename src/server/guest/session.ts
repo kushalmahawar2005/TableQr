@@ -12,6 +12,7 @@ import { topics } from "../realtime/token";
 import { assignTable, visitChanged } from "../floor/assignments";
 import { assertCanSeat, findMovedSession, findOpenSession, findTableByQr, wasRemoved } from "./table";
 import { findRecentVerification } from "./verify";
+import { ROOM_CLASS } from "@/domain/rooms";
 
 // Start ordering / Join this table (PS 3.2, 3.6). One open session per table.
 
@@ -63,6 +64,9 @@ async function seat(input: SeatInput): Promise<Seated | { refused: JoinCodeRefus
       .for("update");
 
     const open = await findOpenSession(tx, tenantId, t.table.id);
+    // A room orders only while a guest is checked in; the QR is inside the room, so no code or OTP
+    const stay = t.table.tableClass === ROOM_CLASS ? await roomStayAt(tx, tenantId, t.table.id) : null;
+    if (t.table.tableClass === ROOM_CLASS && !stay) throw new AppError("table_not_open", "This room is not checked in. Please call reception.");
 
     const existing = open?.people.find((p) => p.deviceId === input.deviceId);
     if (existing && open!.session.status === "open") {
@@ -89,7 +93,7 @@ async function seat(input: SeatInput): Promise<Seated | { refused: JoinCodeRefus
     assertCanSeat(t, table.state, open, now);
 
     // Host-confirmed mode: the table's code, given by the host or waiter, joins a session staff opened
-    if (t.outlet.sessionMode === "host_confirmed") {
+    if (t.outlet.sessionMode === "host_confirmed" && !stay) {
       if (input.joinCode === undefined) {
         throw new AppError("verification_required", "Please ask staff to join this table.", { mode: t.outlet.sessionMode });
       }
@@ -102,8 +106,8 @@ async function seat(input: SeatInput): Promise<Seated | { refused: JoinCodeRefus
 
     // Verified mode: this phone confirmed its number at this table within the last 12 hours (G2)
     const verified =
-      t.outlet.sessionMode === "verified" ? await findRecentVerification(tx, tenantId, t.table.id, input.deviceId, now) : null;
-    if (t.outlet.sessionMode === "verified" && !verified) {
+      t.outlet.sessionMode === "verified" && !stay ? await findRecentVerification(tx, tenantId, t.table.id, input.deviceId, now) : null;
+    if (t.outlet.sessionMode === "verified" && !stay && !verified) {
       throw new AppError("verification_required", "Please verify your number to order at this table.", {
         mode: t.outlet.sessionMode,
       });
@@ -122,13 +126,14 @@ async function seat(input: SeatInput): Promise<Seated | { refused: JoinCodeRefus
         openKey: t.table.id,
         openedAt: now,
         lastActivityAt: now,
+        ...(stay ? { guestName: stay.guestName, partySize: stay.guests } : {}),
       });
       await assignTable(tx, { tenantId, outletId: t.outlet.id, sessionId }, t.table.id, { primary: true, now });
     }
 
     const participantId = uuidv7();
     const count = open?.people.length ?? 0;
-    const name = verified?.name ?? (input.displayName?.trim().slice(0, 40) || placeholderName(count + 1));
+    const name = verified?.name ?? (input.displayName?.trim().slice(0, 40) || (stay ? stay.guestName.split(" ")[0].slice(0, 40) : placeholderName(count + 1)));
     await tx.insert(s.participants).values({
       id: participantId,
       tenantId,
@@ -167,6 +172,16 @@ async function seat(input: SeatInput): Promise<Seated | { refused: JoinCodeRefus
     ]);
   }
   return { sessionId: res.sessionId, participantId: res.participantId, isHost: res.isHost, isNew: res.isNew };
+}
+
+/** The guest checked in to the room behind this hidden counter, if any */
+async function roomStayAt(tx: Tx, tenantId: string, tableId: string) {
+  const [row] = await tx
+    .select({ guestName: s.roomStays.guestName, guests: s.roomStays.guests })
+    .from(s.rooms)
+    .innerJoin(s.roomStays, and(eq(s.roomStays.tenantId, s.rooms.tenantId), eq(s.roomStays.openKey, s.rooms.id)))
+    .where(and(eq(s.rooms.tenantId, tenantId), eq(s.rooms.tableId, tableId), eq(s.rooms.isActive, true)));
+  return row ?? null;
 }
 
 /** Guessing limits for table codes: per phone and per table, over a rolling 10 minutes */

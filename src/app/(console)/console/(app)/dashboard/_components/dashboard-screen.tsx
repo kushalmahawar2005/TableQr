@@ -349,6 +349,9 @@ export function alertsOf(data: DashboardData): Alert[] {
   if (a.pendingRefunds.count > 0) {
     out.push({ key: "refunds", tone: "info", icon: MoneyReceive01Icon, text: <><strong>{a.pendingRefunds.count}</strong> pending {a.pendingRefunds.count === 1 ? "refund" : "refunds"} · {money(a.pendingRefunds.paise)}</> });
   }
+  if (a.lowStock.length > 0) {
+    out.push({ key: "low-stock", tone: "warn", icon: MenuRestaurantIcon, text: <><strong>{a.lowStock.length}</strong> running low: {a.lowStock.slice(0, 3).join(", ")}{a.lowStock.length > 3 ? "…" : ""}</>, href: "/console/inventory", linkLabel: "Inventory" });
+  }
   if (a.blockedTables > 0) out.push({ key: "blocked", tone: "info", icon: LockIcon, text: <><strong>{a.blockedTables}</strong> {a.blockedTables === 1 ? "table" : "tables"} blocked</>, href: "/console/floor", linkLabel: "Floor" });
   return out;
 }

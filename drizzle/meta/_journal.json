@@ -169,6 +169,20 @@
       "when": 1792235439635,
       "tag": "0023_fee_plan",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "5",
+      "when": 1792239186472,
+      "tag": "0024_inventory",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "5",
+      "when": 1792255107041,
+      "tag": "0025_rooms",
+      "breakpoints": true
     }
   ]
 }

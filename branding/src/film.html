@@ -1,0 +1,898 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>TableQR brand film</title>
+<style>
+@font-face{font-family:Manrope;src:url(fonts/manrope.woff2) format('woff2');font-weight:200 800;font-display:block}
+@font-face{font-family:Mono;src:url(fonts/mono-400.woff2) format('woff2');font-weight:400;font-display:block}
+@font-face{font-family:Mono;src:url(fonts/mono-500.woff2) format('woff2');font-weight:500;font-display:block}
+@font-face{font-family:Mono;src:url(fonts/mono-700.woff2) format('woff2');font-weight:700;font-display:block}
+
+:root{
+  --ink:#1f2937; --paper:#fbf8f3; --surface:#ffffff; --muted:#626a78; --line:#ddd6ca;
+  --chilli:#c9482b; --chilli-dk:#a13a22; --chilli-soft:#faedea; --chilli-border:#efc8bf;
+  --night:#141a2b; --night-card:#1f2740; --night-line:#34405f; --night-text:#f8fafc; --night-muted:#b8c0cc;
+  --ok:#237a68; --ok-soft:#e8f3ef; --amber:#c18400; --amber-soft:#fff0c2; --late:#b83a3a; --info:#315e9e;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:1080px;height:1920px;overflow:hidden;background:var(--night)}
+#stage{position:relative;width:1080px;height:1920px;overflow:hidden;background:var(--night);
+  font-family:Manrope,sans-serif;-webkit-font-smoothing:antialiased;text-rendering:geometricPrecision}
+.lay{position:absolute;inset:0}
+.mono{font-family:Mono,monospace}
+
+/* ---------- ground wipes ---------- */
+#wPaper{background:var(--paper);z-index:20}
+#wKds{background:var(--night);z-index:50}
+#wFinal{background:var(--night);z-index:70}
+
+/* ---------- act layers ---------- */
+#a1{z-index:10}
+#a2{z-index:30}
+#a3p{z-index:40}
+#a3k{z-index:60}
+#a4{z-index:80}
+#chrome{z-index:90}
+#grain{z-index:95;pointer-events:none;opacity:.05;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3'/></filter><rect width='200' height='200' filter='url(%23n)'/></svg>")}
+
+/* ---------- chrome ---------- */
+#toprail{position:absolute;top:62px;left:76px;right:76px;display:flex;justify-content:space-between;
+  font-family:Mono,monospace;font-weight:500;font-size:25px;letter-spacing:.07em}
+#prog{position:absolute;left:76px;top:1836px;width:928px;height:3px}
+#progBase{position:absolute;inset:0}
+#progFill{position:absolute;left:0;top:0;height:3px;background:var(--chilli)}
+.tick{position:absolute;top:-4px;width:2px;height:11px}
+
+/* ---------- act 1 ---------- */
+#a1hook{position:absolute;left:76px;top:560px;width:940px}
+#a1hook h1{font-weight:800;font-size:122px;line-height:.98;letter-spacing:-.035em;color:var(--night-text)}
+#a1card{position:absolute;left:76px;top:1010px;width:660px;background:var(--night-card);
+  border:2px solid var(--night-line);border-radius:18px;padding:34px 38px 38px}
+#a1cardTop{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:26px}
+#a1time{font-family:Mono,monospace;font-weight:700;font-size:92px;letter-spacing:-.02em;color:var(--chilli)}
+#a1kot{font-family:Mono,monospace;font-weight:500;font-size:27px;color:var(--night-muted);letter-spacing:.05em}
+#a1barBase{height:14px;border-radius:7px;background:#2b3450;overflow:hidden}
+#a1barFill{height:14px;border-radius:7px;background:var(--chilli)}
+
+#slips{position:absolute;inset:0}
+.slip{position:absolute;left:0;top:0;width:648px;background:var(--paper);color:var(--ink);
+  border-radius:3px;padding:32px 34px 36px;box-shadow:0 30px 70px rgba(0,0,0,.5);
+  font-family:Mono,monospace;transform-origin:50% 50%}
+.slip .sh{display:flex;justify-content:space-between;font-weight:700;font-size:28px;letter-spacing:.04em}
+.slip .perf{margin:20px 0;height:2px;background:repeating-linear-gradient(90deg,var(--line) 0 11px,transparent 11px 22px)}
+.slip .bd{font-weight:400;font-size:31px;line-height:1.55}
+.slip .bd b{font-weight:700}
+.stamp{position:absolute;border:3.5px solid var(--chilli);color:var(--chilli);
+  font-family:Mono,monospace;font-weight:700;font-size:25px;letter-spacing:.07em;
+  padding:9px 17px;border-radius:5px;background:rgba(251,248,243,.72)}
+.strike{text-decoration:line-through;text-decoration-thickness:3px;color:var(--muted)}
+
+#a1line{position:absolute;left:76px;top:1468px;width:940px}
+#a1line .l{font-weight:800;font-size:82px;line-height:1.06;letter-spacing:-.03em}
+
+/* ---------- act 2 ---------- */
+#qrWrap{position:absolute;left:250px;top:470px;width:580px;height:580px}
+#qrc{width:580px;height:580px;display:block}
+#lock{position:absolute;left:0;top:1150px;width:1080px;display:flex;align-items:center;
+  justify-content:center;gap:30px}
+#lockMark{width:104px;height:104px;border-radius:12px}
+#lockWord{font-weight:800;font-size:104px;letter-spacing:-.04em;color:var(--ink)}
+#a2line{position:absolute;left:76px;top:1330px;width:928px;text-align:center;
+  font-weight:500;font-size:40px;line-height:1.4;color:var(--muted)}
+
+/* ---------- phone ---------- */
+#phone{position:absolute;left:240px;top:286px;width:600px;height:1108px;
+  background:var(--ink);border-radius:54px;padding:13px;box-shadow:0 40px 90px rgba(31,41,55,.26)}
+#screen{position:relative;width:574px;height:1082px;background:var(--surface);
+  border-radius:42px;overflow:hidden}
+.scr{position:absolute;inset:0;background:var(--surface)}
+.shead{padding:30px 30px 24px;background:var(--chilli);color:#fff}
+.shead .t1{font-weight:800;font-size:40px;letter-spacing:-.02em}
+.shead .t2{font-family:Mono,monospace;font-weight:500;font-size:24px;opacity:.9;margin-top:7px;letter-spacing:.05em}
+.chips{display:flex;gap:11px;padding:22px 24px;border-bottom:2px solid var(--line);overflow:hidden}
+.chip{font-weight:600;font-size:24px;padding:11px 20px;border-radius:999px;
+  border:2px solid var(--line);color:var(--muted);white-space:nowrap}
+.chip.on{background:var(--chilli);border-color:var(--chilli);color:#fff}
+.item{display:flex;gap:16px;padding:24px 26px;border-bottom:2px solid #f0ece4;align-items:flex-start}
+.vmark{width:26px;height:26px;border:3px solid var(--ok);border-radius:4px;flex:none;margin-top:6px;
+  display:flex;align-items:center;justify-content:center}
+.vmark i{width:12px;height:12px;background:var(--ok);border-radius:50%}
+.vmark.nv{border-color:var(--chilli)}
+.vmark.nv i{width:0;height:0;background:none;border-left:7px solid transparent;border-right:7px solid transparent;
+  border-bottom:12px solid var(--chilli);border-radius:0}
+.iname{font-weight:700;font-size:30px;color:var(--ink);line-height:1.2}
+.idesc{font-weight:500;font-size:22px;color:var(--muted);margin-top:5px;line-height:1.3}
+.iprice{font-family:Mono,monospace;font-weight:700;font-size:29px;color:var(--ink);margin-left:auto;white-space:nowrap}
+.addb{font-weight:700;font-size:23px;color:var(--chilli);border:2px solid var(--chilli-border);
+  background:var(--chilli-soft);border-radius:10px;padding:9px 18px;margin-top:10px;display:inline-block}
+
+.crow{display:flex;align-items:center;gap:14px;padding:22px 26px;border-bottom:2px solid #f0ece4}
+.cname{font-weight:700;font-size:28px;color:var(--ink)}
+.step{display:flex;align-items:center;gap:13px;margin-left:auto;font-family:Mono,monospace;
+  font-weight:700;font-size:26px;color:var(--ink)}
+.step s{width:38px;height:38px;border:2px solid var(--line);border-radius:9px;display:flex;
+  align-items:center;justify-content:center;text-decoration:none;color:var(--muted);font-size:26px}
+.cprice{font-family:Mono,monospace;font-weight:700;font-size:27px;width:118px;text-align:right;color:var(--ink)}
+.trow{display:flex;justify-content:space-between;padding:13px 26px;font-family:Mono,monospace;
+  font-weight:500;font-size:26px;color:var(--muted)}
+.trow.tot{font-weight:700;font-size:36px;color:var(--ink);padding-top:20px;margin-top:10px;
+  border-top:2px solid var(--line)}
+.cta{position:absolute;left:26px;right:26px;bottom:34px;height:92px;border-radius:18px;
+  background:var(--chilli);color:#fff;font-weight:800;font-size:34px;display:flex;
+  align-items:center;justify-content:center;letter-spacing:-.01em}
+.cta.done{background:var(--ok)}
+.sectitle{padding:28px 26px 10px;font-weight:800;font-size:32px;color:var(--ink);letter-spacing:-.02em}
+.pmlab{font-weight:700;font-size:25px;color:var(--muted);margin:30px 26px 14px}
+.pms{display:flex;gap:12px;padding:0 26px}
+.pm{flex:1;text-align:center;font-weight:700;font-size:26px;padding:18px 0;border-radius:14px;
+  border:2px solid var(--line);color:var(--muted)}
+.pm.on{border-color:var(--chilli);background:var(--chilli-soft);color:var(--chilli)}
+
+/* receipt */
+#receipt{position:absolute;left:330px;top:1010px;width:420px;background:var(--paper);
+  color:var(--ink);font-family:Mono,monospace;padding:30px 30px 34px;
+  box-shadow:0 26px 60px rgba(31,41,55,.26);transform-origin:50% 0}
+#receipt .rt{font-weight:700;font-size:27px;text-align:center;letter-spacing:.09em}
+#receipt .rp{margin:17px 0;height:2px;background:repeating-linear-gradient(90deg,var(--line) 0 9px,transparent 9px 18px)}
+#receipt .rr{display:flex;justify-content:space-between;font-size:24px;font-weight:400;line-height:1.75}
+#receipt .rr.b{font-weight:700;font-size:28px}
+#receipt .zig{height:14px;margin:18px -30px -34px;
+  background:linear-gradient(-45deg,transparent 50%,var(--paper) 50%) 0 0/18px 18px repeat-x}
+
+/* ---------- KDS ---------- */
+#kds{position:absolute;left:60px;top:398px;width:960px}
+#kdsTop{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:26px;
+  font-family:Mono,monospace;font-weight:500;font-size:26px;color:var(--night-muted);letter-spacing:.06em}
+#kdsCols{display:flex;flex-wrap:wrap;gap:24px}
+.tkt{width:468px;flex:none;background:var(--night-card);border-radius:18px;border-top:10px solid var(--info);
+  padding:30px 28px 28px;color:var(--night-text)}
+.tkt.amber{border-top-color:var(--amber)}
+.tkt.late{border-top-color:var(--late)}
+.tkt.done{border-top-color:var(--ok)}
+.tktTop{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:22px}
+.tktT{font-weight:800;font-size:46px;letter-spacing:-.02em}
+.tktC{font-family:Mono,monospace;font-weight:700;font-size:44px;color:var(--amber)}
+.tkt.late .tktC{color:var(--late)}
+.tkt.new .tktC{color:var(--info)}
+.tkt.done .tktC{color:var(--ok)}
+.tktL{font-family:Mono,monospace;font-weight:400;font-size:29px;line-height:1.72;color:#e4e8f0;min-height:150px}
+.tktB{margin-top:22px;height:70px;border-radius:12px;border:2px solid var(--night-line);
+  display:flex;align-items:center;justify-content:center;font-weight:700;font-size:28px;color:var(--night-muted)}
+.tkt.done .tktB{background:var(--ok);border-color:var(--ok);color:#fff}
+
+/* ---------- report ---------- */
+#report{position:absolute;left:100px;top:326px;width:880px;background:var(--surface);
+  border:2px solid var(--line);border-radius:26px;padding:40px 42px 44px;
+  box-shadow:0 30px 70px rgba(31,41,55,.12)}
+#repH{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:34px}
+#repH .h1{font-weight:800;font-size:46px;letter-spacing:-.025em;color:var(--ink)}
+#repH .h2{font-family:Mono,monospace;font-weight:500;font-size:25px;color:var(--muted);letter-spacing:.05em}
+#repKpi{display:flex;gap:18px;margin-bottom:34px}
+.kpi{flex:1;background:var(--paper);border-radius:16px;padding:24px 22px}
+.kpiV{font-family:Mono,monospace;font-weight:700;font-size:46px;letter-spacing:-.025em;color:var(--ink)}
+.kpiL{font-weight:600;font-size:23px;color:var(--muted);margin-top:8px}
+#bars{display:flex;align-items:flex-end;gap:14px;height:160px;margin-bottom:12px}
+.bar{flex:1;background:var(--chilli);border-radius:7px 7px 0 0;min-height:4px}
+#barL{display:flex;gap:14px;margin-bottom:34px}
+#barL span{flex:1;text-align:center;font-family:Mono,monospace;font-size:21px;color:var(--muted)}
+.gline{display:flex;justify-content:space-between;padding:14px 0;border-bottom:2px solid #f0ece4;
+  font-family:Mono,monospace;font-weight:500;font-size:29px;color:var(--ink)}
+.gline.b{font-weight:700;border-bottom:none}
+#gsth{font-weight:800;font-size:32px;color:var(--ink);margin-bottom:10px;letter-spacing:-.02em}
+
+/* ---------- act 4 ---------- */
+#chips4{position:absolute;left:76px;top:636px;width:928px;display:flex;flex-wrap:wrap;gap:18px}
+.c4{font-weight:700;font-size:38px;letter-spacing:-.015em;color:var(--night-text);
+  border:2px solid var(--night-line);background:var(--night-card);border-radius:999px;padding:18px 32px}
+#final{position:absolute;left:0;top:700px;width:1080px;text-align:center}
+#finalLock{display:flex;align-items:center;justify-content:center;gap:34px;margin-bottom:60px}
+#finalPlate{width:148px;height:148px;border-radius:16px;background:var(--paper);
+  display:flex;align-items:center;justify-content:center;flex:none}
+#finalMark{width:124px;height:124px;display:block}
+#finalWord{font-weight:800;font-size:126px;letter-spacing:-.045em;color:var(--night-text)}
+#finalTag{font-weight:600;font-size:54px;line-height:1.3;letter-spacing:-.02em;color:var(--night-text)}
+#finalSub{font-family:Mono,monospace;font-weight:500;font-size:30px;letter-spacing:.1em;
+  color:var(--night-muted);margin-top:38px}
+
+/* ---------- headline (tour) ---------- */
+#hl{position:absolute;left:76px;top:1470px;width:940px;z-index:88}
+#hl1{font-weight:800;font-size:76px;line-height:1.04;letter-spacing:-.032em}
+#hl2{font-weight:500;font-size:37px;line-height:1.35;margin-top:20px}
+</style>
+</head>
+<body>
+<div id="stage">
+
+  <!-- ACT 1 -->
+  <div class="lay" id="a1">
+    <div id="a1hook"><h1 id="a1h"></h1></div>
+    <div id="a1card">
+      <div id="a1cardTop"><div id="a1time">00:00</div><div id="a1kot">KOT #0412</div></div>
+      <div id="a1barBase"><div id="a1barFill" style="width:0"></div></div>
+    </div>
+    <div id="slips"></div>
+    <div id="a1line">
+      <div class="l" id="a1l1" style="color:#f8fafc">Your floor runs on paper.</div>
+      <div class="l" id="a1l2" style="color:#c9482b">Paper loses track.</div>
+    </div>
+  </div>
+
+  <div class="lay" id="wPaper"></div>
+
+  <!-- ACT 2 -->
+  <div class="lay" id="a2">
+    <div id="qrWrap"><canvas id="qrc" width="580" height="580"></canvas></div>
+    <div id="lock">
+      <canvas id="lockMark" width="208" height="208"></canvas>
+      <div id="lockWord">TableQR</div>
+    </div>
+    <div id="a2line">One QR on the table.<br>That&rsquo;s the whole install.</div>
+  </div>
+
+  <!-- ACT 3 : paper screens -->
+  <div class="lay" id="a3p">
+    <div id="phone"><div id="screen">
+
+      <div class="scr" id="scrMenu">
+        <div class="shead"><div class="t1">Mirchi House</div><div class="t2">Table 12 &middot; Dine in</div></div>
+        <div class="chips">
+          <div class="chip on">All</div><div class="chip">Starters</div>
+          <div class="chip">Main course</div><div class="chip">Breads</div>
+        </div>
+        <div id="menuItems"></div>
+      </div>
+
+      <div class="scr" id="scrCart">
+        <div class="sectitle">Your order</div>
+        <div id="cartRows"></div>
+        <div style="margin-top:18px">
+          <div class="trow"><span>Item total</span><span id="ctSub">&#8377;1,040</span></div>
+          <div class="trow"><span>CGST 2.5%</span><span>&#8377;26</span></div>
+          <div class="trow"><span>SGST 2.5%</span><span>&#8377;26</span></div>
+          <div class="trow tot"><span>Total</span><span>&#8377;1,092</span></div>
+        </div>
+        <div class="cta" id="cartCta">Place order</div>
+      </div>
+
+      <div class="scr" id="scrBill">
+        <div class="sectitle">Table 12 &middot; Bill</div>
+        <div id="billRows"></div>
+        <div style="margin-top:14px">
+          <div class="trow"><span>Subtotal</span><span>&#8377;1,040</span></div>
+          <div class="trow"><span>CGST + SGST</span><span>&#8377;52</span></div>
+          <div class="trow tot"><span>Total</span><span>&#8377;1,092</span></div>
+        </div>
+        <div class="pmlab">Pay by</div>
+        <div class="pms"><div class="pm on">UPI</div><div class="pm">Card</div><div class="pm">Cash</div></div>
+        <div style="position:absolute;left:26px;right:26px;bottom:148px;height:82px;border-radius:16px;
+          border:2px solid var(--line);display:flex;align-items:center;justify-content:center;
+          font-weight:700;font-size:30px;color:var(--muted)">Split the bill</div>
+        <div class="cta" id="billCta">Pay &#8377;1,092</div>
+      </div>
+
+    </div></div>
+
+    <div id="receipt">
+      <div class="rt">MIRCHI HOUSE</div>
+      <div class="rp"></div>
+      <div class="rr"><span>Table 12</span><span>7:58 PM</span></div>
+      <div class="rp"></div>
+      <div class="rr"><span>3 items</span><span>1,040</span></div>
+      <div class="rr"><span>CGST + SGST</span><span>52</span></div>
+      <div class="rr b"><span>TOTAL</span><span>1,092</span></div>
+      <div class="rp"></div>
+      <div class="rr"><span>Paid</span><span>UPI</span></div>
+      <div class="zig"></div>
+    </div>
+
+    <div id="report">
+      <div id="repH"><div class="h1">Day close</div><div class="h2">Fri &middot; 11:04 PM</div></div>
+      <div id="repKpi">
+        <div class="kpi"><div class="kpiV" id="k1">&#8377;0</div><div class="kpiL">Sales</div></div>
+        <div class="kpi"><div class="kpiV" id="k2">0</div><div class="kpiL">Covers</div></div>
+        <div class="kpi"><div class="kpiV" id="k3">&#8377;0</div><div class="kpiL">Per cover</div></div>
+      </div>
+      <div id="bars"></div>
+      <div id="barL"><span>Sat</span><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span></div>
+      <div id="gsth">GST summary</div>
+      <div class="gline"><span>CGST 2.5%</span><span id="g1">&#8377;0</span></div>
+      <div class="gline"><span>SGST 2.5%</span><span id="g2">&#8377;0</span></div>
+      <div class="gline b"><span>Taxable value</span><span id="g3">&#8377;0</span></div>
+    </div>
+  </div>
+
+  <div class="lay" id="wKds"></div>
+
+  <!-- ACT 3C : KDS -->
+  <div class="lay" id="a3k">
+    <div id="kds">
+      <div id="kdsTop"><span>Kitchen display &middot; Mirchi House</span><span id="kdsClock">7:43 PM</span></div>
+      <div id="kdsCols"></div>
+    </div>
+  </div>
+
+  <div class="lay" id="wFinal"></div>
+
+  <!-- ACT 4 -->
+  <div class="lay" id="a4">
+    <div id="chips4"></div>
+    <div id="final">
+      <div id="finalLock">
+        <div id="finalPlate"><canvas id="finalMark" width="248" height="248"></canvas></div>
+        <div id="finalWord">TableQR</div>
+      </div>
+      <div id="finalTag">Run the floor,<br>not the paperwork.</div>
+      <div id="finalSub">tableqr.in</div>
+    </div>
+  </div>
+
+  <!-- chrome -->
+  <div class="lay" id="chrome">
+    <div id="toprail"><span id="trL">Mirchi House &middot; Outlet 1</span><span id="trR">7:41 PM</span></div>
+    <div id="prog">
+      <div id="progBase"></div><div id="progFill" style="width:0"></div>
+    </div>
+  </div>
+
+  <div class="lay" id="hl">
+    <div id="hl1"></div><div id="hl2"></div>
+  </div>
+
+  <div class="lay" id="grain"></div>
+</div>
+
+<script>
+/* ============================================================
+   TableQR brand film - deterministic frame renderer
+   Every visual property is a pure function of the frame number.
+   ============================================================ */
+const FPS = 30, SECONDS = 36, TOTAL = FPS * SECONDS;      // 1080 frames
+const F = s => Math.round(s * FPS);
+
+const $ = id => document.getElementById(id);
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+
+/* progress between two times, in seconds */
+function p(f, a, b){
+  const fa = F(a), fb = F(b);
+  if (f <= fa) return 0;
+  if (f >= fb) return 1;
+  return (f - fa) / (fb - fa);
+}
+/* a pulse: 0 -> 1 -> 0 across in/hold/out */
+function band(f, a, b, fin, fout){
+  return Math.min(p(f, a, a + fin), 1 - p(f, b - fout, b));
+}
+const lerp = (a, b, t) => a + (b - a) * t;
+
+/* easings - mechanical, with real overshoot */
+const eOut   = t => 1 - Math.pow(1 - t, 3);
+const eExpo  = t => t >= 1 ? 1 : 1 - Math.pow(2, -10 * t);
+const eBack  = t => { const c = 1.9; return 1 + (c + 1) * Math.pow(t - 1, 3) + c * Math.pow(t - 1, 2); };
+const eInOut = t => t < .5 ? 8 * t * t * t * t : 1 - Math.pow(-2 * t + 2, 4) / 2;
+const eStep  = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+/* seeded rng so every render is identical */
+function rng(seed){ let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
+
+/* --- number / money formatting (Indian grouping) --- */
+function inr(n){
+  n = Math.round(n);
+  const s = String(n);
+  if (s.length <= 3) return s;
+  const last3 = s.slice(-3);
+  let rest = s.slice(0, -3), out = '';
+  while (rest.length > 2){ out = ',' + rest.slice(-2) + out; rest = rest.slice(0, -2); }
+  return (rest ? rest + out : out.replace(/^,/, '')) + ',' + last3;
+}
+const money = n => '₹' + inr(n);
+function mmss(sec){
+  sec = Math.max(0, Math.floor(sec));
+  return String(Math.floor(sec / 60)).padStart(2, '0') + ':' + String(sec % 60).padStart(2, '0');
+}
+
+/* ===================== helpers ===================== */
+function show(el, v){ el.style.display = v ? '' : 'none'; }
+function set(el, o){
+  if (o.o !== undefined) el.style.opacity = o.o;
+  const x = o.x || 0, y = o.y || 0, s = o.s === undefined ? 1 : o.s, r = o.r || 0;
+  el.style.transform = 'translate(' + x.toFixed(2) + 'px,' + y.toFixed(2) + 'px) rotate(' + r.toFixed(3) + 'deg) scale(' + s.toFixed(4) + ')';
+}
+
+/* ===================== ACT 1 : the paper slips ===================== */
+const SLIPS = [
+  { top: 640,  left: 128, rot: -3.1, stamp: 'Can&rsquo;t read it',   sx: 300, sy: -26, blur: 2.6,
+    head: ['KOT #0412', '7:32 PM'],
+    body: '2&times; Paneer Tikka<br>1&times; Dal Makhani<br>1&times; Butter Naan' },
+  { top: 860,  left: 288, rot: 2.6,  stamp: 'Same order, twice', sx: 250, sy: -24, blur: 0,
+    head: ['KOT #0412', '7:32 PM'],
+    body: '2&times; Paneer Tikka<br>1&times; Dal Makhani' },
+  { top: 1086, left: 84,  rot: -1.9, stamp: 'Old prices',        sx: 330, sy: -22, blur: 0,
+    head: ['Menu card', 'Mar 2023'],
+    body: 'Paneer Tikka <span class="strike">&#8377;280</span><br>Dal Makhani <span class="strike">&#8377;240</span>' },
+  { top: 600,  left: 412, rot: 7.4,  stamp: '',  blur: 0,
+    head: ['KOT #0418', '7:36 PM'], body: '1&times; Veg Biryani<br>2&times; Roti' },
+  { top: 940,  left: -40, rot: -8.2, stamp: '',  blur: 1.6,
+    head: ['KOT #0421', '7:38 PM'], body: '3&times; Masala Papad' },
+  { top: 1180, left: 392, rot: 5.1,  stamp: '',  blur: 0,
+    head: ['Bill #0906', '7:39 PM'], body: 'Table 07 &mdash; unpaid' },
+  { top: 760,  left: 196, rot: -6.3, stamp: '',  blur: 2.2,
+    head: ['KOT #0423', '7:40 PM'], body: '2&times; Lassi<br>1&times; Gulab Jamun' },
+  { top: 1300, left: 150, rot: 3.4,  stamp: '',  blur: 0,
+    head: ['KOT #0425', '7:41 PM'], body: '1&times; Dal Tadka' }
+];
+const slipEls = [];
+(function buildSlips(){
+  const host = $('slips');
+  SLIPS.forEach((s, i) => {
+    const d = document.createElement('div');
+    d.className = 'slip';
+    d.style.left = s.left + 'px';
+    d.style.top  = s.top  + 'px';
+    d.innerHTML =
+      '<div class="sh"><span>' + s.head[0] + '</span><span>' + s.head[1] + '</span></div>' +
+      '<div class="perf"></div>' +
+      '<div class="bd"' + (s.blur ? ' style="filter:blur(' + s.blur + 'px)"' : '') + '>' + s.body + '</div>' +
+      (s.stamp ? '<div class="stamp" style="left:' + s.sx + 'px;top:' + s.sy + 'px;transform:rotate(-8deg)">' + s.stamp + '</div>' : '');
+    host.appendChild(d);
+    slipEls.push(d);
+  });
+})();
+/* when each slip lands, and from how far up */
+const SLIP_IN = [2.45, 2.80, 3.15, 5.70, 6.05, 6.40, 6.75, 7.10];
+const slipRand = rng(99);
+const SLIP_FROM = SLIPS.map(() => -1000 - slipRand() * 500);
+
+/* ===================== ACT 2 : the QR ===================== */
+const QR = __QR_DATA__;
+const CELL = 580 / QR.size;
+const isFinder = (x, y) => {
+  const n = QR.size;
+  return (x < 7 && y < 7) || (x >= n - 7 && y < 7) || (x < 7 && y >= n - 7);
+};
+const qrMods = [];
+(function buildQr(){
+  const r = rng(20260218);
+  for (let y = 0; y < QR.size; y++){
+    for (let x = 0; x < QR.size; x++){
+      if (QR.rows[y][x] !== '1') continue;
+      const fin = isFinder(x, y);
+      const ang = r() * Math.PI * 2, dist = 340 + r() * 520;
+      qrMods.push({
+        x, y, fin,
+        dx: Math.cos(ang) * dist,
+        dy: Math.sin(ang) * dist,
+        /* body modules land 0 -> .74 ; finders snap at the very end */
+        t0: fin ? .80 + r() * .06 : r() * .62,
+        dur: fin ? .18 : .30
+      });
+    }
+  }
+})();
+function drawQr(ctx, prog, size, showAll){
+  const cell = size / QR.size;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, size * 2, size * 2);
+  ctx.scale(2, 2);                        /* canvas is 2x for crisp edges */
+  ctx.fillStyle = '#1f2937';
+  for (const m of qrMods){
+    let t = showAll ? 1 : clamp((prog - m.t0) / m.dur, 0, 1);
+    if (t <= 0) continue;
+    const e = eBack(t);
+    const cx = m.x * cell + m.dx * (1 - e);
+    const cy = m.y * cell + m.dy * (1 - e);
+    const sc = showAll ? 1 : lerp(.25, 1, Math.min(1, e));
+    const w  = cell * sc;
+    ctx.globalAlpha = Math.min(1, t * 1.6);
+    ctx.fillRect(cx + (cell - w) / 2, cy + (cell - w) / 2, Math.ceil(w) , Math.ceil(w));
+  }
+  ctx.globalAlpha = 1;
+}
+const qrCtx = $('qrc').getContext('2d');
+$('qrc').width = 1160; $('qrc').height = 1160;
+const lockCtx = $('lockMark').getContext('2d');
+const finalCtx = $('finalMark').getContext('2d');
+
+/* ===================== ACT 3 content ===================== */
+const MENU = [
+  { v: 1, n: 'Paneer Tikka',    d: 'Char-grilled, mint chutney', p: 280 },
+  { v: 1, n: 'Dal Makhani',     d: 'Slow-cooked overnight',      p: 240 },
+  { v: 1, n: 'Butter Naan',     d: 'Tandoor, brushed with ghee', p: 60  },
+  { v: 0, n: 'Chicken Biryani', d: 'Hyderabadi, with raita',     p: 340 },
+  { v: 1, n: 'Masala Papad',    d: 'Onion, tomato, chaat masala',p: 90  },
+  { v: 1, n: 'Veg Biryani',     d: 'Basmati, saffron, fried onion', p: 260 },
+  { v: 0, n: 'Butter Chicken',  d: 'Tomato, cream, kasuri methi',p: 360 }
+];
+(function buildMenu(){
+  const host = $('menuItems');
+  MENU.forEach(m => {
+    const d = document.createElement('div');
+    d.className = 'item';
+    d.innerHTML =
+      '<div class="vmark' + (m.v ? '' : ' nv') + '"><i></i></div>' +
+      '<div><div class="iname">' + m.n + '</div><div class="idesc">' + m.d + '</div>' +
+      '<div class="addb">Add</div></div>' +
+      '<div class="iprice">₹' + m.p + '</div>';
+    host.appendChild(d);
+  });
+})();
+const menuEls = Array.from($('menuItems').children);
+
+const CART = [
+  { n: 'Paneer Tikka', q: 2, p: 560 },
+  { n: 'Dal Makhani',  q: 1, p: 240 },
+  { n: 'Butter Naan',  q: 4, p: 240 }
+];
+(function buildCart(){
+  const host = $('cartRows');
+  CART.forEach(c => {
+    const d = document.createElement('div');
+    d.className = 'crow';
+    d.innerHTML = '<div class="cname">' + c.n + '</div>' +
+      '<div class="step"><s>&minus;</s>' + c.q + '<s>+</s></div>' +
+      '<div class="cprice">₹' + c.p + '</div>';
+    host.appendChild(d);
+  });
+  const bh = $('billRows');
+  CART.forEach(c => {
+    const d = document.createElement('div');
+    d.className = 'trow';
+    d.style.fontSize = '28px'; d.style.color = 'var(--ink)';
+    d.innerHTML = '<span>' + c.n + ' ×' + c.q + '</span><span>₹' + c.p + '</span>';
+    bh.appendChild(d);
+  });
+})();
+const cartEls = Array.from($('cartRows').children);
+
+/* KDS tickets */
+const TKTS = [
+  { t: 'T12', cls: 'amber', base: 134, lines: ['2 Paneer Tikka', '1 Dal Makhani', '4 Butter Naan'] },
+  { t: 'T04', cls: 'late',  base: 401, lines: ['1 Chicken Biryani', '2 Roti', '1 Raita'] },
+  { t: 'T09', cls: 'new',   base: 8,   lines: ['3 Masala Papad', '1 Lassi'] },
+  { t: 'T07', cls: 'amber', base: 232, lines: ['2 Veg Biryani', '1 Dal Tadka', '2 Butter Naan'] }
+];
+(function buildKds(){
+  const host = $('kdsCols');
+  TKTS.forEach(k => {
+    const d = document.createElement('div');
+    d.className = 'tkt ' + k.cls;
+    d.innerHTML = '<div class="tktTop"><div class="tktT">' + k.t + '</div><div class="tktC">00:00</div></div>' +
+      '<div class="tktL">' + k.lines.join('<br>') + '</div>' +
+      '<div class="tktB">Bump</div>';
+    host.appendChild(d);
+  });
+})();
+const tktEls = Array.from($('kdsCols').children);
+
+/* report bars */
+const BARS = [62, 71, 48, 55, 83, 92, 100];
+(function buildBars(){
+  const host = $('bars');
+  BARS.forEach(() => { const d = document.createElement('div'); d.className = 'bar'; host.appendChild(d); });
+})();
+const barEls = Array.from($('bars').children);
+
+/* act 4 chips - the real module and feature names from the product */
+const CHIPS = ['Floor plan', 'Table QR', 'Menu', 'Orders', 'Kitchen display', 'Waiter app',
+  'Billing', 'Group bill split', 'Reservations', 'Waitlist', 'Hotel rooms', 'Inventory',
+  'Pricing rules', 'Reports & GST', 'Customers', 'Team & shifts'];
+(function buildChips(){
+  const host = $('chips4');
+  CHIPS.forEach(c => { const d = document.createElement('div'); d.className = 'c4'; d.textContent = c; host.appendChild(d); });
+})();
+const chipEls = Array.from($('chips4').children);
+
+/* ===================== tour script ===================== */
+const TOUR = [
+  { a: 14.0, b: 17.6, h1: 'Guest scans. Menu opens.',         h2: 'No app to install, no waiter to flag down.', clock: '7:42 PM', dark: 0 },
+  { a: 17.6, b: 20.8, h1: 'They order from the table.',       h2: 'Every item, every quantity, in their own hands.', clock: '7:43 PM', dark: 0 },
+  { a: 20.8, b: 24.6, h1: 'Kitchen gets every ticket.',       h2: 'With a timer running on each one.', clock: '7:43 PM', dark: 1 },
+  { a: 24.6, b: 28.1, h1: 'Bill, pay, receipt.',              h2: 'Settled at the table. Nobody waits for change.', clock: '7:58 PM', dark: 0 },
+  { a: 28.1, b: 31.0, h1: 'Day close and GST, already done.', h2: 'Every night, without opening a calculator.', clock: '11:04 PM', dark: 0 }
+];
+
+/* ===================== the renderer ===================== */
+window.renderFrame = function(f){
+
+  /* ---------- which act ---------- */
+  const inA1 = f < F(10.2);
+  const inA2 = f >= F(8.9) && f < F(14.1);
+  const inA3 = f >= F(13.6) && f < F(31.4);
+  const inA4 = f >= F(30.5);
+  const inKds = f >= F(20.8) && f < F(24.7);
+
+  show($('a1'), inA1);
+  show($('a2'), inA2);
+  show($('a3p'), inA3);
+  show($('a3k'), inKds);
+  show($('a4'), inA4);
+  /* act 2 clears out just before the phone arrives */
+  $('a2').style.opacity = 1 - eInOut(p(f, 13.6, 14.05));
+
+  /* ---------- ground wipes ---------- */
+  /* paper takes over from the QR centre */
+  const wp = eInOut(p(f, 9.5, 11.0));
+  $('wPaper').style.clipPath = wp <= 0 ? 'circle(0px at 540px 760px)'
+    : wp >= 1 ? 'none' : 'circle(' + (wp * 1500).toFixed(1) + 'px at 540px 760px)';
+  $('wPaper').style.opacity = wp > 0 ? 1 : 0;
+
+  /* KDS night panel wipes down, then back up */
+  const kin = eInOut(p(f, 20.8, 21.35)), kout = eInOut(p(f, 24.15, 24.7));
+  const kOn = kin > 0 && kout < 1;
+  $('wKds').style.opacity = kOn ? 1 : 0;
+  if (kOn){
+    const top = (1 - kin) * 100, bot = kout * 100;
+    $('wKds').style.clipPath = 'inset(' + top.toFixed(1) + '% 0 ' + bot.toFixed(1) + '% 0)';
+  }
+
+  /* final night ground */
+  const fin = eInOut(p(f, 30.5, 31.15));
+  $('wFinal').style.opacity = fin > 0 ? 1 : 0;
+  $('wFinal').style.clipPath = fin >= 1 ? 'none' : 'inset(' + ((1 - fin) * 100).toFixed(1) + '% 0 0 0)';
+
+  /* is the visible ground dark right now? drives chrome + headline colour */
+  const dark = (f < F(10.0)) || kOn || (fin > .5);
+
+  /* ---------- chrome ---------- */
+  const tr = $('toprail');
+  tr.style.color = dark ? '#8d98ad' : '#9a9387';
+  tr.style.opacity = (f < F(31.0)) ? band(f, 0.35, 31.4, .5, .4) : 0;
+  $('progBase').style.background = dark ? '#2b3450' : '#e6ded2';
+  $('progFill').style.width = (928 * (f / TOTAL)).toFixed(1) + 'px';
+  $('prog').style.opacity = band(f, 0.5, 35.6, .6, .5);
+
+  /* clock advances with the story */
+  let clock = '7:41 PM';
+  for (const t of TOUR) if (f >= F(t.a)) clock = t.clock;
+  $('trR').textContent = clock;
+  $('trL').textContent = inKds ? 'Kitchen · Mirchi House' : 'Mirchi House · Outlet 1';
+
+  /* ================= ACT 1 ================= */
+  if (inA1){
+    /* hook: the wait timer */
+    const hk = band(f, -0.25, 2.95, .55, .35);
+    const hookOut = p(f, 2.45, 2.95);
+    $('a1h').innerHTML = 'Table 12<br>is still waiting.';
+    set($('a1hook'), { o: hk, y: lerp(38, 0, eExpo(p(f, -0.2, 0.7))) - hookOut * 70 });
+    set($('a1card'), { o: hk, y: lerp(56, 0, eExpo(p(f, -0.05, 0.95))) - hookOut * 70 });
+    const tp = eOut(p(f, 0.3, 2.45));
+    $('a1time').textContent = mmss(tp * 552);
+    $('a1barFill').style.width = (584 * tp * .78).toFixed(1) + 'px';
+
+    /* the slips */
+    slipEls.forEach((el, i) => {
+      const t0 = SLIP_IN[i];
+      const pr = eBack(p(f, t0, t0 + .42));
+      if (pr <= 0){ el.style.opacity = 0; return; }
+      /* slip 8 slides out of frame - the one that gets lost */
+      const lost = i === 7 ? eInOut(p(f, 8.0, 8.9)) : 0;
+      /* everything implodes into the QR at the turn */
+      const sh = eInOut(p(f, 8.82 + i * .03, 9.38 + i * .03));
+      const y = lerp(SLIP_FROM[i], 0, pr) + lost * 900 + sh * (760 - SLIPS[i].top) * .9;
+      const x = lost * 60 + sh * (540 - SLIPS[i].left - 324) * .9;
+      set(el, {
+        o: (1 - lost) * (1 - sh) * Math.min(1, pr * 1.4),
+        x, y,
+        r: lerp(SLIPS[i].rot * 2.2, SLIPS[i].rot, pr) + lost * 16 + sh * 18,
+        s: lerp(1.08, 1, Math.min(1, pr)) * (1 - sh * .88)
+      });
+    });
+
+    /* the line */
+    const lp = p(f, 7.35, 8.0);
+    set($('a1line'), { o: band(f, 7.35, 9.1, .65, .28), y: lerp(40, 0, eExpo(lp)) });
+    $('a1l1').style.opacity = Math.min(1, p(f, 7.35, 7.8) * 1.2);
+    $('a1l2').style.opacity = Math.min(1, p(f, 7.75, 8.2) * 1.2);
+  }
+
+  /* ================= ACT 2 ================= */
+  if (inA2){
+    const asm = p(f, 9.78, 12.25);                 /* module assembly */
+    const toLock = eInOut(p(f, 12.5, 13.2));       /* shrink into the logo lockup */
+    drawQr(qrCtx, asm, 580, false);
+
+    /* the big QR (centre 540,760 at 580px) lands as the 104px logo mark
+       whose centre sits at roughly 315,1221 - so translate by the difference */
+    const swapped = toLock >= .999;
+    set($('qrWrap'), {
+      o: swapped ? 0 : Math.min(1, p(f, 9.7, 9.95) * 2),
+      x: lerp(0, -225, toLock),
+      y: lerp(0, 461, toLock),
+      s: lerp(1, .18, toLock),
+      r: lerp(-6, 0, eExpo(Math.min(1, asm * 1.3)))
+    });
+    /* a small punch when the finder squares snap in */
+    const punch = 1 + .04 * Math.sin(Math.PI * clamp(p(f, 11.85, 12.2), 0, 1));
+    $('qrWrap').style.transform += ' scale(' + punch.toFixed(4) + ')';
+
+    drawQr(lockCtx, 1, 104, true);
+    const lw = p(f, 12.8, 13.45);
+    set($('lock'), { o: 1 });
+    $('lockMark').style.opacity = swapped ? 1 : 0;
+    $('lockWord').style.opacity = Math.min(1, lw * 1.3);
+    $('lockWord').style.transform = 'translateX(' + lerp(-58, 0, eBack(lw)).toFixed(1) + 'px)';
+
+    set($('a2line'), { o: Math.min(1, p(f, 13.15, 13.6) * 1.3), y: lerp(28, 0, eExpo(p(f, 13.15, 13.75))) });
+  }
+
+  /* ================= ACT 3 ================= */
+  if (inA3){
+    /* which tour scene */
+    let sc = 0;
+    for (let i = 0; i < TOUR.length; i++) if (f >= F(TOUR[i].a)) sc = i;
+    const T = TOUR[sc];
+
+    /* headline, swapped per scene */
+    $('hl1').innerHTML = T.h1;
+    $('hl2').innerHTML = T.h2;
+    const hc = T.dark ? '#f8fafc' : '#1f2937';
+    $('hl1').style.color = hc;
+    $('hl2').style.color = T.dark ? '#b8c0cc' : '#626a78';
+    const hIn = p(f, T.a + .12, T.a + .62), hOut = p(f, T.b - .34, T.b);
+    set($('hl'), { o: Math.min(hIn, 1 - hOut), y: lerp(34, 0, eExpo(hIn)) + hOut * -22 });
+    $('hl').style.display = '';
+
+    /* ---- the phone ---- */
+    /* the phone hands over to the report sheet at the end of the tour */
+    const rise = eBack(p(f, 13.75, 14.6));
+    const phoneGone = eInOut(p(f, 27.9, 28.25));
+    /* the phone lifts so the printed receipt has clear space under it */
+    const rShift = eInOut(p(f, 26.8, 27.3)) * -176;
+    show($('phone'), f < F(28.35));
+    set($('phone'), {
+      o: Math.min(1, p(f, 13.75, 14.15) * 1.4) * (1 - phoneGone),
+      y: lerp(680, 0, rise) + rShift + phoneGone * -70,
+      s: lerp(.88, 1, rise) * (1 - phoneGone * .06),
+      r: 0
+    });
+
+    /* menu screen */
+    const onMenu = f < F(17.6);
+    show($('scrMenu'), onMenu);
+    if (onMenu){
+      menuEls.forEach((el, i) => {
+        const t = p(f, 14.15 + i * .12, 14.6 + i * .12);
+        el.style.opacity = t;
+        el.style.transform = 'translateY(' + lerp(34, 0, eBack(t)).toFixed(1) + 'px)';
+      });
+      /* the first item is tapped, then added */
+      const tap = band(f, 16.6, 17.6, .12, .0);
+      const ab = menuEls[0].querySelector('.addb');
+      ab.textContent = tap > .5 ? 'Added' : 'Add';
+      ab.style.background = tap > .5 ? 'var(--ok-soft)' : 'var(--chilli-soft)';
+      ab.style.color = tap > .5 ? 'var(--ok)' : 'var(--chilli)';
+      ab.style.borderColor = tap > .5 ? 'var(--ok)' : 'var(--chilli-border)';
+    }
+
+    /* cart screen */
+    const onCart = f >= F(17.55) && f < F(21.4);
+    show($('scrCart'), onCart);
+    if (onCart){
+      const slide = eInOut(p(f, 17.55, 18.05));
+      $('scrCart').style.transform = 'translateX(' + lerp(574, 0, slide).toFixed(1) + 'px)';
+      cartEls.forEach((el, i) => {
+        const t = p(f, 18.0 + i * .16, 18.45 + i * .16);
+        el.style.opacity = t;
+        el.style.transform = 'translateY(' + lerp(26, 0, eBack(t)).toFixed(1) + 'px)';
+      });
+      const press = p(f, 19.5, 19.7), placed = p(f, 19.75, 19.95);
+      const cta = $('cartCta');
+      cta.className = 'cta' + (placed > .5 ? ' done' : '');
+      cta.textContent = placed > .5 ? 'Order placed · 7:43 PM' : 'Place order';
+      cta.style.transform = 'scale(' + (1 - .045 * Math.sin(Math.PI * clamp(press, 0, 1))).toFixed(4) + ')';
+      if (placed > .5) cta.style.fontSize = '30px'; else cta.style.fontSize = '34px';
+    }
+
+    /* bill screen */
+    const onBill = f >= F(24.55) && f < F(28.1);
+    show($('scrBill'), onBill);
+    if (onBill){
+      const slide = eInOut(p(f, 24.6, 25.1));
+      $('scrBill').style.transform = 'translateX(' + lerp(574, 0, slide).toFixed(1) + 'px)';
+      const press = p(f, 26.0, 26.2), paid = p(f, 26.25, 26.45);
+      const cta = $('billCta');
+      cta.className = 'cta' + (paid > .5 ? ' done' : '');
+      cta.textContent = paid > .5 ? 'Paid · UPI' : 'Pay ₹1,092';
+      cta.style.transform = 'scale(' + (1 - .045 * Math.sin(Math.PI * clamp(press, 0, 1))).toFixed(4) + ')';
+    }
+
+    /* the thermal receipt - act 1's paper slip, but right this time */
+    const rOn = f >= F(26.85) && f < F(28.2);
+    show($('receipt'), rOn);
+    if (rOn){
+      const out = eOut(p(f, 26.9, 27.75));
+      set($('receipt'), {
+        o: Math.min(1, p(f, 26.9, 27.15) * 1.5) * (1 - p(f, 27.9, 28.15)),
+        y: lerp(-40, 158, out),
+        s: .72, r: lerp(-2.4, 1.1, out)
+      });
+      $('receipt').style.clipPath = 'inset(' + ((1 - out) * 84).toFixed(1) + '% 0 0 0)';
+    }
+
+    /* report sheet */
+    const rpOn = f >= F(28.1) && f < F(31.15);
+    show($('report'), rpOn);
+    if (rpOn){
+      const up = eBack(p(f, 28.15, 28.85));
+      set($('report'), {
+        o: Math.min(1, p(f, 28.15, 28.45) * 1.5) * (1 - eInOut(p(f, 30.55, 31.05))),
+        y: lerp(520, 0, up) + eInOut(p(f, 30.55, 31.05)) * -110,
+        s: lerp(.93, 1, up)
+      });
+      const cu = eOut(p(f, 28.7, 30.3));
+      $('k1').textContent = money(184260 * cu);
+      $('k2').textContent = inr(412 * cu);
+      $('k3').textContent = money(447 * cu);
+      $('g1').textContent = money(4606 * cu);
+      $('g2').textContent = money(4606 * cu);
+      $('g3').textContent = money(184260 * cu);
+      barEls.forEach((el, i) => {
+        const t = eBack(p(f, 28.95 + i * .07, 29.55 + i * .07));
+        el.style.height = (160 * BARS[i] / 100 * Math.max(0, t)).toFixed(1) + 'px';
+        el.style.background = i === 6 ? 'var(--chilli)' : '#eccfc7';
+      });
+    }
+  } else {
+    $('hl').style.display = 'none';
+  }
+
+  /* ---- KDS (its own act, over the night wipe) ---- */
+  if (inKds){
+    const up = eBack(p(f, 21.1, 21.75));
+    set($('kds'), { o: Math.min(1, p(f, 21.1, 21.45) * 1.5) * (1 - p(f, 24.1, 24.45)), y: lerp(90, 0, up) });
+    tktEls.forEach((el, i) => {
+      const t = eBack(p(f, 21.1 + i * .11, 21.7 + i * .11));
+      el.style.opacity = Math.min(1, t * 1.4);
+      el.style.transform = 'translateY(' + lerp(60, 0, t).toFixed(1) + 'px) scale(' + lerp(.94, 1, Math.min(1, t)).toFixed(4) + ')';
+      /* timers run up in real time */
+      const el_s = TKTS[i].base + (f - F(21.2)) / FPS;
+      const c = el.querySelector('.tktC');
+      /* T12 gets bumped near the end */
+      const bumped = i === 0 && f >= F(23.4);
+      if (bumped){
+        el.className = 'tkt done';
+        c.textContent = 'Ready';
+        c.style.fontSize = '32px';
+        el.querySelector('.tktB').textContent = 'Bumped · 02:4' + (Math.floor((f - F(23.4)) / 3) % 10);
+      } else {
+        el.className = 'tkt ' + TKTS[i].cls;
+        c.style.fontSize = '38px';
+        c.textContent = mmss(el_s);
+        el.querySelector('.tktB').textContent = 'Bump';
+      }
+    });
+    $('kdsClock').textContent = '7:43 PM';
+  }
+
+  /* ================= ACT 4 ================= */
+  if (inA4){
+    /* the modules, flashed in */
+    const chOut = eInOut(p(f, 32.95, 33.45));
+    chipEls.forEach((el, i) => {
+      const t0 = 31.0 + i * .07;
+      const t = eBack(p(f, t0, t0 + .32));
+      el.style.opacity = Math.max(0, Math.min(1, t * 1.5) - chOut);
+      el.style.transform = 'translateY(' + (lerp(26, 0, t) - chOut * 46).toFixed(1) + 'px) scale(' + lerp(.9, 1, Math.min(1, t)).toFixed(3) + ')';
+    });
+    set($('chips4'), { o: 1 - chOut, y: -chOut * 40 });
+
+    /* the lockup */
+    drawQr(finalCtx, 1, 124, true);
+    const fo = p(f, 33.25, 33.85);
+    set($('final'), { o: Math.min(1, fo * 1.3) });
+    $('finalWord').style.transform = 'translateX(' + lerp(-48, 0, eBack(fo)).toFixed(1) + 'px)';
+    $('finalPlate').style.transform = 'scale(' + lerp(.72, 1, eBack(fo)).toFixed(3) + ')';
+    $('finalTag').style.opacity = Math.min(1, p(f, 33.75, 34.35) * 1.3);
+    $('finalTag').style.transform = 'translateY(' + lerp(24, 0, eExpo(p(f, 33.75, 34.4))).toFixed(1) + 'px)';
+    $('finalSub').style.opacity = Math.min(1, p(f, 34.4, 34.95) * 1.3);
+  }
+};
+
+/* a tiny helper the render script calls once */
+window.__ready = false;
+document.fonts.ready.then(() => { window.renderFrame(0); window.__ready = true; });
+</script>
+</body>
+</html>

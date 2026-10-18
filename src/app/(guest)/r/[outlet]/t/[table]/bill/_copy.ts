@@ -1,11 +1,12 @@
 import type { Lang } from "@/lib/i18n";
+import { placeEn, placeHi } from "@/domain/rooms";
 
 // Every word on G8 Bill in English and Hindi. Hindi is a first draft for native review.
 
 const en = {
   language: "Language",
   title: "Bill",
-  tableLine: (code: string) => `Table ${code}`,
+  tableLine: (code: string) => `${placeEn(code)}`,
   tableTotal: "Table total",
   yourBill: "Your bill",
   paidAmount: (a: string) => `${a} paid`,
@@ -167,7 +168,7 @@ export type G8Copy = typeof en;
 const hi: G8Copy = {
   language: "भाषा",
   title: "बिल",
-  tableLine: (code) => `टेबल ${code}`,
+  tableLine: (code) => `${placeHi(code)}`,
   tableTotal: "टेबल का कुल",
   yourBill: "आपका बिल",
   paidAmount: (a) => `${a} चुकाया`,

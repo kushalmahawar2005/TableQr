@@ -1,4 +1,5 @@
 import type { Lang } from "@/lib/i18n";
+import { placeEn, placeHi } from "@/domain/rooms";
 
 // Every word on G2 in English and Hindi. Hindi keeps the meaning rather than the exact words and
 // is a first draft for native review. Numbers, codes and countdowns stay in 0–9 in both.
@@ -6,7 +7,7 @@ import type { Lang } from "@/lib/i18n";
 const en = {
   back: "Back to table",
   language: "Language",
-  table: (code: string) => `Table ${code}`,
+  table: (code: string) => `${placeEn(code)}`,
 
   heading: "Confirm your number",
   starting: "You're starting this table",
@@ -66,7 +67,7 @@ export type G2Copy = typeof en;
 const hi: G2Copy = {
   back: "टेबल पर वापस",
   language: "भाषा",
-  table: (code) => `टेबल ${code}`,
+  table: (code) => `${placeHi(code)}`,
 
   heading: "अपना नंबर कन्फ़र्म करें",
   starting: "आप यह टेबल शुरू कर रहे हैं",

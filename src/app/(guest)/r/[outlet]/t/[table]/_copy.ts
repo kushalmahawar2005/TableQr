@@ -1,4 +1,5 @@
 import type { Lang } from "@/lib/i18n";
+import { placeEn, placeHi } from "@/domain/rooms";
 
 // Every word on G1 in English and Hindi. Hindi is a first draft for native review.
 // Layouts must take about 30% longer text, so nothing here is sized to fit.
@@ -8,10 +9,10 @@ const en = {
   openTill: (time: string) => `Open till ${time}`,
   closedNow: "Closed now",
   youAreAt: "You are at",
-  table: (code: string) => `Table ${code}`,
+  table: (code: string) => `${placeEn(code)}`,
   seats: (n: number) => `Seats ${n}`,
   tableSummary: (code: string, seats: number, zone: string, state: string) =>
-    `Table ${code}, seats ${seats}, ${zone}, ${state}`,
+    `${placeEn(code)}, seats ${seats}, ${zone}, ${state}`,
 
   pill: {
     available: "Available",
@@ -43,8 +44,8 @@ const en = {
   welcome: "Welcome to",
   orderNow: "Order now",
   back: "Back",
-  joinTable: (code: string) => `Join Table ${code}`,
-  startingFor: (code: string) => `Start ordering at Table ${code}`,
+  joinTable: (code: string) => `Join ${placeEn(code)}`,
+  startingFor: (code: string) => `Start ordering at ${placeEn(code)}`,
   checking: "Checking table…",
   opening: "Opening your table…",
   notYourTable: "Not your table? Scan the one you are at.",
@@ -104,9 +105,9 @@ const hi: G1Copy = {
   openTill: (time) => `${time} तक खुला`,
   closedNow: "अभी बंद है",
   youAreAt: "आपकी टेबल",
-  table: (code) => `टेबल ${code}`,
+  table: (code) => `${placeHi(code)}`,
   seats: (n) => `${n} सीटें`,
-  tableSummary: (code, seats, zone, state) => `टेबल ${code}, ${seats} सीटें, ${zone}, ${state}`,
+  tableSummary: (code, seats, zone, state) => `${placeHi(code)}, ${seats} सीटें, ${zone}, ${state}`,
 
   pill: {
     available: "खाली है",
@@ -137,8 +138,8 @@ const hi: G1Copy = {
   welcome: "आपका स्वागत है",
   orderNow: "ऑर्डर करें",
   back: "वापस",
-  joinTable: (code) => `टेबल ${code} से जुड़ें`,
-  startingFor: (code) => `टेबल ${code} पर ऑर्डर शुरू करें`,
+  joinTable: (code) => `${placeHi(code)} से जुड़ें`,
+  startingFor: (code) => `${placeHi(code)} पर ऑर्डर शुरू करें`,
   checking: "टेबल देख रहे हैं…",
   opening: "आपकी टेबल खोल रहे हैं…",
   notYourTable: "यह आपकी टेबल नहीं है? जिस टेबल पर बैठे हैं, उसका QR स्कैन करें।",

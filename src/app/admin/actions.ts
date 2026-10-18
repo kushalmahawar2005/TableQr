@@ -1,5 +1,6 @@
 "use server";
 
+import { insertRoom } from "@/server/staff/rooms";
 import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -58,9 +59,9 @@ async function pickOutletCode(tx: Tx, typed: string, outletName: string) {
   throw new Error("Could not generate an outlet code. Please type one.");
 }
 
-/** One "Main Hall" with tables T1..Tn, each with its own QR code */
+/** One "Main Hall" with tables T1..Tn, each with its own QR code (no tables for a hotel without a restaurant) */
 async function addStarterFloor(tx: Tx, tenantId: string, outletId: string, zoneId: string, tableCount: number) {
-  await tx.insert(s.zones).values({ id: zoneId, tenantId, outletId, name: "Main Hall" });
+  await tx.insert(s.zones).values({ id: zoneId, tenantId, outletId, name: "Main Hall", isActive: tableCount > 0 });
   for (let i = 1; i <= tableCount; i++) {
     const tableId = uuidv7();
     await tx.insert(s.diningTables).values({ id: tableId, tenantId, outletId, zoneId, code: `T${i}`, maxSeats: 4, tableClass: "4-top", joinCode: joinCode() });
@@ -87,6 +88,7 @@ export async function createTenantAction(_prev: TenantState, form: FormData): Pr
     const ownerName = text(form, "ownerName");
     const ownerPin = text(form, "ownerPin");
     const tableCount = Math.min(100, Math.max(1, Number(text(form, "tableCount") || 4)));
+    const roomCount = Math.min(200, Math.max(0, Math.floor(Number(text(form, "roomCount") || 0))));
     const trialDays = Math.min(90, Math.max(1, Math.floor(Number(text(form, "trialDays") || 14))));
     // Kitchen screen chosen at onboarding: stored only when it differs from the plan
     const kitchenChoice = form.get("kitchenDisplay") === null ? null : text(form, "kitchenDisplay") === "on";
@@ -113,7 +115,13 @@ export async function createTenantAction(_prev: TenantState, form: FormData): Pr
       await tx.insert(s.outlets).values({ id: outletId, tenantId, brandId, code: outletCode, name: outletName, city, address });
       await tx.insert(s.users).values({ id: userId, tenantId, phone: ownerPhone, name: ownerName, pinHash: await hashPin(ownerPin) });
       await tx.insert(s.staffRoles).values({ id: uuidv7(), tenantId, userId, outletId, role: "owner" });
-      await addStarterFloor(tx, tenantId, outletId, zoneId, tableCount);
+      const planFeatures = readFeatures(plan.features);
+      await addStarterFloor(tx, tenantId, outletId, zoneId, planFeatures.dineIn ? tableCount : 0);
+      // Hotel plans: rooms 101, 102 … with their QR codes; the owner can renumber them in Rooms
+      if (planFeatures.rooms) {
+        const rooms = Math.min(planFeatures.maxRooms ?? 200, roomCount);
+        for (let i = 0; i < rooms; i++) await insertRoom(tx, { tenantId, outletId, zoneId }, { number: String(101 + i) });
+      }
       return { tenantId, outletCode };
     });
     await logAdminAction(admin, result.tenantId, "admin.tenant_created", null, { name: tenantName, planCode, outlet: result.outletCode });
@@ -320,6 +328,7 @@ export async function setCustomPackageAction(tenantId: string, input: { features
     if (!Number.isFinite(price) || price < 0 || price > 1_000_000) return { error: "Enter the price per month in rupees." };
     if (input.features.maxTables !== null && !(input.features.maxTables >= 1 && input.features.maxTables <= 500)) return { error: "Tables must be from 1 to 500, or empty for no limit." };
     if (input.features.maxStaff !== null && !(input.features.maxStaff >= 1 && input.features.maxStaff <= 500)) return { error: "Staff must be from 1 to 500, or empty for no limit." };
+    if (input.features.maxRooms != null && !(input.features.maxRooms >= 1 && input.features.maxRooms <= 1000)) return { error: "Rooms must be from 1 to 1000, or empty for no limit." };
     const [tenant] = await db.select({ planCode: s.tenants.planCode, customFeatures: s.tenants.customFeatures, customPricePaise: s.tenants.customPricePaise }).from(s.tenants).where(eq(s.tenants.id, tenantId));
     if (!tenant) return { error: "Tenant not found." };
     if (tenant.planCode !== CUSTOM_PLAN) return { error: "Put this restaurant on the Custom plan first." };
@@ -436,7 +445,7 @@ const limit = (value: number | null) => (value === null ? null : Math.max(1, Mat
 /** Only the switches TableQR knows, as true/false, with whole-number limits */
 const cleanFeatures = (f: Features): Features => ({
   ...(Object.fromEntries(FEATURE_KEYS.map((k) => [k, f[k] === true])) as Record<(typeof FEATURE_KEYS)[number], boolean>),
-  maxTables: limit(f.maxTables), maxStaff: limit(f.maxStaff), poweredBy: f.poweredBy === true,
+  maxTables: limit(f.maxTables), maxStaff: limit(f.maxStaff), maxRooms: limit(f.maxRooms ?? null), poweredBy: f.poweredBy === true,
 });
 
 export async function savePlanAction(input: PlanInput, mode: "create" | "edit"): Promise<TenantActionState> {

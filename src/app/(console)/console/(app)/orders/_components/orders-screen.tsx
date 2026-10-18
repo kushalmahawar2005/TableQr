@@ -6,6 +6,7 @@ import { Check, ChefHat, Clock, Flame, Receipt, RefreshCw, Search, Utensils } fr
 import type { OrderRow } from "@/server/staff/orders-read";
 import { VisitRecord } from "../../reservations/_components/visit-record";
 import { servedAction } from "../actions";
+import { placeEn } from "@/domain/rooms";
 
 type Status = OrderRow["status"];
 const STEPS: { key: Status; label: string }[] = [{ key: "placed", label: "Placed" }, { key: "accepted", label: "Accepted" }, { key: "preparing", label: "Cooking" }, { key: "ready", label: "Ready" }, { key: "served", label: "Served" }];
@@ -129,7 +130,7 @@ export function OrdersScreen({ orders, outlet }: { orders: OrderRow[]; outlet: s
               <li key={o.id} className={`rounded-card border bg-surface p-4 sm:p-5 ${isSlow ? "border-danger/60" : "border-line"}`}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="font-display text-section font-bold text-ink">{o.takeaway ? `Takeaway ${o.table}` : `Table ${o.table}`}{o.roundNo > 1 && <span className="ml-2 text-body font-semibold text-muted">· Round {o.roundNo}</span>}</p>
+                    <p className="font-display text-section font-bold text-ink">{o.takeaway ? `Takeaway ${o.table}` : placeEn(o.table)}{o.roundNo > 1 && <span className="ml-2 text-body font-semibold text-muted">· Round {o.roundNo}</span>}</p>
                     <p className="mt-0.5 text-caption text-muted tabular">{clock(o.placedAt)} · {ago(age)}{took !== null ? ` · served in ${took} min` : ""}</p>
                   </div>
                   <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-caption font-semibold ${TONE[o.status]}`}>{LABEL[o.status]}</span>

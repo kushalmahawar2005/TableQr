@@ -208,6 +208,8 @@ export const staffRoleNames = [
   "waiter",
   "kitchen",
   "accountant",
+  /** Hotel front desk: rooms, check-in and check-out, room bills */
+  "reception",
 ] as const;
 
 export const staffRoles = mysqlTable(

@@ -47,7 +47,7 @@ const busy: DashboardData = {
     soldOut: 2,
     late: [{ id: "l1", name: "Rao", partySize: 2, startAt: min(-22), status: "confirmed", tables: ["T6"], lateMinutes: 22, noShowEligible: true }],
     pendingRefunds: { count: 1, paise: 34_000 },
-    blockedTables: 1,
+    blockedTables: 1, lowStock: [],
   },
   topItems: [
     { itemId: "a", name: "Butter Chicken", qty: 23, grossPaise: 874_000 },
@@ -58,7 +58,7 @@ const busy: DashboardData = {
   ].sort((x, y) => y.qty - x.qty),
 };
 
-const calm = { slowBills: [], soldOut: 0, late: [], pendingRefunds: { count: 0, paise: 0 }, blockedTables: 0 };
+const calm = { slowBills: [], soldOut: 0, late: [], pendingRefunds: { count: 0, paise: 0 }, blockedTables: 0, lowStock: [] };
 
 const quiet: DashboardData = {
   ...busy,
@@ -90,7 +90,7 @@ export function dashboardCases(): DashboardCase[] {
     { id: "sold-out", label: "Sold-out items", data: withAlerts({ soldOut: 5 }), trend: steady, staff: owner },
     { id: "late", label: "Late reservation", data: withAlerts({ late: [{ id: "x", name: "Rao", partySize: 2, startAt: min(-9), status: "confirmed", tables: ["T6"], lateMinutes: 9, noShowEligible: false }, { id: "y", name: "Singh", partySize: 5, startAt: min(-31), status: "reminded", tables: ["T9"], lateMinutes: 31, noShowEligible: true }] }), trend: steady, staff: owner },
     { id: "refund", label: "Pending refunds", data: withAlerts({ pendingRefunds: { count: 3, paise: 128_050 } }), trend: steady, staff: owner },
-    { id: "blocked", label: "All tables blocked", data: { ...quiet, kpis: { ...quiet.kpis, openTables: { open: 0, total: 18 } }, operations: { ...quiet.operations, tables: { available: 0, reserved: 0, seated: 0, billRequested: 0, blocked: 18, total: 18 } }, alerts: { ...calm, blockedTables: 18 } }, trend: steady, staff: owner },
+    { id: "blocked", label: "All tables blocked", data: { ...quiet, kpis: { ...quiet.kpis, openTables: { open: 0, total: 18 } }, operations: { ...quiet.operations, tables: { available: 0, reserved: 0, seated: 0, billRequested: 0, blocked: 18, total: 18 } }, alerts: { ...calm, blockedTables: 18, lowStock: [] } }, trend: steady, staff: owner },
     { id: "waitlist", label: "Full waitlist", data: { ...busy, kpis: { ...busy.kpis, waitlist: 14, openTables: { open: 18, total: 18 } }, operations: { ...busy.operations, tables: { available: 0, reserved: 0, seated: 15, billRequested: 3, blocked: 0, total: 18 }, waitlist: { waiting: 11, notified: 3 } } }, trend: steady, staff: owner },
     { id: "trend", label: "7-day revenue variation", data: busy, trend: trendOf([12_000, 148_900, 3_400, 0, 96_250, 210_000, 84_625]), staff: owner },
     { id: "mobile", label: "Mobile (open in a 375px-wide window)", data: { ...busy, outletName: "Spice Route — Malviya Nagar" }, trend: steady, staff: owner },

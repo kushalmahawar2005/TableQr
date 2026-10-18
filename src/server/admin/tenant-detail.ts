@@ -19,14 +19,14 @@ export async function getTenantDetail(tenantId: string): Promise<TenantDetail | 
   const billDay = sql<string>`date_format(${paidAt}, '%Y-%m-%d')`;
 
   // isolation-exempt: authenticated platform admins inspect a single tenant; each query filters on tenantId.
-  const [[tenant], planRow, orderDays, billDays, outletRows, staffRows, [qr], [menu], [orderTotal], recentOrders, recentUsers] = await Promise.all([
+  const [[tenant], planRow, orderDays, billDays, outletRows, staffRows, [qr], [menu], [orderTotal], recentOrders, recentUsers, [roomCount]] = await Promise.all([
     db.select({ planCode: s.tenants.planCode }).from(s.tenants).where(eq(s.tenants.id, tenantId)),
     db.select({ features: s.plans.features }).from(s.tenants).innerJoin(s.plans, eq(s.tenants.planCode, s.plans.code)).where(eq(s.tenants.id, tenantId)),
     db.select({ date: orderDay, total: count() }).from(s.orders).where(and(eq(s.orders.tenantId, tenantId), gte(s.orders.placedAt, start))).groupBy(orderDay),
     db.select({ date: billDay, total: sql<number>`coalesce(sum(${s.bills.totalPaise}), 0)`.mapWith(Number) }).from(s.bills)
       .where(and(eq(s.bills.tenantId, tenantId), eq(s.bills.status, "paid"), sql`${paidAt} >= ${start}`)).groupBy(billDay),
     db.select({ id: s.outlets.id, name: s.outlets.name, code: s.outlets.code, city: s.outlets.city, tables: count(s.diningTables.id) })
-      .from(s.outlets).leftJoin(s.diningTables, and(eq(s.diningTables.outletId, s.outlets.id), eq(s.diningTables.tenantId, s.outlets.tenantId)))
+      .from(s.outlets).leftJoin(s.diningTables, and(eq(s.diningTables.outletId, s.outlets.id), eq(s.diningTables.tenantId, s.outlets.tenantId), eq(s.diningTables.isActive, true)))
       .where(eq(s.outlets.tenantId, tenantId)).groupBy(s.outlets.id, s.outlets.name, s.outlets.code, s.outlets.city),
     db.select({ id: s.users.id, name: s.users.name, phone: s.users.phone, isActive: s.users.isActive, role: s.staffRoles.role })
       .from(s.staffRoles).innerJoin(s.users, and(eq(s.staffRoles.userId, s.users.id), eq(s.users.tenantId, s.staffRoles.tenantId)))
@@ -38,6 +38,7 @@ export async function getTenantDetail(tenantId: string): Promise<TenantDetail | 
       .innerJoin(s.outlets, and(eq(s.orders.outletId, s.outlets.id), eq(s.orders.tenantId, s.outlets.tenantId)))
       .where(eq(s.orders.tenantId, tenantId)).orderBy(desc(s.orders.placedAt)).limit(4),
     db.select({ id: s.users.id, name: s.users.name, createdAt: s.users.createdAt }).from(s.users).where(eq(s.users.tenantId, tenantId)).orderBy(desc(s.users.createdAt)).limit(3),
+    db.select({ total: count() }).from(s.rooms).where(and(eq(s.rooms.tenantId, tenantId), eq(s.rooms.isActive, true))),
   ]);
   if (!tenant) return null;
 
@@ -61,7 +62,7 @@ export async function getTenantDetail(tenantId: string): Promise<TenantDetail | 
 
   return {
     daily,
-    usage: { outlets: outletRows.length, tables, maxTables: features?.maxTables ?? null, staff: staffUsers, maxStaff: features?.maxStaff ?? null, qrCodes: Number(qr.total), menuItems: Number(menu.total) },
+    usage: { outlets: outletRows.length, tables, maxTables: features?.maxTables ?? null, staff: staffUsers, maxStaff: features?.maxStaff ?? null, rooms: Number(roomCount.total), maxRooms: features?.maxRooms ?? null, qrCodes: Number(qr.total), menuItems: Number(menu.total) },
     outlets: outletRows.map((o) => ({ ...o, tables: Number(o.tables) })),
     staff: staffRows.map((r) => ({ id: r.id, name: r.name, phone: r.phone, role: r.role, isActive: r.isActive })),
     activity: [

@@ -1,11 +1,12 @@
 import type { Lang } from "@/lib/i18n";
+import { placeEn, placeHi } from "@/domain/rooms";
 
 // Every word on G7 Table & People in English and Hindi. Service request words come from G6.
 // Hindi is a first draft for native review; layouts take about 30% longer text.
 
 const en = {
   language: "Language",
-  tableLine: (code: string, people: number) => `Table ${code} · ${people === 1 ? "1 person" : `${people} people`}`,
+  tableLine: (code: string, people: number) => `${placeEn(code)} · ${people === 1 ? "1 person" : `${people} people`}`,
   title: "Your table",
   helper: "Who's here, what we've ordered, and more.",
 
@@ -21,12 +22,12 @@ const en = {
   invite: "Invite someone",
   inviteHelpQr: "Share the table QR",
   inviteHelpCode: "Share QR or join code",
-  inviteTitle: (code: string) => `Invite someone to Table ${code}`,
+  inviteTitle: (code: string) => `Invite someone to ${placeEn(code)}`,
   inviteBodyOpen: "Ask them to scan this QR to join.",
   inviteBodyVerified: "Ask them to scan this QR. They will confirm their number to join.",
   inviteBodyCode: "Ask them to scan this QR or use the join code.",
-  scanToJoin: (code: string) => `Scan to join Table ${code}`,
-  qrLabel: (code: string) => `QR code to join Table ${code}`,
+  scanToJoin: (code: string) => `Scan to join ${placeEn(code)}`,
+  qrLabel: (code: string) => `QR code to join ${placeEn(code)}`,
   or: "OR",
   joinCode: "Join code",
   joinCodeHelp: "Share this code with someone near your table.",
@@ -95,7 +96,7 @@ export type G7Copy = typeof en;
 
 const hi: G7Copy = {
   language: "भाषा",
-  tableLine: (code, people) => `टेबल ${code} · ${people === 1 ? "1 व्यक्ति" : `${people} लोग`}`,
+  tableLine: (code, people) => `${placeHi(code)} · ${people === 1 ? "1 व्यक्ति" : `${people} लोग`}`,
   title: "आपकी टेबल",
   helper: "कौन है, क्या ऑर्डर हुआ, और भी बहुत कुछ।",
 
@@ -111,12 +112,12 @@ const hi: G7Copy = {
   invite: "किसी को बुलाएँ",
   inviteHelpQr: "टेबल का QR शेयर करें",
   inviteHelpCode: "QR या जॉइन कोड शेयर करें",
-  inviteTitle: (code) => `टेबल ${code} पर किसी को बुलाएँ`,
+  inviteTitle: (code) => `${placeHi(code)} पर किसी को बुलाएँ`,
   inviteBodyOpen: "जुड़ने के लिए उन्हें यह QR स्कैन करने को कहें।",
   inviteBodyVerified: "उन्हें यह QR स्कैन करने को कहें। जुड़ने से पहले वे अपना नंबर कन्फ़र्म करेंगे।",
   inviteBodyCode: "उन्हें यह QR स्कैन करने या जॉइन कोड डालने को कहें।",
-  scanToJoin: (code) => `टेबल ${code} से जुड़ने के लिए स्कैन करें`,
-  qrLabel: (code) => `टेबल ${code} से जुड़ने का QR कोड`,
+  scanToJoin: (code) => `${placeHi(code)} से जुड़ने के लिए स्कैन करें`,
+  qrLabel: (code) => `${placeHi(code)} से जुड़ने का QR कोड`,
   or: "या",
   joinCode: "जॉइन कोड",
   joinCodeHelp: "यह कोड अपनी टेबल के पास वाले व्यक्ति के साथ शेयर करें।",

@@ -23,6 +23,8 @@ import { AppError } from "../errors";
 import { loadPolicy } from "../floor/policy";
 import { isItemAvailable } from "../guest/menu";
 import type { StaffSession } from "./auth";
+import { tenantFeatures } from "../plan";
+import { lowStock } from "./inventory";
 
 // O1 Owner Dashboard read model. Read-only: plain SELECTs scoped to the tenant and the signed-in
 // outlet, never the S1 floor read (that one reconciles holds and writes). Revenue is net sales from
@@ -204,7 +206,7 @@ export async function getDashboard(staff: Staff, now = new Date()) {
     db.select({ name: s.outlets.name, brandId: s.outlets.brandId }).from(s.outlets).where(and(eq(s.outlets.tenantId, scope.tenantId), eq(s.outlets.id, scope.outletId))),
   ]);
 
-  const [soldOut, bookingTables] = await Promise.all([
+  const [soldOut, bookingTables, low] = await Promise.all([
     soldOutCount(scope, outlet?.brandId ?? "-", now),
     bookings.length
       ? db
@@ -214,6 +216,8 @@ export async function getDashboard(staff: Staff, now = new Date()) {
           .where(and(eq(s.reservationTables.tenantId, scope.tenantId), inArray(s.reservationTables.reservationId, bookings.map((b) => b.id))))
           .orderBy(asc(s.diningTables.code))
       : Promise.resolve([]),
+    // Only when the plan has Inventory: otherwise there is no stock to run low
+    tenantFeatures(scope.tenantId).then((f) => (f.inventory ? lowStock(scope) : [])),
   ]);
 
   const [moneyToday, moneyYesterday] = revenueByDay(bills, ranges);
@@ -266,6 +270,7 @@ export async function getDashboard(staff: Staff, now = new Date()) {
       late,
       pendingRefunds: { count: Number(refunds[0]?.n ?? 0), paise: Number(refunds[0]?.paise ?? 0) },
       blockedTables: states.blocked ?? 0,
+      lowStock: low.map((l) => l.name),
     },
     topItems: top,
   };

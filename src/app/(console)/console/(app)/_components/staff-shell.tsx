@@ -11,6 +11,8 @@ import {
   Logout01Icon,
   MenuRestaurantIcon,
   Note01Icon,
+  PackageIcon,
+  BedIcon,
   Settings01Icon,
   Tag01Icon,
   UserGroupIcon,
@@ -35,6 +37,8 @@ const ICONS: Record<string, IconSvgElement> = {
   kitchen: ChefHatIcon,
   billing: Invoice01Icon,
   menu: MenuRestaurantIcon,
+  inventory: PackageIcon,
+  rooms: BedIcon,
   pricing: Tag01Icon,
   reports: ChartHistogramIcon,
   customers: UserGroupIcon,
@@ -43,7 +47,7 @@ const ICONS: Record<string, IconSvgElement> = {
   plan: CreditCardIcon,
 };
 
-const ROLE = { en: { owner: "Owner", manager: "Manager", host: "Host", cashier: "Cashier", waiter: "Waiter", kitchen: "Kitchen", accountant: "Accountant" }, hi: { owner: "मालिक", manager: "मैनेजर", host: "होस्ट", cashier: "कैशियर", waiter: "वेटर", kitchen: "किचन", accountant: "अकाउंटेंट" } } as const;
+const ROLE = { en: { owner: "Owner", manager: "Manager", host: "Host", cashier: "Cashier", waiter: "Waiter", kitchen: "Kitchen", accountant: "Accountant", reception: "Reception" }, hi: { owner: "मालिक", manager: "मैनेजर", host: "होस्ट", cashier: "कैशियर", waiter: "वेटर", kitchen: "किचन", accountant: "अकाउंटेंट", reception: "रिसेप्शन" } } as const;
 
 /**
  * Staff console frame. 1024px and up: full sidebar. 640 to 1023px: icon rail (labels stay as

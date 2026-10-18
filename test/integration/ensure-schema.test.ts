@@ -27,37 +27,43 @@ describe("schema update at startup", () => {
     await env.db.execute(sql`ALTER TABLE users DROP COLUMN duty_status, DROP COLUMN duty_changed_at, DROP COLUMN last_seen_at`);
     await env.db.execute(sql`DROP TABLE plan_requests`);
     await env.db.execute(sql`DROP TABLE fee_payments`);
-    await env.db.execute(sql`DELETE FROM plans WHERE code = 'custom'`);
+    await env.db.execute(sql`DROP TABLE room_requests, room_stays, rooms`);
+    await env.db.execute(sql`ALTER TABLE staff_roles MODIFY COLUMN role enum('owner','manager','cashier','host','waiter','kitchen','accountant') NOT NULL`);
+    await env.db.execute(sql`DELETE FROM plans WHERE code IN ('custom', 'hotel', 'hotel_plus')`);
     // Production still had the old limits
     await env.db.execute(sql`UPDATE plans SET features = JSON_SET(features, '$.maxTables', 15, '$.maxStaff', 3) WHERE code = 'starter'`);
     await env.db.execute(sql`UPDATE plans SET features = JSON_SET(features, '$.maxTables', 40, '$.maxStaff', 10) WHERE code = 'growth'`);
     await env.db.execute(sql`UPDATE plans SET features = JSON_SET(features, '$.maxTables', 80, '$.maxStaff', 25) WHERE code = 'pro'`);
-    await env.db.execute(sql`UPDATE plans SET features = JSON_REMOVE(features, '$.kitchenDisplay', '$.waiterApp', '$.discounts', '$.whatsappBills', '$.reservations', '$.fullReports')`);
+    await env.db.execute(sql`UPDATE plans SET features = JSON_REMOVE(features, '$.kitchenDisplay', '$.waiterApp', '$.discounts', '$.whatsappBills', '$.reservations', '$.fullReports', '$.dineIn', '$.rooms', '$.maxRooms')`);
     await env.db.execute(sql`DELETE FROM __drizzle_migrations WHERE created_at > 1791043208000`);
     expect(await columns()).toEqual([]);
 
     await ensureSchema(appDb.$client);
     expect(await columns()).toEqual(["custom_features", "custom_price_paise", "kitchen_display", "table_limit"]);
-    expect(Number((await rows<{ n: number }>(sql`SELECT COUNT(*) AS n FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN ('plan_requests', 'fee_payments')`))[0].n)).toBe(2);
+    expect(Number((await rows<{ n: number }>(sql`SELECT COUNT(*) AS n FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN ('plan_requests', 'fee_payments', 'rooms', 'room_stays', 'room_requests')`))[0].n)).toBe(5);
+    expect(String((await rows<{ t: string }>(sql`SELECT COLUMN_TYPE AS t FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'staff_roles' AND COLUMN_NAME = 'role'`))[0].t)).toContain("'reception'");
     const plans = await rows<{ code: string; kds: string }>(sql`SELECT code, JSON_EXTRACT(features, '$.kitchenDisplay') AS kds FROM plans ORDER BY sort_order`);
-    expect(Object.fromEntries(plans.map((p) => [p.code, String(p.kds)]))).toEqual({ starter: "false", growth: "false", pro: "true", chain: "true", custom: "false" });
+    expect(Object.fromEntries(plans.map((p) => [p.code, String(p.kds)]))).toEqual({ starter: "false", growth: "false", pro: "true", chain: "true", hotel: "true", hotel_plus: "true", custom: "false" });
     // The new switches: Starter gets none, Growth all but full reports, higher plans everything
     const switches = await rows<{ code: string; w: string; r: string }>(sql`SELECT code, JSON_EXTRACT(features, '$.waiterApp') AS w, JSON_EXTRACT(features, '$.fullReports') AS r FROM plans ORDER BY sort_order`);
-    expect(switches.map((p) => `${p.code}:${p.w}/${p.r}`)).toEqual(["starter:false/false", "growth:true/false", "pro:true/true", "chain:true/true", "custom:false/false"]);
+    expect(switches.map((p) => `${p.code}:${p.w}/${p.r}`)).toEqual(["starter:false/false", "growth:true/false", "pro:true/true", "chain:true/true", "hotel:false/true", "hotel_plus:true/true", "custom:false/false"]);
+    // Restaurant plans keep their tables and get no rooms; the two hotel plans have rooms
+    const hotel = await rows<{ code: string; d: string; r: string }>(sql`SELECT code, JSON_EXTRACT(features, '$.dineIn') AS d, JSON_EXTRACT(features, '$.rooms') AS r FROM plans ORDER BY sort_order`);
+    expect(hotel.map((p) => `${p.code}:${p.d}/${p.r}`)).toEqual(["starter:true/false", "growth:true/false", "pro:true/false", "chain:true/false", "hotel:false/true", "hotel_plus:true/true", "custom:true/false"]);
     const limits2 = await rows<{ code: string; t: string; s: string }>(sql`SELECT code, JSON_EXTRACT(features, '$.maxTables') AS t, JSON_EXTRACT(features, '$.maxStaff') AS s FROM plans WHERE code IN ('starter', 'growth', 'pro') ORDER BY sort_order`);
     expect(limits2.map((p) => `${p.code}:${p.t}/${p.s}`)).toEqual(["starter:6/3", "growth:12/6", "pro:20/20"]);
     // Existing restaurants keep the tables they run today as their limit
     const limits = await rows<{ n: number; lim: number }>(sql`SELECT t.table_limit AS lim, (SELECT COUNT(*) FROM dining_tables d WHERE d.tenant_id = t.id AND d.is_active = 1) AS n FROM tenants t`);
     for (const l of limits) expect(Number(l.lim)).toBe(Math.max(1, Number(l.n)));
     const recorded = await rows<{ n: number }>(sql`SELECT COUNT(*) AS n FROM __drizzle_migrations WHERE created_at > 1791043208000`);
-    expect(Number(recorded[0].n)).toBe(8);
+    expect(Number(recorded[0].n)).toBe(10);
     // Staff start on duty
     expect((await rows<{ s: string }>(sql`SELECT DISTINCT duty_status AS s FROM users`)).map((r) => r.s)).toEqual(["on"]);
 
     // Second start: nothing changes, nothing is recorded twice
     await env.db.execute(sql`UPDATE tenants SET table_limit = 99`);
     await ensureSchema(appDb.$client);
-    expect(Number((await rows<{ n: number }>(sql`SELECT COUNT(*) AS n FROM __drizzle_migrations WHERE created_at > 1791043208000`))[0].n)).toBe(8);
+    expect(Number((await rows<{ n: number }>(sql`SELECT COUNT(*) AS n FROM __drizzle_migrations WHERE created_at > 1791043208000`))[0].n)).toBe(10);
     expect((await rows<{ lim: number }>(sql`SELECT DISTINCT table_limit AS lim FROM tenants`)).map((r) => Number(r.lim))).toEqual([99]);
   });
 });

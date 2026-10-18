@@ -26,6 +26,8 @@ import { getReport } from "@/server/staff/reports-read";
 import { getOutletSettings } from "@/server/staff/settings-read";
 import { addMember, changeRole, listTeam, resetPin, setMemberActive } from "@/server/staff/team";
 import { waiterBoard, waiterDetail } from "@/server/staff/waiter-read";
+import { checkIn, checkOut, getRooms, roomFoodTab, saveRoom } from "@/server/staff/rooms";
+import { askFromRoom, getRoomPage } from "@/server/guest/room";
 import { seedPlatform, wipeAll, type Db } from "../../scripts/demo-data";
 
 // Three restaurants on one TableQR install, set up the way the platform admin creates them. Each
@@ -324,5 +326,27 @@ describe("guests stay inside the restaurant whose QR they scanned", () => {
     const [bills] = await appDb.execute(sql`
       SELECT COUNT(*) AS n FROM bills b JOIN table_sessions ts ON ts.id = b.session_id WHERE b.tenant_id <> ts.tenant_id`);
     expect(Number((bills as unknown as { n: number }[])[0].n)).toBe(0);
+  });
+});
+
+describe("hotel rooms stay inside one restaurant", () => {
+  it("cannot see, check in, check out or order for another restaurant's room, and its room QR opens nothing elsewhere", async () => {
+    for (const k of ["A", "C"] as const) await appDb.update(s.tenants).set({ planCode: "hotel_plus" }).where(eq(s.tenants.id, R[k].tenantId));
+    const { id: roomC } = await saveRoom(R.C.owner, { number: "101" });
+    await checkIn(R.C.owner, roomC, { guestName: "C Guest" });
+    const [qr] = await appDb.select({ code: s.qrCodes.shortCode }).from(s.rooms).innerJoin(s.qrCodes, eq(s.qrCodes.tableId, s.rooms.tableId)).where(eq(s.rooms.id, roomC));
+
+    expect((await getRooms(R.A.owner)).rooms).toEqual([]);
+    await failsWith(checkIn(R.A.owner, roomC, { guestName: "Intruder" }), ["not_found"]);
+    await failsWith(checkOut(R.A.owner, roomC), ["not_found"]);
+    await failsWith(roomFoodTab(R.A.owner, roomC), ["not_found"]);
+    // A restaurant without rooms in its plan cannot open Rooms at all
+    await failsWith(getRooms(R.B.owner), ["forbidden"]);
+    // A's outlet code with C's room QR finds nothing
+    expect(await getRoomPage(R.A.outletCode, qr.code, null)).toEqual({ kind: "error", code: "not_found" });
+    await failsWith(askFromRoom(R.A.outletCode, qr.code, "towels", null), ["not_found"]);
+    const [stay] = await appDb.select().from(s.roomStays).where(eq(s.roomStays.roomId, roomC));
+    expect(stay).toMatchObject({ tenantId: R.C.tenantId, status: "open", guestName: "C Guest" });
+    for (const k of ["A", "C"] as const) await appDb.update(s.tenants).set({ planCode: "pro" }).where(eq(s.tenants.id, R[k].tenantId));
   });
 });

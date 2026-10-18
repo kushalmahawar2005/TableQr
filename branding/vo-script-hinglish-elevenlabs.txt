@@ -1,0 +1,118 @@
+TableQR brand film — Hinglish VO script for ElevenLabs
+Voice: Vikas - Natural Indian Male
+=======================================================
+
+IMPORTANT — GENERATE EACH LINE SEPARATELY.
+Do NOT paste all 11 lines in one go. Generate one line, download it,
+then the next. Name them vo-01.mp3 ... vo-11.mp3 in this order.
+That way each clip can be dropped at its exact timestamp instead of
+you trying to stretch one long file to fit.
+
+SETTINGS
+- Language: set it to Hindi, not Auto. On Auto it reads romanized
+  Hindi with English phonetics and it sounds wrong.
+- Stability: keep it around the middle or slightly toward Robust.
+  Too Creative and the read gets theatrical for an ad.
+- Similarity: high is fine where you have it.
+- Skip the audio tags ([laughs] etc.) for this one. It is a calm
+  owner-to-owner read, not an emotive performance.
+
+
+=======================================================
+ LINE 1    place at 0.6s
+=======================================================
+Table baarah. Nau minute se intezaar.
+
+
+=======================================================
+ LINE 2    place at 3.3s
+=======================================================
+Parchi samajh nahi aati. Order dobara lag gaya. Rate purane hain.
+
+
+=======================================================
+ LINE 3    place at 7.4s
+=======================================================
+Kaagaz sab bhool jaata hai.
+
+
+=======================================================
+ LINE 4    place at 10.2s
+=======================================================
+Bas ek QR, table par. Yahi poora setup hai.
+
+
+=======================================================
+ LINE 5    place at 14.3s
+=======================================================
+Guest scan kare, menu khul gaya. Koi app nahi.
+
+
+=======================================================
+ LINE 6    place at 17.9s
+=======================================================
+Order table se seedha kitchen mein.
+
+
+=======================================================
+ LINE 7    place at 21.3s
+=======================================================
+Har ticket kitchen screen par, timer ke saath.
+
+
+=======================================================
+ LINE 8    place at 25.0s
+=======================================================
+Bill, UPI payment, raseed. Sab table par.
+
+
+=======================================================
+ LINE 9    place at 28.4s
+=======================================================
+Din ka hisaab aur GST, apne aap.
+
+
+=======================================================
+ LINE 10   place at 31.1s
+=======================================================
+Floor se report tak. Ek hi jagah.
+
+
+=======================================================
+ LINE 11   place at 33.8s
+=======================================================
+Table Q R. Floor sambhaaliye, kaagaz nahi.
+
+
+=======================================================
+IF A WORD COMES OUT WRONG
+You can mix scripts in the same line — swap just the broken word
+to Devanagari and regenerate. Most likely troublemakers:
+
+  kaagaz      ->  काग़ज़
+  parchi      ->  पर्ची
+  hisaab      ->  हिसाब
+  raseed      ->  रसीद
+  sambhaaliye ->  संभालिए
+  baarah      ->  बारह
+  intezaar    ->  इंतज़ार
+
+Example fix:
+  काग़ज़ sab bhool jaata hai.
+
+Full Devanagari version of every line is in vo-script-hindi.txt
+if you would rather run the whole thing in Devanagari — for Hindi
+that usually gives cleaner pronunciation than romanized text.
+
+
+=======================================================
+LENGTH CHECK
+Each clip should land close to these. If one comes out much longer,
+regenerate rather than speeding it up in the editor.
+
+  01  ~2.2s      07  ~2.9s
+  02  ~3.6s      08  ~2.8s
+  03  ~1.8s      09  ~2.5s
+  04  ~3.1s      10  ~2.3s
+  05  ~3.1s      11  ~2.0s
+  06  ~2.2s

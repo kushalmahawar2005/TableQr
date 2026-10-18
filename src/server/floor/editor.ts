@@ -9,7 +9,11 @@ import { publish } from "../realtime/publish";
 import { topics } from "../realtime/token";
 import type { StaffSession } from "../staff/auth";
 import { tableLimitMessage, tenantTableLimit } from "../plan";
+import { ROOM_CLASS } from "@/domain/rooms";
 import { TAKEAWAY_CLASS } from "./takeaway-class";
+
+/** Takeaway counters and hotel rooms run on hidden tables that are not part of the floor plan */
+const onFloor = (t: { tableClass: string }) => t.tableClass !== TAKEAWAY_CLASS && t.tableClass !== ROOM_CLASS;
 
 export const floorEditorRoles = ["manager", "owner"] as const;
 type Scope = Pick<StaffSession, "tenantId" | "outletId" | "userId" | "name" | "roles">;
@@ -52,8 +56,8 @@ export async function getOrCreateDraft(staff: Scope) {
       const id = uuidv7(); zoneMap.set(z.id, id);
       await tx.insert(s.floorLayoutZones).values({ id, tenantId: staff.tenantId, versionId, logicalZoneId: z.id, name: z.name, sortOrder: z.sortOrder, archived: !z.isActive, createdAt: new Date(), updatedAt: new Date() });
     }
-    // Takeaway counters (src/server/floor/takeaway.ts) are not part of the floor plan
-    const tables = (await tx.select().from(s.diningTables).where(and(eq(s.diningTables.tenantId, staff.tenantId), eq(s.diningTables.outletId, staff.outletId)))).filter((t) => t.tableClass !== TAKEAWAY_CLASS);
+    // Takeaway counters (src/server/floor/takeaway.ts) and rooms are not part of the floor plan
+    const tables = (await tx.select().from(s.diningTables).where(and(eq(s.diningTables.tenantId, staff.tenantId), eq(s.diningTables.outletId, staff.outletId)))).filter(onFloor);
     const tableMap = new Map<string, string>();
     for (const t of tables) { const draftId = uuidv7(); tableMap.set(t.id, draftId); await tx.insert(s.floorLayoutTables).values({ id: draftId, tenantId: staff.tenantId, versionId, logicalTableId: t.id, logicalZoneId: zoneMap.get(t.zoneId) ?? null, code: t.code, minSeats: t.minSeats, maxSeats: t.maxSeats, tableClass: t.tableClass, shape: t.shape, posX: t.posX, posY: t.posY, width: t.width, height: t.height, isBookableOnline: t.isBookableOnline, archived: !t.isActive, createdAt: new Date(), updatedAt: new Date() }); }
     for (const t of tables) for (const other of t.combinableWith ?? []) { const a = tableMap.get(t.id); const b = tableMap.get(other); if (a && b && a !== b) await tx.insert(s.floorLayoutCombinations).values({ id: uuidv7(), tenantId: staff.tenantId, versionId, tableId: a, combinedTableId: b, createdAt: new Date() }).onDuplicateKeyUpdate({ set: { createdAt: new Date() } }); }
@@ -142,7 +146,7 @@ export async function publishDraft(staff: Scope, versionId: string, expectedRevi
     }
     const activeLogical = new Set(tables.filter((t) => !t.archived && t.logicalTableId).map((t) => t.logicalTableId!));
     const canon = await tx.select().from(s.diningTables).where(and(eq(s.diningTables.tenantId, staff.tenantId), eq(s.diningTables.outletId, staff.outletId)));
-    const removed = canon.filter((c) => c.tableClass !== TAKEAWAY_CLASS && !activeLogical.has(c.id));
+    const removed = canon.filter((c) => onFloor(c) && !activeLogical.has(c.id));
     for (const c of removed) {
       const active = await tx.select({ id: s.sessionTables.id }).from(s.sessionTables).innerJoin(s.tableSessions, and(eq(s.tableSessions.tenantId, s.sessionTables.tenantId), eq(s.tableSessions.id, s.sessionTables.sessionId), ne(s.tableSessions.status, "closed"))).where(and(eq(s.sessionTables.tenantId, staff.tenantId), eq(s.sessionTables.tableId, c.id), isNotNull(s.sessionTables.activeKey))).limit(1);
       if (active.length) throw new AppError("conflict", `Table ${c.code} has an active session and cannot be archived.`);
@@ -176,7 +180,8 @@ export async function publishDraft(staff: Scope, versionId: string, expectedRevi
     const byDraft = new Map(tables.map((t) => [t.id, t.logicalTableId]));
     const combined = new Map<string, string[]>();
     for (const pair of draftPairs) { const a = byDraft.get(pair.tableId); const b = byDraft.get(pair.combinedTableId); if (a && b) combined.set(a, [...(combined.get(a) ?? []), b]); }
-    const currentCanon = await tx.select().from(s.diningTables).where(and(eq(s.diningTables.tenantId, staff.tenantId), eq(s.diningTables.outletId, staff.outletId)));
+    // A room keeps its QR whatever the floor plan does
+    const currentCanon = (await tx.select().from(s.diningTables).where(and(eq(s.diningTables.tenantId, staff.tenantId), eq(s.diningTables.outletId, staff.outletId)))).filter((c) => c.tableClass !== ROOM_CLASS);
     for (const c of currentCanon) for (const oldOther of c.combinableWith ?? []) if (!(combined.get(c.id) ?? []).includes(oldOther)) {
       const activePair = await tx.select({ id: s.sessionTables.id }).from(s.sessionTables).innerJoin(s.tableSessions, and(eq(s.tableSessions.tenantId, s.sessionTables.tenantId), eq(s.tableSessions.id, s.sessionTables.sessionId), ne(s.tableSessions.status, "closed"))).where(and(eq(s.sessionTables.tenantId, staff.tenantId), eq(s.sessionTables.tableId, c.id), isNotNull(s.sessionTables.activeKey))).limit(1);
       const activeOther = await tx.select({ id: s.sessionTables.id }).from(s.sessionTables).innerJoin(s.tableSessions, and(eq(s.tableSessions.tenantId, s.sessionTables.tenantId), eq(s.tableSessions.id, s.sessionTables.sessionId), ne(s.tableSessions.status, "closed"))).where(and(eq(s.sessionTables.tenantId, staff.tenantId), eq(s.sessionTables.tableId, oldOther), isNotNull(s.sessionTables.activeKey))).limit(1);

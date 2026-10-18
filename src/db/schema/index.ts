@@ -11,3 +11,5 @@ export * from "./audit";
 export * from "./booking";
 
 export * from "./waiter";
+export * from "./inventory";
+export * from "./rooms";

@@ -14,7 +14,7 @@ import { requireFeature } from "../plan";
 // reason, recorded in the audit log. One bill-level discount at a time (giving another replaces it),
 // and only before anyone has paid, so no share that was already settled changes under a guest.
 
-export const discountRoles = ["owner", "manager", "accountant", "cashier"] as const;
+export const discountRoles = ["owner", "manager", "accountant", "cashier", "reception"] as const;
 
 type Staff = Pick<StaffSession, "tenantId" | "outletId" | "userId" | "name" | "roles">;
 type DiscountInput = { sessionId: string; kind: "percent" | "flat"; /** percent: 1-100; flat: rupees */ value: number; reason: string };

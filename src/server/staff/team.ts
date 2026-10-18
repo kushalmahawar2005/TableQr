@@ -15,16 +15,16 @@ import { staffLimitMessage, tenantFeatures } from "../plan";
 // handed out here, and a person can never change their own access.
 
 type Staff = Pick<StaffSession, "tenantId" | "outletId" | "roles" | "userId" | "name">;
-/** Roles the owner can give. Kitchen only with the kitchen screen, Waiter only with the waiter app (plan or admin). */
-export const TEAM_ROLES = ["manager", "waiter", "accountant", "kitchen"] as const satisfies readonly StaffRole[];
+/** Roles the owner can give. Kitchen only with the kitchen screen, Waiter only with the waiter app, Reception only with rooms (plan or admin). */
+export const TEAM_ROLES = ["manager", "reception", "waiter", "accountant", "kitchen"] as const satisfies readonly StaffRole[];
 export type TeamRole = (typeof TEAM_ROLES)[number];
 /** Older roles (cashier, host) are no longer handed out; people who already have them keep working */
-const LIST_ORDER = ["owner", "manager", "waiter", "accountant", "kitchen", "cashier", "host"];
+const LIST_ORDER = ["owner", "manager", "reception", "waiter", "accountant", "kitchen", "cashier", "host"];
 
 /** The roles this restaurant's owner may give, from its plan */
 export async function assignableRoles(tenantId: string): Promise<TeamRole[]> {
   const f = await tenantFeatures(tenantId);
-  return TEAM_ROLES.filter((r) => (r !== "kitchen" || f.kitchenDisplay) && (r !== "waiter" || f.waiterApp));
+  return TEAM_ROLES.filter((r) => (r !== "kitchen" || f.kitchenDisplay) && (r !== "waiter" || f.waiterApp) && (r !== "reception" || f.rooms));
 }
 
 /** Stops the owner going past the plan's staff logins; the owner's own login does not count */

@@ -31,6 +31,7 @@ import { OutletLogo } from "../../_components/outlet-logo";
 import { cancelLineAction, serviceRequestAction } from "../actions";
 import { g6Copy, type G6Copy } from "../_copy";
 import { useTrackerSync } from "../_hooks/use-tracker-sync";
+import { isRoomCode, placeHi } from "@/domain/rooms";
 
 type Round = TrackerScreenData["rounds"][number];
 type Line = Round["lines"][number];
@@ -177,7 +178,7 @@ export function TrackerScreen({
         <div className="min-w-0 flex-1">
           <p className="font-display text-section font-bold break-words text-ink">{data.outlet.name}</p>
           <p className="text-caption text-muted">
-            {lang === "hi" ? "टेबल" : "Table"} {data.table.code.replace(/^T(?=\d)/, "")} <span aria-hidden>·</span>{" "}
+            {isRoomCode(data.table.code) ? (lang === "hi" ? placeHi(data.table.code) : data.table.code) : <>{lang === "hi" ? "टेबल" : "Table"} {data.table.code.replace(/^T(?=\d)/, "")}</>} <span aria-hidden>·</span>{" "}
             {session.people} {lang === "hi" ? "लोग" : "people"}
           </p>
         </div>

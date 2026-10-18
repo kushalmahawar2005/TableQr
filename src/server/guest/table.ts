@@ -5,6 +5,7 @@ import * as s from "@/db/schema";
 import { readFeatures } from "@/lib/plan-features";
 import { isPlaceholderName } from "@/domain/guest-name";
 import { isOpenAt, openingInfo } from "@/domain/hours";
+import { ROOM_CLASS } from "@/domain/rooms";
 import { AppError } from "../errors";
 import type { Runner } from "../db-types";
 import { tenantAccess } from "../access";
@@ -46,6 +47,7 @@ async function resolveQr(run: Runner, outletCode: string, shortCode: string) {
         maxSeats: s.diningTables.maxSeats,
         state: s.diningTables.state,
         active: s.diningTables.isActive,
+        tableClass: s.diningTables.tableClass,
       },
       zoneName: s.zones.name,
       qrRevokedAt: s.qrCodes.revokedAt,
@@ -73,7 +75,10 @@ export async function findTableByQr(run: Runner, outletCode: string, shortCode: 
   const row = await resolveQr(run, outletCode, shortCode);
   if (!row) throw new AppError("not_found", "We could not find this table. Please ask staff for help.");
   if (row.qrRevokedAt) throw new AppError("qr_revoked", "This code is no longer active. Please ask staff for help.");
-  if (!row.table.active) throw new AppError("not_found", "This table is no longer available. Please ask staff for help.");
+  // A room's hidden counter is never active on the floor; its QR works while the plan has rooms
+  if (row.table.tableClass === ROOM_CLASS) {
+    if (!readFeatures(row.customFeatures ?? row.planFeatures).rooms) throw new AppError("outlet_unavailable", "Ordering from the room is not available right now. Please call reception.");
+  } else if (!row.table.active) throw new AppError("not_found", "This table is no longer available. Please ask staff for help.");
   if (await isUnavailable(row)) {
     throw new AppError("outlet_unavailable", "Ordering from the table is not available right now. Please ask staff.");
   }
@@ -232,7 +237,7 @@ export async function getTableLanding(outletCode: string, shortCode: string, dev
     nextOpen: hours.nextOpen,
     poweredBy: readFeatures(t.customFeatures ?? t.planFeatures).poweredBy,
   };
-  const table = { code: t.table.code, maxSeats: t.table.maxSeats, zone: t.zoneName, state: t.table.state };
+  const table: { code: string; maxSeats: number; zone: string; state: typeof t.table.state; isRoom?: boolean } = { code: t.table.code, maxSeats: t.table.maxSeats, zone: t.zoneName, state: t.table.state, isRoom: t.table.tableClass === ROOM_CLASS };
 
   if (t.qrRevokedAt) return { outlet, table, landing: { kind: "revoked" } as Landing };
   if (await isUnavailable(t)) return { outlet, table, landing: { kind: "unavailable" } as Landing };

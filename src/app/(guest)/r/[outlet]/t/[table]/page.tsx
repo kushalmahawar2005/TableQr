@@ -50,6 +50,8 @@ async function Landing({
   if (data.landing.kind === "settling" && data.landing.isParticipant) {
     redirect(`/r/${encodeURIComponent(outletCode)}/t/${encodeURIComponent(shortCode)}/orders`);
   }
+  // A hotel room has its own page: room service and housekeeping
+  if (data.table.isRoom) redirect(`/r/${encodeURIComponent(outletCode)}/room/${encodeURIComponent(shortCode)}`);
 
   return <LandingView data={data} lang={lang} shortCode={shortCode} />;
 }

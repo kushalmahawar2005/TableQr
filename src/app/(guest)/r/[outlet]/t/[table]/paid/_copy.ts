@@ -1,10 +1,11 @@
 import type { Lang } from "@/lib/i18n";
+import { placeEn, placeHi } from "@/domain/rooms";
 
 // Every word on G9 Paid, receipt and next visit. Hindi is a first draft for native review.
 
 const en = {
   language: "Language",
-  tableLine: (code: string) => `Table ${code}`,
+  tableLine: (code: string) => `${placeEn(code)}`,
   paid: (amount: string) => `Paid ${amount}`,
   billAndTip: (bill: string, tip: string) => `${bill} bill + ${tip} tip`,
   thanks: (name: string | null) => (name ? `Thank you, ${name}.` : "Thank you."),
@@ -18,7 +19,7 @@ const en = {
   staysOpen: "Table stays open until everyone's share is settled.",
   allSettled: "All settled",
   allSettledBody: "Thanks for dining with us.",
-  tableClosed: (code: string) => `Table ${code} is now closed.`,
+  tableClosed: (code: string) => `${placeEn(code)} is now closed.`,
   youPaid: (amount: string) => `You paid ${amount}.`,
   summaryTitle: "Your visit summary",
   closedOn: (when: string) => `This table was closed on ${when}.`,
@@ -55,7 +56,7 @@ export type G9Copy = typeof en;
 
 const hi: G9Copy = {
   language: "भाषा",
-  tableLine: (code) => `टेबल ${code}`,
+  tableLine: (code) => `${placeHi(code)}`,
   paid: (amount) => `${amount} चुकाए`,
   billAndTip: (bill, tip) => `${bill} बिल + ${tip} टिप`,
   thanks: (name) => (name ? `धन्यवाद, ${name}।` : "धन्यवाद।"),
@@ -69,7 +70,7 @@ const hi: G9Copy = {
   staysOpen: "सबका हिस्सा चुकने तक टेबल खुली रहेगी।",
   allSettled: "सब चुका दिया गया",
   allSettledBody: "हमारे साथ खाने के लिए धन्यवाद।",
-  tableClosed: (code) => `टेबल ${code} अब बंद हो गई है।`,
+  tableClosed: (code) => `${placeHi(code)} अब बंद हो गई है।`,
   youPaid: (amount) => `आपने ${amount} चुकाए।`,
   summaryTitle: "आपकी विज़िट का सारांश",
   closedOn: (when) => `यह टेबल ${when} को बंद हुई।`,
