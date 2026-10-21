@@ -153,7 +153,14 @@ export async function startFeePayment(
   let replayed = !!existing;
   if (!payment) {
     const [waiting] = await db.select({ id: s.feePayments.id }).from(s.feePayments).where(and(eq(s.feePayments.tenantId, staff.tenantId), eq(s.feePayments.status, "claimed")));
-    if (waiting) throw new AppError("invalid_state", "Your last payment is still being confirmed by Cashfree.");
+    if (waiting) {
+      // Re-check where the pending payment stands at Cashfree before blocking the owner
+      const updated = await reconcileCashfreeFee(waiting.id, now).catch(() => null);
+      if (updated === "confirmed") throw new AppError("invalid_state", "This payment is already complete.");
+      if (updated === "claimed") {
+        throw new AppError("invalid_state", "Your previous payment is still being confirmed by Cashfree. Please refresh status or wait a moment.");
+      }
+    }
     const fee = await monthlyFee(db, staff.tenantId);
     const target = await upgradeTarget(staff.tenantId, input.planCode);
     const perMonth = target ? target.monthlyPricePaise * fee.outletCount : fee.totalPaise;
@@ -179,6 +186,20 @@ export async function startFeePayment(
 
   const callbackUrl = input.callbackUrl.replace("PLACEHOLDER", payment.id);
   let gatewayRef = payment.gatewayRef;
+  if (gatewayRef && replayed) {
+    // If resuming an existing attempt, verify if Cashfree has already settled or terminated this order
+    const current = await gateway.fetchStatus(gatewayRef).catch(() => null);
+    if (current && (current.status === "success" || current.status === "failed")) {
+      await settleCashfreeFee(payment.id, {
+        status: current.status,
+        amountPaise: current.amountPaise,
+        gatewayPaymentId: current.gatewayPaymentId,
+        reason: current.reason,
+      }, now);
+      if (current.status === "success") throw new AppError("invalid_state", "This payment is already complete.");
+      throw new AppError("invalid_state", "That payment attempt has expired or failed. Please click Pay again.");
+    }
+  }
   if (!gatewayRef) {
     const [tenant] = await db.select({ name: s.tenants.name, phone: s.tenants.contactPhone }).from(s.tenants).where(eq(s.tenants.id, staff.tenantId));
     try {

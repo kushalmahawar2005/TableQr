@@ -148,15 +148,9 @@ export function PayCard({ plan, target, bare = false }: { plan: PlanView; target
   const pay = async () => {
     setState("busy");
     setError(null);
-    const intent = `${months}:${target?.code ?? plan.planCode}`;
-    let requestId = requests.current.get(intent);
-    if (!requestId) {
-      requestId = crypto.randomUUID();
-      requests.current.set(intent, requestId);
-    }
+    const requestId = crypto.randomUUID();
     const r = await startFeePaymentAction({ months, planCode: target?.code ?? null, requestId });
     if (!r.ok) {
-      requests.current.delete(intent);
       setError(r.error);
       setState("idle");
       return;
