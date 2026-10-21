@@ -29,7 +29,7 @@ export function Welcome({ lang, name, onStart, onSkip }: { lang: Lang; name: str
 
   return (
     <motion.div className="fixed inset-0 z-[60] grid place-items-center p-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-      <motion.div className="absolute inset-0 bg-black/50 backdrop-blur-sm" aria-hidden />
+      <motion.div className="absolute inset-0 bg-black/50 backdrop-blur-sm cursor-pointer" aria-hidden onClick={onSkip} />
       <motion.section
         role="dialog"
         aria-modal="true"

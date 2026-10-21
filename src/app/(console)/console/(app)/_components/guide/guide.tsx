@@ -16,15 +16,28 @@ export function Guide({ lang, name, sections, kitchen, welcomeSeen }: { lang: La
   const [mode, setMode] = useState<"welcome" | "tour" | null>(null);
 
   useEffect(() => {
+    // If already seen in database or local storage, never show again
+    const storageKey = `tq_welcome_seen_${name}`;
+    const localSeen = typeof window !== "undefined" && window.localStorage?.getItem(storageKey);
+    if (welcomeSeen || localSeen) return;
+
+    // Immediately record in database and client storage so subsequent logins/reloads never see it again
+    void guideAction(["welcome", "tour"]);
+    try {
+      window.localStorage?.setItem(storageKey, "true");
+    } catch {
+      // Ignore private browsing storage quota errors
+    }
+
     // A moment after the page appears, so the welcome does not land on a half-drawn screen
-    const t = welcomeSeen ? undefined : setTimeout(() => setMode((m) => m ?? "welcome"), 500);
+    const t = setTimeout(() => setMode((m) => m ?? "welcome"), 500);
     const open = () => setMode("tour");
     window.addEventListener(TOUR_EVENT, open);
     return () => {
       clearTimeout(t);
       window.removeEventListener(TOUR_EVENT, open);
     };
-  }, [welcomeSeen]);
+  }, [welcomeSeen, name]);
 
   const c = guideCopy(lang).tour;
   const steps: TourStep[] = [
@@ -38,18 +51,29 @@ export function Guide({ lang, name, sections, kitchen, welcomeSeen }: { lang: La
     { target: "help", ...c.help },
   ];
 
+  const storageKey = `tq_welcome_seen_${name}`;
+
   const startTour = useCallback(() => {
     void guideAction(["welcome"]);
+    try {
+      window.localStorage?.setItem(storageKey, "true");
+    } catch {}
     setMode("tour");
-  }, []);
+  }, [storageKey]);
   const skipAll = useCallback(() => {
     void guideAction(["welcome", "tour"]);
+    try {
+      window.localStorage?.setItem(storageKey, "true");
+    } catch {}
     setMode(null);
-  }, []);
+  }, [storageKey]);
   const endTour = useCallback(() => {
     void guideAction(["welcome", "tour"]);
+    try {
+      window.localStorage?.setItem(storageKey, "true");
+    } catch {}
     setMode(null);
-  }, []);
+  }, [storageKey]);
 
   return (
     <MotionConfig reducedMotion="user">
