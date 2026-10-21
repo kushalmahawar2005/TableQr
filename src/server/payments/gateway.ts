@@ -1,6 +1,7 @@
 import "server-only";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { uuidv7 } from "@/db/id";
+import type { Checkout, FormCheckout } from "@/lib/payments/checkout";
 
 // Payment gateway boundary (PS 6.4). Each restaurant connects its own gateway account and money
 // settles straight to them; TableQR never holds guest funds or sees card numbers: the guest pays
@@ -9,9 +10,6 @@ import { uuidv7 } from "@/db/id";
 
 /** "none": the order exists but no payment was attempted on it (the guest cancelled or closed the page) */
 export type GatewayStatus = "pending" | "success" | "failed" | "none";
-
-/** How the phone reaches the hosted checkout: a plain form submit, no gateway script in our pages */
-export type Checkout = { provider: string; method: "GET" | "POST"; action: string; fields: Record<string, string> };
 
 export type CheckoutInput = {
   gatewayRef: string;
@@ -30,173 +28,244 @@ export type WebhookEvent =
 
 export interface PaymentGateway {
   readonly name: string;
-  createOrder(input: { paymentId: string; amountPaise: number; receipt: string }): Promise<{ gatewayRef: string }>;
-  checkout(input: CheckoutInput): Checkout;
+  createOrder(input: {
+    paymentId: string;
+    amountPaise: number;
+    receipt: string;
+    callbackUrl?: string;
+    notifyUrl?: string;
+    customer?: { id?: string; phone?: string | null; name?: string | null; email?: string | null };
+  }): Promise<{ gatewayRef: string }>;
+  checkout(input: CheckoutInput): Checkout | Promise<Checkout>;
   fetchStatus(gatewayRef: string): Promise<{ status: GatewayStatus; amountPaise: number; gatewayPaymentId?: string; reason?: string }>;
-  refund(input: { gatewayPaymentId: string; amountPaise: number; refundId: string }): Promise<{ gatewayRefundId: string; status: "pending" | "success" | "failed" }>;
+  refund(input: { gatewayRef: string; gatewayPaymentId: string; amountPaise: number; refundId: string }): Promise<{ gatewayRefundId: string; status: "pending" | "success" | "failed" }>;
   /** Where a refund stands at the gateway; used to settle a refund whose webhook was missed */
-  fetchRefund(gatewayRefundId: string): Promise<{ status: "pending" | "success" | "failed" }>;
+  fetchRefund(input: { gatewayRef: string; gatewayRefundId: string }): Promise<{ status: "pending" | "success" | "failed" }>;
   /** Checks the webhook signature over the exact raw body */
-  verifyWebhook(rawBody: string, signature: string | null): boolean;
+  verifyWebhook(rawBody: string, signature: string | null, timestamp?: string | null): boolean;
   parseWebhook(rawBody: string): WebhookEvent;
 }
 
-const safeEqualHex = (a: string, b: string) => {
+const safeEqual = (a: string, b: string) => {
   const x = Buffer.from(a, "utf8");
   const y = Buffer.from(b, "utf8");
   return x.length === y.length && timingSafeEqual(x, y);
 };
 
-export type RazorpayMode = "test" | "live";
+export type CashfreeMode = "sandbox" | "production";
+export type CashfreeConfig = {
+  mode: CashfreeMode;
+  clientId: string;
+  clientSecret: string;
+  apiBase: string;
+  apiVersion: string;
+};
 
-/** A Razorpay setting that is missing, malformed or mixed; thrown on the server, never shown to guests */
-export class RazorpayConfigError extends Error {
+export class CashfreeConfigError extends Error {
   constructor(message: string) {
-    super(`Razorpay configuration error: ${message}`);
-    this.name = "RazorpayConfigError";
+    super(`Cashfree configuration error: ${message}`);
+    this.name = "CashfreeConfigError";
   }
 }
 
-export type RazorpayConfig = { mode: RazorpayMode; keyId: string; keySecret: string; webhookSecret: string; apiBase: string | undefined };
+/** Reads Cashfree credentials without ever exposing the secret to a Client Component. */
+export function parseCashfreeConfig(env: Record<string, string | undefined>): CashfreeConfig | null {
+  const clientId = env.CASHFREE_CLIENT_ID?.trim();
+  const clientSecret = env.CASHFREE_CLIENT_SECRET?.trim();
+  if (!clientId && !clientSecret) return null;
+  if (!clientId || !clientSecret) throw new CashfreeConfigError("CASHFREE_CLIENT_ID and CASHFREE_CLIENT_SECRET must be set together");
+  if (clientId.length < 6) throw new CashfreeConfigError("CASHFREE_CLIENT_ID is too short");
+  if (clientSecret.length < 8) throw new CashfreeConfigError("CASHFREE_CLIENT_SECRET is too short");
 
-/**
- * Reads and checks the Razorpay settings. Nothing is guessed: the mode is named by RAZORPAY_MODE
- * (required in production) and must agree with the key prefix, so a test key can never be run as
- * live nor a live key as test. Live keys are accepted only in production and need the webhook
- * secret; the API base can only be overridden in test mode. Returns null when online payment is
- * not configured at all.
- */
-export function parseRazorpayConfig(env: Record<string, string | undefined>): RazorpayConfig | null {
-  const keyId = env.RAZORPAY_KEY_ID?.trim();
-  const keySecret = env.RAZORPAY_KEY_SECRET?.trim();
-  if (!keyId && !keySecret) return null;
-  if (!keyId || !keySecret) throw new RazorpayConfigError("RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET must be set together");
-  const found = /^rzp_(test|live)_[A-Za-z0-9]{6,}$/.exec(keyId);
-  if (!found) throw new RazorpayConfigError("RAZORPAY_KEY_ID must look like rzp_test_... or rzp_live_...");
-  const keyMode = found[1] as RazorpayMode;
-  if (keySecret.length < 8) throw new RazorpayConfigError("RAZORPAY_KEY_SECRET is too short to be a Razorpay secret");
   const production = env.NODE_ENV === "production";
-  const declared = env.RAZORPAY_MODE?.trim();
-  if (declared !== undefined && declared !== "" && declared !== "test" && declared !== "live") throw new RazorpayConfigError('RAZORPAY_MODE must be "test" or "live"');
-  if (production && !declared) throw new RazorpayConfigError('RAZORPAY_MODE must be set to "test" or "live" in production');
-  if (declared && declared !== keyMode) throw new RazorpayConfigError(`RAZORPAY_MODE is "${declared}" but the key is a ${keyMode} key`);
-  if (keyMode === "live" && !production) throw new RazorpayConfigError("live keys are only allowed when NODE_ENV is production");
-  const webhookSecret = env.RAZORPAY_WEBHOOK_SECRET?.trim() ?? "";
-  if (keyMode === "live" && webhookSecret.length < 8) throw new RazorpayConfigError("RAZORPAY_WEBHOOK_SECRET is required for live keys");
-  const apiBase = env.RAZORPAY_API_BASE?.trim() || undefined;
-  if (keyMode === "live" && apiBase) throw new RazorpayConfigError("RAZORPAY_API_BASE cannot be changed for live keys");
-  return { mode: keyMode, keyId, keySecret, webhookSecret, apiBase };
+  const declared = env.CASHFREE_MODE?.trim();
+  if (declared && declared !== "sandbox" && declared !== "production") {
+    throw new CashfreeConfigError('CASHFREE_MODE must be "sandbox" or "production"');
+  }
+  if (production && !declared) throw new CashfreeConfigError("CASHFREE_MODE must be set in production");
+  const mode = (declared || "sandbox") as CashfreeMode;
+  if (mode === "production" && !production) throw new CashfreeConfigError("production credentials are only allowed when NODE_ENV is production");
+
+  const apiVersion = env.CASHFREE_API_VERSION?.trim() || "2026-01-01";
+  if (!/^20\d{2}-\d{2}-\d{2}$/.test(apiVersion)) throw new CashfreeConfigError("CASHFREE_API_VERSION must use YYYY-MM-DD format");
+  const customBase = env.CASHFREE_API_BASE?.trim();
+  if (mode === "production" && customBase) throw new CashfreeConfigError("CASHFREE_API_BASE cannot be changed in production mode");
+  const apiBase = customBase || (mode === "production" ? "https://api.cashfree.com/pg" : "https://sandbox.cashfree.com/pg");
+  return { mode, clientId, clientSecret, apiBase, apiVersion };
 }
 
-/**
- * Razorpay, in test or live mode (see parseRazorpayConfig). Orders are created server to server; the
- * guest pays on Razorpay's hosted checkout; webhooks are verified with the webhook secret.
- */
-export class RazorpayGateway implements PaymentGateway {
-  readonly name = "razorpay";
+const paiseFromRupees = (rupees: number) => Math.round(rupees * 100);
+const cashfreeRefundStatus = (status: string) =>
+  status === "SUCCESS" ? ("success" as const) : ["CANCELLED", "REJECTED", "FAILED"].includes(status) ? ("failed" as const) : ("pending" as const);
+
+/** Cashfree PG Orders API plus the hosted Cashfree JS checkout. */
+export class CashfreeGateway implements PaymentGateway {
+  readonly name = "cashfree";
+
   constructor(
-    private readonly keyId: string,
-    private readonly keySecret: string,
-    private readonly webhookSecret: string,
-    private readonly apiBase = "https://api.razorpay.com",
+    private readonly clientId: string,
+    private readonly clientSecret: string,
+    readonly mode: CashfreeMode,
+    private readonly apiBase = mode === "production" ? "https://api.cashfree.com/pg" : "https://sandbox.cashfree.com/pg",
+    private readonly apiVersion = "2026-01-01",
   ) {
-    if (!/^rzp_(test|live)_[A-Za-z0-9]{6,}$/.test(keyId)) throw new RazorpayConfigError("RAZORPAY_KEY_ID must look like rzp_test_... or rzp_live_...");
+    if (clientId.length < 6 || clientSecret.length < 8) throw new CashfreeConfigError("client credentials are incomplete");
   }
 
-  private async call<T>(path: string, init: { method: "GET" | "POST"; body?: unknown }): Promise<T> {
+  private async call<T>(path: string, init: { method: "GET" | "POST"; body?: unknown; idempotencyKey?: string }): Promise<T> {
     const res = await fetch(`${this.apiBase}${path}`, {
       method: init.method,
       headers: {
-        Authorization: `Basic ${Buffer.from(`${this.keyId}:${this.keySecret}`).toString("base64")}`,
+        "x-client-id": this.clientId,
+        "x-client-secret": this.clientSecret,
+        "x-api-version": this.apiVersion,
+        Accept: "application/json",
+        ...(init.idempotencyKey ? { "x-idempotency-key": init.idempotencyKey } : {}),
         ...(init.body ? { "Content-Type": "application/json" } : {}),
       },
       body: init.body ? JSON.stringify(init.body) : undefined,
       signal: AbortSignal.timeout(8000),
     });
-    if (!res.ok) throw new Error(`Razorpay ${init.method} ${path} failed: ${res.status}`);
-    return (await res.json()) as T;
+    const raw = await res.text();
+    if (!res.ok) {
+      let detail = "";
+      try { detail = String((JSON.parse(raw) as { message?: string }).message ?? ""); } catch { /* Cashfree sometimes returns an empty/non-JSON error. */ }
+      throw new Error(`Cashfree ${init.method} ${path} failed: ${res.status}${detail ? ` ${detail.slice(0, 160)}` : ""}`);
+    }
+    return JSON.parse(raw) as T;
   }
 
-  async createOrder(input: { paymentId: string; amountPaise: number; receipt: string }) {
-    const order = await this.call<{ id: string }>("/v1/orders", {
+  async createOrder(input: {
+    paymentId: string;
+    amountPaise: number;
+    receipt: string;
+    callbackUrl?: string;
+    notifyUrl?: string;
+    customer?: { id?: string; phone?: string | null; name?: string | null; email?: string | null };
+  }) {
+    if (!input.callbackUrl) throw new Error("Cashfree requires a payment return URL");
+    const callback = new URL(input.callbackUrl);
+    if (this.mode === "production" && callback.protocol !== "https:") throw new Error("Cashfree production return URLs must use HTTPS");
+    const phone = input.customer?.phone?.replace(/\D/g, "").slice(-10);
+    const order = await this.call<{ order_id: string }>("/orders", {
       method: "POST",
-      body: { amount: input.amountPaise, currency: "INR", receipt: input.receipt.slice(0, 40), notes: { payment_id: input.paymentId } },
-    });
-    return { gatewayRef: order.id };
-  }
-
-  checkout(input: CheckoutInput): Checkout {
-    return {
-      provider: this.name,
-      method: "POST",
-      action: `${this.apiBase}/v1/checkout/embedded`,
-      fields: {
-        key_id: this.keyId,
-        order_id: input.gatewayRef,
-        amount: String(input.amountPaise),
-        currency: "INR",
-        name: input.outletName,
-        callback_url: input.callbackUrl,
-        cancel_url: `${input.callbackUrl}${input.callbackUrl.includes("?") ? "&" : "?"}cancelled=1`,
-        "prefill[method]": input.method === "wallet" ? "wallet" : input.method,
-        "notes[payment_id]": input.paymentId,
+      idempotencyKey: input.paymentId,
+      body: {
+        order_id: input.paymentId,
+        order_amount: input.amountPaise / 100,
+        order_currency: "INR",
+        customer_details: {
+          customer_id: input.customer?.id?.slice(0, 50) || `tq_${input.paymentId.replace(/-/g, "")}`,
+          customer_phone: phone && phone.length === 10 ? phone : "9999999999",
+          ...(input.customer?.name ? { customer_name: input.customer.name.slice(0, 100) } : {}),
+          ...(input.customer?.email ? { customer_email: input.customer.email.slice(0, 100) } : {}),
+        },
+        order_meta: {
+          return_url: input.callbackUrl,
+          notify_url: input.notifyUrl || `${callback.origin}/api/payments/cashfree/webhook`,
+        },
+        order_note: "TableQR payment",
+        order_tags: { payment_id: input.paymentId, receipt: input.receipt.slice(0, 40) },
       },
-    };
+    });
+    return { gatewayRef: order.order_id };
+  }
+
+  async checkout(input: CheckoutInput): Promise<Checkout> {
+    const order = await this.call<{ payment_session_id: string }>(`/orders/${encodeURIComponent(input.gatewayRef)}`, { method: "GET" });
+    if (!order.payment_session_id) throw new Error("Cashfree did not return a payment session");
+    return { provider: "cashfree", kind: "cashfree", mode: this.mode, paymentSessionId: order.payment_session_id };
   }
 
   async fetchStatus(gatewayRef: string) {
-    const list = await this.call<{ items: { id: string; status: string; amount: number; error_description?: string }[] }>(
-      `/v1/orders/${encodeURIComponent(gatewayRef)}/payments`,
+    const payments = await this.call<Array<{
+      cf_payment_id: string | number;
+      payment_status: string;
+      payment_amount: number;
+      payment_message?: string;
+      error_details?: { error_description?: string } | null;
+    }>>(`/orders/${encodeURIComponent(gatewayRef)}/payments`, { method: "GET" });
+    const success = payments.find((payment) => payment.payment_status === "SUCCESS");
+    if (success) return { status: "success" as const, amountPaise: paiseFromRupees(success.payment_amount), gatewayPaymentId: String(success.cf_payment_id) };
+    if (payments.some((payment) => payment.payment_status === "PENDING")) return { status: "pending" as const, amountPaise: 0 };
+    const attempted = payments.filter((payment) => payment.payment_status !== "NOT_ATTEMPTED");
+    if (attempted.length === 0) return { status: "none" as const, amountPaise: 0 };
+    const last = attempted[attempted.length - 1];
+    return {
+      status: "failed" as const,
+      amountPaise: 0,
+      gatewayPaymentId: String(last.cf_payment_id),
+      reason: last.error_details?.error_description ?? last.payment_message,
+    };
+  }
+
+  async refund(input: { gatewayRef: string; gatewayPaymentId: string; amountPaise: number; refundId: string }) {
+    const refund = await this.call<{ refund_id?: string; refund_status: string }>(`/orders/${encodeURIComponent(input.gatewayRef)}/refunds`, {
+      method: "POST",
+      idempotencyKey: input.refundId,
+      body: {
+        refund_amount: input.amountPaise / 100,
+        refund_id: input.refundId,
+        refund_note: "TableQR refund",
+        refund_speed: "STANDARD",
+      },
+    });
+    return { gatewayRefundId: refund.refund_id || input.refundId, status: cashfreeRefundStatus(refund.refund_status) };
+  }
+
+  async fetchRefund(input: { gatewayRef: string; gatewayRefundId: string }) {
+    const refund = await this.call<{ refund_status: string }>(
+      `/orders/${encodeURIComponent(input.gatewayRef)}/refunds/${encodeURIComponent(input.gatewayRefundId)}`,
       { method: "GET" },
     );
-    const captured = list.items.find((p) => p.status === "captured");
-    if (captured) return { status: "success" as const, amountPaise: captured.amount, gatewayPaymentId: captured.id };
-    if (list.items.some((p) => p.status === "authorized" || p.status === "created")) return { status: "pending" as const, amountPaise: 0 };
-    if (list.items.length === 0) return { status: "none" as const, amountPaise: 0 };
-    const last = list.items[list.items.length - 1];
-    return { status: "failed" as const, amountPaise: 0, gatewayPaymentId: last.id, reason: last.error_description };
+    return { status: cashfreeRefundStatus(refund.refund_status) };
   }
 
-  async refund(input: { gatewayPaymentId: string; amountPaise: number; refundId: string }) {
-    const r = await this.call<{ id: string; status: string }>(`/v1/payments/${encodeURIComponent(input.gatewayPaymentId)}/refund`, {
-      method: "POST",
-      body: { amount: input.amountPaise, receipt: input.refundId.slice(0, 40), speed: "normal" },
-    });
-    return { gatewayRefundId: r.id, status: r.status === "processed" ? ("success" as const) : r.status === "failed" ? ("failed" as const) : ("pending" as const) };
-  }
-
-  async fetchRefund(gatewayRefundId: string) {
-    const r = await this.call<{ status: string }>(`/v1/refunds/${encodeURIComponent(gatewayRefundId)}`, { method: "GET" });
-    return { status: r.status === "processed" ? ("success" as const) : r.status === "failed" ? ("failed" as const) : ("pending" as const) };
-  }
-
-  verifyWebhook(rawBody: string, signature: string | null) {
-    if (!signature || !this.webhookSecret) return false;
-    return safeEqualHex(createHmac("sha256", this.webhookSecret).update(rawBody).digest("hex"), signature);
+  verifyWebhook(rawBody: string, signature: string | null, timestamp?: string | null) {
+    if (!signature || !timestamp) return false;
+    const expected = createHmac("sha256", this.clientSecret).update(`${timestamp}${rawBody}`).digest("base64");
+    return safeEqual(expected, signature);
   }
 
   parseWebhook(rawBody: string): WebhookEvent {
     const body = JSON.parse(rawBody) as {
-      event: string;
-      payload: {
-        payment?: { entity: { id: string; order_id: string; amount: number; status: string; error_description?: string } };
-        refund?: { entity: { id: string; payment_id: string; amount: number; status: string } };
+      type?: string;
+      data?: {
+        order?: { order_id?: string };
+        payment?: { cf_payment_id?: string | number; payment_status?: string; payment_amount?: number; payment_message?: string };
+        error_details?: { error_description?: string } | null;
+        refund?: {
+          refund_id?: string;
+          cf_refund_id?: string | number;
+          cf_payment_id?: string | number;
+          refund_status?: string;
+          refund_amount?: number;
+        };
       };
     };
-    const payment = body.payload.payment?.entity;
-    if ((body.event === "payment.captured" || body.event === "payment.failed") && payment?.order_id) {
+    const payment = body.data?.payment;
+    const order = body.data?.order;
+    if (["PAYMENT_SUCCESS_WEBHOOK", "PAYMENT_FAILED_WEBHOOK", "PAYMENT_USER_DROPPED_WEBHOOK"].includes(body.type ?? "") && order?.order_id && payment?.cf_payment_id !== undefined) {
       return {
         kind: "payment",
-        gatewayRef: payment.order_id,
-        gatewayPaymentId: payment.id,
-        status: body.event === "payment.captured" ? "success" : "failed",
-        amountPaise: payment.amount,
-        reason: payment.error_description,
+        gatewayRef: order.order_id,
+        gatewayPaymentId: String(payment.cf_payment_id),
+        status: body.type === "PAYMENT_SUCCESS_WEBHOOK" && payment.payment_status === "SUCCESS" ? "success" : "failed",
+        amountPaise: paiseFromRupees(payment.payment_amount ?? 0),
+        reason: body.data?.error_details?.error_description ?? payment.payment_message,
       };
     }
-    const refund = body.payload.refund?.entity;
-    if ((body.event === "refund.processed" || body.event === "refund.failed") && refund) {
-      return { kind: "refund", gatewayRefundId: refund.id, gatewayPaymentId: refund.payment_id, status: body.event === "refund.processed" ? "success" : "failed", amountPaise: refund.amount };
+    const refund = body.data?.refund;
+    if (["REFUND_STATUS_WEBHOOK", "AUTO_REFUND_STATUS_WEBHOOK"].includes(body.type ?? "") && refund?.refund_status) {
+      const status = cashfreeRefundStatus(refund.refund_status);
+      if (status === "pending") return { kind: "ignored" };
+      return {
+        kind: "refund",
+        gatewayRefundId: refund.refund_id ?? String(refund.cf_refund_id ?? ""),
+        gatewayPaymentId: String(refund.cf_payment_id ?? ""),
+        status,
+        amountPaise: paiseFromRupees(refund.refund_amount ?? 0),
+      };
     }
     return { kind: "ignored" };
   }
@@ -217,9 +286,10 @@ class MockGateway implements PaymentGateway {
     return { gatewayRef };
   }
 
-  checkout(input: CheckoutInput): Checkout {
+  checkout(input: CheckoutInput): FormCheckout {
     return {
       provider: this.name,
+      kind: "form",
       method: "GET",
       action: "/pay/mock",
       fields: { ref: input.gatewayRef, amount: String(input.amountPaise), method: input.method, callback: input.callbackUrl },
@@ -239,15 +309,15 @@ class MockGateway implements PaymentGateway {
     return { gatewayRefundId: id, status: "pending" as const };
   }
 
-  async fetchRefund(ref: string) {
-    return { status: this.refunds.get(ref) ?? ("pending" as const) };
+  async fetchRefund(input: { gatewayRefundId: string }) {
+    return { status: this.refunds.get(input.gatewayRefundId) ?? ("pending" as const) };
   }
 
   settleRefund(ref: string, status: "success" | "failed") { if (this.refunds.has(ref)) this.refunds.set(ref, status); }
   refundStatus(ref: string) { return this.refunds.get(ref) ?? null; }
 
   verifyWebhook(rawBody: string, signature: string | null) {
-    return !!signature && safeEqualHex(createHmac("sha256", this.webhookSecret).update(rawBody).digest("hex"), signature);
+    return !!signature && safeEqual(createHmac("sha256", this.webhookSecret).update(rawBody).digest("hex"), signature);
   }
 
   parseWebhook(rawBody: string): WebhookEvent {
@@ -275,28 +345,39 @@ class MockGateway implements PaymentGateway {
 
 export const mockGateway = new MockGateway();
 
-let razorpay: { signature: string; gateway: RazorpayGateway } | null = null;
+let cashfree: { signature: string; gateway: CashfreeGateway } | null = null;
 
-function configuredRazorpay(): RazorpayGateway | null {
-  const config = parseRazorpayConfig(process.env);
+function configuredCashfree(): CashfreeGateway | null {
+  const config = parseCashfreeConfig(process.env);
   if (!config) return null;
-  const signature = [config.mode, config.keyId, config.keySecret, config.webhookSecret, config.apiBase].join("|");
-  if (razorpay?.signature !== signature) razorpay = { signature, gateway: new RazorpayGateway(config.keyId, config.keySecret, config.webhookSecret, config.apiBase) };
-  return razorpay.gateway;
+  const signature = [config.mode, config.clientId, config.clientSecret, config.apiBase, config.apiVersion].join("|");
+  if (cashfree?.signature !== signature) {
+    cashfree = {
+      signature,
+      gateway: new CashfreeGateway(config.clientId, config.clientSecret, config.mode, config.apiBase, config.apiVersion),
+    };
+  }
+  return cashfree.gateway;
 }
 
-/** "test", "live", or null when Razorpay is not configured; throws on a bad configuration */
-export const razorpayMode = (): RazorpayMode | null => parseRazorpayConfig(process.env)?.mode ?? null;
+export const cashfreeMode = (): CashfreeMode | null => parseCashfreeConfig(process.env)?.mode ?? null;
 
-/** The mock is for development and tests; production must configure a real (test) gateway */
+/** The mock is for development and tests; production must configure a real gateway. */
 export const mockAllowed = () => process.env.NODE_ENV !== "production" || process.env.PAYMENTS_MOCK === "1";
 
 /**
- * The gateway new payments use, or null when online payment is not set up (guests then pay at the
- * counter). The real adapter will take the outlet id and load that outlet's own keys.
+ * The gateway for guest bill payments. Prefers a restaurant-configured Cashfree account when
+ * CASHFREE_CLIENT_ID / CASHFREE_CLIENT_SECRET are set; falls back to the mock in development.
  */
 export function gatewayFor(): PaymentGateway | null {
-  return configuredRazorpay() ?? (mockAllowed() ? mockGateway : null);
+  const cf = configuredCashfree();
+  if (cf) return cf;
+  return mockAllowed() ? mockGateway : null;
+}
+
+/** TableQR's own Cashfree account, used only for restaurant plan fees. */
+export function platformGateway(): CashfreeGateway | null {
+  return configuredCashfree();
 }
 
 /** Guests pay their bill at the counter for now; GUEST_ONLINE_PAY=1 turns online bill payment back on */
@@ -306,7 +387,7 @@ export function guestGateway(): PaymentGateway | null {
 
 /** The gateway an existing payment went through, for status checks, webhooks and refunds */
 export function gatewayByName(name: string): PaymentGateway | null {
-  if (name === "razorpay") return configuredRazorpay();
   if (name === "mock") return mockAllowed() ? mockGateway : null;
+  if (name === "cashfree") return configuredCashfree();
   return null;
 }

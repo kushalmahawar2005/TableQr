@@ -96,10 +96,7 @@ export const planRequests = mysqlTable(
   (t) => [index("plan_requests_tenant_status_idx").on(t.tenantId, t.status)],
 );
 
-/**
- * TableQR fees a restaurant paid by hand (UPI to the operator, cash, bank). The owner can say
- * "I have paid" (claimed); the platform admin confirms it, which extends the paid period.
- */
+/** TableQR plan fees. Cashfree confirms online payments; admins can still record offline receipts. */
 export const feePayments = mysqlTable(
   "fee_payments",
   {
@@ -107,9 +104,15 @@ export const feePayments = mysqlTable(
     tenantId: tenantId().references(() => tenants.id),
     months: int("months").notNull(),
     amountPaise: int("amount_paise").notNull(),
-    method: mysqlEnum("method", ["upi", "cash", "bank"]).notNull().default("upi"),
-    /** UPI reference (UTR) or a note */
+    method: mysqlEnum("method", ["cashfree", "upi", "cash", "bank"]).notNull().default("cashfree"),
+    /** UPI reference (UTR), bank note, or Cashfree payment ID */
     reference: varchar("reference", { length: 60 }),
+    /** Makes a retry/double tap return the same Cashfree order. */
+    clientRequestId: varchar("client_request_id", { length: 64 }),
+    gatewayRef: varchar("gateway_ref", { length: 100 }),
+    gatewayPaymentId: varchar("gateway_payment_id", { length: 100 }),
+    failureReason: varchar("failure_reason", { length: 200 }),
+    checkedAt: at("checked_at"),
     /** The plan paid for when the owner upgrades from My plan; null keeps the current plan */
     planCode: varchar("plan_code", { length: 20 }),
     status: mysqlEnum("status", ["claimed", "confirmed", "rejected"]).notNull(),
@@ -121,7 +124,12 @@ export const feePayments = mysqlTable(
     createdAt: createdAt(),
     decidedAt: at("decided_at"),
   },
-  (t) => [index("fee_payments_tenant_created_idx").on(t.tenantId, t.createdAt), index("fee_payments_status_idx").on(t.status)],
+  (t) => [
+    index("fee_payments_tenant_created_idx").on(t.tenantId, t.createdAt),
+    index("fee_payments_status_idx").on(t.status),
+    uniqueIndex("fee_payments_request_uq").on(t.tenantId, t.clientRequestId),
+    uniqueIndex("fee_payments_gateway_ref_uq").on(t.gatewayRef),
+  ],
 );
 
 export const brands = mysqlTable(

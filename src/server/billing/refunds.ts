@@ -124,10 +124,10 @@ export async function reconcileRefund(ctx: { tenantId: string; outletId: string 
     .where(and(eq(s.refunds.tenantId, ctx.tenantId), eq(s.payments.outletId, ctx.outletId), eq(s.refunds.id, refundId)));
   if (!row) throw new AppError("not_found", "Refund not found.");
   const { refund, payment } = row;
-  if (refund.status !== "pending" || !refund.gatewayRef) return refund.status;
+  if (refund.status !== "pending" || !refund.gatewayRef || !payment.gatewayRef) return refund.status;
   const gateway = gatewayByName(payment.channel);
   if (!gateway) return refund.status;
-  const seen = await gateway.fetchRefund(refund.gatewayRef);
+  const seen = await gateway.fetchRefund({ gatewayRef: payment.gatewayRef, gatewayRefundId: refund.gatewayRef });
   if (seen.status === "pending") return "pending" as const;
   await recordRefundResult(payment.channel, { gatewayRefundId: refund.gatewayRef, status: seen.status }, now);
   return seen.status;

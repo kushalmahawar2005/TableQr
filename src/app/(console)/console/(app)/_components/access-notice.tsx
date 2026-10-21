@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { feesUpiId } from "@/lib/support";
 import type { Access } from "@/server/access";
 import type { StaffSession } from "@/server/staff/auth";
 import { planViewFor } from "./plan-data";
@@ -29,7 +28,7 @@ export async function PausedScreen({ access, canAsk, staff }: { access: Extract<
           {access.endsAt ? `It ended on ${day(access.endsAt)}. ` : ""}Orders, billing and the QR menu are stopped. Your menu, bills and customers are safe; once TableQR renews your plan, everything comes back at once.
         </p>
         <div className="mt-6 flex flex-col items-center gap-3">
-          {plan && <PlanPanel plan={plan} upiId={feesUpiId()} compact />}
+          {plan && <PlanPanel plan={plan} compact />}
           {canAsk ? <><RenewButton /><ContactTableQR message={`Hi TableQR, this is ${outlet}. Please renew our plan.`} /></> : <p className="text-body font-semibold text-ink">Please tell the owner.</p>}
           <form action={signOutAction}><button type="submit" className="min-h-11 text-body font-semibold text-muted underline underline-offset-4">Sign out</button></form>
         </div>

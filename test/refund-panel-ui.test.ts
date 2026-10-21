@@ -7,7 +7,7 @@ import type { PosBillDetail } from "@/server/staff/pos-read";
 vi.mock("@/server/staff/pos-actions", () => ({}));
 
 const payment = (over: Partial<PosBillDetail["payments"][number]> = {}): PosBillDetail["payments"][number] => ({
-  id: "p1", method: "card", amountPaise: 33600, tipPaise: 0, status: "success", channel: "razorpay", createdAt: 0,
+  id: "p1", method: "card", amountPaise: 33600, tipPaise: 0, status: "success", channel: "mock", createdAt: 0,
   refund: { refunds: [{ id: "r1", amountPaise: 10000, status: "pending", createdAt: 0, sent: true }, { id: "r2", amountPaise: 5000, status: "success", createdAt: 0, sent: true }], refundedPaise: 5000, pendingPaise: 10000, refundablePaise: 18600 },
   ...over,
 });

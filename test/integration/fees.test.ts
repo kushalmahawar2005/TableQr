@@ -1,10 +1,11 @@
-import { eq } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { count, eq } from "drizzle-orm";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { db as appDb } from "@/db";
+import { uuidv7 } from "@/db/id";
 import * as s from "@/db/schema";
 import { tenantAccess } from "@/server/access";
 import { AppError } from "@/server/errors";
-import { claimFee, confirmFee, feesData, monthlyFee, ownerPlan, recordFee, rejectFee } from "@/server/fees";
+import { claimFee, confirmFee, feesData, monthlyFee, ownerPlan, recordFee, reconcileCashfreeFee, rejectFee, settleCashfreeFeeByGatewayRef, startFeePayment } from "@/server/fees";
 import { resetTestDb } from "./setup-db";
 
 // TableQR fees paid by hand: the owner says "I have paid", the admin confirms, the months are added.
@@ -73,5 +74,75 @@ describe("fees paid by hand", () => {
     expect((await monthlyFee(appDb, env.demo.tenantId)).totalPaise).toBe(249900);
     const [row] = await env.db.select({ reference: s.feePayments.reference }).from(s.feePayments).where(eq(s.feePayments.id, claim.id));
     expect(row.reference).toBe("412345678902");
+  });
+
+  it("a verified Cashfree success activates exactly once and cannot be confirmed by hand", async () => {
+    const amountPaise = (await monthlyFee(appDb, env.demo.tenantId)).totalPaise;
+    const id = uuidv7();
+    const gatewayRef = `cf_${id}`;
+    await env.db.insert(s.feePayments).values({
+      id,
+      tenantId: env.demo.tenantId,
+      months: 1,
+      amountPaise,
+      method: "cashfree",
+      clientRequestId: `req_${id}`,
+      gatewayRef,
+      status: "claimed",
+      claimedBy: "Rohan Sharma",
+    });
+    await refused(confirmFee(id), "invalid_state");
+    const [before] = await env.db.select({ n: count() }).from(s.subscriptions).where(eq(s.subscriptions.tenantId, env.demo.tenantId));
+    expect(await settleCashfreeFeeByGatewayRef(gatewayRef, { status: "success", amountPaise, gatewayPaymentId: "cfpay_1" })).toMatchObject({ status: "confirmed", alreadyFinal: false });
+    expect(await settleCashfreeFeeByGatewayRef(gatewayRef, { status: "success", amountPaise, gatewayPaymentId: "cfpay_1" })).toEqual({ status: "confirmed", alreadyFinal: true });
+    const [after] = await env.db.select({ n: count() }).from(s.subscriptions).where(eq(s.subscriptions.tenantId, env.demo.tenantId));
+    expect(Number(after.n)).toBe(Number(before.n) + 1);
+    const [payment] = await env.db.select({ status: s.feePayments.status, gatewayPaymentId: s.feePayments.gatewayPaymentId, reference: s.feePayments.reference }).from(s.feePayments).where(eq(s.feePayments.id, id));
+    expect(payment).toEqual({ status: "confirmed", gatewayPaymentId: "cfpay_1", reference: "cfpay_1" });
+  });
+
+  describe("Cashfree checkout", () => {
+    afterEach(() => {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+    });
+
+    it("does not leave a hanging claim when Cashfree cannot start the order", async () => {
+      vi.stubEnv("CASHFREE_CLIENT_ID", "cashfree_client_123");
+      vi.stubEnv("CASHFREE_CLIENT_SECRET", "cashfree_secret_123");
+      vi.stubEnv("CASHFREE_MODE", "sandbox");
+      vi.stubEnv("CASHFREE_API_BASE", "https://cashfree.example/pg");
+      vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ message: "down" }), { status: 503 }));
+      await refused(startFeePayment(owner(), { months: 1, requestId: "pay-down-1", callbackUrl: "https://tableqr.example/api/fees/return?p=PLACEHOLDER" }), "invalid_state");
+      expect((await ownerPlan(owner())).waiting).toBe(false);
+    });
+
+    it("starts one Cashfree order, replays the same tap, and activates after Cashfree confirms", async () => {
+      const amountPaise = (await monthlyFee(appDb, env.demo.tenantId)).totalPaise;
+      vi.stubEnv("CASHFREE_CLIENT_ID", "cashfree_client_123");
+      vi.stubEnv("CASHFREE_CLIENT_SECRET", "cashfree_secret_123");
+      vi.stubEnv("CASHFREE_MODE", "sandbox");
+      vi.stubEnv("CASHFREE_API_BASE", "https://cashfree.example/pg");
+      vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
+        if (String(url).endsWith("/orders") && init?.method === "POST") {
+          const body = JSON.parse(String(init.body)) as { order_id: string };
+          return new Response(JSON.stringify({ order_id: body.order_id }), { status: 200 });
+        }
+        if (String(url).includes("/payments")) {
+          return new Response(JSON.stringify([{ cf_payment_id: 99, payment_status: "SUCCESS", payment_amount: amountPaise / 100 }]), { status: 200 });
+        }
+        return new Response(JSON.stringify({ payment_session_id: "session_1" }), { status: 200 });
+      });
+      const started = await startFeePayment(owner(), { months: 1, requestId: "pay-again-1", callbackUrl: "https://tableqr.example/api/fees/return?p=PLACEHOLDER" });
+      expect(started.checkout).toEqual({ provider: "cashfree", kind: "cashfree", mode: "sandbox", paymentSessionId: "session_1" });
+      expect(started.replayed).toBe(false);
+      const again = await startFeePayment(owner(), { months: 1, requestId: "pay-again-1", callbackUrl: "https://tableqr.example/api/fees/return?p=PLACEHOLDER" });
+      expect(again).toMatchObject({ id: started.id, replayed: true });
+      const [before] = await env.db.select({ n: count() }).from(s.subscriptions).where(eq(s.subscriptions.tenantId, env.demo.tenantId));
+      expect(await reconcileCashfreeFee(started.id)).toBe("confirmed");
+      expect(await reconcileCashfreeFee(started.id)).toBe("confirmed");
+      const [after] = await env.db.select({ n: count() }).from(s.subscriptions).where(eq(s.subscriptions.tenantId, env.demo.tenantId));
+      expect(Number(after.n)).toBe(Number(before.n) + 1);
+    });
   });
 });

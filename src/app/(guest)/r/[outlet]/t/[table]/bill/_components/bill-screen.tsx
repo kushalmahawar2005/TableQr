@@ -26,6 +26,7 @@ import { brandStyle, deriveBrandTokens } from "@/domain/brand";
 import { formatRupees } from "@/domain/menu-price";
 import { roundHalfUp } from "@/domain/money";
 import type { Lang } from "@/lib/i18n";
+import { openCheckout } from "@/lib/payments/checkout";
 import type { BillScreenData } from "@/server/guest/bill-screen";
 import { DiningNav } from "../../_components/dining-nav";
 import { LanguageToggle } from "../../_components/language-toggle";
@@ -75,22 +76,6 @@ const primary = `${button} bg-brand text-brand-on hover:bg-brand-hover active:bg
 const exact = (paise: number) =>
   `${paise < 0 ? "−" : ""}₹${(Math.abs(paise) / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const pct = (bp: number) => `${(bp / 100).toLocaleString("en-IN", { maximumFractionDigits: 2 })}%`;
-
-function submitCheckout(checkout: { method: "GET" | "POST"; action: string; fields: Record<string, string> }) {
-  // A plain form to the gateway's hosted page: no gateway script ever runs on our pages
-  const form = document.createElement("form");
-  form.method = checkout.method;
-  form.action = checkout.action;
-  for (const [name, value] of Object.entries(checkout.fields)) {
-    const input = document.createElement("input");
-    input.type = "hidden";
-    input.name = name;
-    input.value = value;
-    form.appendChild(input);
-  }
-  document.body.appendChild(form);
-  form.submit();
-}
 
 export function BillScreen({
   data: initial,
@@ -250,7 +235,7 @@ export function BillScreen({
     try {
       const res = await startPaymentAction(data.outlet.code, shortCode, { forParticipantIds: selected, tipPaise, method, requestId });
       if (res.ok) {
-        submitCheckout(res.checkout);
+        await openCheckout(res.checkout);
         return;
       }
       requests.current.delete(intent);

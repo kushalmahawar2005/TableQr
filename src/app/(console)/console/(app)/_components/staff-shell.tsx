@@ -15,6 +15,7 @@ import {
   PackageIcon,
   BedIcon,
   Settings01Icon,
+  SidebarLeftIcon,
   Tag01Icon,
   UserGroupIcon,
   UserMultipleIcon,
@@ -22,7 +23,7 @@ import {
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import type { Lang } from "@/lib/i18n";
 import { signOutAction } from "../../login/actions";
@@ -52,8 +53,8 @@ const ICONS: Record<string, IconSvgElement> = {
 const ROLE = { en: { owner: "Owner", manager: "Manager", host: "Host", cashier: "Cashier", waiter: "Waiter", kitchen: "Kitchen", accountant: "Accountant", reception: "Reception" }, hi: { owner: "मालिक", manager: "मैनेजर", host: "होस्ट", cashier: "कैशियर", waiter: "वेटर", kitchen: "किचन", accountant: "अकाउंटेंट", reception: "रिसेप्शन" } } as const;
 
 /**
- * Staff console frame. 1024px and up: full sidebar. 640 to 1023px: icon rail (labels stay as
- * accessible names). Phones: a slim top bar and a bottom tab bar.
+ * Staff console frame. 1024px and up: full sidebar, which can be folded to the icon rail. 640 to
+ * 1023px: icon rail (labels stay as accessible names). Phones: a slim top bar and a bottom tab bar.
  */
 export function StaffShell({
   lang,
@@ -63,6 +64,7 @@ export function StaffShell({
   activeSlug,
   preview = false,
   theme = "light",
+  sidebar = "open",
   kitchen = false,
   outlets = [],
   plan,
@@ -74,6 +76,8 @@ export function StaffShell({
   activeSlug?: string;
   preview?: boolean;
   theme?: "light" | "dark";
+  /** Wide-screen sidebar as last left: open, or folded to icons */
+  sidebar?: "open" | "folded";
   /** Show the Kitchen button in the top bar */
   kitchen?: boolean;
   /** Other outlets this person can work at; a switcher shows when there is more than one */
@@ -98,11 +102,25 @@ export function StaffShell({
     mq.addEventListener("change", update);
     return () => mq.removeEventListener("change", update);
   }, []);
+  // Folded sidebar on wide screens; kept in a cookie like the theme so the page opens the same way. Ctrl/Cmd+B flips it
+  const [folded, setFolded] = useState(sidebar === "folded");
+  useEffect(() => {
+    document.cookie = `tq_sidebar=${folded ? "folded" : "open"}; path=/; max-age=31536000; samesite=lax`;
+  }, [folded]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() === "b" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); setFolded((v) => !v); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+  // Labels show only on wide screens with the sidebar open
+  const wideLabel = folded ? "hidden" : "hidden lg:inline";
   const path = usePathname();
   const active = activeSlug ?? path?.split("/")[2];
   const role = staff.roles.map((r) => ROLE[lang][r as keyof (typeof ROLE)["en"]] ?? r).join(", ");
   return (
-    <div lang={lang} className={`flex min-h-dvh flex-1 flex-col bg-paper text-ink sm:flex-row ${dark ? "theme-dark" : ""}`}>
+    <div lang={lang} style={{ "--sidebar-width": folded ? "4rem" : "13rem" } as CSSProperties} className={`flex min-h-dvh flex-1 flex-col bg-paper text-ink sm:flex-row ${dark ? "theme-dark" : ""}`}>
       <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between border-b border-line bg-surface px-4 sm:hidden print:hidden">
         <span className="flex min-w-0 items-center gap-2">
           <span className="grid size-8 shrink-0 place-items-center rounded-input bg-ink font-display text-body font-bold text-white" aria-hidden>T</span>
@@ -120,12 +138,12 @@ export function StaffShell({
         </form>
         </span>
       </header>
-      <aside className="sticky top-0 hidden h-dvh w-16 shrink-0 flex-col border-r border-line bg-surface sm:flex lg:w-52 print:hidden">
-        <div className="flex h-14 items-center gap-2 border-b border-line px-3 lg:px-4">
+      <aside className={`sticky top-0 hidden h-dvh w-16 shrink-0 flex-col border-r border-line bg-surface transition-[width] duration-200 sm:flex print:hidden ${folded ? "" : "lg:w-52"}`}>
+        <div className={`flex h-14 items-center gap-2 border-b border-line px-3 ${folded ? "" : "lg:px-4"}`}>
           <span className="grid size-9 shrink-0 place-items-center rounded-input bg-ink font-display text-section font-bold text-white" aria-hidden>
             T
           </span>
-          <span className="hidden min-w-0 lg:block">
+          <span className={`hidden min-w-0 ${folded ? "" : "lg:block"}`}>
             <span className="block truncate font-display text-body font-bold">TableQR</span>
             <span className="block truncate text-caption text-muted">{staff.outlet}</span>
           </span>
@@ -144,13 +162,13 @@ export function StaffShell({
                 className={`flex min-h-11 items-center gap-3 rounded-input px-3 text-body font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-ink ${current ? "bg-ink text-white" : "text-muted hover:bg-ink/5 hover:text-ink"}`}
               >
                 <HugeiconsIcon icon={ICONS[s.slug] ?? DashboardSquare01Icon} size={20} className="shrink-0" aria-hidden />
-                <span className="hidden truncate lg:inline">{s.label}</span>
+                <span className={`truncate ${wideLabel}`}>{s.label}</span>
               </Link>
             );
           })}
         </nav>
         <div className="border-t border-line p-2">
-          <div className="hidden px-2 pb-2 lg:block">
+          <div className={`hidden px-2 pb-2 ${folded ? "" : "lg:block"}`}>
             <p className="truncate text-body font-semibold">{staff.name}</p>
             <p className="truncate text-caption text-muted">{role}</p>
             {plan && (
@@ -160,11 +178,11 @@ export function StaffShell({
               </div>
             )}
           </div>
-          <ThemeToggle dark={dark} onChange={setDark} showLabel className="flex min-h-11 w-full items-center gap-3 rounded-input px-3 text-body font-semibold text-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-2 focus-visible:outline-ink [&>span]:hidden lg:[&>span]:inline" />
+          <ThemeToggle dark={dark} onChange={setDark} showLabel className={`flex min-h-11 w-full items-center gap-3 rounded-input px-3 text-body font-semibold text-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-2 focus-visible:outline-ink [&>span]:hidden ${folded ? "" : "lg:[&>span]:inline"}`} />
           <form action={preview ? undefined : signOutAction}>
             <button type={preview ? "button" : "submit"} aria-label={lang === "hi" ? "साइन आउट" : "Sign out"} title={staff.name} className="flex min-h-11 w-full items-center gap-3 rounded-input px-3 text-body font-semibold text-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-2 focus-visible:outline-ink">
               <HugeiconsIcon icon={Logout01Icon} size={20} className="shrink-0" aria-hidden />
-              <span className="hidden lg:inline">{lang === "hi" ? "साइन आउट" : "Sign out"}</span>
+              <span className={wideLabel}>{lang === "hi" ? "साइन आउट" : "Sign out"}</span>
             </button>
           </form>
         </div>
@@ -172,6 +190,17 @@ export function StaffShell({
       <div className="flex min-w-0 flex-1 flex-col pb-[calc(4rem+env(safe-area-inset-bottom))] sm:pb-0">
         {/* Top bar on tablets and computers, level with the sidebar's logo row */}
         <header className="sticky top-0 z-20 hidden h-14 shrink-0 print:hidden items-center justify-end gap-2 border-b border-line bg-surface/95 px-4 backdrop-blur-[2px] sm:flex lg:px-6">
+          <button
+            type="button"
+            onClick={() => setFolded(!folded)}
+            aria-label={folded ? (lang === "hi" ? "मेन्यू खोलें" : "Open sidebar") : (lang === "hi" ? "मेन्यू बंद करें" : "Close sidebar")}
+            aria-expanded={!folded}
+            title={`${folded ? (lang === "hi" ? "मेन्यू खोलें" : "Open sidebar") : (lang === "hi" ? "मेन्यू बंद करें" : "Close sidebar")} (Ctrl+B)`}
+            className="-ml-1.5 hidden size-9 shrink-0 place-items-center rounded-input text-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-2 focus-visible:outline-ink lg:grid"
+          >
+            <HugeiconsIcon icon={SidebarLeftIcon} size={20} aria-hidden />
+          </button>
+          <span className="hidden h-5 w-px shrink-0 bg-line lg:block" aria-hidden />
           {outlets.length > 1 && !preview ? <OutletSwitcher outlets={outlets} lang={lang} /> : <span className="mr-auto truncate text-caption text-muted">{staff.outlet}</span>}
           {kitchen && <KitchenButton lang={lang} active={active === "kitchen"} preview={preview} />}
           <HelpButton lang={lang} preview={preview} />

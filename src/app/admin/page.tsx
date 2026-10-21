@@ -9,7 +9,6 @@ import { AuditView } from "./audit-view";
 import { SettingsView } from "./settings-view";
 import { AnalyticsView } from "./analytics-view";
 import { FeesView } from "./fees-view";
-import { feesUpiId } from "@/lib/support";
 import { PlansView } from "./plans-view";
 import { SubscriptionsView } from "./subscriptions-view";
 import { TenantsView } from "./tenants-view";
@@ -25,7 +24,7 @@ export default async function AdminPage() {
   const name = admin.name.trim().split(/\s+/)[0] || admin.email.split("@")[0];
   const rupees = (paise: number) => `₹${Math.round(paise / 100).toLocaleString("en-IN")}`;
   const alerts: AdminAlert[] = data.tenants.flatMap((t) => [
-    ...(t.feeClaim ? [{ id: `${t.id}-claim`, title: `${t.name} says they paid`, detail: `${rupees(t.feeClaim.amountPaise)} · check it and confirm`, page: "Fees" }] : []),
+    ...(t.feeClaim ? [{ id: `${t.id}-claim`, title: t.feeClaim.method === "cashfree" ? `${t.name} payment is processing` : `${t.name} says they paid`, detail: t.feeClaim.method === "cashfree" ? `${rupees(t.feeClaim.amountPaise)} · Cashfree is confirming` : `${rupees(t.feeClaim.amountPaise)} · check it and confirm`, page: "Fees" }] : []),
     ...t.requests.map((r) => ({ id: r.id, title: `${t.name} asked for ${r.feature && r.feature in FEATURE_LABELS ? FEATURE_LABELS[r.feature as keyof typeof FEATURE_LABELS].label : "a plan change"}`, detail: r.note ? `“${r.note}”` : `by ${r.requestedBy}`, page: "Tenants", tenantId: t.id })),
   ]);
   return <AdminShell
@@ -38,7 +37,7 @@ export default async function AdminPage() {
       Tenants: <TenantsView data={data} />,
       Subscriptions: <SubscriptionsView data={data} />,
       "Plans & Pricing": <PlansView data={data} />,
-      Fees: <FeesView data={data} upiId={feesUpiId()} />,
+      Fees: <FeesView data={data} />,
       Analytics: <AnalyticsView data={data} />,
       "Audit Logs": <AuditView />,
       Settings: <SettingsView />,

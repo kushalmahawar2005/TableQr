@@ -20,6 +20,7 @@ export default async function ConsoleLayout({ children }: LayoutProps<"/console"
   const jar = await cookies();
   const lang = parseLang(jar.get(LANG_COOKIE)?.value);
   const theme = jar.get("tq_theme")?.value === "dark" ? "dark" : "light";
+  const sidebar = jar.get("tq_sidebar")?.value === "folded" ? "folded" : "open";
   // The kitchen board is a button in the top bar, not a sidebar row
   // Sections outside the plan are left out of the menu; My plan shows what more there is
   const [features, outlets, access, planName, guide] = await Promise.all([tenantFeatures(staff.tenantId), outletsFor(staff), tenantAccess(staff.tenantId), tenantPlanName(staff.tenantId), getGuide(staff)]);
@@ -35,7 +36,7 @@ export default async function ConsoleLayout({ children }: LayoutProps<"/console"
     .map(({ slug, label }) => ({ slug, label }));
   const kitchen = canSee(staff.roles, "kitchen");
   return (
-    <StaffShell theme={theme} lang={lang} sections={sections} kitchen={kitchen} plan={planName ? { name: planName, canManage: canAsk } : undefined} outlets={outlets.map((o) => ({ id: o.id, name: o.name, current: o.id === staff.outletId }))} staff={{ name: staff.name, roles: staff.roles, outlet: staff.outlet.name, shiftEnds: staff.expiresAt }}>
+    <StaffShell theme={theme} sidebar={sidebar} lang={lang} sections={sections} kitchen={kitchen} plan={planName ? { name: planName, canManage: canAsk } : undefined} outlets={outlets.map((o) => ({ id: o.id, name: o.name, current: o.id === staff.outletId }))} staff={{ name: staff.name, roles: staff.roles, outlet: staff.outlet.name, shiftEnds: staff.expiresAt }}>
       <AccessBanner access={access} canAsk={canAsk} outlet={staff.outlet.name} />
       {children}
       <Guide lang={lang} name={staff.name} sections={sections} kitchen={kitchen} welcomeSeen={!!guide.welcome} />

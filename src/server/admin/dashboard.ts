@@ -49,9 +49,9 @@ export async function getAdminData(): Promise<AdminData> {
   // isolation-exempt: authenticated platform admins see every restaurant's open plan requests
   const requestRows = await db.select({ id: s.planRequests.id, tenantId: s.planRequests.tenantId, feature: s.planRequests.feature, note: s.planRequests.note, requestedBy: s.planRequests.requestedBy, createdAt: s.planRequests.createdAt })
     .from(s.planRequests).where(eq(s.planRequests.status, "open")).orderBy(desc(s.planRequests.createdAt));
-  // isolation-exempt: authenticated platform admins see every restaurant's "I have paid" waiting to be checked
-  const claimRows = await db.select({ tenantId: s.feePayments.tenantId, amountPaise: s.feePayments.amountPaise, createdAt: s.feePayments.createdAt }).from(s.feePayments).where(eq(s.feePayments.status, "claimed"));
-  const claimByTenant = new Map(claimRows.map((c) => [c.tenantId, { amountPaise: c.amountPaise, createdAt: c.createdAt.toISOString() }]));
+  // isolation-exempt: authenticated platform admins see plan payments still being confirmed.
+  const claimRows = await db.select({ tenantId: s.feePayments.tenantId, amountPaise: s.feePayments.amountPaise, createdAt: s.feePayments.createdAt, method: s.feePayments.method }).from(s.feePayments).where(eq(s.feePayments.status, "claimed"));
+  const claimByTenant = new Map(claimRows.map((c) => [c.tenantId, { amountPaise: c.amountPaise, createdAt: c.createdAt.toISOString(), method: c.method }]));
   const requestsByTenant = new Map<string, { id: string; feature: string | null; note: string | null; requestedBy: string; createdAt: string }[]>();
   for (const r of requestRows) requestsByTenant.set(r.tenantId, [...(requestsByTenant.get(r.tenantId) ?? []), { id: r.id, feature: r.feature, note: r.note, requestedBy: r.requestedBy, createdAt: r.createdAt.toISOString() }]);
 

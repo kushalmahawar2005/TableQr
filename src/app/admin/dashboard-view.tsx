@@ -30,7 +30,7 @@ type Attention = { id: string; kind: AttentionKind; tenant: AdminTenant; label: 
 function attentionItems(tenants: AdminTenant[], now: number): Attention[] {
   const items: Attention[] = [];
   for (const tenant of tenants) {
-    if (tenant.feeClaim) items.push({ id: `${tenant.id}-claim`, kind: "payment", tenant, label: "Says they paid", detail: `₹${Math.round(tenant.feeClaim.amountPaise / 100).toLocaleString("en-IN")} · check it in Fees`, tone: "amber", rank: -2, page: "Fees" });
+    if (tenant.feeClaim) items.push({ id: `${tenant.id}-claim`, kind: "payment", tenant, label: tenant.feeClaim.method === "cashfree" ? "Payment processing" : "Says they paid", detail: `₹${Math.round(tenant.feeClaim.amountPaise / 100).toLocaleString("en-IN")} · ${tenant.feeClaim.method === "cashfree" ? "Cashfree is confirming" : "check it in Fees"}`, tone: "amber", rank: -2, page: "Fees" });
     for (const r of tenant.requests) items.push({ id: r.id, kind: "request", tenant, label: "Asked for upgrade", detail: `${r.feature && r.feature in FEATURE_LABELS ? FEATURE_LABELS[r.feature as keyof typeof FEATURE_LABELS].label : "Plan change"} · ${ago(r.createdAt, now)}`, tone: "amber", rank: -1 });
     if (tenant.subscriptionStatus === "past_due") items.push({ id: `${tenant.id}-due`, kind: "payment", tenant, label: "Payment overdue", detail: tenant.renewalAt ? `Was due ${shortDate(tenant.renewalAt)}` : "Subscription is past due", tone: "red", rank: 0 });
     if (tenant.status === "suspended") items.push({ id: `${tenant.id}-sus`, kind: "suspended", tenant, label: "Suspended", detail: "Tenant cannot take orders", tone: "red", rank: 1 });

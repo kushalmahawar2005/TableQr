@@ -789,10 +789,10 @@ export async function executeRefund(ctx: StaffContext, refundId: string, now = n
       return "success" as const;
     }
     const gateway = gatewayByName(payment.channel);
-    if (!gateway || !payment.gatewayPaymentId) throw new AppError("invalid_state", "This payment cannot be refunded online.");
+    if (!gateway || !payment.gatewayRef || !payment.gatewayPaymentId) throw new AppError("invalid_state", "This payment cannot be refunded online.");
     let res;
     try {
-      res = await gateway.refund({ gatewayPaymentId: payment.gatewayPaymentId, amountPaise: refund.amountPaise, refundId: refund.id });
+      res = await gateway.refund({ gatewayRef: payment.gatewayRef, gatewayPaymentId: payment.gatewayPaymentId, amountPaise: refund.amountPaise, refundId: refund.id });
     } catch (err) {
       // A refused or failed call never counts as money returned; the amount is free to refund again
       console.error("[refunds] gateway refund failed", { refundId: refund.id, error: err instanceof Error ? err.message : String(err) });
@@ -832,7 +832,7 @@ export async function checkoutFor(ctx: GuestContext, paymentId: string, callback
   if (!row?.payment.gatewayRef || row.payment.status !== "pending") return null;
   const gateway = gatewayByName(row.payment.channel);
   if (!gateway || row.payment.method === "cash") return null;
-  return gateway.checkout({
+  return await gateway.checkout({
     gatewayRef: row.payment.gatewayRef,
     paymentId,
     amountPaise: row.payment.amountPaise + row.payment.tipPaise,

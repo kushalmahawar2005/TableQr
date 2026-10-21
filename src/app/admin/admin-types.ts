@@ -18,8 +18,8 @@ export type AdminTenant = {
   /** Open asks from the restaurant to unlock a feature or change the plan */
   /** Whether the restaurant can use TableQR now: trial or paid period, grace days, or paused */
   access: { state: "ok" | "grace" | "blocked"; reason: string; endsAt: string | null; stopsAt: string | null };
-  /** The owner said they paid and it is waiting to be checked in Fees */
-  feeClaim: { amountPaise: number; createdAt: string } | null;
+  /** A plan payment waiting for Cashfree or manual confirmation. */
+  feeClaim: { amountPaise: number; createdAt: string; method: "cashfree" | "upi" | "cash" | "bank" } | null;
   requests: { id: string; feature: string | null; note: string | null; requestedBy: string; createdAt: string }[];
   /** What this restaurant gets right now: its plan or custom package, with the admin's choices */
   features: Features;

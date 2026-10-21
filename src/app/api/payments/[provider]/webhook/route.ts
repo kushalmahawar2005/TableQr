@@ -13,8 +13,10 @@ export async function POST(request: Request, ctx: { params: Promise<{ provider: 
   const gateway = gatewayByName(provider);
   if (!gateway) return Response.json({ error: "Unknown gateway" }, { status: 404 });
   const raw = await request.text();
-  const signature = request.headers.get(provider === "razorpay" ? "x-razorpay-signature" : "x-mock-signature");
-  if (!gateway.verifyWebhook(raw, signature)) return Response.json({ error: "Bad signature" }, { status: 401 });
+  // Cashfree uses x-webhook-signature + x-webhook-timestamp; the mock uses x-mock-signature
+  const signature = request.headers.get("x-webhook-signature") ?? request.headers.get("x-mock-signature");
+  const timestamp = request.headers.get("x-webhook-timestamp");
+  if (!gateway.verifyWebhook(raw, signature, timestamp)) return Response.json({ error: "Bad signature" }, { status: 401 });
 
   let event;
   try {

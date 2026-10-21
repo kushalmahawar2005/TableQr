@@ -197,6 +197,13 @@
       "when": 1792567360613,
       "tag": "0027_user_guide",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "5",
+      "when": 1792582575582,
+      "tag": "0028_early_santa_claus",
+      "breakpoints": true
     }
   ]
 }

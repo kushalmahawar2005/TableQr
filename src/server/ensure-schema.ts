@@ -3,7 +3,7 @@ import type { Pool, RowDataPacket } from "mysql2/promise";
 
 // Brings the live database up to what this release needs, once, when the server starts.
 // Hostinger builds and starts the app straight from Git and never runs `db:migrate`, so these
-// steps mirror drizzle/0016-0027. Every step checks first, so running it again (another server
+// steps mirror drizzle/0016-0028. Every step checks first, so running it again (another server
 // instance, a restart) changes nothing. Works on MySQL and MariaDB.
 
 type Step = { tag: string; when: number; hash: string; apply: (db: Pool) => Promise<void> };
@@ -21,6 +21,14 @@ const hasTable = async (db: Pool, table: string) => {
   return Number(rows[0]?.n ?? 0) > 0;
 };
 
+const hasIndex = async (db: Pool, table: string, index: string) => {
+  const [rows] = await db.query<RowDataPacket[]>(
+    "SELECT COUNT(*) AS n FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ?",
+    [table, index],
+  );
+  return Number(rows[0]?.n ?? 0) > 0;
+};
+
 /** Adds a column unless it is there; a second server adding it at the same moment is fine */
 async function addColumn(db: Pool, table: string, column: string, type: string) {
   if (await hasColumn(db, table, column)) return false;
@@ -29,6 +37,16 @@ async function addColumn(db: Pool, table: string, column: string, type: string) 
     return true;
   } catch (err) {
     if (await hasColumn(db, table, column)) return false;
+    throw err;
+  }
+}
+
+async function addUniqueIndex(db: Pool, table: string, index: string, columns: string) {
+  if (await hasIndex(db, table, index)) return;
+  try {
+    await db.query(`CREATE UNIQUE INDEX \`${index}\` ON \`${table}\` (${columns})`);
+  } catch (err) {
+    if (await hasIndex(db, table, index)) return;
     throw err;
   }
 }
@@ -215,6 +233,24 @@ const STEPS: Step[] = [
     hash: "92decc3eff21aa11eb8a5efa96b3d1a56387b8d640622378b802b03de5199733",
     apply: async (db) => {
       await addColumn(db, "users", "guide", "json");
+    },
+  },
+  {
+    tag: "0028_early_santa_claus",
+    when: 1792582575582,
+    hash: "8ad41d93e5fb71ee118baac2f1ea8e3f4107ff97abfcce879c133e802a79b23a",
+    apply: async (db) => {
+      const [method] = await db.query<RowDataPacket[]>("SELECT COLUMN_TYPE AS t FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'fee_payments' AND COLUMN_NAME = 'method'");
+      if (!String(method[0]?.t ?? "").includes("'cashfree'")) {
+        await db.query("ALTER TABLE `fee_payments` MODIFY COLUMN `method` enum('cashfree','upi','cash','bank') NOT NULL DEFAULT 'cashfree'");
+      }
+      await addColumn(db, "fee_payments", "client_request_id", "varchar(64)");
+      await addColumn(db, "fee_payments", "gateway_ref", "varchar(100)");
+      await addColumn(db, "fee_payments", "gateway_payment_id", "varchar(100)");
+      await addColumn(db, "fee_payments", "failure_reason", "varchar(200)");
+      await addColumn(db, "fee_payments", "checked_at", "datetime(3)");
+      await addUniqueIndex(db, "fee_payments", "fee_payments_request_uq", "`tenant_id`,`client_request_id`");
+      await addUniqueIndex(db, "fee_payments", "fee_payments_gateway_ref_uq", "`gateway_ref`");
     },
   },
 ];

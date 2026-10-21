@@ -16,11 +16,12 @@ import { openAdminPage } from "./admin-nav";
 import type { AdminData } from "./admin-types";
 import { FeeForm } from "./subscriptions-view";
 
-// TableQR's own income: restaurants' fees, paid by hand. Guest bill money is not shown anywhere here.
+// TableQR's own income. Cashfree plan fees and admin-recorded offline receipts live here;
+// restaurant guest bill money is never shown here.
 
 const money = (paise: number) => `₹${Math.round(paise / 100).toLocaleString("en-IN")}`;
 const date = (v: string | null) => (v ? new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" }).format(new Date(v)) : "—");
-const METHOD = { upi: "UPI", cash: "Cash", bank: "Bank" } as const;
+const METHOD = { cashfree: "Cashfree", upi: "UPI", cash: "Cash", bank: "Bank" } as const;
 /** "just now", "12 min ago", "3 h ago", "2 days ago" */
 const ago = (iso: string, now: number) => {
   const m = Math.max(0, Math.round((now - new Date(iso).getTime()) / 60_000));
@@ -53,12 +54,11 @@ function dueText(t: FeesTenant, now: number) {
   return { text: `${what} ends ${days <= 0 ? "today" : `in ${days} ${days === 1 ? "day" : "days"}`}`, tone: "bg-amber-100 text-amber-700" };
 }
 
-function reminder(t: FeesTenant, upiId: string | null) {
-  const pay = upiId ? ` Please pay to UPI ${upiId}` : " Please pay TableQR";
-  return `Hi ${t.contactName}, your TableQR ${t.planName} plan for ${t.name} is ${money(t.monthlyPaise)} per month and ${t.access.state === "ok" ? `is due on ${date(t.access.endsAt)}` : "is overdue"}.${pay}, then tap "I have paid" in TableQR > My plan. Thank you!`;
+function reminder(t: FeesTenant) {
+  return `Hi ${t.contactName}, your TableQR ${t.planName} plan for ${t.name} is ${money(t.monthlyPaise)} per month and ${t.access.state === "ok" ? `is due on ${date(t.access.endsAt)}` : "is overdue"}. Please open TableQR > My plan and pay securely through Cashfree. Thank you!`;
 }
 
-export function FeesView({ data, upiId }: { data: AdminData; upiId: string | null }) {
+export function FeesView({ data }: { data: AdminData }) {
   const router = useRouter();
   const [fees, setFees] = useState<FeesData | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -93,9 +93,8 @@ export function FeesView({ data, upiId }: { data: AdminData; upiId: string | nul
   return <div className="space-y-6">
     <div>
       <h1 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">Fees</h1>
-      <p className="mt-1 text-sm text-muted-foreground">What restaurants pay TableQR. They pay you by UPI, cash or bank; you confirm it here.</p>
+      <p className="mt-1 text-sm text-muted-foreground">What restaurants pay TableQR. Cashfree confirms online payments automatically; offline receipts can still be recorded here.</p>
     </div>
-    {!upiId && <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">Your UPI ID is not set, so restaurants see no Pay button. Add <span className="font-mono">TABLEQR_UPI_ID</span> in hPanel → Node.js → Environment variables.</p>}
     {notice && <p role={notice.ok ? "status" : "alert"} className={`rounded-lg p-3 text-sm ${notice.ok ? "bg-emerald-50 text-emerald-800" : "bg-red-50 text-red-700"}`}>{notice.text}</p>}
 
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4 [&>*]:min-w-0">
@@ -111,9 +110,9 @@ export function FeesView({ data, upiId }: { data: AdminData; upiId: string | nul
     </div> : <section aria-label="Waiting for you" className="rounded-2xl border border-[#5b42f5]/50 bg-[#5b42f5]/[0.06] p-4 sm:p-5">
       <div className="flex flex-wrap items-center gap-2">
         <span className="relative flex size-2.5"><span className="absolute inline-flex size-full animate-ping rounded-full bg-[#5b42f5] opacity-60" /><span className="relative inline-flex size-2.5 rounded-full bg-[#5b42f5]" /></span>
-        <h2 className="text-base font-semibold">Waiting for you</h2>
+        <h2 className="text-base font-semibold">Payments and requests in progress</h2>
         <Badge className="bg-[#5b42f5] text-white">{waitingCount}</Badge>
-        <p className="w-full text-sm text-muted-foreground sm:ml-2 sm:w-auto">Restaurants start working again as soon as you act.</p>
+        <p className="w-full text-sm text-muted-foreground sm:ml-2 sm:w-auto">Cashfree payments settle automatically; manual receipts and requests still need your action.</p>
       </div>
       <ul className="mt-4 space-y-3">
         {fees.claims.map((c) => <li key={c.id} className="rounded-xl border border-l-4 border-l-emerald-500 bg-card p-4 shadow-sm">
@@ -122,13 +121,15 @@ export function FeesView({ data, upiId }: { data: AdminData; upiId: string | nul
               <div className="flex flex-wrap items-center gap-2"><Badge variant="secondary" className="bg-emerald-100 text-emerald-700">Payment</Badge>{c.planCode && <Badge variant="secondary" className="bg-[#5b42f5]/15 text-[#5b42f5] dark:text-[#a99bff]">Upgrade to {data.plans.find((p) => p.code === c.planCode)?.name ?? c.planCode}</Badge>}<span className="text-xs text-muted-foreground">{ago(c.createdAt, now)}</span></div>
               <p className="text-lg font-semibold leading-tight">{c.tenant.name}</p>
               <p className="text-2xl font-bold tracking-tight">{money(c.amountPaise)} <span className="text-sm font-normal text-muted-foreground">for {c.months === 12 ? "1 year" : `${c.months} ${c.months === 1 ? "month" : "months"}`} · {METHOD[c.method]}</span></p>
-              <p className="text-sm text-muted-foreground">{c.reference ? <>Ref <span className="font-mono text-foreground">{c.reference}</span></> : "No reference given"} · sent by {c.claimedBy}</p>
+              <p className="text-sm text-muted-foreground">{c.reference ? <>Ref <span className="font-mono text-foreground">{c.reference}</span></> : c.method === "cashfree" ? "Waiting for Cashfree confirmation" : "No reference given"} · started by {c.claimedBy}</p>
               <p className="text-xs text-muted-foreground">{c.tenant.planName} plan · {c.tenant.contactName} · {c.tenant.contactPhone}</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <Reach t={c.tenant} message={`Hi ${c.tenant.contactName}, this is TableQR about your ${money(c.amountPaise)} payment.`} />
-              <Button variant="outline" disabled={pending} onClick={() => run(() => rejectFeeAction(c.id), "Marked not received. The owner can try again.")}>Not received</Button>
-              <Button disabled={pending} className="bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => run(() => confirmFeeAction(c.id), `Confirmed. ${c.tenant.name} is paid for ${c.months} ${c.months === 1 ? "month" : "months"}${c.planCode ? ` and moved to ${data.plans.find((p) => p.code === c.planCode)?.name ?? c.planCode}` : ""}.`)}>{pending ? <Loader2 className="animate-spin" /> : <CircleCheck />}Confirm payment</Button>
+              {c.method === "cashfree" ? <Badge variant="secondary" className="bg-blue-100 text-blue-700">Cashfree is confirming automatically</Badge> : <>
+                <Reach t={c.tenant} message={`Hi ${c.tenant.contactName}, this is TableQR about your ${money(c.amountPaise)} payment.`} />
+                <Button variant="outline" disabled={pending} onClick={() => run(() => rejectFeeAction(c.id), "Marked not received. The owner can try again.")}>Not received</Button>
+                <Button disabled={pending} className="bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => run(() => confirmFeeAction(c.id), `Confirmed. ${c.tenant.name} is paid for ${c.months} ${c.months === 1 ? "month" : "months"}${c.planCode ? ` and moved to ${data.plans.find((p) => p.code === c.planCode)?.name ?? c.planCode}` : ""}.`)}>{pending ? <Loader2 className="animate-spin" /> : <CircleCheck />}Confirm payment</Button>
+              </>}
             </div>
           </div>
         </li>)}
@@ -165,7 +166,7 @@ export function FeesView({ data, upiId }: { data: AdminData; upiId: string | nul
               <div className="min-w-0"><p className="font-medium">{t.name} <span className="font-normal text-muted-foreground">· {t.planName} · {money(t.monthlyPaise)}/month</span></p><p className="text-xs text-muted-foreground">{t.contactName} · {t.contactPhone}</p></div>
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="secondary" className={d.tone}>{d.text}</Badge>
-                <a href={whatsAppTo(t.contactPhone, reminder(t, upiId))} target="_blank" rel="noopener noreferrer" className={linkBtn}><MessageCircle className="size-4" aria-hidden="true" />WhatsApp reminder</a>
+                <a href={whatsAppTo(t.contactPhone, reminder(t))} target="_blank" rel="noopener noreferrer" className={linkBtn}><MessageCircle className="size-4" aria-hidden="true" />WhatsApp reminder</a>
                 {admin && <Button variant={recording === t.id ? "secondary" : "default"} onClick={() => setRecording(recording === t.id ? null : t.id)}>Record fees</Button>}
               </div>
             </div>

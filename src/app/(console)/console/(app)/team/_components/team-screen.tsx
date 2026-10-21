@@ -2,8 +2,9 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Copy, KeyRound, Phone, Plus, Power, UserRound } from "lucide-react";
+import { Check, Copy, KeyRound, Phone, Plus, Power, Search, Settings2, UserRound } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import type { TeamMember } from "@/server/staff/team";
@@ -23,9 +24,31 @@ const LABEL: Record<string, string> = { owner: "Owner", cashier: "Cashier", host
 const TONE: Record<string, string> = { owner: "#c9482b", manager: "#315e9e", waiter: "#237a68", kitchen: "#a74608", cashier: "#8a5a00", host: "#6d5bd0", accountant: "#64748b", reception: "#0f766e" };
 const field = "h-11 rounded-xl";
 
-function Avatar({ name, role }: { name: string; role: string }) {
+// Shift status from the duty list; people without one (the owner) just show whether they can sign in
+const DUTY = {
+  on: ["On duty", "bg-[var(--state-available-soft)] text-[var(--state-available-text)]"],
+  break: ["On break", "bg-[var(--state-held-soft)] text-[var(--state-held-text)]"],
+  off: ["Off duty", "bg-ink/10 text-muted"],
+} as const;
+
+function Avatar({ name, role, online = false }: { name: string; role: string; online?: boolean }) {
   const c = TONE[role] ?? "#64748b";
-  return <span className="grid size-11 shrink-0 place-items-center rounded-full font-display text-lg font-bold" style={{ background: `color-mix(in srgb, ${c} 16%, var(--surface))`, color: c }}>{name.trim().slice(0, 1).toUpperCase() || "?"}</span>;
+  return (
+    <span className="relative grid size-10 shrink-0 place-items-center rounded-full font-display text-base font-bold" style={{ background: `color-mix(in srgb, ${c} 16%, var(--surface))`, color: c }}>
+      {name.trim().slice(0, 1).toUpperCase() || "?"}
+      {online && <span className="absolute -right-0.5 -bottom-0.5 size-3 rounded-full border-2 border-surface bg-[var(--state-available)]" title="App open" />}
+    </span>
+  );
+}
+
+function RoleBadge({ role }: { role: string }) {
+  const c = TONE[role] ?? "#64748b";
+  return <span className="rounded-full px-2 py-0.5 text-xs font-semibold" style={{ background: `color-mix(in srgb, ${c} 14%, var(--surface))`, color: c }}>{LABEL[role] ?? role}</span>;
+}
+
+function StatusBadge({ member, duty }: { member: TeamMember; duty?: DutyRow }) {
+  const [text, tone] = !member.isActive ? ["Switched off", "bg-ink/10 text-muted"] : duty ? DUTY[duty.status] : ["Can sign in", "bg-ink/5 text-muted"];
+  return <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${tone}`}>{text}</span>;
 }
 
 function copy(text: string) {
@@ -50,6 +73,7 @@ export function TeamScreen({ initial, canEdit, outletCode, outletName, roles: al
   const member = initial.find((m) => m.id === manage) ?? null;
   const shown = initial.filter((m) => !q.trim() || `${m.name} ${m.phone}`.toLowerCase().includes(q.trim().toLowerCase()));
   const active = initial.filter((m) => m.isActive).length;
+  const dutyById = new Map(duty.map((d) => [d.id, d]));
   const randomPin = () => String(Math.floor(1000 + Math.random() * 9000));
 
   const openAdd = () => { setName(""); setPhone(""); setRole("waiter"); setPin(randomPin()); setErr(null); setCreated(null); setAdding(true); };
@@ -88,9 +112,67 @@ export function TeamScreen({ initial, canEdit, outletCode, outletName, roles: al
         {canEdit && <button type="button" onClick={openAdd} className="inline-flex h-11 items-center gap-2 rounded-xl border border-brand bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-strong"><Plus className="size-4" aria-hidden="true" />Add person</button>}
       </header>
 
-      <div className="mt-4 grid grid-cols-3 gap-2 sm:max-w-xl sm:gap-3">
-        {[["People", initial.length], ["Active", active], ["Switched off", initial.length - active]].map(([k, v]) => <div key={k as string} className="rounded-2xl border border-line bg-surface p-3"><p className="font-display text-title font-bold tabular-nums">{v}</p><p className="text-caption text-muted">{k}</p></div>)}
+      <div className="mt-5 grid grid-cols-3 divide-x divide-line overflow-hidden rounded-2xl border border-line bg-surface">
+        {([["People", initial.length, null], ["Active", active, "var(--state-available)"], ["Switched off", initial.length - active, null]] as const).map(([k, v, dot]) => (
+          <div key={k} className="px-4 py-3">
+            <p className="flex items-center gap-1.5 text-caption text-muted">{dot && <span className="size-1.5 rounded-full" style={{ background: dot }} aria-hidden="true" />}{k}</p>
+            <p className="mt-0.5 font-display text-title font-bold tabular-nums text-ink">{v}</p>
+          </div>
+        ))}
       </div>
+
+      {notice && <p role="status" className="mt-4 flex items-center gap-2 rounded-xl border border-success/30 bg-surface px-3 py-2 text-sm font-semibold text-success"><Check className="size-4" aria-hidden="true" />{notice.text}</p>}
+
+      <section aria-labelledby="team-people" className="mt-4 overflow-hidden rounded-2xl border border-line bg-surface">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3">
+          <h2 id="team-people" className="font-display text-section font-bold text-ink">Everyone <span className="ml-1 text-sm font-semibold tabular-nums text-muted">{initial.length}</span></h2>
+          <div className="relative w-full sm:w-64">
+            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted" aria-hidden="true" />
+            <Input aria-label="Search team" className="h-10 rounded-xl pl-9" placeholder="Search name or number" value={q} onChange={(e) => setQ(e.target.value)} />
+          </div>
+        </div>
+        <Table>
+          <TableHeader>
+            <TableRow className="border-line hover:bg-transparent">
+              <TableHead className="h-10 px-4 text-xs font-semibold tracking-wide text-muted uppercase">Person</TableHead>
+              <TableHead className="hidden h-10 px-4 text-xs font-semibold tracking-wide text-muted uppercase sm:table-cell">Role</TableHead>
+              <TableHead className="hidden h-10 px-4 text-xs font-semibold tracking-wide text-muted uppercase md:table-cell">Status</TableHead>
+              <TableHead className="h-10 w-0 px-4"><span className="sr-only">Change</span></TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {shown.map((m) => {
+              const d = dutyById.get(m.id);
+              return (
+                <TableRow key={m.id} className={`border-line hover:bg-ink/[0.03] ${m.isActive ? "" : "opacity-60"}`}>
+                  <TableCell className="px-4 py-3 whitespace-normal">
+                    <div className="flex items-center gap-3">
+                      <Avatar name={m.name} role={m.roles[0]} online={d?.online} />
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold text-ink">{m.name}{m.isMe && <span className="ml-1.5 text-xs font-normal text-muted">(you)</span>}</p>
+                        <p className="flex items-center gap-1 truncate text-caption text-muted"><Phone className="size-3" aria-hidden="true" />{m.phone}</p>
+                        <p className="mt-1 flex flex-wrap gap-1.5 sm:hidden">{m.roles.map((r) => <RoleBadge key={r} role={r} />)}<StatusBadge member={m} duty={d} /></p>
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell className="hidden px-4 py-3 sm:table-cell">
+                    <div className="flex flex-wrap gap-1.5">{m.roles.map((r) => <RoleBadge key={r} role={r} />)}<span className="md:hidden"><StatusBadge member={m} duty={d} /></span></div>
+                  </TableCell>
+                  <TableCell className="hidden px-4 py-3 md:table-cell"><StatusBadge member={m} duty={d} /></TableCell>
+                  <TableCell className="px-4 py-3 text-right">
+                    {canEdit && !m.locked && !m.isMe && <button type="button" onClick={() => { setManage(m.id); setErr(null); setNewPin(randomPin()); }} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-line px-3 text-sm font-semibold hover:border-ink/40"><Settings2 className="size-3.5" aria-hidden="true" />Manage</button>}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+            {shown.length === 0 && (
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={4} className="p-10 text-center text-sm text-muted"><UserRound className="mx-auto mb-2 size-6" aria-hidden="true" />No one found.</TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </section>
 
       <WhoIsWorking rows={duty} canChange={canChangeDuty} />
 
@@ -101,25 +183,6 @@ export function TeamScreen({ initial, canEdit, outletCode, outletName, roles: al
           {ROLES.map((r) => <span key={r.id} className="rounded-full bg-ink/5 px-2.5 py-1 font-semibold">{r.label} → {r.opens}</span>)}
         </div>
       </section>
-
-      {notice && <p role="status" className="mt-4 flex items-center gap-2 rounded-xl border border-success/30 bg-surface px-3 py-2 text-sm font-semibold text-success"><Check className="size-4" aria-hidden="true" />{notice.text}</p>}
-
-      <div className="mt-4"><Input aria-label="Search team" className={`${field} max-w-sm`} placeholder="Search name or number" value={q} onChange={(e) => setQ(e.target.value)} /></div>
-
-      <ul className="mt-3 grid gap-3 sm:grid-cols-2">
-        {shown.map((m) => (
-          <li key={m.id} className={`flex items-center gap-3 rounded-2xl border border-line bg-surface p-3.5 ${m.isActive ? "" : "opacity-60"}`}>
-            <Avatar name={m.name} role={m.roles[0]} />
-            <div className="min-w-0 flex-1">
-              <p className="truncate font-semibold">{m.name}{m.isMe && <span className="ml-1.5 text-xs font-normal text-muted">(you)</span>}</p>
-              <p className="flex items-center gap-1 truncate text-caption text-muted"><Phone className="size-3" aria-hidden="true" />{m.phone}</p>
-              <p className="mt-1 flex flex-wrap gap-1.5">{m.roles.map((r) => <span key={r} className="rounded-full px-2 py-0.5 text-xs font-semibold" style={{ background: `color-mix(in srgb, ${TONE[r] ?? "#64748b"} 14%, var(--surface))`, color: TONE[r] ?? "#64748b" }}>{LABEL[r] ?? r}</span>)}{!m.isActive && <span className="rounded-full bg-ink/10 px-2 py-0.5 text-xs font-semibold text-muted">Switched off</span>}</p>
-            </div>
-            {canEdit && !m.locked && !m.isMe && <button type="button" onClick={() => { setManage(m.id); setErr(null); setNewPin(randomPin()); }} className="min-h-10 shrink-0 rounded-lg border border-line px-3 text-sm font-semibold hover:border-ink/40">Manage</button>}
-          </li>
-        ))}
-        {shown.length === 0 && <li className="rounded-2xl border border-dashed border-line bg-surface p-8 text-center text-sm text-muted sm:col-span-2"><UserRound className="mx-auto mb-2 size-6" aria-hidden="true" />No one found.</li>}
-      </ul>
 
       <Sheet open={adding} onOpenChange={(o) => !o && setAdding(false)}>
         <SheetContent className="w-full overflow-y-auto bg-background data-[side=right]:sm:max-w-md">

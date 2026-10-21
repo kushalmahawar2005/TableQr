@@ -14,9 +14,9 @@ export async function startReservationCredit(outletCode: string, token: string, 
   const credit = existing ?? (await db.insert(s.reservationCredits).values({ tenantId: scope.tenantId, outletId: scope.outletId, reservationId: row.id, clientRequestId: requestId, amountPaise: row.creditRequiredPaise, status: "pending", provider: gateway.name }).$returningId(), await db.select().from(s.reservationCredits).where(and(eq(s.reservationCredits.tenantId, scope.tenantId), eq(s.reservationCredits.reservationId, row.id), eq(s.reservationCredits.clientRequestId, requestId))).then(x => x[0]));
   let gatewayRef = credit.gatewayRef;
   if (!gatewayRef) { gatewayRef = (await gateway.createOrder({ paymentId: credit.id, amountPaise: credit.amountPaise, receipt: credit.id })).gatewayRef; await db.update(s.reservationCredits).set({ gatewayRef, status: "pending", updatedAt: new Date() }).where(and(eq(s.reservationCredits.tenantId, scope.tenantId), eq(s.reservationCredits.id, credit.id))); }
-  const checkout = gateway.checkout({ gatewayRef, paymentId: credit.id, amountPaise: credit.amountPaise, method: "upi", outletName: scope.name, callbackUrl }).fields;
-  if (checkout.callback_url) checkout.callback_url = checkout.callback_url.replace("PLACEHOLDER", credit.id);
-  return { paid: false as const, creditId: credit.id, gatewayRef, checkout: { ...gateway.checkout({ gatewayRef, paymentId: credit.id, amountPaise: credit.amountPaise, method: "upi", outletName: scope.name, callbackUrl }), fields: checkout } };
+  const checkout = await gateway.checkout({ gatewayRef, paymentId: credit.id, amountPaise: credit.amountPaise, method: "upi", outletName: scope.name, callbackUrl });
+  if (checkout.kind === "form" && checkout.fields.callback_url) checkout.fields.callback_url = checkout.fields.callback_url.replace("PLACEHOLDER", credit.id);
+  return { paid: false as const, creditId: credit.id, gatewayRef, checkout };
 }
 
 export async function reconcileReservationCredit(provider: string, creditId: string, cancelled = false) {
@@ -37,8 +37,8 @@ export async function refundReservationCredit(tenantId: string, reservationId: s
   if (!credit) return { status: "none" as const };
   if (credit.refundStatus !== "none") return { status: credit.refundStatus };
   const gateway = gatewayByName(credit.provider ?? "");
-  if (!gateway || !credit.gatewayPaymentId) return { status: "failed" as const };
-  const result = await gateway.refund({ gatewayPaymentId: credit.gatewayPaymentId, amountPaise: credit.paidPaise, refundId: credit.id });
+  if (!gateway || !credit.gatewayRef || !credit.gatewayPaymentId) return { status: "failed" as const };
+  const result = await gateway.refund({ gatewayRef: credit.gatewayRef, gatewayPaymentId: credit.gatewayPaymentId, amountPaise: credit.paidPaise, refundId: credit.id });
   await db.update(s.reservationCredits).set({ refundGatewayRef: result.gatewayRefundId, refundStatus: result.status, status: result.status === "success" ? "refunded" : "paid", updatedAt: new Date() }).where(and(eq(s.reservationCredits.tenantId, tenantId), eq(s.reservationCredits.id, credit.id)));
   return { status: result.status };
 }

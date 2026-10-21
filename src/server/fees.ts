@@ -9,13 +9,14 @@ import { AppError } from "./errors";
 import { tenantFeatures } from "./plan";
 import type { StaffSession } from "./staff/auth";
 import { emailAdmin } from "./admin-alerts";
+import { platformGateway } from "./payments/gateway";
+import type { Checkout } from "@/lib/payments/checkout";
 
-// TableQR's own fees, paid by hand: the owner pays the operator's UPI (or cash, or bank) and says
-// "I have paid"; the platform admin checks the bank and confirms, which adds the paid months.
-// The admin can also record a payment directly. Guest bill money never comes through here.
+// TableQR's own fees. Cashfree confirms online payments; an admin can still record an offline
+// receipt. Guest bill money never comes through here.
 
 export const FEE_MONTHS = [1, 3, 6, 12] as const;
-export type FeeMethod = "upi" | "cash" | "bank";
+export type FeeMethod = "cashfree" | "upi" | "cash" | "bank";
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 const DAY = 86_400_000;
 
@@ -132,6 +133,135 @@ export async function claimFee(staff: Pick<StaffSession, "tenantId" | "roles" | 
   return { id, amountPaise: perMonth * months };
 }
 
+export type StartedFeePayment = { id: string; amountPaise: number; checkout: Checkout; replayed: boolean };
+
+/** Starts TableQR plan payment on the platform's Cashfree account. */
+export async function startFeePayment(
+  staff: Pick<StaffSession, "tenantId" | "roles" | "name">,
+  input: { months: number; planCode?: string | null; requestId: string; callbackUrl: string },
+  now = new Date(),
+): Promise<StartedFeePayment> {
+  if (!staff.roles.some((role) => role === "owner" || role === "manager")) throw new AppError("forbidden", "Ask the owner or a manager to do this.");
+  const gateway = platformGateway();
+  if (!gateway) throw new AppError("invalid_state", "Online plan payment is not configured yet.", { reason: "no_gateway" });
+  const requestId = String(input.requestId ?? "").trim();
+  if (!/^[a-zA-Z0-9_-]{8,64}$/.test(requestId)) throw new AppError("invalid_state", "This payment request is not valid.");
+  const { months } = cleanInput({ months: input.months });
+
+  const existing = await db.select().from(s.feePayments).where(and(eq(s.feePayments.tenantId, staff.tenantId), eq(s.feePayments.clientRequestId, requestId))).then((rows) => rows[0]);
+  let payment = existing;
+  let replayed = !!existing;
+  if (!payment) {
+    const [waiting] = await db.select({ id: s.feePayments.id }).from(s.feePayments).where(and(eq(s.feePayments.tenantId, staff.tenantId), eq(s.feePayments.status, "claimed")));
+    if (waiting) throw new AppError("invalid_state", "Your last payment is still being confirmed by Cashfree.");
+    const fee = await monthlyFee(db, staff.tenantId);
+    const target = await upgradeTarget(staff.tenantId, input.planCode);
+    const perMonth = target ? target.monthlyPricePaise * fee.outletCount : fee.totalPaise;
+    const id = uuidv7();
+    await db.insert(s.feePayments).values({
+      id,
+      tenantId: staff.tenantId,
+      months,
+      amountPaise: perMonth * months,
+      method: "cashfree",
+      clientRequestId: requestId,
+      planCode: target?.code ?? null,
+      status: "claimed",
+      claimedBy: staff.name.slice(0, 80),
+      createdAt: now,
+    });
+    payment = await db.select().from(s.feePayments).where(and(eq(s.feePayments.tenantId, staff.tenantId), eq(s.feePayments.id, id))).then((rows) => rows[0]);
+    replayed = false;
+  }
+  if (!payment || payment.method !== "cashfree") throw new AppError("invalid_state", "This payment request cannot be resumed.");
+  if (payment.status === "confirmed") throw new AppError("invalid_state", "This payment is already complete.");
+  if (payment.status === "rejected") throw new AppError("invalid_state", "That payment attempt ended. Please try again.");
+
+  const callbackUrl = input.callbackUrl.replace("PLACEHOLDER", payment.id);
+  let gatewayRef = payment.gatewayRef;
+  if (!gatewayRef) {
+    const [tenant] = await db.select({ name: s.tenants.name, phone: s.tenants.contactPhone }).from(s.tenants).where(eq(s.tenants.id, staff.tenantId));
+    try {
+      gatewayRef = (await gateway.createOrder({
+        paymentId: payment.id,
+        amountPaise: payment.amountPaise,
+        receipt: `TableQR ${payment.months}m`,
+        callbackUrl,
+        notifyUrl: `${new URL(callbackUrl).origin}/api/fees/cashfree/webhook`,
+        customer: { id: staff.tenantId, phone: tenant?.phone, name: tenant?.name },
+      })).gatewayRef;
+    } catch (error) {
+      await db.update(s.feePayments).set({ status: "rejected", failureReason: "Could not reach Cashfree", decidedAt: now }).where(and(eq(s.feePayments.tenantId, staff.tenantId), eq(s.feePayments.id, payment.id), eq(s.feePayments.status, "claimed")));
+      throw new AppError("invalid_state", "Cashfree could not start the payment. No money was taken. Please try again.", { reason: "gateway_down", cause: String(error) });
+    }
+    await db.update(s.feePayments).set({ gatewayRef }).where(and(eq(s.feePayments.tenantId, staff.tenantId), eq(s.feePayments.id, payment.id)));
+  }
+  const checkout = await gateway.checkout({ gatewayRef, paymentId: payment.id, amountPaise: payment.amountPaise, method: "upi", outletName: "TableQR", callbackUrl });
+  return { id: payment.id, amountPaise: payment.amountPaise, checkout, replayed };
+}
+
+type FeeVerdict = { status: "success" | "failed"; amountPaise: number; gatewayPaymentId?: string; reason?: string };
+
+/** Applies a verified Cashfree result once. Success immediately activates/extends the plan. */
+async function settleCashfreeFee(id: string, verdict: FeeVerdict, now = new Date()) {
+  return db.transaction(async (tx) => {
+    const [payment] = await tx.select().from(s.feePayments).where(eq(s.feePayments.id, id)).for("update");
+    if (!payment || payment.method !== "cashfree") return null;
+    if (payment.status !== "claimed") return { status: payment.status, alreadyFinal: true } as const;
+    if (verdict.status === "failed" || verdict.amountPaise !== payment.amountPaise) {
+      const failureReason = verdict.status === "failed" ? verdict.reason ?? "Payment failed" : `Amount mismatch: expected ${payment.amountPaise}, got ${verdict.amountPaise}`;
+      await tx.update(s.feePayments).set({
+        status: "rejected",
+        gatewayPaymentId: verdict.gatewayPaymentId ?? null,
+        reference: verdict.gatewayPaymentId?.slice(0, 60) ?? null,
+        failureReason: failureReason.slice(0, 200),
+        checkedAt: now,
+        decidedAt: now,
+      }).where(and(eq(s.feePayments.tenantId, payment.tenantId), eq(s.feePayments.id, payment.id)));
+      return { status: "rejected" as const, alreadyFinal: false };
+    }
+    if (payment.planCode) await tx.update(s.tenants).set({ planCode: payment.planCode, customFeatures: null, customPricePaise: null }).where(eq(s.tenants.id, payment.tenantId));
+    const paid = await addPaidMonths(tx, payment.tenantId, payment.months, now);
+    await tx.update(s.feePayments).set({
+      status: "confirmed",
+      gatewayPaymentId: verdict.gatewayPaymentId ?? null,
+      reference: verdict.gatewayPaymentId?.slice(0, 60) ?? null,
+      failureReason: null,
+      subscriptionId: paid.subscriptionId,
+      paidUntil: paid.periodEnd,
+      checkedAt: now,
+      decidedAt: now,
+    }).where(and(eq(s.feePayments.tenantId, payment.tenantId), eq(s.feePayments.id, payment.id)));
+    return { status: "confirmed" as const, alreadyFinal: false, tenantId: payment.tenantId, paidUntil: paid.periodEnd };
+  });
+}
+
+/** Signed webhook path: Cashfree names the order, which is stored as gatewayRef. */
+export async function settleCashfreeFeeByGatewayRef(gatewayRef: string, verdict: FeeVerdict, now = new Date()) {
+  const [payment] = await db.select({ id: s.feePayments.id }).from(s.feePayments).where(and(eq(s.feePayments.method, "cashfree"), eq(s.feePayments.gatewayRef, gatewayRef)));
+  return payment ? settleCashfreeFee(payment.id, verdict, now) : null;
+}
+
+/** Return-page/status fallback. The browser return never decides success; Cashfree's API does. */
+export async function reconcileCashfreeFee(id: string, now = new Date()) {
+  const [payment] = await db.select().from(s.feePayments).where(eq(s.feePayments.id, id));
+  if (!payment || payment.method !== "cashfree") return null;
+  if (payment.status !== "claimed" || !payment.gatewayRef) return payment.status;
+  const gateway = platformGateway();
+  if (!gateway) return payment.status;
+  const verdict = await gateway.fetchStatus(payment.gatewayRef);
+  await db.update(s.feePayments).set({ checkedAt: now }).where(and(eq(s.feePayments.tenantId, payment.tenantId), eq(s.feePayments.id, payment.id)));
+  if (verdict.status === "success" || verdict.status === "failed") {
+    return (await settleCashfreeFee(payment.id, {
+      status: verdict.status,
+      amountPaise: verdict.amountPaise,
+      gatewayPaymentId: verdict.gatewayPaymentId,
+      reason: verdict.reason,
+    }, now))?.status ?? null;
+  }
+  return "claimed" as const;
+}
+
 /** The admin found the money in the bank: the claim adds its months */
 export async function confirmFee(id: string, now = new Date()) {
   return db.transaction(async (tx) => {
@@ -139,6 +269,7 @@ export async function confirmFee(id: string, now = new Date()) {
     const [claim] = await tx.select().from(s.feePayments).where(eq(s.feePayments.id, id)).for("update");
     if (!claim) throw new AppError("not_found", "Payment not found.");
     if (claim.status !== "claimed") throw new AppError("invalid_state", "This payment was already handled.");
+    if (claim.method === "cashfree") throw new AppError("invalid_state", "Cashfree payments are confirmed automatically.");
     // An upgrade: move to the plan they paid for, dropping any custom package or special price
     if (claim.planCode) await tx.update(s.tenants).set({ planCode: claim.planCode, customFeatures: null, customPricePaise: null }).where(eq(s.tenants.id, claim.tenantId));
     const paid = await addPaidMonths(tx, claim.tenantId, claim.months, now);
@@ -150,9 +281,10 @@ export async function confirmFee(id: string, now = new Date()) {
 /** The money never arrived: the owner can say "I have paid" again */
 export async function rejectFee(id: string, now = new Date()) {
   // isolation-exempt: only the platform admin turns a payment down; the row it finds carries the tenant
-  const [claim] = await db.select({ tenantId: s.feePayments.tenantId, status: s.feePayments.status }).from(s.feePayments).where(eq(s.feePayments.id, id));
+  const [claim] = await db.select({ tenantId: s.feePayments.tenantId, status: s.feePayments.status, method: s.feePayments.method }).from(s.feePayments).where(eq(s.feePayments.id, id));
   if (!claim) throw new AppError("not_found", "Payment not found.");
   if (claim.status !== "claimed") throw new AppError("invalid_state", "This payment was already handled.");
+  if (claim.method === "cashfree") throw new AppError("invalid_state", "Cashfree payments are settled automatically.");
   await db.update(s.feePayments).set({ status: "rejected", decidedAt: now }).where(and(eq(s.feePayments.tenantId, claim.tenantId), eq(s.feePayments.id, id)));
   return { tenantId: claim.tenantId };
 }
@@ -234,4 +366,3 @@ export async function feesData(now = new Date()): Promise<FeesData> {
     history: history.map((h) => ({ ...feeRow(h.fee), tenantName: h.tenantName })),
   };
 }
-
