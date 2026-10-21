@@ -11,6 +11,16 @@ const nextConfig: NextConfig = {
   experimental: { serverActions: { bodySizeLimit: "3mb" }, cpus: 2 },
   async headers() {
     return [
+      // Global security headers against clickjacking, MIME-sniffing and data leakage
+      {
+        source: "/(.*)",
+        headers: [
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+        ],
+      },
       // Uploaded menu photos have random names that never change, so phones can keep them
       { source: "/uploads/:path*", headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }] },
       // App icons and the staff app manifest change rarely
