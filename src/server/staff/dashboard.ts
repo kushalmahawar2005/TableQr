@@ -151,6 +151,53 @@ export async function getRevenueTrend(staff: Staff, now = new Date()) {
 
 export type RevenueTrend = Awaited<ReturnType<typeof getRevenueTrend>>;
 
+export type TableTileItem = {
+  id: string;
+  code: string;
+  seats: number;
+  state: string;
+  guests?: number;
+  runningPaise?: number;
+};
+
+export type KitchenOrderItem = {
+  id: string;
+  tableCode: string;
+  roundNo: number;
+  items: string;
+  itemCount: number;
+  status: "placed" | "preparing" | "ready";
+  placedAt: number;
+  elapsedMinutes: number;
+};
+
+export type CustomerRequestItem = {
+  id: string;
+  tableCode: string;
+  kind: string;
+  createdAt: number;
+  elapsedMinutes: number;
+};
+
+export type RecentPaymentItem = {
+  id: string;
+  billId: string;
+  tableCode: string;
+  amountPaise: number;
+  method: "upi" | "card" | "wallet" | "cash";
+  status: string;
+  createdAt: number;
+};
+
+export type ActivityFeedItem = {
+  id: string;
+  type: "payment" | "order" | "request" | "reservation";
+  title: string;
+  subtitle: string;
+  timestamp: number;
+  amountPaise?: number;
+};
+
 /** Everything on the dashboard except the 7-day trend, which refreshes on its own slower cadence */
 export async function getDashboard(staff: Staff, now = new Date()) {
   guard(staff);
@@ -162,7 +209,7 @@ export async function getDashboard(staff: Staff, now = new Date()) {
   const lateSince = new Date(now.getTime() - LATE_LOOKBACK_HOURS * 3600_000);
   const billAlertBefore = new Date(now.getTime() - BILL_REQUESTED_ALERT_MINUTES * 60_000);
 
-  const [bills, ordersToday, ordersYesterday, tableStates, waitlist, outstanding, waitingBills, bookings, refunds, top, policy, [outlet]] = await Promise.all([
+  const [bills, ordersToday, ordersYesterday, tableStates, waitlist, outstanding, waitingBills, bookings, refunds, top, policy, [outlet], rawRequests, rawKitchenOrders, rawPayments] = await Promise.all([
     paidBills(scope, yesterday.start, today.end),
     ordersIn(scope, today),
     ordersIn(scope, yesterday),
@@ -204,9 +251,58 @@ export async function getDashboard(staff: Staff, now = new Date()) {
     topItems(scope, today),
     loadPolicy(db, scope),
     db.select({ name: s.outlets.name, brandId: s.outlets.brandId }).from(s.outlets).where(and(eq(s.outlets.tenantId, scope.tenantId), eq(s.outlets.id, scope.outletId))),
+    db
+      .select({
+        id: s.serviceRequests.id,
+        kind: s.serviceRequests.kind,
+        createdAt: s.serviceRequests.createdAt,
+        tableCode: s.diningTables.code,
+      })
+      .from(s.serviceRequests)
+      .innerJoin(s.diningTables, and(eq(s.diningTables.tenantId, s.serviceRequests.tenantId), eq(s.diningTables.id, s.serviceRequests.tableId)))
+      .where(and(eq(s.serviceRequests.tenantId, scope.tenantId), eq(s.serviceRequests.outletId, scope.outletId), eq(s.serviceRequests.status, "open")))
+      .orderBy(desc(s.serviceRequests.createdAt))
+      .limit(8),
+    db
+      .select({
+        id: s.orders.id,
+        roundNo: s.orders.roundNo,
+        status: s.orders.status,
+        placedAt: s.orders.placedAt,
+        tableCode: s.diningTables.code,
+      })
+      .from(s.orders)
+      .innerJoin(s.tableSessions, and(eq(s.tableSessions.tenantId, s.orders.tenantId), eq(s.tableSessions.id, s.orders.sessionId)))
+      .innerJoin(s.diningTables, and(eq(s.diningTables.tenantId, s.tableSessions.tenantId), eq(s.diningTables.id, s.tableSessions.tableId)))
+      .where(
+        and(
+          eq(s.orders.tenantId, scope.tenantId),
+          eq(s.orders.outletId, scope.outletId),
+          inArray(s.orders.status, ["placed", "preparing", "ready"]),
+        ),
+      )
+      .orderBy(desc(s.orders.placedAt))
+      .limit(8),
+    db
+      .select({
+        id: s.payments.id,
+        billId: s.payments.billId,
+        amountPaise: s.payments.amountPaise,
+        method: s.payments.method,
+        status: s.payments.status,
+        createdAt: s.payments.createdAt,
+        tableCode: s.diningTables.code,
+      })
+      .from(s.payments)
+      .innerJoin(s.bills, and(eq(s.bills.tenantId, s.payments.tenantId), eq(s.bills.id, s.payments.billId)))
+      .innerJoin(s.tableSessions, and(eq(s.tableSessions.tenantId, s.bills.tenantId), eq(s.tableSessions.id, s.bills.sessionId)))
+      .innerJoin(s.diningTables, and(eq(s.diningTables.tenantId, s.tableSessions.tenantId), eq(s.diningTables.id, s.tableSessions.tableId)))
+      .where(and(eq(s.payments.tenantId, scope.tenantId), eq(s.payments.outletId, scope.outletId), eq(s.payments.status, "success")))
+      .orderBy(desc(s.payments.createdAt))
+      .limit(6),
   ]);
 
-  const [soldOut, bookingTables, low] = await Promise.all([
+  const [soldOut, bookingTables, low, rawTables, openSessions] = await Promise.all([
     soldOutCount(scope, outlet?.brandId ?? "-", now),
     bookings.length
       ? db
@@ -218,6 +314,27 @@ export async function getDashboard(staff: Staff, now = new Date()) {
       : Promise.resolve([]),
     // Only when the plan has Inventory: otherwise there is no stock to run low
     tenantFeatures(scope.tenantId).then((f) => (f.inventory ? lowStock(scope) : [])),
+    db
+      .select({
+        id: s.diningTables.id,
+        code: s.diningTables.code,
+        seats: s.diningTables.maxSeats,
+        state: s.diningTables.state,
+      })
+      .from(s.diningTables)
+      .where(and(eq(s.diningTables.tenantId, scope.tenantId), eq(s.diningTables.outletId, scope.outletId), eq(s.diningTables.isActive, true)))
+      .orderBy(asc(s.diningTables.code))
+      .limit(20),
+    db
+      .select({
+        tableId: s.tableSessions.tableId,
+        partySize: s.tableSessions.partySize,
+        billPaise: sql<string>`coalesce(sum(${s.bills.totalPaise}), 0)`,
+      })
+      .from(s.tableSessions)
+      .leftJoin(s.bills, and(eq(s.bills.tenantId, s.tableSessions.tenantId), eq(s.bills.sessionId, s.tableSessions.id)))
+      .where(and(eq(s.tableSessions.tenantId, scope.tenantId), eq(s.tableSessions.outletId, scope.outletId), ne(s.tableSessions.status, "closed")))
+      .groupBy(s.tableSessions.id, s.tableSessions.tableId, s.tableSessions.partySize),
   ]);
 
   const [moneyToday, moneyYesterday] = revenueByDay(bills, ranges);
@@ -238,6 +355,108 @@ export async function getDashboard(staff: Staff, now = new Date()) {
     // Strictly longer than the threshold: a bill asked for exactly ten minutes ago is not late yet
     .filter((b) => b.requestedAt! < billAlertBefore)
     .map((b) => ({ sessionId: b.sessionId, tableCode: b.tableCode, waitedMinutes: waitedMinutes(b.requestedAt!.getTime(), now.getTime()) }));
+
+  const sessionByTable = new Map(openSessions.map((os) => [os.tableId, { guests: os.partySize ?? undefined, runningPaise: Number(os.billPaise) }]));
+  const tableTiles = rawTables.map((t) => {
+    const sess = sessionByTable.get(t.id);
+    return {
+      id: t.id,
+      code: t.code,
+      seats: t.seats,
+      state: t.state,
+      guests: sess?.guests,
+      runningPaise: sess?.runningPaise,
+    };
+  });
+
+  const kitchenOrderIds = rawKitchenOrders.map((o) => o.id);
+  const kitchenLines = kitchenOrderIds.length > 0
+    ? await db
+        .select({
+          orderId: s.orderLines.orderId,
+          name: s.orderLines.nameEn,
+          qty: s.orderLines.qty,
+        })
+        .from(s.orderLines)
+        .where(and(eq(s.orderLines.tenantId, scope.tenantId), inArray(s.orderLines.orderId, kitchenOrderIds)))
+    : [];
+
+  const linesByOrder = new Map<string, { qty: number; name: string }[]>();
+  for (const l of kitchenLines) {
+    const arr = linesByOrder.get(l.orderId) ?? [];
+    arr.push({ qty: l.qty, name: l.name });
+    linesByOrder.set(l.orderId, arr);
+  }
+
+  const kitchenOrders: KitchenOrderItem[] = rawKitchenOrders.map((o) => {
+    const lns = linesByOrder.get(o.id) ?? [];
+    const itemsSummary = lns.map((l) => `${l.qty}x ${l.name}`).join(", ") || "1x Food Items";
+    const totalQty = lns.reduce((sum, l) => sum + l.qty, 0) || 1;
+    const elapsed = Math.max(0, Math.floor((now.getTime() - o.placedAt.getTime()) / 60_000));
+    const status: "placed" | "preparing" | "ready" =
+      o.status === "preparing" ? "preparing" : o.status === "ready" ? "ready" : "placed";
+    return {
+      id: o.id,
+      tableCode: o.tableCode,
+      roundNo: o.roundNo,
+      items: itemsSummary,
+      itemCount: totalQty,
+      status,
+      placedAt: o.placedAt.getTime(),
+      elapsedMinutes: elapsed,
+    };
+  });
+
+  const customerRequests: CustomerRequestItem[] = rawRequests.map((r) => ({
+    id: r.id,
+    tableCode: r.tableCode,
+    kind: r.kind,
+    createdAt: r.createdAt.getTime(),
+    elapsedMinutes: Math.max(0, Math.floor((now.getTime() - r.createdAt.getTime()) / 60_000)),
+  }));
+
+  const recentPayments: RecentPaymentItem[] = rawPayments.map((p) => ({
+    id: p.id,
+    billId: p.billId,
+    tableCode: p.tableCode,
+    amountPaise: p.amountPaise,
+    method: p.method,
+    status: p.status,
+    createdAt: p.createdAt.getTime(),
+  }));
+
+  // Build live activity feed from real events matching Target design
+  const activityFeed: ActivityFeedItem[] = [
+    ...recentPayments.map((p) => ({
+      id: `pay-${p.id}`,
+      type: "payment" as const,
+      title: "Payment received",
+      subtitle: `₹${(p.amountPaise / 100).toLocaleString("en-IN")} · Table ${p.tableCode}`,
+      timestamp: p.createdAt,
+      amountPaise: p.amountPaise,
+    })),
+    ...kitchenOrders.map((k) => ({
+      id: `ord-${k.id}`,
+      type: "order" as const,
+      title: "New order placed",
+      subtitle: `Table ${k.tableCode} · ${k.itemCount} item${k.itemCount > 1 ? "s" : ""}`,
+      timestamp: k.placedAt,
+    })),
+    ...customerRequests.map((r) => ({
+      id: `req-${r.id}`,
+      type: "request" as const,
+      title: `Table ${r.tableCode} requested ${r.kind.replace("_", " ")}`,
+      subtitle: "Assistance needed",
+      timestamp: r.createdAt,
+    })),
+    ...upcoming.slice(0, 3).map((u) => ({
+      id: `res-${u.id}`,
+      type: "reservation" as const,
+      title: "Reservation confirmed",
+      subtitle: `${u.name ?? "Guest"} · ${u.partySize} guests`,
+      timestamp: u.startAt,
+    })),
+  ].sort((a, b) => b.timestamp - a.timestamp).slice(0, 10);
 
   return {
     outletName: outlet?.name ?? staff.outlet.name,
@@ -260,9 +479,14 @@ export async function getDashboard(staff: Staff, now = new Date()) {
     secondary: { taxPaise: moneyToday.taxPaise, serviceChargePaise: moneyToday.serviceChargePaise, tipPaise: moneyToday.tipPaise },
     operations: {
       tables: { available: states.available ?? 0, reserved: (states.reserved ?? 0) + (states.held ?? 0), seated: states.seated ?? 0, billRequested: states.bill_requested ?? 0, blocked: states.blocked ?? 0, total: totalTables },
+      tableTiles,
       waitlist: { waiting: queue.waiting ?? 0, notified: queue.notified ?? 0 },
       upcoming,
       billRequestedTables: waitingBills.length,
+      kitchenOrders,
+      customerRequests,
+      recentPayments,
+      activityFeed,
     },
     alerts: {
       slowBills,

@@ -15,22 +15,29 @@
   color-scheme: only light;
 
   /* Animated sidebar tokens (src/components/ui/animated-sidebar.tsx) */
-  --border: oklch(0.922 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --ring: oklch(0.708 0 0);
+  --border: #E5E7EB;
+  --muted-foreground: #768078;
+  --ring: #103B2C;
   --hover: #f1f2f8;
 
-  /* Core palette */
-  --ink: #1f2937; /* main text */
-  --accent: #c9482b; /* Deep Chilli, the TableQR default */
-  --paper: #fbf8f3; /* Warm Paper background */
-  --surface: #ffffff;
-  --muted: #626a78;
-  --line: #ddd6ca;
-  --success: #237a68;
+  /* Core palette - TableQR Premium Theme */
+  --ink: #17251F; /* Primary Text */
+  --accent: #D86B45; /* Terracotta Accent */
+  --paper: #F7F5EF; /* Warm Cream background */
+  --surface: #ffffff; /* Cards / Surfaces */
+  --muted: #768078; /* Muted Text */
+  --line: #E9E5DD; /* Subtle Warm Border */
+  --success: #103B2C; /* Primary Forest Green */
   --warning: #8a5a00;
   --danger: #b83a3a;
   --info: #315e9e;
+
+  /* Premium Design Tokens */
+  --forest: #103B2C;
+  --forest-hover: #174D39;
+  --terracotta: #D86B45;
+  --sage: #DDE8DA;
+  --warm-cream: #F7F5EF;
 
   /* Table states: main (border, icon), text, soft (fill). Never colour alone. */
   --state-available: #237a68;
@@ -135,6 +142,11 @@
   --color-warning: var(--warning);
   --color-danger: var(--danger);
   --color-info: var(--info);
+  --color-forest: var(--forest);
+  --color-forest-hover: var(--forest-hover);
+  --color-terracotta: var(--terracotta);
+  --color-sage: var(--sage);
+  --color-warm-cream: var(--warm-cream);
   --color-kds-bg: var(--kds-bg);
   --color-kds-card: var(--kds-card);
   --color-kds-text: var(--kds-text);

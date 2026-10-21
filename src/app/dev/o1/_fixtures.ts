@@ -41,6 +41,11 @@ const busy: DashboardData = {
       { id: "u4", name: null, partySize: 3, startAt: min(80), status: "confirmed", tables: [] },
     ],
     billRequestedTables: 2,
+    tableTiles: [],
+    kitchenOrders: [],
+    customerRequests: [],
+    recentPayments: [],
+    activityFeed: [],
   },
   alerts: {
     slowBills: [{ sessionId: "s1", tableCode: "T12", waitedMinutes: 14 }],
@@ -66,7 +71,7 @@ const quiet: DashboardData = {
   generatedAt: localTime(DATE, 9 * 60 + 5, TZ).getTime(),
   kpis: { revenue: { today: 0, yesterday: 0 }, orders: { today: 0, yesterday: 0 }, covers: { today: 0, yesterday: 0 }, averageBill: { today: 0, yesterday: 0 }, paidBills: 0, openTables: { open: 0, total: 18 }, upcomingReservations: 0, waitlist: 0, outstandingPaise: 0 },
   secondary: { taxPaise: 0, serviceChargePaise: 0, tipPaise: 0 },
-  operations: { tables: { available: 18, reserved: 0, seated: 0, billRequested: 0, blocked: 0, total: 18 }, waitlist: { waiting: 0, notified: 0 }, upcoming: [], billRequestedTables: 0 },
+  operations: { tables: { available: 18, reserved: 0, seated: 0, billRequested: 0, blocked: 0, total: 18 }, tableTiles: [], waitlist: { waiting: 0, notified: 0 }, upcoming: [], billRequestedTables: 0, kitchenOrders: [], customerRequests: [], recentPayments: [], activityFeed: [] },
   alerts: calm,
   topItems: [],
 };
