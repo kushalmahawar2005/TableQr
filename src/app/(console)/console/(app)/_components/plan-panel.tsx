@@ -93,7 +93,8 @@ export function PlanPass({ plan }: { plan: PlanView }) {
 
       <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
-          ["Tables", plan.features.maxTables ?? "Any"],
+          ...(plan.features.dineIn ? [["Tables", plan.features.maxTables ?? "Any"]] : []),
+          ...(plan.features.rooms ? [["Rooms", plan.features.maxRooms ?? "Any"]] : []),
           ["Staff logins", plan.features.maxStaff ?? "Any"],
           ["Outlets", plan.fee.outletCount],
           [plan.access.reason === "trial" ? "Trial until" : "Paid until", plan.access.endsAt === null ? "—" : new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" }).format(new Date(plan.access.endsAt))],
@@ -365,7 +366,7 @@ export function ComparePlans({ plan, upiId }: { plan: PlanView; upiId: string | 
               </div>
 
               <ul className="mt-5 space-y-2.5 border-t border-line pt-5">
-                <li className="flex gap-2 text-body text-ink"><HugeiconsIcon icon={Tick02Icon} size={18} className="mt-0.5 shrink-0 text-success" aria-hidden />{p.features.maxTables ?? "Any number of"} tables, {p.features.maxStaff ?? "any"} staff</li>
+                <li className="flex gap-2 text-body text-ink"><HugeiconsIcon icon={Tick02Icon} size={18} className="mt-0.5 shrink-0 text-success" aria-hidden />{p.features.dineIn ? `${p.features.maxTables ?? "Any number of"} tables, ` : ""}{p.features.rooms ? `${p.features.maxRooms ?? "Any number of"} rooms, ` : ""}{p.features.maxStaff ?? "any"} staff</li>
                 <li className="flex gap-2 text-body text-ink"><HugeiconsIcon icon={Tick02Icon} size={18} className="mt-0.5 shrink-0 text-success" aria-hidden />QR ordering, billing, KOT</li>
                 {FEATURE_KEYS.map((k) => (
                   <li key={k} className={`flex gap-2 text-body ${p.features[k] ? "text-ink" : "text-muted/60"}`}>
@@ -439,7 +440,7 @@ function SwitchPlan({ plan, target, upiId, onClose }: { plan: PlanView; target: 
                 <li className="flex gap-3">
                   <HugeiconsIcon icon={Tick02Icon} size={18} className="mt-0.5 shrink-0 text-success" aria-hidden />
                   <span className="text-body text-ink">
-                    Up to <span className="font-semibold">{target.features.maxTables ?? "any number of"} tables</span> and <span className="font-semibold">{target.features.maxStaff ?? "any number of"} staff logins</span>
+                    Up to {target.features.dineIn && <><span className="font-semibold">{target.features.maxTables ?? "any number of"} tables</span>, </>}{target.features.rooms && <><span className="font-semibold">{target.features.maxRooms ?? "any number of"} rooms</span>, </>}and <span className="font-semibold">{target.features.maxStaff ?? "any number of"} staff logins</span>
                   </span>
                 </li>
               </ul>

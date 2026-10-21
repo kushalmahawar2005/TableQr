@@ -1,9 +1,13 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { LANG_COOKIE, parseLang } from "@/lib/i18n";
 import { canSee } from "@/lib/staff-permissions";
 import { getDashboard, getRevenueTrend } from "@/server/staff/dashboard";
+import { setupSteps } from "@/server/staff/guide";
 import { teamDuty } from "@/server/staff/duty";
 import { currentStaff } from "@/server/staff/request";
+import { SetupChecklist } from "../_components/guide/setup-checklist";
 import { DashboardScreen } from "./_components/dashboard-screen";
 
 export const metadata: Metadata = { title: "Dashboard", robots: { index: false, follow: false } };
@@ -22,8 +26,9 @@ export default async function DashboardPage() {
     );
   }
   const now = new Date();
-  const [data, trend, duty] = await Promise.all([getDashboard(staff, now), getRevenueTrend(staff, now), canSee(staff.roles, "team") ? teamDuty(staff, now) : null]);
+  const [data, trend, duty, setup] = await Promise.all([getDashboard(staff, now), getRevenueTrend(staff, now), canSee(staff.roles, "team") ? teamDuty(staff, now) : null, setupSteps(staff)]);
+  const lang = parseLang((await cookies()).get(LANG_COOKIE)?.value);
   // Who is on duty, set right here by the manager or owner
   const canChange = staff.roles.some((r) => r === "owner" || r === "manager");
-  return <DashboardScreen initial={data} initialTrend={trend} duty={duty ? { rows: duty, canChange } : undefined} />;
+  return <DashboardScreen initial={data} initialTrend={trend} duty={duty ? { rows: duty, canChange } : undefined} setup={setup && <SetupChecklist lang={lang} steps={setup} />} />;
 }

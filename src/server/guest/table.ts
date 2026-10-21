@@ -78,7 +78,11 @@ export async function findTableByQr(run: Runner, outletCode: string, shortCode: 
   // A room's hidden counter is never active on the floor; its QR works while the plan has rooms
   if (row.table.tableClass === ROOM_CLASS) {
     if (!readFeatures(row.customFeatures ?? row.planFeatures).rooms) throw new AppError("outlet_unavailable", "Ordering from the room is not available right now. Please call reception.");
-  } else if (!row.table.active) throw new AppError("not_found", "This table is no longer available. Please ask staff for help.");
+  } else {
+    if (!row.table.active) throw new AppError("not_found", "This table is no longer available. Please ask staff for help.");
+    // A hotel-only plan has no restaurant floor, so old table QRs stop taking orders
+    if (!readFeatures(row.customFeatures ?? row.planFeatures).dineIn) throw new AppError("outlet_unavailable", "Ordering from the table is not available right now. Please ask staff.");
+  }
   if (await isUnavailable(row)) {
     throw new AppError("outlet_unavailable", "Ordering from the table is not available right now. Please ask staff.");
   }

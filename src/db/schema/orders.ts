@@ -39,6 +39,8 @@ export const orders = mysqlTable(
     placedByUserId: ref("placed_by_user_id"),
     status: mysqlEnum("status", orderStatuses).notNull().default("placed"),
     note: varchar("note", { length: 140 }),
+    /** Handed over at the billing counter for one person (water, a chocolate): stays theirs even in an equal split */
+    atCounter: boolean("at_counter").notNull().default(false),
     /** Set by the guest's phone, one per Place-order attempt; a retry with it returns this order */
     clientRequestId: varchar("client_request_id", { length: 64 }),
     // Timestamp per state so kitchen speed can be measured

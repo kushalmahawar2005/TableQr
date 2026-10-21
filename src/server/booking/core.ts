@@ -71,7 +71,8 @@ async function exceptionFor(run: Runner, scope: OutletScope, date: string) {
 
 function slotStarts(date: string, scope: OutletScope, policy: BookingPolicy) {
   const day = localClock(localTime(date, 12 * 60, scope.timezone), scope.timezone).day;
-  const windows = scope.openingHours && Object.keys(scope.openingHours).length ? (scope.openingHours[day] ?? []) : [["00:00", "24:00"] as [string, string]];
+  // No hours set: offer usual dining hours rather than a slot every half hour through the night
+  const windows = scope.openingHours && Object.keys(scope.openingHours).length ? (scope.openingHours[day] ?? []) : [["11:00", "23:00"] as [string, string]];
   const result: Date[] = [];
   for (const [from, to] of windows) {
     const [fh, fm] = from.split(":").map(Number);

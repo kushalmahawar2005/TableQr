@@ -5,7 +5,9 @@ import * as s from "@/db/schema";
 import { floorEditorRoles } from "@/server/floor/editor";
 import { publicBaseUrl } from "@/server/floor/qr-read";
 import { qrSvg } from "@/server/floor/qr-svg";
+import { tenantFeatures } from "@/server/plan";
 import { currentStaff } from "@/server/staff/request";
+import { FeatureLocked } from "../../../_components/feature-locked";
 import { PrintBar } from "./print-bar";
 
 const SIZES = { a6: { mm: 70, scale: 1 }, a5: { mm: 100, scale: 1.15 }, a4: { mm: 150, scale: 1.5 } } as const;
@@ -15,6 +17,7 @@ export default async function QrSheetPage(props: PageProps<"/console/floor/edito
   const staff = await currentStaff();
   if (!staff) redirect("/console/login");
   if (!staff.roles.some((r) => floorEditorRoles.includes(r as never))) return <main className="p-8">Permission denied</main>;
+  if (!(await tenantFeatures(staff.tenantId)).dineIn) return <FeatureLocked feature="dineIn" />;
   const q = await props.searchParams;
   const size = (typeof q.size === "string" && q.size in SIZES ? q.size : "a6") as keyof typeof SIZES;
   const only = typeof q.table === "string" ? q.table : null;

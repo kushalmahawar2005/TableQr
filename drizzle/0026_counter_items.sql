@@ -1,0 +1,1 @@
+ALTER TABLE `orders` ADD `at_counter` boolean DEFAULT false NOT NULL;

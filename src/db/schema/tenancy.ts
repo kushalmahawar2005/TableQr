@@ -194,6 +194,8 @@ export const users = mysqlTable(
     dutyChangedAt: at("duty_changed_at"),
     /** Last time the staff app checked in, for "online now" */
     lastSeenAt: at("last_seen_at"),
+    /** First-run guide: when this person saw the welcome, finished the tour, hid the setup list (epoch ms) */
+    guide: json("guide").$type<{ welcome?: number; tour?: number; setupHidden?: number; qrPrinted?: number }>(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

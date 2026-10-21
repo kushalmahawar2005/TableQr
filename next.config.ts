@@ -6,7 +6,9 @@ const nextConfig: NextConfig = {
   turbopack: { root: path.resolve(import.meta.dirname) },
   // Menu photos come in through a Server Action, already shrunk in the browser to under ~1 MB;
   // as base64 that is about 1.3 MB, over the 1 MB default
-  experimental: { serverActions: { bodySizeLimit: "3mb" } },
+  // Hostinger's build box reports ~64 CPUs but caps threads per account; one build worker per CPU
+  // ran out of threads ("OS can't spawn worker thread") while collecting page data
+  experimental: { serverActions: { bodySizeLimit: "3mb" }, cpus: 2 },
   async headers() {
     return [
       // Uploaded menu photos have random names that never change, so phones can keep them

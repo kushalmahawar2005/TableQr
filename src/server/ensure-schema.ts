@@ -3,7 +3,7 @@ import type { Pool, RowDataPacket } from "mysql2/promise";
 
 // Brings the live database up to what this release needs, once, when the server starts.
 // Hostinger builds and starts the app straight from Git and never runs `db:migrate`, so these
-// steps mirror drizzle/0016-0025. Every step checks first, so running it again (another server
+// steps mirror drizzle/0016-0027. Every step checks first, so running it again (another server
 // instance, a restart) changes nothing. Works on MySQL and MariaDB.
 
 type Step = { tag: string; when: number; hash: string; apply: (db: Pool) => Promise<void> };
@@ -199,6 +199,22 @@ const STEPS: Step[] = [
       await db.query("UPDATE `plans` SET `features` = JSON_SET(`features`, '$.rooms', JSON_EXTRACT('false', '$')) WHERE JSON_EXTRACT(`features`, '$.rooms') IS NULL");
       await db.query("INSERT INTO `plans` (`code`, `name`, `monthly_price_paise`, `features`, `is_public`, `sort_order`, `created_at`, `updated_at`) SELECT 'hotel', 'Hotel', 299900, '{\"dineIn\":false,\"rooms\":true,\"waiterApp\":false,\"discounts\":true,\"whatsappBills\":true,\"groupSplit\":false,\"reservations\":false,\"kitchenDisplay\":true,\"pricingRules\":false,\"fullReports\":true,\"multiOutlet\":false,\"inventory\":false,\"maxTables\":null,\"maxStaff\":10,\"maxRooms\":30,\"poweredBy\":false}', 1, 4, CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3) FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM `plans` WHERE `code` = 'hotel')");
       await db.query("INSERT INTO `plans` (`code`, `name`, `monthly_price_paise`, `features`, `is_public`, `sort_order`, `created_at`, `updated_at`) SELECT 'hotel_plus', 'Hotel + Restaurant', 699900, '{\"dineIn\":true,\"rooms\":true,\"waiterApp\":true,\"discounts\":true,\"whatsappBills\":true,\"groupSplit\":true,\"reservations\":true,\"kitchenDisplay\":true,\"pricingRules\":true,\"fullReports\":true,\"multiOutlet\":false,\"inventory\":true,\"maxTables\":20,\"maxStaff\":25,\"maxRooms\":30,\"poweredBy\":false}', 1, 5, CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3) FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM `plans` WHERE `code` = 'hotel_plus')");
+    },
+  },
+  {
+    tag: "0026_counter_items",
+    when: 1792564802690,
+    hash: "b5191ed05540cf4f68846d080cac1467549cbdd29e64a26d1ff7be8d94275b8c",
+    apply: async (db) => {
+      await addColumn(db, "orders", "at_counter", "boolean DEFAULT false NOT NULL");
+    },
+  },
+  {
+    tag: "0027_user_guide",
+    when: 1792567360613,
+    hash: "92decc3eff21aa11eb8a5efa96b3d1a56387b8d640622378b802b03de5199733",
+    apply: async (db) => {
+      await addColumn(db, "users", "guide", "json");
     },
   },
 ];

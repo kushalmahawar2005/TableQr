@@ -142,7 +142,7 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
         </Card>
       </div>
 
-      <Card className="mt-4">
+      <Card id="hours" className="mt-4 scroll-mt-20">
         <CardHeader>
           <div className="flex items-start justify-between gap-3">
             <div><CardTitle className="font-display text-section font-bold">Opening hours</CardTitle><CardDescription>{hoursOn ? "Set when you are open each day." : "Not set. Turn on to add your timings."}</CardDescription></div>

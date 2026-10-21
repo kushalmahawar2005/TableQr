@@ -199,6 +199,7 @@ function KdsBoardScreen(props: { initial: KdsBoard; device: KdsDeviceView; realt
     <div lang={lang} className={`flex min-h-0 flex-col bg-kds-bg font-sans text-kds-text ${props.embedded ? "h-[calc(100dvh-7.5rem)] sm:h-[calc(100dvh-3.5rem)]" : "h-dvh"}`}>
       <Header
         c={c}
+        embedded={props.embedded}
         lang={lang}
         device={device}
         board={board}
@@ -300,6 +301,8 @@ function KdsBoardScreen(props: { initial: KdsBoard; device: KdsDeviceView; realt
 
 function Header(props: {
   c: KdsCopy;
+  /** Inside the console, beside the sidebar: less room, so the extras show only on wide screens */
+  embedded?: boolean;
   lang: Lang;
   device: KdsDeviceView;
   board: KdsBoard;
@@ -324,8 +327,8 @@ function Header(props: {
   const connTone = conn === "live" ? "text-kds-text" : conn === "offline" ? "text-kds-late" : conn === "polling" ? "text-kds-muted" : "text-kds-amber";
   return (
     <header className="flex min-h-[72px] shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-kds-line px-4 py-2 sm:h-[72px] sm:flex-nowrap sm:gap-x-6 sm:py-0">
-      <div className="min-w-0">
-        <h1 className="font-display text-[22px] font-bold leading-8 sm:text-[28px]">
+      <div className="min-w-0 flex-1">
+        <h1 className="truncate whitespace-nowrap font-display text-[22px] font-bold leading-8 sm:text-[28px]">
           {c.kitchen} <span className="text-kds-muted">·</span> {board.station ?? (device.expeditor ? c.all : device.station)}
           {!device.expeditor && <span className="tabular ml-3 rounded-md bg-kds-text px-2 align-middle text-[22px] text-kds-bg">{board.counts[device.station ?? ""] ?? 0}</span>}
         </h1>
@@ -334,25 +337,25 @@ function Header(props: {
           {device.expeditor ? ` · ${c.expeditor}` : ""}
         </p>
       </div>
-      <p className="tabular ml-auto font-display text-[26px] font-bold sm:text-[30px]" aria-label={c.clock}>
+      <p className="tabular ml-auto shrink-0 whitespace-nowrap font-display text-[26px] font-bold sm:text-[30px]" aria-label={c.clock}>
         {time}
       </p>
-      {board.avgMinutes !== null && <p className="hidden text-[18px] text-kds-muted xl:block">{c.avg(board.avgMinutes)}</p>}
+      {board.avgMinutes !== null && <p className={`hidden shrink-0 whitespace-nowrap text-[18px] text-kds-muted ${props.embedded ? "2xl:block" : "xl:block"}`}>{c.avg(board.avgMinutes)}</p>}
       <button
         type="button"
         onClick={props.onSound}
         aria-label={sound === "locked" ? c.enableSound : sound === "on" ? c.soundOn : c.soundOff}
-        className={`flex h-11 items-center gap-2 rounded-lg px-3 text-[18px] font-semibold sm:h-12 sm:px-4 ${sound === "locked" ? "bg-kds-new" : "bg-kds-card"}`}
+        className={`flex h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-3 text-[18px] font-semibold sm:h-12 sm:px-4 ${sound === "locked" ? "bg-kds-new" : "bg-kds-card"}`}
       >
         <HugeiconsIcon icon={sound === "off" ? VolumeOffIcon : VolumeHighIcon} size={22} aria-hidden />
         <span className={sound === "locked" ? "text-[16px] sm:text-[18px]" : "hidden sm:inline"}>{sound === "locked" ? c.enableSound : sound === "on" ? c.soundOn : c.soundOff}</span>
       </button>
-      <button type="button" onClick={props.onAutoKot} aria-pressed={props.autoKot} className={`flex h-11 items-center gap-2 rounded-lg px-3 text-[18px] font-semibold sm:h-12 sm:px-4 ${props.autoKot ? "bg-kds-ok text-kds-bg" : "bg-kds-card"}`}>
+      <button type="button" onClick={props.onAutoKot} aria-pressed={props.autoKot} className={`flex h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-3 text-[18px] font-semibold sm:h-12 sm:px-4 ${props.autoKot ? "bg-kds-ok text-kds-bg" : "bg-kds-card"}`}>
         {props.autoKot ? c.autoKotOn : c.autoKotOff}
       </button>
-      <span role="status" aria-label={connLabel} className={`flex items-center gap-2 text-[18px] font-semibold ${connTone}`}>
+      <span role="status" aria-label={connLabel} className={`flex shrink-0 items-center gap-2 whitespace-nowrap text-[18px] font-semibold ${connTone}`}>
         <HugeiconsIcon icon={conn === "offline" ? WifiOff01Icon : Wifi01Icon} size={22} aria-hidden />
-        <span className="hidden sm:inline">{connLabel}</span>
+        <span className={`hidden ${props.embedded ? "xl:inline" : "sm:inline"}`}>{connLabel}</span>
       </span>
       {props.onSettings && (
         <button type="button" onClick={props.onSettings} aria-label={c.settings} className="ml-auto flex h-11 w-11 items-center justify-center rounded-lg bg-kds-card sm:ml-0 sm:h-12 sm:w-12">
@@ -385,7 +388,7 @@ function BottomBar({
     <footer className="flex min-h-20 shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-t border-kds-line px-4 py-2 sm:h-20 sm:flex-nowrap sm:py-0">
       {last ? (
         <>
-          <p className="min-w-0 truncate text-[20px]">
+          <p className="min-w-0 truncate whitespace-nowrap text-[20px]">
             <span className="text-kds-muted">{c.lastBump}: </span>
             <span className="font-semibold">
               {last.tableCode} · {c.round(last.roundNo)} · {last.station}
@@ -395,7 +398,7 @@ function BottomBar({
             type="button"
             disabled={!!blocked || offline}
             onClick={() => onRecall(last.ticketId)}
-            className="flex h-14 shrink-0 items-center gap-2 rounded-lg border-2 border-kds-text px-5 text-[20px] font-bold disabled:border-kds-line disabled:text-kds-muted"
+            className="flex h-14 shrink-0 items-center gap-2 whitespace-nowrap rounded-lg border-2 border-kds-text px-5 text-[20px] font-bold disabled:border-kds-line disabled:text-kds-muted"
           >
             <HugeiconsIcon icon={ArrowTurnBackwardIcon} size={22} aria-hidden />
             {blocked === "expired"
@@ -408,7 +411,7 @@ function BottomBar({
       ) : (
         <p className="text-[20px] text-kds-muted">{c.nothingBumped}</p>
       )}
-      <button type="button" onClick={onStock} className="ml-auto flex h-14 shrink-0 items-center gap-2 rounded-lg bg-kds-card px-5 text-[20px] font-bold">
+      <button type="button" onClick={onStock} className="ml-auto flex h-14 shrink-0 items-center gap-2 whitespace-nowrap rounded-lg bg-kds-card px-5 text-[20px] font-bold">
         <HugeiconsIcon icon={PackageRemoveIcon} size={22} aria-hidden />
         {c.stock}
         {board.unavailable.length > 0 && <span className="tabular rounded-md bg-kds-late px-2 text-[18px]">{board.unavailable.length}</span>}

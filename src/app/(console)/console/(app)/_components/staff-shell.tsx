@@ -6,6 +6,7 @@ import {
   ChefHatIcon,
   CreditCardIcon,
   DashboardSquare01Icon,
+  HelpCircleIcon,
   Home01Icon,
   Invoice01Icon,
   Logout01Icon,
@@ -25,6 +26,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import type { Lang } from "@/lib/i18n";
 import { signOutAction } from "../../login/actions";
+import { startTour } from "./guide/copy";
 import { NotificationBell } from "./notification-bell";
 import { switchOutletAction } from "./outlet-actions";
 
@@ -108,7 +110,8 @@ export function StaffShell({
         </span>
         <span className="flex items-center">
         {kitchen && <KitchenButton lang={lang} active={active === "kitchen"} preview={preview} compact />}
-        {wide === false && <NotificationBell preview={preview} placement="header" />}
+        <HelpButton lang={lang} preview={preview} />
+        {wide === false && <span data-tour="bell" className="flex"><NotificationBell preview={preview} placement="header" /></span>}
         <ThemeToggle dark={dark} onChange={setDark} className="grid size-10 place-items-center rounded-input text-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-2 focus-visible:outline-ink" />
         <form action={preview ? undefined : signOutAction}>
           <button type={preview ? "button" : "submit"} aria-label={lang === "hi" ? "साइन आउट" : "Sign out"} className="grid size-10 place-items-center rounded-input text-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-2 focus-visible:outline-ink">
@@ -134,6 +137,7 @@ export function StaffShell({
               <Link
                 key={s.slug}
                 href={preview ? "#" : `/console/${s.slug}`}
+                data-tour={`nav-${s.slug}`}
                 aria-current={current ? "page" : undefined}
                 aria-label={s.label}
                 title={s.label}
@@ -170,7 +174,8 @@ export function StaffShell({
         <header className="sticky top-0 z-20 hidden h-14 shrink-0 print:hidden items-center justify-end gap-2 border-b border-line bg-surface/95 px-4 backdrop-blur-[2px] sm:flex lg:px-6">
           {outlets.length > 1 && !preview ? <OutletSwitcher outlets={outlets} lang={lang} /> : <span className="mr-auto truncate text-caption text-muted">{staff.outlet}</span>}
           {kitchen && <KitchenButton lang={lang} active={active === "kitchen"} preview={preview} />}
-          {wide && <NotificationBell preview={preview} placement="header" />}
+          <HelpButton lang={lang} preview={preview} />
+          {wide && <span data-tour="bell" className="flex"><NotificationBell preview={preview} placement="header" /></span>}
         </header>
         {children}
       </div>
@@ -178,7 +183,7 @@ export function StaffShell({
         {sections.map((s) => {
           const current = s.slug === active;
           return (
-            <Link key={s.slug} href={preview ? "#" : `/console/${s.slug}`} aria-current={current ? "page" : undefined} className={`flex min-h-16 min-w-[4.75rem] flex-1 flex-col items-center justify-center gap-1 px-1 text-[10px] font-semibold ${current ? "text-brand" : "text-muted"}`}>
+            <Link key={s.slug} href={preview ? "#" : `/console/${s.slug}`} data-tour={`nav-${s.slug}`} aria-current={current ? "page" : undefined} className={`flex min-h-16 min-w-[4.75rem] flex-1 flex-col items-center justify-center gap-1 px-1 text-[10px] font-semibold ${current ? "text-brand" : "text-muted"}`}>
               <HugeiconsIcon icon={ICONS[s.slug] ?? DashboardSquare01Icon} size={22} aria-hidden />
               <span className="max-w-full truncate">{s.label}</span>
             </Link>
@@ -221,6 +226,7 @@ function KitchenButton({ lang, active, preview, compact = false }: { lang: Lang;
   return (
     <Link
       href={preview ? "#" : "/console/kitchen"}
+      data-tour="kitchen"
       aria-current={active ? "page" : undefined}
       aria-label={label}
       title={label}
@@ -231,5 +237,22 @@ function KitchenButton({ lang, active, preview, compact = false }: { lang: Lang;
       <HugeiconsIcon icon={ChefHatIcon} size={20} className="shrink-0" aria-hidden />
       {!compact && <span>{label}</span>}
     </Link>
+  );
+}
+
+/** Opens the console tour again; the tour's last stop points here */
+function HelpButton({ lang, preview }: { lang: Lang; preview: boolean }) {
+  const label = lang === "hi" ? "टूर देखें" : "Take the tour";
+  return (
+    <button
+      type="button"
+      data-tour="help"
+      onClick={preview ? undefined : startTour}
+      aria-label={label}
+      title={label}
+      className="grid size-10 place-items-center rounded-input text-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-2 focus-visible:outline-ink"
+    >
+      <HugeiconsIcon icon={HelpCircleIcon} size={20} aria-hidden />
+    </button>
   );
 }

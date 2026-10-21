@@ -45,3 +45,6 @@ next-env.d.ts
 
 # allow the env template
 !.env.example
+
+# Graphify knowledge graph (local only)
+graphify-out/

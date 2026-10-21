@@ -28,7 +28,7 @@ const dayLabel = (date: string, opts: Intl.DateTimeFormatOptions) => new Intl.Da
 
 export type DashboardPreview = { refreshing?: boolean; error?: string };
 
-export function DashboardScreen({ initial, initialTrend, preview, duty }: { initial: DashboardData; initialTrend: RevenueTrend; preview?: DashboardPreview; duty?: { rows: DutyRow[]; canChange: boolean } }) {
+export function DashboardScreen({ initial, initialTrend, preview, duty, setup }: { initial: DashboardData; initialTrend: RevenueTrend; preview?: DashboardPreview; duty?: { rows: DutyRow[]; canChange: boolean }; /** First-run setup list, while the owner still has steps left */ setup?: ReactNode }) {
   const [data, setData] = useState(initial);
   const [trend, setTrend] = useState(initialTrend);
   const [busy, setBusy] = useState(false);
@@ -93,6 +93,8 @@ export function DashboardScreen({ initial, initialTrend, preview, duty }: { init
           {shownError}
         </p>
       )}
+
+      {setup}
 
       {duty && <WhoIsWorking rows={duty.rows} canChange={duty.canChange} />}
 

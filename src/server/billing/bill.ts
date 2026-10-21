@@ -45,8 +45,10 @@ export async function loadBillInputs(run: Runner, scope: BillScope) {
         qty: s.orderLines.qty,
         taxRateBp: s.orderLines.taxRateBp,
         sharedWith: s.orderLines.sharedWith,
+        atCounter: s.orders.atCounter,
       })
       .from(s.orderLines)
+      .innerJoin(s.orders, and(eq(s.orders.tenantId, s.orderLines.tenantId), eq(s.orders.id, s.orderLines.orderId)))
       .where(and(eq(s.orderLines.tenantId, scope.tenantId), eq(s.orderLines.sessionId, scope.sessionId), notInArray(s.orderLines.status, DEAD_LINES)))
       .orderBy(s.orderLines.id),
     run.select().from(s.bills).where(and(eq(s.bills.tenantId, scope.tenantId), eq(s.bills.sessionId, scope.sessionId))),
@@ -118,6 +120,7 @@ export function computeDraft(inputs: BillInputs, opts: { mode?: SplitMode; custo
       amountPaise: Math.max(0, l.unitPricePaise * l.qty - (itemDiscount.get(l.id) ?? 0)),
       taxRateBp: l.taxRateBp,
       sharedWith: sharers.length > 1 ? sharers : null,
+      personal: l.atCounter,
     };
   });
 

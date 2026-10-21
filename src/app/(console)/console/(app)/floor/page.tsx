@@ -3,7 +3,9 @@ import { cookies } from "next/headers";
 import { LANG_COOKIE, parseLang } from "@/lib/i18n";
 import { canSee } from "@/lib/staff-permissions";
 import { getFloor } from "@/server/floor/read";
+import { tenantFeatures } from "@/server/plan";
 import { currentStaff } from "@/server/staff/request";
+import { FeatureLocked } from "../_components/feature-locked";
 import { s1Copy } from "./_copy";
 import { FloorScreen } from "./_components/floor-screen";
 
@@ -23,6 +25,7 @@ export default async function FloorPage() {
       </main>
     );
   }
+  if (!(await tenantFeatures(staff.tenantId)).dineIn) return <FeatureLocked feature="dineIn" />;
   const data = await getFloor(staff);
   return <FloorScreen data={data} lang={lang} realtimeUrl={process.env.REALTIME_URL?.replace(/^http/, "ws") ?? null} />;
 }

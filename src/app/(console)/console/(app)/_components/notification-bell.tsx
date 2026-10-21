@@ -12,6 +12,8 @@ import { noticesAction } from "./notification-actions";
 const POLL_MS = 8_000;
 const SOUND_KEY = "tq_console_sound";
 const KEEP = 30;
+/** On open, the list shows the last few hours as already read, so a reload never empties it */
+const HISTORY_MS = 6 * 3_600_000;
 
 const timeAgo = (at: number, now: number) => {
   const m = Math.floor((now - at) / 60_000);
@@ -77,8 +79,9 @@ export function NotificationBell({ preview = false, className = "", placement = 
     let stopped = false;
     const check = async () => {
       let res: Awaited<ReturnType<typeof noticesAction>>;
+      const first = since.current === null;
       try {
-        res = await noticesAction(since.current);
+        res = await noticesAction(first ? Date.now() - HISTORY_MS : since.current);
       } catch {
         return; // offline for a moment: the next check catches up
       }
@@ -89,14 +92,23 @@ export function NotificationBell({ preview = false, className = "", placement = 
       fresh.forEach((n) => seen.current.add(n.id));
       setClock(res.now);
       if (!fresh.length) return;
-      setItems((old) => [...fresh, ...old].slice(0, KEEP));
+      setItems((old) => [...fresh, ...old].sort((a, b) => b.at - a.at).slice(0, KEEP));
+      // History from before this screen opened: listed, but it does not ring or count as new
+      if (first) return;
       setUnread((u) => u + fresh.length);
       setToasts((old) => [...fresh.slice(0, 3), ...old].slice(0, 3));
       fresh.slice(0, 3).forEach((n) => setTimeout(() => setToasts((old) => old.filter((x) => x.id !== n.id)), 6_000));
       const ring = onKitchen.current ? fresh.filter((n) => n.kind !== "order") : fresh;
-      if (ring.length && soundOn.current && audio.current?.state === "running") chime(audio.current, { repeat: true });
+      const ctx = audio.current;
+      // The browser suspends sound while the tab is in the background: wake it, then ring
+      if (ring.length && soundOn.current && ctx) {
+        if (ctx.state === "running") chime(ctx, { repeat: true });
+        else void ctx.resume().then(() => { if (ctx.state === "running") chime(ctx, { repeat: true }); }, () => {});
+      }
       if (document.hidden && typeof Notification !== "undefined" && Notification.permission === "granted") {
-        for (const n of fresh.slice(0, 3)) new Notification(n.title, { body: n.body, tag: n.id });
+        for (const n of fresh.slice(0, 3)) {
+          try { new Notification(n.title, { body: n.body, tag: n.id }); } catch { /* Android Chrome allows only service-worker notifications */ }
+        }
       }
     };
     void check();
@@ -163,7 +175,7 @@ export function NotificationBell({ preview = false, className = "", placement = 
           {items.length === 0 ? (
             <div className="flex flex-col items-center gap-2 px-4 py-8 text-center text-caption text-muted">
               <HugeiconsIcon icon={NotificationOff01Icon} size={24} aria-hidden />
-              Nothing new since you opened this screen. New orders, requests, payments and bookings ring here.
+              Nothing in the last few hours. New orders, requests, payments and bookings ring here.
             </div>
           ) : (
             <ul className="max-h-96 divide-y divide-line overflow-y-auto">

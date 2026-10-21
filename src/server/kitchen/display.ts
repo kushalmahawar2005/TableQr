@@ -228,7 +228,9 @@ export async function averageTicketMinutes(ctx: StaffContext & { timezone: strin
     .select({ bumpedAt: s.tickets.bumpedAt, placedAt: s.orders.placedAt })
     .from(s.tickets)
     .innerJoin(s.orders, and(eq(s.orders.tenantId, s.tickets.tenantId), eq(s.orders.id, s.tickets.orderId)))
-    .where(and(eq(s.tickets.tenantId, ctx.tenantId), eq(s.tickets.outletId, ctx.outletId), eq(s.tickets.status, "done"), gte(s.tickets.bumpedAt, since)));
-  if (rows.length < 3) return null;
-  return Math.round(rows.reduce((n, r) => n + (r.bumpedAt!.getTime() - r.placedAt.getTime()), 0) / rows.length / 60_000);
+    .where(and(eq(s.tickets.tenantId, ctx.tenantId), eq(s.tickets.outletId, ctx.outletId), eq(s.tickets.status, "done"), gte(s.tickets.bumpedAt, since), gte(s.orders.placedAt, since)));
+  // A ticket left on the screen for hours and cleared later was forgotten, not cooked that long.
+  const mins = rows.map((r) => (r.bumpedAt!.getTime() - r.placedAt.getTime()) / 60_000).filter((m) => m <= 180);
+  if (mins.length < 3) return null;
+  return Math.round(mins.reduce((n, m) => n + m, 0) / mins.length);
 }

@@ -6,6 +6,7 @@ import { canSee } from "@/lib/staff-permissions";
 import { AppError } from "../errors";
 import type { StaffSession } from "./auth";
 import { requireFeature } from "../plan";
+import { isPlaceholderName } from "@/domain/guest-name";
 
 // Customers: everyone this restaurant has a phone number for, from table verification, bookings,
 // the waitlist and bills sent on WhatsApp, joined up by phone. Shows how often they come and when
@@ -23,6 +24,8 @@ export type Customer = {
   spendPaise: number;
   offersOk: boolean;
   firstSeenAt: number | null;
+  /** Who else sat at the table on their last visit: names first, then how many gave no name */
+  companions: { names: string[]; unnamed: number };
 };
 
 const normal = (phone: string | null | undefined) => {
@@ -57,7 +60,7 @@ export async function getCustomers(staff: Staff): Promise<Customer[]> {
   const get = (phone: string, name: string | null, seen: Date | null) => {
     let c = byPhone.get(phone);
     if (!c) {
-      c = { phone, name: null, visits: 0, lastVisitAt: null, bookings: 0, noShows: 0, spendPaise: 0, offersOk: false, firstSeenAt: null };
+      c = { phone, name: null, visits: 0, lastVisitAt: null, bookings: 0, noShows: 0, spendPaise: 0, offersOk: false, firstSeenAt: null, companions: { names: [], unnamed: 0 } };
       byPhone.set(phone, c);
     }
     if (!c.name && name && name.trim() && !/^pending guest$/i.test(name.trim())) c.name = name.trim();
@@ -75,12 +78,14 @@ export async function getCustomers(staff: Staff): Promise<Customer[]> {
     c.noShows = Math.max(c.noShows, g.noShowCount);
   }
   const counted = new Set<string>();
+  const lastSession = new Map<string, string>();
   for (const v of visits) {
     const phone = v.guestId ? phoneOfGuest.get(v.guestId) : undefined;
     if (!phone || counted.has(`${phone}:${v.sessionId}`)) continue;
     counted.add(`${phone}:${v.sessionId}`);
     const c = get(phone, null, v.openedAt);
     c.visits++;
+    if (v.openedAt.getTime() >= (c.lastVisitAt ?? 0)) lastSession.set(phone, v.sessionId);
     c.lastVisitAt = Math.max(c.lastVisitAt ?? 0, v.openedAt.getTime());
     if (v.billStatus === "paid") c.spendPaise += v.spend ?? 0;
   }
@@ -100,6 +105,24 @@ export async function getCustomers(staff: Staff): Promise<Customer[]> {
   for (const w of waitlist) {
     const phone = normal(w.phone);
     if (phone) get(phone, w.name, w.joinedAt);
+  }
+  // Only one person at a table usually gives a number; list the others with them
+  const sessionIds = [...new Set(lastSession.values())];
+  const people = sessionIds.length
+    ? await db
+        .select({ sessionId: s.participants.sessionId, name: s.participants.displayName, guestId: s.participants.guestId })
+        .from(s.participants)
+        .where(and(eq(s.participants.tenantId, staff.tenantId), inArray(s.participants.sessionId, sessionIds)))
+        .orderBy(s.participants.joinedAt)
+    : [];
+  for (const [phone, sessionId] of lastSession) {
+    const c = byPhone.get(phone)!;
+    for (const p of people) {
+      if (p.sessionId !== sessionId || (p.guestId && phoneOfGuest.get(p.guestId) === phone)) continue;
+      const name = p.name.trim();
+      if (!name || isPlaceholderName(name)) c.companions.unnamed++;
+      else if (!c.companions.names.includes(name) && name !== c.name) c.companions.names.push(name);
+    }
   }
   return [...byPhone.values()].sort((a, b) => (b.lastVisitAt ?? b.firstSeenAt ?? 0) - (a.lastVisitAt ?? a.firstSeenAt ?? 0));
 }

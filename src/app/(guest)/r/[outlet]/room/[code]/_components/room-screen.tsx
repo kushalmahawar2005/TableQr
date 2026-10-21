@@ -6,13 +6,14 @@ import { useRouter } from "next/navigation";
 import {
   AlarmClockIcon,
   ArrowRight02Icon,
-  Bathtub01Icon,
+  BodySoapIcon,
   BubbleChatIcon,
   CheckmarkCircle02Icon,
   CleaningBucketIcon,
   Clock01Icon,
   DropletIcon,
   Restaurant01Icon,
+  TowelsIcon,
   TShirtIcon,
   Wrench01Icon,
 } from "@hugeicons/core-free-icons";
@@ -30,9 +31,9 @@ import { askReception, orderFood } from "../actions";
 
 const ICON: Record<RoomRequestKind, IconSvgElement> = {
   housekeeping: CleaningBucketIcon,
-  towels: Bathtub01Icon,
+  towels: TowelsIcon,
   water: DropletIcon,
-  toiletries: Bathtub01Icon,
+  toiletries: BodySoapIcon,
   laundry: TShirtIcon,
   maintenance: Wrench01Icon,
   wake_up: AlarmClockIcon,
@@ -110,7 +111,7 @@ function Room({ data, lang, outletCode, shortCode }: { data: Extract<RoomPage, {
   const c = COPY[lang];
   const router = useRouter();
   const [pending, start] = useTransition();
-  const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
+  const [notice, setNotice] = useState<{ ok: boolean; text: string; at: "food" | "need" } | null>(null);
   const [other, setOther] = useState<string | null>(null);
   const { outlet, room, stay } = data;
   const style = brandStyle(deriveBrandTokens(outlet.accentColor)) as CSSProperties;
@@ -119,9 +120,9 @@ function Room({ data, lang, outletCode, shortCode }: { data: Extract<RoomPage, {
   const ask = (kind: RoomRequestKind, note: string | null = null) =>
     start(async () => {
       const r = await askReception(outletCode, shortCode, kind, note);
-      if (r && "error" in r) setNotice({ ok: false, text: r.error });
+      if (r && "error" in r) setNotice({ ok: false, text: r.error, at: "need" });
       else {
-        setNotice({ ok: true, text: r?.repeated ? c.already : c.sent });
+        setNotice({ ok: true, text: r?.repeated ? c.already : c.sent, at: "need" });
         setOther(null);
         router.refresh();
       }
@@ -129,7 +130,7 @@ function Room({ data, lang, outletCode, shortCode }: { data: Extract<RoomPage, {
   const order = () =>
     start(async () => {
       const r = await orderFood(outletCode, shortCode);
-      if (r && "error" in r) setNotice({ ok: false, text: r.error });
+      if (r && "error" in r) setNotice({ ok: false, text: r.error, at: "food" });
     });
 
   return (
@@ -148,12 +149,6 @@ function Room({ data, lang, outletCode, shortCode }: { data: Extract<RoomPage, {
         </section>
       ) : (
         <>
-          {notice && (
-            <p role="status" className={`mt-4 rounded-cta px-4 py-3 text-body font-semibold ${notice.ok ? "bg-[var(--state-available-soft)] text-[var(--state-available-text)]" : "bg-danger/10 text-danger"}`}>
-              {notice.text}
-            </p>
-          )}
-
           <section className="mt-4 rounded-card border border-line bg-surface p-5" aria-labelledby="food">
             <div className="flex items-center gap-3">
               <span className="grid size-11 place-items-center rounded-full bg-brand-soft text-brand-strong"><HugeiconsIcon icon={Restaurant01Icon} size={22} aria-hidden /></span>
@@ -174,6 +169,7 @@ function Room({ data, lang, outletCode, shortCode }: { data: Extract<RoomPage, {
               </button>
             )}
             {stay.joined && <Link href={`${base}/orders`} className={`mt-2 flex min-h-11 items-center justify-center text-body font-semibold text-brand-strong ${focus}`}>{c.myOrder}</Link>}
+            {notice?.at === "food" && <Notice ok={notice.ok} text={notice.text} />}
           </section>
 
           <section className="mt-4 rounded-card border border-line bg-surface p-5" aria-labelledby="need">
@@ -205,6 +201,8 @@ function Room({ data, lang, outletCode, shortCode }: { data: Extract<RoomPage, {
                 <button type="submit" disabled={pending || !other.trim()} className={`h-12 rounded-cta bg-brand px-4 text-button font-semibold text-brand-on disabled:opacity-60 ${focus}`}>{c.send}</button>
               </form>
             )}
+            {/* Shown right under the buttons: the guest has scrolled down here to tap */}
+            {notice?.at === "need" && <Notice ok={notice.ok} text={notice.text} />}
           </section>
 
           {stay.requests.length > 0 && (
@@ -226,5 +224,13 @@ function Room({ data, lang, outletCode, shortCode }: { data: Extract<RoomPage, {
         </>
       )}
     </div>
+  );
+}
+
+function Notice({ ok, text }: { ok: boolean; text: string }) {
+  return (
+    <p role="status" className={`mt-3 rounded-cta px-4 py-3 text-body font-semibold ${ok ? "bg-[var(--state-available-soft)] text-[var(--state-available-text)]" : "bg-danger/10 text-danger"}`}>
+      {text}
+    </p>
   );
 }

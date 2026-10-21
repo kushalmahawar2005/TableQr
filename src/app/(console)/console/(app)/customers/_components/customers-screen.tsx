@@ -7,6 +7,12 @@ import type { Customer } from "@/server/staff/customers";
 // one at a time from here, and offers only to people who agreed to receive them.
 
 const rs = (paise: number) => `₹${Math.round(paise / 100).toLocaleString("en-IN")}`;
+/** "Hitesh, Mitarthh and 1 more": the others at the table on their last visit */
+const withText = (c: Customer) => {
+  const { names, unnamed } = c.companions;
+  if (!names.length) return unnamed ? `${unnamed} other${unnamed === 1 ? "" : "s"}` : "";
+  return unnamed ? `${names.join(", ")} and ${unnamed} more` : names.join(", ");
+};
 const day = (ms: number | null) => (ms ? new Date(ms).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "—");
 const DAY = 86_400_000;
 
@@ -27,7 +33,7 @@ export function CustomersScreen({ customers, outletName, now }: { customers: Cus
   }, [customers, query, filter, now]);
 
   const csv = () => {
-    const rows = [["Name", "Phone", "Visits", "Last visit", "Bookings", "No-shows", "Spend (Rs)", "Offers OK"], ...shown.map((c) => [c.name ?? "", c.phone, c.visits, day(c.lastVisitAt), c.bookings, c.noShows, Math.round(c.spendPaise / 100), c.offersOk ? "yes" : "no"])];
+    const rows = [["Name", "Phone", "Came with", "Visits", "Last visit", "Bookings", "No-shows", "Spend (Rs)", "Offers OK"], ...shown.map((c) => [c.name ?? "", c.phone, withText(c), c.visits, day(c.lastVisitAt), c.bookings, c.noShows, Math.round(c.spendPaise / 100), c.offersOk ? "yes" : "no"])];
     const text = rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
     const url = URL.createObjectURL(new Blob([text], { type: "text/csv" }));
     Object.assign(document.createElement("a"), { href: url, download: "customers.csv" }).click();
@@ -81,6 +87,7 @@ export function CustomersScreen({ customers, outletName, now }: { customers: Cus
                     <b className="block">{c.name ?? "Guest"}</b>
                     <span className="text-caption text-muted tabular-nums">{c.phone.replace(/(\d{5})(\d{5})/, "$1 $2")}</span>
                     {c.noShows > 0 && <span className="ml-2 rounded-full bg-[var(--state-held-soft)] px-2 py-0.5 text-xs font-semibold text-[var(--state-held-text)]">{c.noShows} no-show{c.noShows === 1 ? "" : "s"}</span>}
+                    {withText(c) && <span className="mt-0.5 block text-caption text-muted">With {withText(c)}</span>}
                   </td>
                   <td className="p-3 text-right tabular-nums">{c.visits}{c.visits >= 3 && <span className="ml-1 text-xs text-[var(--state-available-text)]">★</span>}</td>
                   <td className="p-3">{day(c.lastVisitAt)}</td>

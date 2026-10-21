@@ -116,7 +116,7 @@ export function PlansView({ data }: { data: AdminData }) {
           {p.code === "custom" && <p className="rounded-lg border border-dashed p-3 text-xs text-muted-foreground">Features and price are picked for each restaurant. Open the restaurant in Tenants, then Manage. The list below is only the starting point.</p>}
           <div className="rounded-lg bg-muted/60 p-3 text-sm"><p><span className="font-semibold">{tenants}</span> {tenants === 1 ? "tenant" : "tenants"} · <span className="font-semibold">{money(income)}</span> / month</p></div>
           <ul className="space-y-1.5 text-sm">
-            <li className="flex justify-between"><span className="text-muted-foreground">Tables</span><span className="font-medium">{p.features.maxTables ? `Up to ${p.features.maxTables}` : "Unlimited"}</span></li>
+            {p.features.dineIn && <li className="flex justify-between"><span className="text-muted-foreground">Tables</span><span className="font-medium">{p.features.maxTables ? `Up to ${p.features.maxTables}` : "Unlimited"}</span></li>}
             <li className="flex justify-between"><span className="text-muted-foreground">Staff</span><span className="font-medium">{p.features.maxStaff ? `Up to ${p.features.maxStaff}` : "Unlimited"}</span></li>
             {p.features.rooms && <li className="flex justify-between"><span className="text-muted-foreground">Rooms</span><span className="font-medium">{p.features.maxRooms ? `Up to ${p.features.maxRooms}` : "Unlimited"}</span></li>}
           </ul>

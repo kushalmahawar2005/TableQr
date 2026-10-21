@@ -38,10 +38,10 @@ function Kpi({ icon: Icon, label, value, note, children }: { icon: typeof Users;
   return (
     <Card size="sm">
       <CardContent className="flex items-start gap-3">
-        <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-brand-soft text-brand-strong"><Icon className="size-5" aria-hidden="true" /></span>
+        <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-brand-soft text-brand-strong print:hidden"><Icon className="size-5" aria-hidden="true" /></span>
         <div className="min-w-0">
           <p className="text-xs font-semibold text-muted">{label}</p>
-          <p className="truncate font-display text-2xl font-bold leading-tight tabular-nums">{value}</p>
+          <p className="truncate font-display text-2xl font-bold print:whitespace-normal leading-tight tabular-nums">{value}</p>
           {children ?? (note && <p className="mt-1 text-xs text-muted">{note}</p>)}
         </div>
       </CardContent>
@@ -166,7 +166,7 @@ export function ReportsScreen({ report, outlet }: { report: Report; outlet: stri
         </div>
       </header>
 
-      <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 print:grid-cols-4">
+      <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 print:grid-cols-4 print:[&>*]:min-w-0">
         <Kpi icon={TrendingUp} label="Total sales" value={money(t.revenuePaise)}><Delta now={t.revenuePaise} before={p.revenuePaise} period={report.range} /></Kpi>
         <Kpi icon={Receipt} label="Paid bills" value={String(t.bills)}><Delta now={t.bills} before={p.bills} period={report.range} /></Kpi>
         <Kpi icon={Banknote} label="Average bill" value={money(avg)}><Delta now={avg} before={prevAvg} period={report.range} /></Kpi>
@@ -199,7 +199,7 @@ export function ReportsScreen({ report, outlet }: { report: Report; outlet: stri
         </CardContent>
       </Card>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-2 print:grid-cols-2 print:[&>*]:break-inside-avoid">
+      <div className="mt-4 grid gap-4 lg:grid-cols-2 print:grid-cols-2 print:[&>*]:min-w-0 print:[&>*]:break-inside-avoid">
         <Card>
           <CardHeader><CardTitle className="font-display text-section font-bold">Best selling dishes</CardTitle><CardDescription>Most ordered first. Amount is before discount and tax.</CardDescription></CardHeader>
           <CardContent>
@@ -234,7 +234,7 @@ export function ReportsScreen({ report, outlet }: { report: Report; outlet: stri
         </Card>
       </div>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-2 print:grid-cols-2 print:[&>*]:break-inside-avoid">
+      <div className="mt-4 grid gap-4 lg:grid-cols-2 print:grid-cols-2 print:[&>*]:min-w-0 print:[&>*]:break-inside-avoid">
         <Card>
           <CardHeader><CardTitle className="font-display text-section font-bold">Which day sells most</CardTitle><CardDescription>{hasSales ? `${WEEKDAYS_LONG[bestDay]} is the strongest day.` : "Sales by day of the week."}</CardDescription></CardHeader>
           <CardContent>
@@ -276,14 +276,14 @@ export function ReportsScreen({ report, outlet }: { report: Report; outlet: stri
         </CardContent>
       </Card>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 print:grid-cols-4">
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 print:grid-cols-4 print:[&>*]:min-w-0">
         <Kpi icon={Timer} label="Time guests stay" value={x.avgStayMin === null ? "—" : `${x.avgStayMin} min`} note={x.visits ? `${x.visits} table visit${x.visits === 1 ? "" : "s"} closed` : "No closed tables yet"} />
         <Kpi icon={ChefHat} label="Kitchen speed" value={x.avgPrepMin === null ? "—" : `${x.avgPrepMin} min`} note="Order placed to food ready" />
         <Kpi icon={Users} label="Guests served" value={String(x.covers)} note={x.covers && t.revenuePaise ? `${money(Math.round(t.revenuePaise / x.covers))} per guest` : "Counted when staff seat a party"} />
         <Kpi icon={ShoppingBag} label="Items sold" value={String(x.itemsSold)} note={x.voidedLines ? `${x.voidedLines} cancelled (${money(x.voidedPaise)})` : "Nothing cancelled"} />
       </div>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-2 print:grid-cols-2 print:[&>*]:break-inside-avoid">
+      <div className="mt-4 grid gap-4 lg:grid-cols-2 print:grid-cols-2 print:[&>*]:min-w-0 print:[&>*]:break-inside-avoid">
         <Card>
           <CardHeader><CardTitle className="font-display text-section font-bold">Money breakdown</CardTitle><CardDescription>Where the paid bills add up.</CardDescription></CardHeader>
           <CardContent>

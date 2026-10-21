@@ -41,6 +41,18 @@ describe("customers", () => {
     expect((await getCustomers(owner)).filter((c) => c.phone === "9811122334")).toHaveLength(1);
   });
 
+  it("lists the others at the table with the one who gave a number", async () => {
+    const qr = env.demo.tableQr.T4;
+    const first = await startOrJoinTable({ outletCode: "SRJ01", shortCode: qr, deviceId: "with-a", displayName: "Jayendra" });
+    await startOrJoinTable({ outletCode: "SRJ01", shortCode: qr, deviceId: "with-b", displayName: "Hitesh" });
+    await startOrJoinTable({ outletCode: "SRJ01", shortCode: qr, deviceId: "with-c" });
+    const g = await getGuestContext("SRJ01", qr, first.participantId, "with-a");
+    await rememberCustomer(owner, { sessionId: g.sessionId, phone: "9587507407", name: "Jayendra" });
+
+    const jayendra = (await getCustomers(owner)).find((c) => c.phone === "9587507407");
+    expect(jayendra?.companions).toEqual({ names: ["Hitesh"], unnamed: 1 });
+  });
+
   it("refuses a bad number, another outlet's visit, and roles without access", async () => {
     const bad = (await rememberCustomer(owner, { sessionId: "x", phone: "123" }).then(() => null, (e: unknown) => e)) as AppError;
     expect(bad.details?.reason).toBe("phone");

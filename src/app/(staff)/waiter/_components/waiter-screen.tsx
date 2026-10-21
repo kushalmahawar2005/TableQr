@@ -68,9 +68,12 @@ export function WaiterScreen({
     } catch { /* storage blocked: keep defaults */ }
     try { const raw = JSON.parse(localStorage.getItem("tq_waiter_acked") ?? "[]"); if (Array.isArray(raw)) queueMicrotask(() => setAcked(new Set(raw.map(String)))); } catch { /* ignore */ }
     if (typeof Notification !== "undefined") queueMicrotask(() => setNotifState(Notification.permission));
-    const unlock = () => { try { audioRef.current ??= new AudioContext(); void audioRef.current.resume(); } catch { /* no audio */ } };
-    window.addEventListener("pointerdown", unlock, { once: true });
-    return () => window.removeEventListener("pointerdown", unlock);
+    // Phones suspend sound when the screen locks or the app goes to the background, so wake it on every tap and on return
+    const unlock = () => { try { audioRef.current ??= new AudioContext(); if (audioRef.current.state !== "running") void audioRef.current.resume(); } catch { /* no audio */ } };
+    const back = () => { if (document.visibilityState === "visible" && audioRef.current) unlock(); };
+    window.addEventListener("pointerdown", unlock);
+    document.addEventListener("visibilitychange", back);
+    return () => { window.removeEventListener("pointerdown", unlock); document.removeEventListener("visibilitychange", back); };
   }, []);
   useEffect(() => {
     pingRef.current = (text: string, quiet = false) => {
@@ -79,16 +82,20 @@ export function WaiterScreen({
       try { navigator.vibrate?.(quiet ? [600, 150, 600, 150, 600] : [220, 90, 220, 90, 420]); } catch { /* not supported, e.g. iPhone */ }
       try {
         const ctx = audioRef.current;
-        if (ctx && ctx.state === "running") {
+        const beep = () => {
+          if (!ctx || ctx.state !== "running") return;
           [[880, 0], [1175, 0.18], [880, 0.36]].forEach(([f, at]) => {
             const o = ctx.createOscillator(), g = ctx.createGain();
             o.type = "sine"; o.frequency.value = f; o.connect(g); g.connect(ctx.destination);
             const t = ctx.currentTime + at; g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.35, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
             o.start(t); o.stop(t + 0.18);
           });
-        }
+        };
+        // Sound suspended since the last task (screen locked, app in background): wake it, then beep
+        if (ctx && ctx.state !== "running") void ctx.resume().then(beep, () => {}); else beep();
       } catch { /* sound is a bonus */ }
-      try { if (typeof Notification !== "undefined" && Notification.permission === "granted" && document.hidden && text) new Notification("TableQR", { body: text, tag: "tableqr-task", requireInteraction: true }); } catch { /* ignore */ }
+      // renotify: a second task with the same tag must alert again, not silently replace the first
+      try { if (typeof Notification !== "undefined" && Notification.permission === "granted" && document.hidden && text) new Notification("TableQR", { body: text, tag: "tableqr-task", requireInteraction: true, renotify: true } as NotificationOptions); } catch { /* ignore */ }
     };
   });
   // Keep the screen on while the waiter app is open, so alerts are not missed on a locked phone
@@ -242,14 +249,17 @@ export function WaiterScreen({
       <div className="mx-auto w-full max-w-xl px-4 pt-5">
         <header className="flex items-center gap-3">
           <span className="grid size-12 shrink-0 place-items-center rounded-full bg-brand-soft font-display text-xl font-bold text-brand-strong">{board.identity.name.trim().slice(0, 1).toUpperCase()}</span>
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-semibold text-muted">{board.identity.outlet}</p>
-            <h1 className="truncate font-display text-2xl font-bold leading-tight">{L("Hi", "नमस्ते")}, {board.identity.name}</h1>
+          {/* Status chips sit under the name so the name keeps the row's width on small phones */}
+          <div className="min-w-0 flex-1 [overflow-wrap:normal]">
+            <p className="truncate text-xs font-semibold text-muted">{board.identity.outlet}</p>
+            <h1 className="truncate font-display text-xl font-bold leading-tight">{L("Hi", "नमस्ते")}, {board.identity.name}</h1>
+            <div className="mt-1 flex flex-wrap items-center gap-1.5">
+              <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-semibold ${offline ? "bg-[var(--state-seated-soft)] text-[var(--state-seated-text)]" : "bg-[var(--state-available-soft)] text-[var(--state-available-text)]"}`}>
+                <span className={`size-1.5 rounded-full ${offline ? "bg-[var(--state-seated)]" : "animate-pulse bg-[var(--state-available)]"}`} aria-hidden="true" />{offline ? L("Offline", "ऑफ़लाइन") : L("Live", "लाइव")}
+              </span>
+              {duty !== "on" && <button type="button" onClick={() => setTab("me")} className="rounded-full bg-[var(--state-held-soft)] px-2 py-0.5 text-xs font-semibold text-[var(--state-held-text)]">{duty === "break" ? L("On break", "ब्रेक पर") : L("Off duty", "ड्यूटी ख़त्म")}</button>}
+            </div>
           </div>
-          <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${offline ? "bg-[var(--state-seated-soft)] text-[var(--state-seated-text)]" : "bg-[var(--state-available-soft)] text-[var(--state-available-text)]"}`}>
-            <span className={`size-1.5 rounded-full ${offline ? "bg-[var(--state-seated)]" : "animate-pulse bg-[var(--state-available)]"}`} aria-hidden="true" />{offline ? L("Offline", "ऑफ़लाइन") : L("Live", "लाइव")}
-          </span>
-          {duty !== "on" && <button type="button" onClick={() => setTab("me")} className="shrink-0 rounded-full bg-[var(--state-held-soft)] px-2.5 py-1 text-xs font-semibold text-[var(--state-held-text)]">{duty === "break" ? L("On break", "ब्रेक पर") : L("Off duty", "ड्यूटी ख़त्म")}</button>}
           {/* Bell: requests and ready food waiting for this waiter; tap opens Tasks */}
           <button type="button" aria-label={L(`${taskCount} tasks waiting`, `${taskCount} काम बाकी`)} className={`relative grid size-10 shrink-0 place-items-center rounded-lg border bg-surface ${pending.length ? "animate-pulse border-danger text-danger" : "border-line"}`} onClick={() => setTab("tasks")}>
             {alerts ? <BellRing className="size-5" aria-hidden="true" /> : <BellOff className="size-5" aria-hidden="true" />}
@@ -428,8 +438,9 @@ export function WaiterScreen({
                     ))}</div>
                     <div className={card}>
                       <label className="mb-2 block font-semibold" htmlFor="diner-name">{c.addDiner}</label>
-                      <Input id="diner-name" value={name} onChange={(e) => setName(e.target.value)} placeholder={c.optionalName} className={fieldCls} maxLength={40} />
-                      <button className={`${primary} mt-3 w-full`} disabled={disabled} onClick={() => perform(() => actions.addDinerAction(detail.sessionId, name), (p) => { setPerson(p.id); setName(""); })}><Plus className="size-5" aria-hidden="true" />{c.add}</button>
+                      {/* A name is required: orders, bills and the customer list all show who ordered */}
+                      <Input id="diner-name" value={name} onChange={(e) => setName(e.target.value)} placeholder={c.dinerName} className={fieldCls} maxLength={40} required aria-required="true" />
+                      <button className={`${primary} mt-3 w-full`} disabled={disabled || !name.trim()} onClick={() => perform(() => actions.addDinerAction(detail.sessionId, name.trim()), (p) => { setPerson(p.id); setName(""); })}><Plus className="size-5" aria-hidden="true" />{c.add}</button>
                     </div>
                   </>
                 )}

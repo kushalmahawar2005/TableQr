@@ -13,6 +13,7 @@ import { posRoles } from "../staff/pos-read";
 import type { StaffDraftLine } from "../guest/order";
 import { staffPlaceOrder, waiterRequestBill } from "../staff/waiter-mutations";
 import { requireStaffRole } from "../staff/waiter";
+import { lockSession, syncBill } from "./bill";
 import { reopenBill } from "./payments";
 
 // Items added at the counter while the guest is paying: a chocolate, a bottle of water, mouth
@@ -47,7 +48,11 @@ export async function addItemsAtBilling(staff: StaffSession, input: { sessionId:
     // Whatever happened, the bill goes back to "asked for" so the counter can take the money
     await waiterRequestBill(staff, String(input.sessionId), now);
   }
+  const scope = { tenantId: staff.tenantId, outletId: staff.outletId, sessionId: String(input.sessionId) };
   await db.transaction(async (tx) => {
+    // Session lock first, as every bill change takes it
+    await lockSession(tx, scope);
+    await tx.update(s.orders).set({ atCounter: true }).where(and(eq(s.orders.tenantId, staff.tenantId), eq(s.orders.id, placed.orderId)));
     await tx
       .update(s.orderLines)
       .set({ status: "served", servedAt: now })
@@ -55,6 +60,8 @@ export async function addItemsAtBilling(staff: StaffSession, input: { sessionId:
     await syncTickets(tx, staff.tenantId, placed.orderId, now);
     await syncOrderStatus(tx, staff.tenantId, placed.orderId, now);
     await audit(tx, staff, { action: "billing.counter_items", entity: "order", entityId: placed.orderId, after: { sessionId: input.sessionId, lines: input.lines.length }, now });
+    // The bill was written before the order was marked as counter items: work the shares out again
+    await syncBill(tx, scope, now);
   }, LOCK_THEN_READ);
   await publish(staff, [{ topic: topics.kitchen, type: "ticket.updated", data: { orderId: placed.orderId } }]);
   return { ...placed, atCounter: true };

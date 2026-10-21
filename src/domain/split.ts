@@ -11,6 +11,8 @@ export type SplitLine = {
   taxRateBp: number;
   /** People sharing the line, in table order; null or empty means not shared */
   sharedWith?: string[] | null;
+  /** Handed over at the counter for the owner alone: an equal split never spreads it to others */
+  personal?: boolean;
 };
 
 export type SplitInput = {
@@ -51,13 +53,13 @@ export type BillTotals = {
   totalPaise: number;
 };
 
-type Portion = { participantId: string; amountPaise: number; taxRateBp: number; shared: boolean };
+type Portion = { participantId: string; amountPaise: number; taxRateBp: number; shared: boolean; personal?: boolean };
 
 /** Divides a line among its sharers; leftover paise go to the first person in the list */
 function portionsOf(line: SplitLine): Portion[] {
   const sharers = line.sharedWith?.length ? line.sharedWith : null;
   if (!sharers) {
-    return [{ participantId: line.ownerId, amountPaise: line.amountPaise, taxRateBp: line.taxRateBp, shared: false }];
+    return [{ participantId: line.ownerId, amountPaise: line.amountPaise, taxRateBp: line.taxRateBp, shared: false, personal: !!line.personal }];
   }
   const each = Math.floor(line.amountPaise / sharers.length);
   const leftover = line.amountPaise - each * sharers.length;
@@ -313,8 +315,19 @@ export function splitBill(input: BillSplitInput): { totals: BillTotals; shares: 
       shares.set(p.id, { participantId: p.id, basis: "items", amountPaise: d.amountPaise, detail: { ...d } });
       rest -= d.amountPaise;
     }
-    for (const e of splitEqually(Math.max(0, rest), eligible.map((p) => p.id))) {
-      shares.set(e.participantId, { participantId: e.participantId, basis: "equal", amountPaise: e.amountPaise, detail: null });
+    // Counter items stay with their owner: taken out of the pool, then added back to that person alone
+    const own = new Map(eligible.map((p) => {
+      const mine = portions.filter((x) => x.participantId === p.id && x.personal);
+      const base = mine.reduce((n, x) => n + x.amountPaise, 0);
+      const tax = mine.reduce((n, x) => n + (x.amountPaise * factor * x.taxRateBp) / 10000, 0);
+      const charge = totals.subtotalPaise ? (totals.serviceChargePaise * base) / totals.subtotalPaise : 0;
+      return [p.id, roundToRupee(base * factor + charge + tax)] as const;
+    }));
+    const ownTotal = [...own.values()].reduce((a, b) => a + b, 0);
+    // Only when they fit in what is left to share (a large bill discount could leave less)
+    const keepOwn = ownTotal > 0 && ownTotal <= Math.max(0, rest);
+    for (const e of splitEqually(Math.max(0, rest) - (keepOwn ? ownTotal : 0), eligible.map((p) => p.id))) {
+      shares.set(e.participantId, { participantId: e.participantId, basis: "equal", amountPaise: e.amountPaise + (keepOwn ? (own.get(e.participantId) ?? 0) : 0), detail: null });
     }
   } else {
     for (const p of open) {
