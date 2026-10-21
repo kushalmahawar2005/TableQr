@@ -31,7 +31,8 @@ async function handle(request: Request) {
       // The bill page keeps checking; a slow gateway here must not strand the guest
     }
   }
-  return Response.redirect(new URL(`${back}${back === "/" ? "" : `?p=${encodeURIComponent(paymentId)}`}`, url.origin), 303);
+  const baseOrigin = url.origin.replace("0.0.0.0", "localhost");
+  return Response.redirect(new URL(`${back}${back === "/" ? "" : `?p=${encodeURIComponent(paymentId)}`}`, baseOrigin), 303);
 }
 
 export const GET = handle;

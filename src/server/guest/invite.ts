@@ -8,7 +8,8 @@ import { encodeQr, qrSvgPath } from "@/domain/qr";
 export function publicOrigin(h: Headers): string {
   const configured = process.env.PUBLIC_APP_URL?.replace(/\/+$/, "");
   if (configured) return configured;
-  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
+  let host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
+  if (host.startsWith("0.0.0.0")) host = host.replace("0.0.0.0", "localhost");
   const proto = h.get("x-forwarded-proto")?.split(",")[0] ?? (/^(localhost|127\.)/.test(host) ? "http" : "https");
   return `${proto}://${host}`;
 }
