@@ -189,7 +189,10 @@ describe("screen", () => {
   it("links only to screens that exist and loads no chart library", () => {
     const html = render("busy");
     const hrefs = [...html.matchAll(/href="([^"]+)"/g)].map((m) => m[1]);
-    expect(new Set(hrefs)).toEqual(new Set(["/console/floor", "/console/billing", "/console/orders", "/console/reservations", "/console/reports", "/console/reports/day-close", "/console/waitlist", "/console/menu"]));
+    // Every link on the dashboard resolves to a real console route. The kitchen panel links to
+    // the KDS; the inventory and team links appear only when their data does (low stock / duty
+    // rows), so they are not part of this fixture render.
+    expect(new Set(hrefs)).toEqual(new Set(["/console/floor", "/console/billing", "/console/orders", "/console/reservations", "/console/reports", "/console/reports/day-close", "/console/waitlist", "/console/menu", "/console/kitchen"]));
     expect(html).not.toMatch(/recharts|chart\.js|echarts|<canvas/i);
   });
 });

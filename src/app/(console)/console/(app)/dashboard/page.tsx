@@ -30,5 +30,5 @@ export default async function DashboardPage() {
   const lang = parseLang((await cookies()).get(LANG_COOKIE)?.value);
   // Who is on duty, set right here by the manager or owner
   const canChange = staff.roles.some((r) => r === "owner" || r === "manager");
-  return <DashboardScreen initial={data} initialTrend={trend} duty={duty ? { rows: duty, canChange } : undefined} setup={setup && <SetupChecklist lang={lang} steps={setup} />} />;
+  return <DashboardScreen initial={data} initialTrend={trend} duty={duty ? { rows: duty, canChange } : undefined} setup={setup && <SetupChecklist lang={lang} steps={setup} />} realtimeUrl={process.env.REALTIME_URL?.replace(/^http/, "ws") ?? null} />;
 }

@@ -6,6 +6,7 @@ import { consoleSectionRoles } from "@/lib/staff-permissions";
 import { AppError } from "@/server/errors";
 import type { StaffSession } from "@/server/staff/auth";
 import { getDashboard, getRevenueTrend } from "@/server/staff/dashboard";
+import { staffRealtimeToken, topics } from "@/server/realtime/token";
 import { staffFor } from "@/server/staff/request";
 
 // O1 Owner Dashboard reads and interactive quick actions.
@@ -69,4 +70,13 @@ export async function checkInReservationAction(reservationId: string) {
     console.error("[dashboard] checkInReservationAction failed", err);
     return { ok: false };
   }
+}
+
+/**
+ * Short-lived staff-scoped realtime token for the dashboard subscription (floor/kitchen/tasks).
+ * The role gate runs first (staffFor with the dashboard section roles); returns null when
+ * realtime is not configured, in which case the client falls back to polling.
+ */
+export async function dashboardTokenAction() {
+  return run(async (s) => staffRealtimeToken(s, [topics.floor, topics.kitchen, topics.tasks]));
 }
