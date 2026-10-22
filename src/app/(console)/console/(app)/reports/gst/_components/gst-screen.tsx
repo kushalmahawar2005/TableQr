@@ -38,11 +38,13 @@ export function GstScreen({ report: r }: { report: GstReport }) {
   const file = (kind: string) => `GST-${kind}-${r.month}${r.outlet.gstin ? `-${r.outlet.gstin}` : ""}.csv`;
 
   return (
-    <main className="mx-auto w-full max-w-[1000px] px-4 py-5 text-ink sm:px-6 lg:px-8 lg:py-7">
+    <main id="gst-report-print" className="mx-auto w-full max-w-[1000px] px-4 py-5 text-ink sm:px-6 lg:px-8 lg:py-7 print:max-w-none print:p-0">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-caption font-semibold text-muted">{r.outlet.name}{r.outlet.gstin ? ` · GSTIN ${r.outlet.gstin}` : ""}</p>
           <h1 className="mt-1 font-display text-title font-bold">GST report</h1>
+          <p className="mt-1 text-body text-muted">{monthName(r.month)}</p>
+          {!r.outlet.gstin && <p className="hidden print:block text-caption text-muted">GSTIN: Not configured for this outlet</p>}
         </div>
         <div className="flex items-center gap-2 print:hidden">
           <button type="button" className={btn} onClick={() => go(shiftMonth(r.month, -1))} aria-label="Previous month">‹</button>
@@ -52,7 +54,7 @@ export function GstScreen({ report: r }: { report: GstReport }) {
       </header>
 
       {!r.outlet.gstin && (
-        <p className="mt-4 rounded-xl border border-warning/30 bg-[var(--state-held-soft)] px-4 py-3 text-body text-[var(--state-held-text)]">
+        <p className="mt-4 rounded-xl border border-warning/30 bg-[var(--state-held-soft)] px-4 py-3 text-body text-[var(--state-held-text)] print:hidden">
           This outlet has no GSTIN yet, so bills print as receipts. Add it in <Link href="/console/settings" className="font-semibold underline underline-offset-4">Settings</Link> to issue tax invoices.
         </p>
       )}
@@ -78,8 +80,8 @@ export function GstScreen({ report: r }: { report: GstReport }) {
           <section className={`${card} mt-5 overflow-hidden`} aria-label="Tax by rate">
             <h2 className="px-5 pt-5 font-display text-section font-bold">Tax by rate</h2>
             <p className="px-5 text-caption text-muted">Sales to customers without a GSTIN go in GSTR-1 as B2C, by rate.</p>
-            <div className="mt-3 overflow-x-auto">
-              <table className="w-full min-w-[520px] text-left text-body tabular-nums">
+            <div className="mt-3 overflow-x-auto print:overflow-visible">
+              <table className="w-full min-w-[520px] text-left text-body tabular-nums print:min-w-0">
                 <thead><tr className="text-caption text-muted"><th className="px-5 py-2 font-medium">Rate</th><th className="px-3 py-2 text-right font-medium">Invoices</th><th className="px-3 py-2 text-right font-medium">Taxable value</th><th className="px-3 py-2 text-right font-medium">CGST</th><th className="px-5 py-2 text-right font-medium">SGST</th></tr></thead>
                 <tbody>
                   {s.byRate.map((row) => (
@@ -117,8 +119,8 @@ export function GstScreen({ report: r }: { report: GstReport }) {
             <section className={`${card} mt-5 overflow-hidden`} aria-label="Business invoices">
               <h2 className="px-5 pt-5 font-display text-section font-bold">Invoices with the customer&apos;s GSTIN (B2B)</h2>
               <p className="px-5 text-caption text-muted">Reported one by one in GSTR-1</p>
-              <div className="mt-3 overflow-x-auto">
-                <table className="w-full min-w-[560px] text-left text-body tabular-nums">
+              <div className="mt-3 overflow-x-auto print:overflow-visible">
+                <table className="w-full min-w-[560px] text-left text-body tabular-nums print:min-w-0">
                   <thead><tr className="text-caption text-muted"><th className="px-5 py-2 font-medium">Invoice</th><th className="px-3 py-2 font-medium">Customer</th><th className="px-3 py-2 text-right font-medium">Taxable</th><th className="px-5 py-2 text-right font-medium">Tax</th></tr></thead>
                   <tbody>{s.b2b.map((b) => <tr key={b.number} className="border-t border-line"><td className="px-5 py-2.5">{b.number}<span className="block text-caption text-muted">{dateIst(b.issuedAt)}</span></td><td className="px-3 py-2.5">{b.customerName ?? "—"}<span className="block text-caption text-muted">{b.customerGstin}</span></td><td className="px-3 py-2.5 text-right">{rs(b.taxablePaise)}</td><td className="px-5 py-2.5 text-right">{rs(b.taxPaise)}</td></tr>)}</tbody>
                 </table>
@@ -128,9 +130,9 @@ export function GstScreen({ report: r }: { report: GstReport }) {
 
           <section className={`${card} mt-5 overflow-hidden`} aria-label="All invoices">
             <h2 className="px-5 pt-5 font-display text-section font-bold">All invoices</h2>
-            <div className="mt-3 max-h-[480px] overflow-auto print:max-h-none">
-              <table className="w-full min-w-[620px] text-left text-body tabular-nums">
-                <thead className="sticky top-0 bg-surface"><tr className="text-caption text-muted"><th className="px-5 py-2 font-medium">Invoice</th><th className="px-3 py-2 font-medium">Date</th><th className="px-3 py-2 text-right font-medium">Taxable</th><th className="px-3 py-2 text-right font-medium">CGST</th><th className="px-3 py-2 text-right font-medium">SGST</th><th className="px-5 py-2 text-right font-medium">Total</th></tr></thead>
+            <div className="mt-3 max-h-[480px] overflow-auto print:max-h-none print:overflow-visible">
+              <table className="w-full min-w-[620px] text-left text-body tabular-nums print:min-w-0">
+                <thead className="sticky top-0 bg-surface print:static"><tr className="text-caption text-muted"><th className="px-5 py-2 font-medium">Invoice</th><th className="px-3 py-2 font-medium">Date</th><th className="px-3 py-2 text-right font-medium">Taxable</th><th className="px-3 py-2 text-right font-medium">CGST</th><th className="px-3 py-2 text-right font-medium">SGST</th><th className="px-5 py-2 text-right font-medium">Total</th></tr></thead>
                 <tbody>{r.rows.map((row) => <tr key={row.number} className="border-t border-line"><td className="px-5 py-2">{row.number}</td><td className="px-3 py-2">{dateIst(row.issuedAt)}</td><td className="px-3 py-2 text-right">{rs(row.taxablePaise)}</td><td className="px-3 py-2 text-right">{rs(row.cgstPaise)}</td><td className="px-3 py-2 text-right">{rs(row.sgstPaise)}</td><td className="px-5 py-2 text-right font-semibold">{rs(row.totalPaise)}</td></tr>)}</tbody>
               </table>
             </div>

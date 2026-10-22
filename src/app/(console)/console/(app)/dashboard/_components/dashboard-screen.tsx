@@ -6,7 +6,7 @@ import type { DutyRow } from "@/server/staff/duty";
 import { dashboardAction, dashboardTokenAction, revenueTrendAction } from "../actions";
 import { CustomerRequests } from "./customer-requests";
 import { DashboardHeader, type ConnState } from "./dashboard-header";
-import { DashboardKpis } from "./dashboard-kpis";
+import { DashboardKpis, DashboardSecondaryStats } from "./dashboard-kpis";
 import { createDashboardSync, startDashboardSync } from "./dashboard-sync";
 import { money, THEME } from "./dashboard-shared";
 import { KitchenOrders } from "./kitchen-orders";
@@ -86,7 +86,6 @@ export function DashboardScreen({
   // Events only nudge a debounced ops refetch; on (re)connect a full snapshot resyncs, so a
   // missed event can never leave the dashboard permanently stale.
   const syncRef = useRef(sync);
-  syncRef.current = sync;
   useEffect(() => {
     if (preview || !realtimeUrl) return;
     let debounce: ReturnType<typeof setTimeout> | undefined;
@@ -134,47 +133,50 @@ export function DashboardScreen({
   const showStaff = !!dutyData;
 
   return (
-    <div className="mx-auto w-full max-w-[1440px] space-y-5 px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
-      <DashboardHeader data={data} conn={conn} refreshing={refreshing} onRefresh={refresh} />
+    <div className="dashboard-theme min-h-[calc(100dvh-4rem)] bg-dashboard-canvas sm:min-h-[calc(100dvh-4.5rem)]">
+      <main className="mx-auto w-full max-w-[1440px] space-y-5 px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
+        <DashboardHeader data={data} conn={conn} refreshing={refreshing} onRefresh={refresh} />
 
-      {refreshError && (
-        <p className="rounded-input border border-rose-200 bg-rose-50 px-4 py-2.5 text-[13px] font-semibold text-rose-700" role="alert">
-          {refreshError} The numbers below may be from earlier.
-        </p>
-      )}
+        {refreshError && (
+          <p className="rounded-input border border-rose-200 bg-rose-50 px-4 py-2.5 text-[13px] font-semibold text-rose-700" role="alert">
+            {refreshError} The numbers below may be from earlier.
+          </p>
+        )}
 
-      <NeedsAttention data={data} />
+        {setup}
 
-      {setup}
+        <DashboardKpis data={data} trend={trend} />
 
-      <QuickActions />
+        <QuickActions />
 
-      <DashboardKpis data={data} />
+        <DashboardSecondaryStats data={data} />
 
-      {/* Operations: two independent columns. Nothing here stretches to match a neighbour —
-          each stack is as tall as its own content, in every scenario. */}
-      <div className="grid items-start gap-5 xl:grid-cols-12">
-        <div className="min-w-0 space-y-5 xl:col-span-8">
-          <LiveFloor data={data} />
-          <div className="grid items-start gap-5 lg:grid-cols-2">
-            <div className="min-w-0 space-y-5">
-              <RecentPayments payments={data.operations.recentPayments} timezone={data.timezone} />
-              <TopDishes data={data} />
-            </div>
-            <div className="min-w-0 space-y-5">
-              <SalesPerformance trend={trend} />
-              <LiveActivity feed={data.operations.activityFeed} />
-            </div>
+        <NeedsAttention data={data} />
+
+        {/* Match the reference's floor-first operations area while keeping each panel content-sized. */}
+        <div className="grid items-start gap-5 xl:grid-cols-12">
+          <div className="min-w-0 xl:col-span-6">
+            <LiveFloor data={data} />
+          </div>
+
+          <div className="min-w-0 space-y-5 xl:col-span-3">
+            {showStaff && <StaffOnDuty duty={dutyData} />}
+            <KitchenOrders orders={data.operations.kitchenOrders} />
+          </div>
+
+          <div className="min-w-0 space-y-5 xl:col-span-3">
+            <CustomerRequests initialRequests={data.operations.customerRequests} />
+            <UpcomingReservations data={data} />
           </div>
         </div>
 
-        <div className="min-w-0 space-y-5 xl:col-span-4">
-          <CustomerRequests initialRequests={data.operations.customerRequests} />
-          <KitchenOrders orders={data.operations.kitchenOrders} />
-          <UpcomingReservations data={data} />
-          {showStaff && <StaffOnDuty duty={dutyData} />}
+        <div className="grid items-start gap-5 xl:grid-cols-2 2xl:grid-cols-4">
+          <RecentPayments payments={data.operations.recentPayments} timezone={data.timezone} />
+          <SalesPerformance trend={trend} />
+          <TopDishes data={data} />
+          <LiveActivity feed={data.operations.activityFeed} />
         </div>
-      </div>
+      </main>
     </div>
   );
 }

@@ -62,3 +62,26 @@ export async function updateOutletSettings(staff: Staff, input: SettingsPatch, n
     });
   });
 }
+
+/** Change the logo for this tenant's shared brand. Guest pages read it from the brand record. */
+export async function updateBrandLogo(staff: Staff, logoUrl: string | null, now = new Date()) {
+  if (!staff.roles.includes("owner")) throw new AppError("forbidden", "Only the owner can change the restaurant logo.");
+  if (logoUrl !== null && (!/^https:\/\//i.test(logoUrl) && !logoUrl.startsWith("/uploads/"))) {
+    throw bad("Upload a logo image before saving it.");
+  }
+  if (logoUrl && logoUrl.length > 500) throw bad("The logo address is too long.");
+
+  return db.transaction(async (tx) => {
+    const [outlet] = await tx.select({ brandId: s.outlets.brandId }).from(s.outlets)
+      .where(and(eq(s.outlets.tenantId, staff.tenantId), eq(s.outlets.id, staff.outletId))).for("update");
+    if (!outlet) throw new AppError("not_found", "Outlet not found.");
+    const [brand] = await tx.select({ logoUrl: s.brands.logoUrl }).from(s.brands)
+      .where(and(eq(s.brands.tenantId, staff.tenantId), eq(s.brands.id, outlet.brandId))).for("update");
+    if (!brand) throw new AppError("not_found", "Restaurant brand not found.");
+    await tx.update(s.brands).set({ logoUrl }).where(and(eq(s.brands.tenantId, staff.tenantId), eq(s.brands.id, outlet.brandId)));
+    await audit(tx, staff, {
+      action: "brand.logo_changed", entity: "brand", entityId: outlet.brandId, now,
+      before: { logoUrl: brand.logoUrl }, after: { logoUrl },
+    });
+  });
+}

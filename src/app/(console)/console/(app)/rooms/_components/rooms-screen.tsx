@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Cancel01Icon, PlusSignIcon, PrinterIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { CalendarDays, Search, Users, Utensils, BedDouble, QrCode } from "lucide-react";
 import { ROOM_REQUEST_LABEL, ROOM_STATUS_LABEL, type RoomStatus } from "@/domain/rooms";
 import type { RoomsData, StayHistory } from "@/server/staff/rooms";
 import { checkInAction, checkOutAction, foodTabAction, removeRoomAction, requestDoneAction, roomStatusAction, roomsAction, saveRoomAction } from "../actions";
@@ -63,6 +64,8 @@ export function RoomsScreen({ initial, history: initialHistory }: { initial: Roo
   const [data, setData] = useState(initial);
   const [history, setHistory] = useState(initialHistory);
   const [tab, setTab] = useState<"rooms" | "history">("rooms");
+  const [roomFilter, setRoomFilter] = useState<"all" | RoomStatus>("all");
+  const [query, setQuery] = useState("");
   const [panel, setPanel] = useState<Panel>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -106,16 +109,18 @@ export function RoomsScreen({ initial, history: initialHistory }: { initial: Roo
   const rooms = data.rooms;
   const count = (st: RoomStatus) => rooms.filter((r) => r.status === st).length;
   const requests = rooms.flatMap((r) => r.requests.map((q) => ({ ...q, room: r.number }))).sort((a, b) => a.createdAt - b.createdAt);
+  const visibleRooms = rooms.filter((room) => {
+    const matchesStatus = roomFilter === "all" || room.status === roomFilter;
+    const text = `${room.number} ${room.roomType ?? ""} ${room.floorLabel ?? ""} ${room.stay?.guestName ?? ""} ${room.stay?.guestPhone ?? ""}`.toLowerCase();
+    return matchesStatus && text.includes(query.trim().toLowerCase());
+  });
 
   return (
     <main className="mx-auto w-full max-w-[1200px] px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="font-display text-title font-bold text-ink">Rooms</h1>
-          <p className="mt-1 text-body text-muted">
-            {count("occupied")} of {rooms.length} rooms have guests · {count("vacant")} ready · {count("cleaning")} cleaning
-            {data.maxRooms !== null && data.canManage ? ` · plan allows ${data.maxRooms}` : ""}
-          </p>
+          <p className="mt-1 text-body text-muted">A clear view of every stay, room request and checkout.{data.maxRooms !== null && data.canManage ? ` · ${rooms.length} of ${data.maxRooms} rooms in your plan` : ""}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           {rooms.length > 0 && (
@@ -156,12 +161,29 @@ export function RoomsScreen({ initial, history: initialHistory }: { initial: Roo
         </section>
       )}
 
-      <div role="tablist" aria-label="Rooms" className="mt-5 inline-flex rounded-xl border border-line bg-surface p-1">
+      <section aria-label="Room status overview" className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
+        {([
+          ["all", "All rooms", rooms.length],
+          ["occupied", "Guests in", count("occupied")],
+          ["vacant", "Ready", count("vacant")],
+          ["cleaning", "Cleaning", count("cleaning")],
+          ["blocked", "Out of service", count("blocked")],
+        ] as const).map(([key, label, value]) => (
+          <button key={key} type="button" aria-pressed={roomFilter === key} onClick={() => setRoomFilter(key)} className={`rounded-2xl border px-4 py-3 text-left transition ${roomFilter === key ? "border-brand/45 bg-brand/[0.08] shadow-sm" : "border-line bg-surface hover:bg-ink/[0.025]"}`}>
+            <span className="block text-caption font-semibold text-muted">{label}</span><span className="mt-0.5 block font-display text-section font-bold tabular-nums text-ink">{value}</span>
+          </button>
+        ))}
+      </section>
+
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+      <div role="tablist" aria-label="Rooms" className="inline-flex rounded-xl border border-line bg-surface p-1">
         {([["rooms", "Rooms"], ["history", "Past stays"]] as const).map(([k, label]) => (
           <button key={k} role="tab" type="button" aria-selected={tab === k} onClick={() => setTab(k)} className={`min-h-9 rounded-lg px-4 text-body font-semibold ${focus} ${tab === k ? "bg-ink text-paper" : "text-muted hover:text-ink"}`}>
             {label}
           </button>
         ))}
+      </div>
+      {tab === "rooms" && rooms.length > 0 && <label className={`flex h-11 min-w-[220px] items-center gap-2 rounded-xl border border-line bg-surface px-3 text-muted ${focus}`}><Search size={17} aria-hidden /><span className="sr-only">Search rooms or guests</span><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Find a room or guest…" className="min-w-0 flex-1 bg-transparent text-body text-ink outline-none placeholder:text-muted" /></label>}
       </div>
 
       {tab === "rooms" &&
@@ -174,39 +196,47 @@ export function RoomsScreen({ initial, history: initialHistory }: { initial: Roo
             {data.canManage && <button type="button" className={`${primary} mt-4`} onClick={() => setPanel({ kind: "room", room: null })}>Add room</button>}
           </section>
         ) : (
-          <ul className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {rooms.map((room) => (
-              <li key={room.id} className={`${card} flex flex-col p-4`}>
+          <>
+          <ul className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {visibleRooms.map((room) => (
+              <li key={room.id} className={`${card} group relative flex min-h-[270px] flex-col overflow-hidden p-4 transition duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-ink/[0.06]`}>
+                <div className={`absolute inset-x-0 top-0 h-1 ${room.status === "occupied" ? "bg-brand" : room.status === "cleaning" ? "bg-[var(--state-cleaning-text)]" : room.status === "blocked" ? "bg-muted" : "bg-[var(--state-available-text)]"}`} />
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     {data.canManage ? (
-                      <button type="button" onClick={() => setPanel({ kind: "room", room })} className={`font-display text-title font-bold text-ink hover:underline ${focus}`}>Room {room.number}</button>
+                      <button type="button" onClick={() => setPanel({ kind: "room", room })} className={`font-display text-title font-bold text-ink hover:text-brand ${focus}`}>Room {room.number}</button>
                     ) : (
                       <p className="font-display text-title font-bold text-ink">Room {room.number}</p>
                     )}
-                    <p className="text-caption text-muted">{[room.roomType, room.floorLabel].filter(Boolean).join(" · ") || " "}</p>
+                    <p className="mt-1 flex items-center gap-1.5 text-caption text-muted"><BedDouble size={14} aria-hidden />{[room.roomType, room.floorLabel].filter(Boolean).join(" · ") || "Room"}</p>
                   </div>
                   <span className={`shrink-0 rounded-full px-2.5 py-1 text-caption font-semibold ${TONE[room.status]}`}>{ROOM_STATUS_LABEL[room.status].en}</span>
                 </div>
 
                 {room.stay ? (
-                  <div className="mt-3 rounded-xl bg-ink/[0.03] px-3 py-2.5 text-body">
-                    <p className="font-semibold text-ink">{room.stay.guestName} <span className="font-normal text-muted">· {room.stay.guests} {room.stay.guests === 1 ? "guest" : "guests"}</span></p>
-                    <p className="text-caption text-muted">
-                      In {day(room.stay.checkInAt)}{room.stay.expectedCheckOutAt ? ` · out ${day(room.stay.expectedCheckOutAt)}` : ""}{room.stay.guestPhone ? ` · ${room.stay.guestPhone.replace(/^\+91/, "")}` : ""}
-                    </p>
-                    <p className="mt-1 text-caption">
+                  <div className="mt-4 flex-1 rounded-xl border border-line/70 bg-ink/[0.025] p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0"><p className="truncate font-semibold text-ink">{room.stay.guestName}</p><p className="mt-0.5 flex items-center gap-1 text-caption text-muted"><Users size={13} aria-hidden />{room.stay.guests} {room.stay.guests === 1 ? "guest" : "guests"}{room.stay.guestPhone ? ` · ${room.stay.guestPhone.replace(/^\+91/, "")}` : ""}</p></div>
+                      <span className="rounded-lg bg-surface px-2 py-1 text-caption font-semibold text-muted">In-house</span>
+                    </div>
+                    <div className="mt-3 grid grid-cols-2 gap-2 border-t border-line/70 pt-2.5">
+                      <p className="text-caption text-muted"><span className="mb-0.5 flex items-center gap-1"><CalendarDays size={13} aria-hidden />Check-in</span><strong className="font-semibold text-ink">{day(room.stay.checkInAt)}</strong></p>
+                      <p className="text-caption text-muted"><span className="mb-0.5 flex items-center gap-1"><CalendarDays size={13} aria-hidden />Expected out</span><strong className="font-semibold text-ink">{room.stay.expectedCheckOutAt ? day(room.stay.expectedCheckOutAt) : "Not set"}</strong></p>
+                    </div>
+                    <div className="mt-2.5 flex items-start gap-2 border-t border-line/70 pt-2.5 text-caption">
+                      <Utensils size={14} className="mt-0.5 shrink-0 text-muted" aria-hidden /><p>
                       {room.stay.food.unpaidPaise > 0 ? (
-                        <span className="font-semibold text-danger">Food {rs(room.stay.food.unpaidPaise)} not paid ({room.stay.food.items} {room.stay.food.items === 1 ? "item" : "items"}, before tax)</span>
+                        <span className="font-semibold text-danger">Food bill due {rs(room.stay.food.unpaidPaise)} · {room.stay.food.items} {room.stay.food.items === 1 ? "item" : "items"}</span>
                       ) : (
                         <span className="text-muted">No unpaid food{room.stay.food.paidPaise ? ` · ${rs(room.stay.food.paidPaise)} paid` : ""}</span>
                       )}
-                      <span className="text-muted"> · {room.stay.foodPay === "at_checkout" ? "pay at check-out" : "pay per order"}</span>
-                    </p>
-                    {room.requests.length > 0 && <p className="mt-1 text-caption font-semibold text-brand">{room.requests.length} open {room.requests.length === 1 ? "request" : "requests"}</p>}
+                      <span className="block text-muted">{room.stay.foodPay === "at_checkout" ? "Added to room · settle at check-out" : "Guest pays for each order"}</span>
+                      </p>
+                    </div>
+                    {room.requests.length > 0 && <p className="mt-2 rounded-lg bg-brand/[0.08] px-2.5 py-1.5 text-caption font-semibold text-brand">{room.requests.length} open {room.requests.length === 1 ? "request" : "requests"} · needs attention</p>}
                   </div>
                 ) : (
-                  <p className="mt-3 text-caption text-muted">{room.hasQr ? "Guests scan the room QR after check-in." : "No QR yet."}</p>
+                  <div className="mt-4 flex flex-1 items-center gap-3 rounded-xl border border-dashed border-line bg-ink/[0.02] px-3 py-4 text-caption text-muted"><span className="grid size-9 shrink-0 place-items-center rounded-xl bg-surface text-brand"><QrCode size={18} aria-hidden /></span><span>{room.status === "cleaning" ? "Housekeeping is preparing this room." : room.status === "blocked" ? "This room is out of service." : room.hasQr ? "Ready for the next guest. Room QR is active after check-in." : "Ready for the next guest. QR code not set up."}</span></div>
                 )}
 
                 <div className="mt-auto flex flex-wrap gap-1.5 pt-3">
@@ -233,6 +263,8 @@ export function RoomsScreen({ initial, history: initialHistory }: { initial: Roo
               </li>
             ))}
           </ul>
+          {visibleRooms.length === 0 && <section className={`${card} mt-4 px-6 py-10 text-center`}><p className="font-display text-section font-bold text-ink">No rooms match this view</p><p className="mt-1 text-body text-muted">Try another status or search for a different room or guest.</p><button type="button" onClick={() => { setRoomFilter("all"); setQuery(""); }} className={`${quiet} mt-3`}>Clear filters</button></section>}
+          </>
         ))}
 
       {tab === "history" && (

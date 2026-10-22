@@ -2,6 +2,8 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { DashboardScreen, alertsOf } from "@/app/(console)/console/(app)/dashboard/_components/dashboard-screen";
+import { FLOOR_PREVIEW_LIMIT, floorGridClass, floorPreview, floorTileClass } from "@/app/(console)/console/(app)/dashboard/_components/live-floor";
+import { SalesPerformance } from "@/app/(console)/console/(app)/dashboard/_components/sales-performance";
 import { OPS_POLL_MS, TREND_POLL_MS, createDashboardSync, startDashboardSync } from "@/app/(console)/console/(app)/dashboard/_components/dashboard-sync";
 import { dashboardCases } from "@/app/dev/o1/_fixtures";
 import { addDays, dayRange, deltaLabel, deltaOf, lastDays, lateness } from "@/domain/dashboard";
@@ -11,7 +13,17 @@ import type { DashboardData, RevenueTrend } from "@/server/staff/dashboard";
 
 // O1 Owner Dashboard: pure helpers, landing, polling controller and the screen rendered to HTML.
 
-vi.mock("@/app/(console)/console/(app)/dashboard/actions", () => ({}));
+vi.mock("@/app/(console)/console/(app)/dashboard/actions", () => ({
+  dashboardAction: vi.fn(),
+  dashboardTokenAction: vi.fn(),
+  revenueTrendAction: vi.fn(),
+  resolveServiceRequestAction: vi.fn(),
+  checkInReservationAction: vi.fn(),
+}));
+vi.mock("next/navigation", async (importOriginal) => ({
+  ...await importOriginal<typeof import("next/navigation")>(),
+  useRouter: () => ({ refresh: vi.fn() }),
+}));
 
 const caseOf = (id: string) => dashboardCases().find((c) => c.id === id)!;
 const render = (id: string) => {
@@ -100,7 +112,7 @@ describe("polling controller", () => {
   const data = (n: number) => ({ generatedAt: n }) as unknown as DashboardData;
   const trend = (n: number) => [{ date: "2026-10-04", revenuePaise: n }] as RevenueTrend;
 
-  it("AW/AX/AY: operations every minute, the trend every five, nothing while the tab is hidden", () => {
+  it("AW/AX/AY: operations every 12 seconds, the trend every five minutes, nothing while the tab is hidden", () => {
     const timers: { fn: () => void; ms: number }[] = [];
     const sync = { ops: vi.fn(async () => {}), trend: vi.fn(async () => {}) };
     let visible = true;
@@ -168,6 +180,7 @@ describe("screen", () => {
     expect(html).toContain("+12%");
     expect(html).toContain("No change");
     expect(html).toContain("Money from paid bills");
+    expect(html).toContain("Revenue trend for the last 7 days");
     expect(html).toContain("Sales, Last 7 Days");
     expect(html).toContain("Top 5 Dishes Today");
     expect(html).toContain("T12");
@@ -181,9 +194,22 @@ describe("screen", () => {
     expect(quiet).toContain("Nothing needs your attention");
     expect(quiet).toContain("No items sold yet today.");
     expect(quiet).toContain("No reservations due");
-    expect(render("no-baseline")).toContain("Nothing yesterday to compare");
+    expect(quiet).toContain("No recent sales trend");
+    expect(render("no-baseline")).toContain("No baseline");
     expect(alertsOf(caseOf("quiet").data)).toEqual([]);
     expect(alertsOf(caseOf("blocked").data).map((a) => a.key)).toEqual(["blocked"]);
+  });
+
+  it("plots real daily sales as bars and leaves zero-sales days empty", () => {
+    const active = renderToStaticMarkup(createElement(SalesPerformance, { trend: caseOf("trend").trend }));
+    expect(active).toContain("Sales, Last 7 Days");
+    expect(active).toContain("Today");
+    expect(active).toContain("bg-forest");
+    expect(active).toContain("—");
+
+    const empty = renderToStaticMarkup(createElement(SalesPerformance, { trend: caseOf("quiet").trend }));
+    expect(empty).toContain("No sales recorded in the last 7 days");
+    expect(empty).not.toContain("bg-[#103B2C]");
   });
 
   it("links only to screens that exist and loads no chart library", () => {
@@ -194,5 +220,42 @@ describe("screen", () => {
     // rows), so they are not part of this fixture render.
     expect(new Set(hrefs)).toEqual(new Set(["/console/floor", "/console/billing", "/console/orders", "/console/reservations", "/console/reports", "/console/reports/day-close", "/console/waitlist", "/console/menu", "/console/kitchen"]));
     expect(html).not.toMatch(/recharts|chart\.js|echarts|<canvas/i);
+  });
+});
+
+describe("live floor sizing", () => {
+  it("labels live order value separately from a bill that is ready to pay", () => {
+    const html = render("busy");
+    expect(html).toContain("Orders so far");
+    expect(html).toContain("Bill due");
+  });
+
+  it("gives a small table count larger cards and adds columns as the count grows", () => {
+    expect(floorGridClass(1)).toBe("grid-cols-1 max-w-sm");
+    expect(floorTileClass(1)).toContain("min-h-[124px]");
+    expect(floorGridClass(2)).toBe("grid-cols-2 max-w-xl");
+    expect(floorGridClass(4)).toBe("grid-cols-2");
+    expect(floorGridClass(6)).toBe("grid-cols-2 sm:grid-cols-3");
+    expect(floorGridClass(7)).toBe("grid-cols-2 sm:grid-cols-3 xl:grid-cols-4");
+    expect(floorTileClass(7)).toContain("min-h-[106px]");
+  });
+
+  it("keeps a small floor complete and caps a large dashboard preview", () => {
+    const tables = Array.from({ length: FLOOR_PREVIEW_LIMIT + 2 }, (_, i) => ({
+      id: `table-${i + 1}`,
+      code: `T${i + 1}`,
+      seats: 2 + (i % 5),
+      state: "available",
+    }));
+    tables[12].state = "seated";
+    tables[13].state = "bill_requested";
+
+    const smallFloor = floorPreview(tables.slice(0, 3));
+    const largeFloor = floorPreview(tables);
+
+    expect(smallFloor).toHaveLength(3);
+    expect(largeFloor).toHaveLength(FLOOR_PREVIEW_LIMIT);
+    expect(largeFloor[0].state).toBe("bill_requested");
+    expect(largeFloor.some((table) => table.state === "seated")).toBe(true);
   });
 });

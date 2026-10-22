@@ -66,7 +66,7 @@ export function NeedsAttention({ data }: { data: DashboardData }) {
         <h2 className="font-display text-base font-bold text-ink">Needs Attention</h2>
         <span className="rounded-full bg-terracotta/10 px-2 py-0.5 text-xs font-bold text-terracotta tabular">{alerts.length}</span>
       </div>
-      <ul className="mt-3 grid gap-2">
+      <ul className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
         {alerts.map((al) => {
           const Icon = al.icon;
           return (

@@ -109,6 +109,21 @@ describe("K: week view groups by date, then time", () => {
   });
 });
 
+describe("large group enquiry inbox", () => {
+  it("shows the event request, contact action, and makes no-payment status clear", () => {
+    const data: CalendarData = {
+      ...busy,
+      groupRequests: [{ id: "gr1", publicReference: "GR-123ABC", name: "Neha Shah", phone: "9876543210", partySize: 24, desiredDate: "2026-10-05", desiredStartAt: localTime("2026-10-05", 19 * 60, TZ).getTime(), notes: "Birthday dinner", status: "requested", createdAt: 0 }],
+    };
+    const html = renderToStaticMarkup(createElement(ReservationCalendar, { initial: data, realtimeUrl: null, preview: true }));
+    expect(html).toContain("Large group &amp; event enquiries");
+    expect(html).toContain("Neha Shah");
+    expect(html).toContain("Call 9876543210");
+    expect(html).toContain("Mark contacted");
+    expect(html).toContain("No deposit or booking fee is collected");
+  });
+});
+
 describe("L/M/N/O: live refresh keeps what the user is looking at", () => {
   const data = (over: Partial<CalendarData> = {}): CalendarData => ({ ...busy, ...over });
   function setup() {
@@ -252,5 +267,12 @@ describe("phone width", () => {
     const html = render("busy-day");
     expect(html).toMatch(/<form class="flex min-w-0 flex-1 gap-2 sm:max-w-md"/);
     expect(html).toMatch(/aria-label="Search guest, phone or reference"[^>]*class="[^"]*min-w-0 flex-1"/);
+  });
+
+  it("keeps the booking list full width until a booking is selected", () => {
+    const html = render("busy-day", "no-selection");
+    expect(html).not.toContain('aria-label="Reservation details"');
+    expect(html).not.toContain("Pick a booking");
+    expect(render("busy-day", "a")).toContain('aria-label="Reservation details"');
   });
 });

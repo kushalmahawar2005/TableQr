@@ -21,9 +21,13 @@ export default async function PlanPage() {
   }
   const plan = await planViewFor(staff);
   return (
-    <main className="mx-auto w-full max-w-[1160px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="font-display text-title font-bold text-ink">My plan</h1>
+    <main className="mx-auto w-full max-w-[1320px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-caption font-semibold uppercase tracking-[0.08em] text-muted">Subscription & billing</p>
+          <h1 className="mt-1 font-display text-title font-bold text-ink">My plan</h1>
+          <p className="mt-1 text-body text-muted">Check your access, compare plans and pay securely when you’re ready.</p>
+        </div>
         <ContactTableQR message={`Hi TableQR, this is ${staff.outlet.name}. I have a question about our plan.`} />
       </header>
       <div className="mt-6 grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">

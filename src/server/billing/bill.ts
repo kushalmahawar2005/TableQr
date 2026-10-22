@@ -179,9 +179,9 @@ export async function syncBill(
   if (bookingCreditPaise > 0) subtractCredit(bookingCreditPaise);
   const linkedReservationId = inputs.session.reservationId ?? (await tx.select({ id: s.reservations.id }).from(s.reservations).where(and(eq(s.reservations.tenantId, scope.tenantId), eq(s.reservations.sessionId, scope.sessionId))).then((rows) => rows[0]?.id ?? null));
   if (linkedReservationId && !bookingCreditPaise) {
-    const [reservation] = await tx.select({ id: s.reservations.id, creditPaidPaise: s.reservations.creditPaidPaise, creditAppliedPaise: s.reservations.creditAppliedPaise })
+    const [reservation] = await tx.select({ id: s.reservations.id, creditPaidPaise: s.reservations.creditPaidPaise, advanceReceivedPaise: s.reservations.advanceReceivedPaise, creditAppliedPaise: s.reservations.creditAppliedPaise })
       .from(s.reservations).where(and(eq(s.reservations.tenantId, scope.tenantId), eq(s.reservations.id, linkedReservationId)));
-    const available = Math.max(0, (reservation?.creditPaidPaise ?? 0) - (reservation?.creditAppliedPaise ?? 0));
+    const available = Math.max(0, (reservation?.creditPaidPaise ?? 0) + (reservation?.advanceReceivedPaise ?? 0) - (reservation?.creditAppliedPaise ?? 0));
     if (available > 0) {
       const applied = Math.min(available, draft.totals.totalPaise);
       subtractCredit(applied);

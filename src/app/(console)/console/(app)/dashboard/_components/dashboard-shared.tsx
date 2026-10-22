@@ -21,7 +21,7 @@ export const THEME = {
 
 export const focusRing = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-forest";
 export const cardClass = "rounded-card border border-line bg-surface p-5";
-export const viewAllClass = `inline-flex min-h-10 items-center gap-1 rounded-input border border-line bg-surface px-3 text-xs font-semibold text-ink transition-colors hover:border-forest/40 hover:bg-paper ${focusRing}`;
+export const viewAllClass = `inline-flex min-h-10 shrink-0 items-center gap-1 whitespace-nowrap rounded-input border border-line bg-surface px-3 text-xs font-semibold text-ink transition-colors hover:border-forest/40 hover:bg-paper ${focusRing}`;
 
 const rupees = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 });
 /** ₹ with Indian grouping; paise only when there are any, so an amount is never rounded away */
@@ -70,8 +70,8 @@ export function Panel({
 }) {
   return (
     <section className={cardClass} aria-label={labelledBy ?? title}>
-      <div className="flex items-center justify-between gap-2 border-b border-line pb-3">
-        <h2 className="flex items-center gap-2 font-display text-base font-bold text-ink">
+      <div className="flex min-w-0 items-center justify-between gap-2 border-b border-line pb-3">
+        <h2 className="flex min-w-0 items-center gap-2 whitespace-nowrap font-display text-sm font-bold text-ink">
           {icon}
           {title}
         </h2>
@@ -83,14 +83,14 @@ export function Panel({
 }
 
 /** Today-vs-yesterday delta, using the domain wording so nothing is ever fabricated */
-export function Delta({ today, yesterday }: { today: number; yesterday: number }) {
+export function Delta({ today, yesterday, compact = false }: { today: number; yesterday: number; compact?: boolean }) {
   const d = deltaOf(today, yesterday);
   const label = deltaLabel(d);
   if (d.kind === "up") {
     return (
       <span className="flex items-center gap-1 text-[13px] font-bold text-emerald-700 tabular">
         <TrendingUp className="size-3.5 stroke-[2.5]" aria-hidden="true" />
-        <span>{label} vs yesterday</span>
+        <span>{compact ? label : `${label} vs yesterday`}</span>
       </span>
     );
   }
@@ -98,12 +98,12 @@ export function Delta({ today, yesterday }: { today: number; yesterday: number }
     return (
       <span className="flex items-center gap-1 text-[13px] font-bold text-terracotta tabular">
         <TrendingDown className="size-3.5 stroke-[2.5]" aria-hidden="true" />
-        <span>{label} vs yesterday</span>
+        <span>{compact ? label : `${label} vs yesterday`}</span>
       </span>
     );
   }
   if (d.kind === "same") {
-    return <span className="text-[13px] font-medium text-muted">No change vs yesterday</span>;
+    return <span className="text-[13px] font-medium text-muted">{compact ? "No change" : "No change vs yesterday"}</span>;
   }
-  return <span className="text-[13px] font-medium text-muted">{label}</span>;
+  return <span className="text-[13px] font-medium text-muted">{compact ? "No baseline" : label}</span>;
 }

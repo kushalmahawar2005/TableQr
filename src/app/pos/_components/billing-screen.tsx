@@ -27,7 +27,7 @@ const field = "mt-1 block min-h-11 w-full rounded-input border border-line bg-su
 export function BillingScreen({ initial, realtimeUrl, embedded = false, openSession = null }: { initial: PosQueue; realtimeUrl: string | null; embedded?: boolean; openSession?: string | null }) {
   const [queue, setQueue] = useState(initial);
   const [detail, setDetail] = useState<PosBillDetail | null>(null);
-  const [tab, setTab] = useState<"due" | "paid">("due");
+  const [tab, setTab] = useState<"due" | "takeaway" | "paid">("due");
   const [search, setSearch] = useState("");
   const [offline, setOffline] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -93,9 +93,14 @@ export function BillingScreen({ initial, realtimeUrl, embedded = false, openSess
 
   const dueAll = queue.queue as Card[];
   const paidAll = queue.recent as Card[];
-  const due = dueAll.filter((c) => `${c.tableCode} ${c.status}`.toLowerCase().includes(search.toLowerCase()));
+  // Unbilled takeaways need item prep and tracking, not payment collection. Keep them in a
+  // separate queue so “Bills waiting” and “To collect” only describe actual bills.
+  const paymentQueue = dueAll.filter((c) => !c.takeaway || c.status === "bill_requested");
+  const takeawayQueue = dueAll.filter((c) => c.takeaway && c.status !== "bill_requested");
+  const due = paymentQueue.filter((c) => `${c.tableCode} ${c.status}`.toLowerCase().includes(search.toLowerCase()));
+  const takeaways = takeawayQueue.filter((c) => `${c.tableCode} ${c.guestName ?? ""} ${c.status}`.toLowerCase().includes(search.toLowerCase()));
   const paid = paidAll.filter((c) => c.tableCode.toLowerCase().includes(search.toLowerCase()));
-  const toCollect = dueAll.reduce((n, c) => n + c.balancePaise, 0);
+  const toCollect = paymentQueue.reduce((n, c) => n + c.balancePaise, 0);
   const counterCount = dueAll.filter((c) => c.payAtCounter).length;
   const paidToday = paidAll.reduce((n, c) => n + c.totalPaise, 0);
   const asked = (c: Card) => (c.requestedAt ? Math.max(0, Math.floor((now - c.requestedAt) / 60_000)) : null);
@@ -147,7 +152,7 @@ export function BillingScreen({ initial, realtimeUrl, embedded = false, openSess
         {message && !sheet && <p role={message.tone === "bad" ? "alert" : "status"} className={`mt-4 rounded-input border p-3 text-body font-semibold ${message.tone === "bad" ? "border-danger text-danger" : "border-line"}`}>{message.text}</p>}
 
         <dl className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
-          {([[Wallet, L("To collect", "वसूलना है"), rs(toCollect), "#c9482b"], [ReceiptText, L("Bills waiting", "बिल इंतज़ार में"), String(dueAll.length), "#315e9e"], [BellRing, L("Want to pay at counter", "काउंटर पर भुगतान"), String(counterCount), "#a74608"], [Check, L("Paid recently", "हाल में भुगतान"), rs(paidToday), "#237a68"]] as const).map(([Icon, label, v, tone]) => (
+          {([[Wallet, L("To collect", "वसूलना है"), rs(toCollect), "#c9482b"], [ReceiptText, L("Bills waiting", "बिल इंतज़ार में"), String(paymentQueue.length), "#315e9e"], [BellRing, L("Want to pay at counter", "काउंटर पर भुगतान"), String(counterCount), "#a74608"], [Check, L("Paid recently", "हाल में भुगतान"), rs(paidToday), "#237a68"]] as const).map(([Icon, label, v, tone]) => (
             <Card key={label} size="sm"><CardContent>
               <div className="flex items-start justify-between gap-2"><dt className="text-caption font-semibold text-muted">{label}</dt><span className="grid size-8 shrink-0 place-items-center rounded-lg" style={{ background: `color-mix(in srgb, ${tone} 14%, var(--surface))`, color: tone }}><Icon className="size-4" aria-hidden="true" /></span></div>
               <dd className="mt-1 font-display text-[24px] leading-8 font-bold tabular">{v}</dd>
@@ -162,13 +167,13 @@ export function BillingScreen({ initial, realtimeUrl, embedded = false, openSess
               <input aria-label={L("Search tables", "टेबल खोजें")} className="h-11 w-full rounded-input border border-line bg-surface pl-9 pr-3 text-body outline-none focus:border-ink focus-visible:ring-2 focus-visible:ring-ink/20" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={L("Search by table", "टेबल से खोजें")} />
             </div>
             <div role="tablist" className="mt-3 flex gap-2">
-              {([["due", L("Needs payment", "भुगतान बाकी"), due.length], ["paid", L("Recently paid", "हाल में भुगतान"), paid.length]] as const).map(([k, label, n]) => (
+              {([["due", L("Needs payment", "भुगतान बाकी"), due.length], ["takeaway", L("Takeaways", "पार्सल"), takeaways.length], ["paid", L("Recently paid", "हाल में भुगतान"), paid.length]] as const).map(([k, label, n]) => (
                 <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)} className={`min-h-11 flex-1 rounded-full border px-3 text-body font-semibold ${tab === k ? "border-ink bg-ink text-white" : "border-line bg-surface text-muted hover:text-ink"}`}>{label} <span className="tabular opacity-70">{n}</span></button>
               ))}
             </div>
 
             <ul className="mt-3 space-y-2.5">
-              {(tab === "due" ? due : paid).map((c) => {
+              {(tab === "due" ? due : tab === "takeaway" ? takeaways : paid).map((c) => {
                 const mins = asked(c);
                 const sel = detail?.sessionId === c.sessionId;
                 return (
@@ -176,10 +181,11 @@ export function BillingScreen({ initial, realtimeUrl, embedded = false, openSess
                     <button type="button" onClick={() => open(c.sessionId)} aria-pressed={sel} className={`block w-full rounded-card border bg-surface p-4 text-left transition-colors hover:border-ink/30 focus-visible:outline-2 focus-visible:outline-brand ${sel ? "border-brand ring-2 ring-brand/30" : "border-line"}`}>
                       <div className="flex items-start justify-between gap-3">
                         <div><p className="font-display text-section font-bold">{c.takeaway ? <><ShoppingBag className="mr-1.5 inline size-4 align-[-2px]" aria-hidden="true" />{L("Takeaway", "पार्सल")}</> : (isRoomCode(c.tableCode) ? "" : L("Table", "टेबल"))} {c.tableCode}{c.guestName ? <span className="ml-1.5 text-body font-semibold text-muted">· {c.guestName}</span> : null}</p><p className="mt-0.5 flex items-center gap-1.5 text-caption text-muted"><Users className="size-3.5" aria-hidden="true" />{c.partySize} {L("guests", "लोग")}{tab === "due" && mins !== null ? ` · ${L("bill asked", "बिल माँगा")} ${mins < 1 ? L("just now", "अभी") : `${mins} min`}` : ""}</p></div>
-                        <p className="font-display text-section font-bold tabular">{tab === "due" ? rs(c.balancePaise) : rs(c.totalPaise)}</p>
+                        <p className="font-display text-section font-bold tabular">{tab === "due" ? rs(c.balancePaise) : tab === "takeaway" ? L("In progress", "तैयारी में") : rs(c.totalPaise)}</p>
                       </div>
                       <div className="mt-2 flex flex-wrap gap-1.5">
                         {tab === "paid" && <span className="rounded-full bg-[var(--state-paid-soft)] px-2 py-0.5 text-caption font-semibold text-[var(--state-paid-text)]">{L("Paid", "भुगतान हुआ")}</span>}
+                        {tab === "takeaway" && <span className="rounded-full bg-[var(--state-held-soft)] px-2 py-0.5 text-caption font-semibold text-[var(--state-held-text)]">{L("Not billed yet", "बिल बाकी है")}</span>}
                         {tab === "due" && c.payAtCounter && !c.pendingOnline && <span className="inline-flex items-center gap-1 rounded-full bg-[var(--state-held-soft)] px-2 py-0.5 text-caption font-semibold text-[var(--state-held-text)]"><BellRing className="size-3" aria-hidden="true" />{L("Wants to pay at counter", "काउंटर पर भुगतान")}</span>}
                         {c.pendingOnline && <span className="rounded-full bg-[var(--state-cleaning-soft)] px-2 py-0.5 text-caption font-semibold text-[var(--state-cleaning-text)]">{L("Online payment being checked", "ऑनलाइन भुगतान जाँच में")}</span>}
                         {tab === "due" && c.paidPaise > 0 && <span className="rounded-full bg-[var(--state-available-soft)] px-2 py-0.5 text-caption font-semibold text-[var(--state-available-text)]">{L("Part paid", "आंशिक भुगतान")} {rs(c.paidPaise)}</span>}
@@ -189,11 +195,11 @@ export function BillingScreen({ initial, realtimeUrl, embedded = false, openSess
                   </li>
                 );
               })}
-              {(tab === "due" ? due : paid).length === 0 && (
+              {(tab === "due" ? due : tab === "takeaway" ? takeaways : paid).length === 0 && (
                 <li className="rounded-card border border-dashed border-line bg-surface px-5 py-10 text-center">
                   <span className="mx-auto grid size-12 place-items-center rounded-full bg-brand-soft text-brand"><ReceiptText className="size-6" aria-hidden="true" /></span>
-                  <p className="mt-3 font-display text-section font-bold">{tab === "due" ? L("No bills to collect", "कोई बिल बाकी नहीं") : L("Nothing paid yet", "अभी कोई भुगतान नहीं")}</p>
-                  <p className="mt-1 text-body text-muted">{tab === "due" ? L("When a table asks for the bill, it shows up here.", "जब कोई टेबल बिल माँगेगी, वह यहाँ दिखेगी।") : L("Bills paid in the last 24 hours show up here.", "पिछले 24 घंटे के भुगतान यहाँ दिखते हैं।")}</p>
+                  <p className="mt-3 font-display text-section font-bold">{tab === "due" ? L("No bills to collect", "कोई बिल बाकी नहीं") : tab === "takeaway" ? L("No open takeaways", "कोई पार्सल ऑर्डर नहीं") : L("Nothing paid yet", "अभी कोई भुगतान नहीं")}</p>
+                  <p className="mt-1 text-body text-muted">{tab === "due" ? L("Bills appear here when a table asks to pay.", "टेबल के बिल माँगने पर यहाँ दिखेंगे।") : tab === "takeaway" ? L("New takeaway orders appear here before their bill is ready.", "पार्सल ऑर्डर का बिल बनने से पहले वे यहाँ दिखेंगे।") : L("Bills paid in the last 24 hours show up here.", "पिछले 24 घंटे के भुगतान यहाँ दिखते हैं।")}</p>
                 </li>
               )}
             </ul>
@@ -212,7 +218,7 @@ export function BillingScreen({ initial, realtimeUrl, embedded = false, openSess
                     <div>
                       <h2 className="font-display text-title font-bold">{detail.takeaway ? L("Takeaway", "पार्सल") : (isRoomCode(detail.tableCode) ? "" : L("Table", "टेबल"))} {detail.tableCode}</h2>
                       <p className="mt-0.5 flex flex-wrap items-center gap-2 text-body text-muted">
-                        <span className={`rounded-full px-2.5 py-0.5 text-caption font-semibold ${isPaidBill ? "bg-[var(--state-paid-soft)] text-[var(--state-paid-text)]" : detail.status === "bill_requested" ? "bg-[var(--state-bill-soft)] text-[var(--state-bill-text)]" : "bg-[var(--state-seated-soft)] text-[var(--state-seated-text)]"}`}>{isPaidBill ? L("Paid", "भुगतान हुआ") : detail.status === "bill_requested" ? L("Bill asked", "बिल माँगा") : L("Still eating", "अभी खा रहे हैं")}</span>
+                        <span className={`rounded-full px-2.5 py-0.5 text-caption font-semibold ${isPaidBill ? "bg-[var(--state-paid-soft)] text-[var(--state-paid-text)]" : detail.status === "bill_requested" ? "bg-[var(--state-bill-soft)] text-[var(--state-bill-text)]" : "bg-[var(--state-seated-soft)] text-[var(--state-seated-text)]"}`}>{isPaidBill ? L("Paid", "भुगतान हुआ") : detail.status === "bill_requested" ? L("Bill asked", "बिल माँगा") : detail.takeaway ? L("Order in progress", "ऑर्डर जारी है") : L("Still eating", "अभी खा रहे हैं")}</span>
                         {detail.people.length > 0 && <span>{detail.people.map((p) => p.name).join(", ")}</span>}
                       </p>
                     </div>

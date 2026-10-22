@@ -24,6 +24,7 @@
   --ink: #17251F; /* Primary Text */
   --accent: #D86B45; /* Terracotta Accent */
   --paper: #F7F5EF; /* Warm Cream background */
+  --dashboard-canvas: #FAFAF8; /* Neutral off-white, scoped to the owner dashboard */
   --surface: #ffffff; /* Cards / Surfaces */
   --muted: #768078; /* Muted Text */
   --line: #E9E5DD; /* Subtle Warm Border */
@@ -135,6 +136,7 @@
   --color-ink: var(--ink);
   --color-accent: var(--accent);
   --color-paper: var(--paper);
+  --color-dashboard-canvas: var(--dashboard-canvas);
   --color-surface: var(--surface);
   --color-line: var(--line);
   --color-muted: var(--muted);
@@ -403,6 +405,7 @@ body {
   color-scheme: dark;
   --ink: #e8eaf0;
   --paper: #13161c;
+  --dashboard-canvas: #171b22;
   --surface: #1b1f27;
   --line: #2c323e;
   --muted: #9aa3b2;
@@ -423,8 +426,72 @@ body {
   background: var(--paper);
   color: var(--ink);
 }
+.theme-dark .text-forest { color: #86c9a8; }
+.theme-dark [class~="text-rose-600"] { color: #ff9ca7; }
+.theme-dark [class~="hover:bg-rose-50"]:hover { background-color: #3b2027; }
+
+/* Owner dashboard uses TableQR's terracotta accent without changing the palette on other screens. */
+.dashboard-theme {
+  --paper: #F5F2EA;
+  --dashboard-canvas: #EFEEE8;
+  --surface: #FAF8F2;
+  --line: #E4DED2;
+  --forest: #103B2C;
+  --forest-hover: #0c2b20;
+  --terracotta: #D86B45;
+  --sage: #E7EEE8;
+  --ring: #103B2C;
+  --dashboard-sales-tint: #F1F3EC;
+  --dashboard-chart-track: #F3F3F4;
+  --dashboard-chart-bar: #D9DADD;
+  --dashboard-chart-previous: #BFC1C5;
+  --dashboard-badge: #F7F7F4;
+  --dashboard-footer-line: #F0EFEA;
+}
+
+.theme-dark .dashboard-theme {
+  --paper: #13161c;
+  --dashboard-canvas: #171b22;
+  --surface: #1b1f27;
+  --line: #2c323e;
+  --dashboard-sales-tint: #202922;
+  --dashboard-chart-track: #282d35;
+  --dashboard-chart-bar: #56606b;
+  --dashboard-chart-previous: #89919b;
+  --dashboard-badge: #282d35;
+  --dashboard-footer-line: #343b46;
+  --sage: #24372f;
+  --ring: #84c5a6;
+}
+
+/* Small status surfaces and text need dark-mode-specific contrast inside the owner dashboard. */
+.theme-dark .dashboard-theme .bg-rose-50 { background-color: #3b2027; }
+.theme-dark .dashboard-theme .text-rose-700 { color: #ff9ca7; }
+.theme-dark .dashboard-theme .border-rose-200 { border-color: #70404a; }
+.theme-dark .dashboard-theme .bg-amber-50,
+.theme-dark .dashboard-theme .bg-amber-100 { background-color: #3b3019; }
+.theme-dark .dashboard-theme .text-amber-700,
+.theme-dark .dashboard-theme .text-amber-800 { color: #f4c66e; }
+.theme-dark .dashboard-theme .text-amber-600 { color: #f4c66e; }
+.theme-dark .dashboard-theme .border-amber-200 { border-color: #705b2c; }
+.theme-dark .dashboard-theme .bg-emerald-50 { background-color: #18352b; }
+.theme-dark .dashboard-theme .text-emerald-700,
+.theme-dark .dashboard-theme .text-emerald-800 { color: #81d4ad; }
+.theme-dark .dashboard-theme .text-emerald-600 { color: #81d4ad; }
+.theme-dark .dashboard-theme .border-emerald-200 { border-color: #315c49; }
+.theme-dark .dashboard-theme .bg-sky-50,
+.theme-dark .dashboard-theme .bg-sky-100 { background-color: #1c3040; }
+.theme-dark .dashboard-theme .text-sky-600,
+.theme-dark .dashboard-theme .text-sky-700 { color: #8dcdf2; }
+.theme-dark .dashboard-theme .text-neutral-700 { color: #c6cbd3; }
+.theme-dark .dashboard-theme .bg-purple-50 { background-color: #30263e; }
+.theme-dark .dashboard-theme .text-purple-600 { color: #c5a4f1; }
+.theme-dark .dashboard-theme .bg-neutral-100 { background-color: #282d35; }
+.theme-dark .dashboard-theme .ring-white { --tw-ring-color: #1b1f27; }
+.theme-dark .dashboard-theme [class*="focus-visible:outline-forest"]:focus-visible { outline-color: #86c9a8; }
 /* Paper is white: printing from the dark console uses the light palette, so text stays black and sharp */
 @media print {
+  @page { size: A4 portrait; margin: 12mm; }
   .theme-dark, html.console-ui {
     color-scheme: light;
     --ink: #1f2937; --paper: #ffffff; --surface: #ffffff; --line: #ddd6ca; --muted: #4b5260;
@@ -447,6 +514,20 @@ body {
   /* Charts are drawn at screen width; shrink them to the paper instead of running off the edge */
   .recharts-responsive-container, .recharts-wrapper { width: 100% !important; max-width: 100%; height: auto !important; }
   .recharts-surface { width: 100% !important; height: auto !important; }
+  body:has(#reports-print) { background: #fff !important; }
+  #reports-print { box-sizing: border-box; padding: 0 10mm !important; color: #111 !important; font-family: Arial, Helvetica, sans-serif; font-size: 10pt; line-height: 1.35; }
+  /* These reports print their screen layout, whose print:p-0 removes the normal page gutter. */
+  #gst-report-print, #items-report-print { box-sizing: border-box; width: 100%; max-width: none; padding: 0 10mm !important; }
+  #reports-print h1, #reports-print h2, #reports-print p { color: #111 !important; }
+  #reports-print section { margin-top: 12pt !important; }
+  #reports-print h2 { break-after: avoid-page; }
+  #reports-print .report-paper-table { width: 100%; border-collapse: collapse; font-size: 9pt; }
+  #reports-print .report-paper-table thead { display: table-header-group; }
+  #reports-print .report-paper-table tr { break-inside: avoid; }
+  #reports-print .report-paper-table th,
+  #reports-print .report-paper-table td { border-bottom: 1px solid #c9c9c9; padding: 4pt 5pt; text-align: left; vertical-align: top; }
+  #reports-print .report-paper-table th { font-weight: 700; }
+  #reports-print .report-paper-table td:not(:first-child) { text-align: right; }
 }
 
 /* Solid ink surfaces flip to light in dark mode, so their label must flip to dark */

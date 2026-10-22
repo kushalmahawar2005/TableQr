@@ -6,6 +6,7 @@ import {
   calendarAction,
   calendarTokenAction,
   editDetailsAction,
+  groupRequestStatusAction,
   reservationArriveAction,
   reservationCancelAction,
   reservationCreateAction,
@@ -58,6 +59,8 @@ export function ReservationCalendar({ initial, realtimeUrl, preview = false, ini
   const [newTable, setNewTable] = useState("");
   const [newOccasion, setNewOccasion] = useState("");
   const [newNotes, setNewNotes] = useState("");
+  const [advanceReceived, setAdvanceReceived] = useState(false);
+  const [advanceAmount, setAdvanceAmount] = useState("");
   const [moreFilters, setMoreFilters] = useState(false);
   const syncRef = useRef<CalendarSync | null>(null);
 
@@ -101,17 +104,45 @@ export function ReservationCalendar({ initial, realtimeUrl, preview = false, ini
     void syncRef.current.today();
   };
 
-  const create = async () => {
-    const r = await reservationCreateAction({ name: newName, phone: newPhone.trim() || null, partySize: newParty, localDateTime: `${newDate}T${newTime}`, tableIds: newTable ? [newTable] : undefined, occasion: newOccasion || null, notes: newNotes.trim() || null, source: newSource });
-    if (!r.ok) return setNotice({ kind: "error", text: r.message });
-    setNewName("");
-    setNewPhone("");
-    setNewTable("");
-    setNewOccasion("");
-    setNewNotes("");
-    setAdding(false);
-    setNotice({ kind: "ok", text: "Reservation created." });
+  const updateGroupRequest = async (id: string, status: "contacted" | "cancelled") => {
+    if (preview) return;
+    setBusy(true);
+    setNotice(null);
+    const result = await groupRequestStatusAction(id, status);
+    setBusy(false);
+    if (!result.ok) return setNotice({ kind: "error", text: result.message });
+    setData((current) => ({
+      ...current,
+      groupRequests: status === "cancelled" ? current.groupRequests.filter((r) => r.id !== id) : current.groupRequests.map((r) => r.id === id ? { ...r, status } : r),
+    }));
+    setNotice({ kind: "ok", text: status === "contacted" ? "Enquiry marked as contacted." : "Enquiry closed." });
     reload();
+  };
+
+  const create = async () => {
+    if (busy) return;
+    const amount = advanceReceived ? Number(advanceAmount) : 0;
+    if (advanceReceived && (!Number.isSafeInteger(amount) || amount < 1 || amount > 20_000_000)) return setNotice({ kind: "error", text: "Enter a valid advance amount in rupees." });
+    setBusy(true);
+    setNotice(null);
+    try {
+      const r = await reservationCreateAction({ name: newName, phone: newPhone.trim() || null, partySize: newParty, localDateTime: `${newDate}T${newTime}`, tableIds: newTable ? [newTable] : undefined, occasion: newOccasion || null, notes: newNotes.trim() || null, source: newSource, advanceReceivedRupees: amount });
+      if (!r.ok) return setNotice({ kind: "error", text: r.message });
+      setNewName("");
+      setNewPhone("");
+      setNewTable("");
+      setNewOccasion("");
+      setNewNotes("");
+      setAdvanceReceived(false);
+      setAdvanceAmount("");
+      setAdding(false);
+      setNotice({ kind: "ok", text: "Reservation created." });
+      reload();
+    } catch {
+      setNotice({ kind: "error", text: "Could not create the reservation. Please try again." });
+    } finally {
+      setBusy(false);
+    }
   };
 
   const tz = data.timezone;
@@ -122,11 +153,10 @@ export function ReservationCalendar({ initial, realtimeUrl, preview = false, ini
   const count = (st: string) => data.reservations.filter((r) => r.status === st).length;
   const chips: [string, string][] = [["", "All"], ["confirmed", "Confirmed"], ["arrived", "Arrived"], ["seated", "Seated"], ["completed", "Done"], ["cancelled", "Cancelled"], ["no_show", "No-show"]];
   const activeFilters = [query.zoneId, query.tableId, query.source, query.partySize].filter(Boolean).length;
-  const times = Array.from({ length: 25 }, (_, i) => { const m = 11 * 60 + i * 30; return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`; });
   const clock12 = (t: string) => { const [h, m] = t.split(":").map(Number); return `${h % 12 === 0 ? 12 : h % 12}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`; };
 
   return (
-    <main className="mx-auto min-h-dvh w-full max-w-[1200px] px-4 py-5 text-ink sm:px-6 lg:px-8 lg:py-7">
+    <main className="mx-auto min-h-dvh w-full max-w-[1680px] px-4 py-5 text-ink sm:px-6 lg:px-8 lg:py-7">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
           <p className="text-caption font-semibold text-muted">{data.reservations.length} {data.reservations.length === 1 ? "booking" : "bookings"} · {data.view === "day" ? "one day" : "this week"}</p>
@@ -138,6 +168,38 @@ export function ReservationCalendar({ initial, realtimeUrl, preview = false, ini
           </button>
         )}
       </header>
+
+      {data.groupRequests.length > 0 && (
+        <section aria-labelledby="group-enquiries-title" className="mt-5 rounded-card border border-[var(--state-held)] bg-[var(--state-held-soft)] p-4 sm:p-5">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <h2 id="group-enquiries-title" className="font-display text-section font-bold text-ink">Large group &amp; event enquiries</h2>
+              <p className="mt-1 text-body text-muted">For groups above 12. Call the guest to discuss space, timing and your event terms.</p>
+            </div>
+            <span className="rounded-full bg-surface px-3 py-1 text-caption font-semibold text-ink">{data.groupRequests.filter((r) => r.status === "requested").length} new</span>
+          </div>
+          <ul className="mt-4 grid gap-3 xl:grid-cols-2">
+            {data.groupRequests.map((request) => (
+              <li key={request.id} className="rounded-card border border-line bg-surface p-4">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <p className="font-semibold text-ink">{request.name} <span className="font-normal text-muted">· {request.partySize} guests</span></p>
+                    <p className="mt-1 text-body text-muted">{formatDay(request.desiredDate)} · {formatTime(request.desiredStartAt, data.timezone)} · Ref {request.publicReference}</p>
+                  </div>
+                  <span className={`rounded-full px-2.5 py-1 text-caption font-semibold capitalize ${request.status === "requested" ? "bg-[var(--state-held-soft)] text-[var(--state-held-text)]" : "bg-[var(--state-cleaning-soft)] text-[var(--state-cleaning-text)]"}`}>{request.status === "requested" ? "Needs a call" : "Contacted"}</span>
+                </div>
+                {request.notes && <p className="mt-2 rounded-input bg-paper px-3 py-2 text-body text-muted">{request.notes}</p>}
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <a href={`tel:${request.phone}`} className="inline-flex min-h-10 items-center rounded-input bg-brand px-3 text-body font-semibold text-white">Call {request.phone}</a>
+                  {request.status === "requested" && <button type="button" disabled={busy || preview} onClick={() => void updateGroupRequest(request.id, "contacted")} className={`${plainButton} bg-surface`}>Mark contacted</button>}
+                  <button type="button" disabled={busy || preview} onClick={() => void updateGroupRequest(request.id, "cancelled")} className={`${plainButton} bg-surface text-muted`}>Close enquiry</button>
+                </div>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-3 text-caption text-muted">No deposit or booking fee is collected from this enquiry. Agree any event payment terms with the guest first.</p>
+        </section>
+      )}
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <div className="flex items-center gap-1 rounded-input border border-line bg-surface p-1" role="group" aria-label="Date">
@@ -188,7 +250,7 @@ export function ReservationCalendar({ initial, realtimeUrl, preview = false, ini
         <p role={notice.kind === "error" ? "alert" : "status"} className={`mt-4 rounded-input border p-3 ${notice.kind === "error" ? "border-danger text-danger" : "border-line text-ink"}`}>{notice.text}</p>
       )}
 
-      <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
+      <div className={`mt-5 grid gap-5 ${selected ? "lg:grid-cols-[minmax(0,1fr)_400px]" : "grid-cols-1"}`}>
         <section className="min-w-0 space-y-6" aria-busy={busy}>
           {!days.length && (
             <div className="rounded-card border border-line bg-surface p-10 text-center">
@@ -213,11 +275,9 @@ export function ReservationCalendar({ initial, realtimeUrl, preview = false, ini
             </section>
           ))}
         </section>
-        <aside className="h-fit rounded-card border border-line bg-surface p-5 lg:sticky lg:top-4" aria-label="Reservation details">
-          {selected ? <Drawer key={selected.id} reservation={selected} data={data} preview={preview} onDone={reload} onClose={() => setSelectedId(null)} /> : (
-            <div className="py-6 text-center"><p className="font-semibold text-ink">Pick a booking</p><p className="mt-1 text-body text-muted">Tap any booking to check the guest in, seat them, change the time or cancel.</p></div>
-          )}
-        </aside>
+        {selected && <aside className="max-h-[calc(100dvh-6rem)] overflow-y-auto rounded-card border border-line bg-surface p-4 sm:p-5 lg:sticky lg:top-4" aria-label="Reservation details">
+          <Drawer key={selected.id} reservation={selected} data={data} preview={preview} onDone={reload} onClose={() => setSelectedId(null)} />
+        </aside>}
       </div>
       <ReservationCompanion data={data} />
 
@@ -238,7 +298,7 @@ export function ReservationCalendar({ initial, realtimeUrl, preview = false, ini
             </div>
             <div className="grid grid-cols-2 gap-3">
               <label className="block text-body font-semibold">Date<input type="date" required className={`${field} mt-1 block w-full`} value={newDate} onChange={(e) => setNewDate(e.target.value)} /></label>
-              <label className="block text-body font-semibold">Time<select className={`${field} mt-1 block w-full`} value={newTime} onChange={(e) => setNewTime(e.target.value)}>{times.map((t) => <option key={t} value={t}>{clock12(t)}</option>)}</select></label>
+              <label className="block text-body font-semibold">Time<input type="time" step={900} required className={`${field} mt-1 block w-full`} value={newTime} onChange={(e) => setNewTime(e.target.value)} /><span className="mt-1 block text-caption font-normal text-muted">Choose any time in 15-minute intervals.</span></label>
             </div>
             <fieldset>
               <legend className="text-body font-semibold">Which table? <span className="font-normal text-muted">(or let the system pick)</span></legend>
@@ -266,10 +326,21 @@ export function ReservationCalendar({ initial, realtimeUrl, preview = false, ini
                 </select>
               </label>
             </div>
+            <fieldset className="rounded-card border border-line p-3">
+              <legend className="px-1 text-body font-semibold">Advance received</legend>
+              <label className="flex min-h-10 items-center gap-2 text-body text-ink">
+                <input type="checkbox" checked={advanceReceived} onChange={(e) => { setAdvanceReceived(e.target.checked); if (!e.target.checked) setAdvanceAmount(""); }} className="size-4 accent-[var(--brand)]" />
+                Guest has already paid an advance
+              </label>
+              {advanceReceived ? <label className="mt-2 block text-body font-semibold">Amount received
+                <span className="mt-1 flex h-11 items-center rounded-input border border-line bg-surface px-3"><span className="mr-2 text-muted">₹</span><input type="number" min="1" max="20000000" step="1" required inputMode="numeric" className="min-w-0 flex-1 bg-transparent outline-none" value={advanceAmount} onChange={(e) => setAdvanceAmount(e.target.value)} placeholder="e.g. 500" /></span>
+                <span className="mt-1 block text-caption font-normal text-muted">This amount will be credited on the guest’s final bill.</span>
+              </label> : <p className="text-caption text-muted">Optional. Leave off if no advance was collected.</p>}
+            </fieldset>
             <label className="block text-body font-semibold">Notes <span className="font-normal text-muted">(optional)</span><input className={`${field} mt-1 block w-full`} value={newNotes} onChange={(e) => setNewNotes(e.target.value)} maxLength={200} placeholder="Allergies, high chair, quiet corner…" /></label>
             <div className="sticky -bottom-5 -mx-5 flex justify-end gap-2 border-t border-line bg-surface px-5 py-3">
               <button type="button" className={plainButton} onClick={() => setAdding(false)}>Cancel</button>
-              <button type="submit" className="min-h-11 rounded-input bg-brand px-4 font-semibold text-white disabled:opacity-50" disabled={!newName.trim() || !newDate || busy || preview}>Create reservation</button>
+              <button type="submit" className="min-h-11 rounded-input bg-brand px-4 font-semibold text-white disabled:opacity-50" disabled={!newName.trim() || !newDate || !newTime || busy || preview}>{busy ? "Creating…" : "Create reservation"}</button>
             </div>
           </form>
         </div>
@@ -303,6 +374,7 @@ function ReservationCard({ r, selected, onSelect }: { r: CalendarReservation; se
         <span className="capitalize">{r.source.replace("_", " ")}</span>
       </p>
       {r.occasion && <p className="mt-1 text-caption text-muted">{r.occasion}</p>}
+      {r.advanceReceivedPaise > 0 && <p className="mt-1 text-caption font-semibold text-[var(--state-available-text)]">Advance received · ₹{(r.advanceReceivedPaise / 100).toLocaleString("en-IN")}</p>}
       {r.lateMinutes > 0 && <p className="mt-1 text-caption font-semibold text-warning">{r.lateMinutes} min late</p>}
       {r.credit && <p className="mt-1 text-caption font-semibold text-warning">Credit: ₹{(r.credit.amountPaise / 100).toLocaleString("en-IN")} · {r.credit.status}</p>}
     </button>
@@ -357,6 +429,8 @@ function Drawer({ reservation: r, data, preview, onDone, onClose }: { reservatio
         </dd>
         <dt className="text-muted">Tables</dt>
         <dd>{r.assignments.map((a) => a.code).join(" + ") || "Unassigned"}</dd>
+        <dt className="text-muted">Advance received</dt>
+        <dd>{r.advanceReceivedPaise > 0 ? `₹${(r.advanceReceivedPaise / 100).toLocaleString("en-IN")} · credited on final bill` : "No advance recorded"}</dd>
         {r.occasion && (
           <>
             <dt className="text-muted">Occasion</dt>

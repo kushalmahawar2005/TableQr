@@ -186,20 +186,6 @@ export async function startFeePayment(
 
   const callbackUrl = input.callbackUrl.replace("PLACEHOLDER", payment.id);
   let gatewayRef = payment.gatewayRef;
-  if (gatewayRef && replayed) {
-    // If resuming an existing attempt, verify if Cashfree has already settled or terminated this order
-    const current = await gateway.fetchStatus(gatewayRef).catch(() => null);
-    if (current && (current.status === "success" || current.status === "failed")) {
-      await settleCashfreeFee(payment.id, {
-        status: current.status,
-        amountPaise: current.amountPaise,
-        gatewayPaymentId: current.gatewayPaymentId,
-        reason: current.reason,
-      }, now);
-      if (current.status === "success") throw new AppError("invalid_state", "This payment is already complete.");
-      throw new AppError("invalid_state", "That payment attempt has expired or failed. Please click Pay again.");
-    }
-  }
   if (!gatewayRef) {
     const [tenant] = await db.select({ name: s.tenants.name, phone: s.tenants.contactPhone }).from(s.tenants).where(eq(s.tenants.id, staff.tenantId));
     try {
@@ -226,6 +212,7 @@ type FeeVerdict = { status: "success" | "failed"; amountPaise: number; gatewayPa
 /** Applies a verified Cashfree result once. Success immediately activates/extends the plan. */
 async function settleCashfreeFee(id: string, verdict: FeeVerdict, now = new Date()) {
   return db.transaction(async (tx) => {
+    // isolation-exempt: the signed Cashfree webhook or authenticated owner return supplies the opaque payment id.
     const [payment] = await tx.select().from(s.feePayments).where(eq(s.feePayments.id, id)).for("update");
     if (!payment || payment.method !== "cashfree") return null;
     if (payment.status !== "claimed") return { status: payment.status, alreadyFinal: true } as const;
@@ -259,12 +246,14 @@ async function settleCashfreeFee(id: string, verdict: FeeVerdict, now = new Date
 
 /** Signed webhook path: Cashfree names the order, which is stored as gatewayRef. */
 export async function settleCashfreeFeeByGatewayRef(gatewayRef: string, verdict: FeeVerdict, now = new Date()) {
+  // isolation-exempt: Cashfree webhook payloads carry only the platform-wide gateway order reference.
   const [payment] = await db.select({ id: s.feePayments.id }).from(s.feePayments).where(and(eq(s.feePayments.method, "cashfree"), eq(s.feePayments.gatewayRef, gatewayRef)));
   return payment ? settleCashfreeFee(payment.id, verdict, now) : null;
 }
 
 /** Return-page/status fallback. The browser return never decides success; Cashfree's API does. */
 export async function reconcileCashfreeFee(id: string, now = new Date()) {
+  // isolation-exempt: the return URL contains the opaque payment id created for this checkout.
   const [payment] = await db.select().from(s.feePayments).where(eq(s.feePayments.id, id));
   if (!payment || payment.method !== "cashfree") return null;
   if (payment.status !== "claimed" || !payment.gatewayRef) return payment.status;

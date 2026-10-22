@@ -120,20 +120,23 @@ export function PricingScreen({ initial, preview }: { initial: PricingData; prev
     <main className="min-h-[calc(100dvh-5rem)] bg-paper p-4 pb-28 text-ink sm:p-6 sm:pb-28">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="font-display text-title font-bold">Pricing</h1>
-          <p className="mt-1 text-body text-muted">Set a different price for {data.outlet}. Other outlets are not affected.</p>
+          <p className="text-caption font-semibold text-muted">{data.outlet} · Outlet menu</p>
+          <h1 className="mt-1 font-display text-title font-bold">Pricing</h1>
+          <p className="mt-1 max-w-2xl text-body text-muted">Set prices for this outlet. Dishes without a custom price keep the main menu price.</p>
         </div>
+        <span className="inline-flex min-h-9 items-center gap-2 rounded-full border border-line bg-surface px-3 text-caption font-semibold text-muted"><span className="size-2 rounded-full bg-[var(--state-available)]" />Other outlets stay unchanged</span>
       </header>
 
-      <div className="mt-4 grid grid-cols-3 gap-2 sm:max-w-xl sm:gap-3">
-        {[
-          ["Dishes", data.rows.length],
-          ["Changed here", overrideCount],
-          ["Menu price", data.rows.length - overrideCount],
-        ].map(([label, n]) => (
-          <div key={label as string} className="rounded-2xl border border-line bg-surface p-3">
-            <p className="font-display text-title font-bold tabular-nums">{n}</p>
-            <p className="text-caption text-muted">{label}</p>
+      <div className="mt-5 grid grid-cols-1 gap-3 sm:max-w-3xl sm:grid-cols-3">
+        {([
+          ["Dishes on menu", data.rows.length, "Available to price at this outlet"],
+          ["Custom prices", overrideCount, "Different from the main menu"],
+          ["Using menu price", data.rows.length - overrideCount, "Same price across outlets"],
+        ] as const).map(([label, n, caption]) => (
+          <div key={label as string} className="rounded-2xl border border-line bg-surface p-4">
+            <p className="text-caption font-semibold text-muted">{label}</p>
+            <p className="mt-1 font-display text-title font-bold tabular-nums">{n}</p>
+            <p className="mt-0.5 text-caption text-muted">{caption}</p>
           </div>
         ))}
       </div>
@@ -150,8 +153,8 @@ export function PricingScreen({ initial, preview }: { initial: PricingData; prev
         </p>
       )}
 
-      <section aria-label="Filters" className="mt-5 space-y-3">
-        <div className="flex flex-wrap items-center gap-2">
+      <section aria-label="Filters" className="mt-6 space-y-3 rounded-2xl border border-line bg-surface/50 p-3 sm:p-4">
+        <div className="flex flex-wrap items-center gap-2.5">
           <div className="relative min-w-0 flex-1 sm:max-w-sm">
             <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" />
             <Input aria-label="Search dishes" className="h-11 rounded-xl pl-9" placeholder="Search dish or category" value={query} onChange={(e) => setQuery(e.target.value)} />
@@ -161,12 +164,13 @@ export function PricingScreen({ initial, preview }: { initial: PricingData; prev
             <button type="button" className={chip(overridesOnly)} onClick={() => setOverridesOnly(true)}>Changed here ({overrideCount})</button>
           </div>
           {data.canEdit && visible.length > 0 && (
-            <button type="button" className="ml-auto min-h-9 rounded-full border border-line bg-surface px-3.5 text-sm font-semibold hover:border-ink/40" onClick={toggleAllShown}>
+            <button type="button" className="min-h-9 rounded-full border border-line bg-surface px-3.5 text-sm font-semibold hover:border-ink/40 sm:ml-auto" onClick={toggleAllShown}>
               {allShownSelected ? "Unselect all" : `Select all ${visible.length}`}
             </button>
           )}
         </div>
-        <div className="no-scrollbar -mx-4 flex gap-1.5 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="mr-1 text-caption font-semibold text-muted">Category</span>
           <button type="button" className={chip(categoryId === "all")} onClick={() => setCategoryId("all")}>All categories</button>
           {data.categories.map((c) => (
             <button key={c.id} type="button" className={chip(categoryId === c.id)} onClick={() => setCategoryId(c.id)}>{c.nameEn}</button>
@@ -175,6 +179,7 @@ export function PricingScreen({ initial, preview }: { initial: PricingData; prev
       </section>
 
       <section aria-label="Dish prices" className="mt-4 min-w-0">
+        {data.rows.length > 0 && <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><p className="text-sm font-semibold">{overridesOnly ? "Custom prices" : "Dish prices"}</p><p className="text-caption text-muted">Showing {visible.length} of {data.rows.length} dishes</p></div>}
         {data.rows.length === 0 ? (
           <Empty title="No dishes yet." body="Add dishes in Menu first. Their prices will show here." />
         ) : visible.length === 0 ? (
@@ -203,6 +208,7 @@ export function PricingScreen({ initial, preview }: { initial: PricingData; prev
                         <span className="text-muted">Menu {formatPrice(r.brandPricePaise)} · {diff > 0 ? "+" : "−"}{formatPrice(Math.abs(diff))}</span>
                       </p>
                     )}
+                    {!changed && <p className="mt-1 text-caption text-muted">Uses the main menu price</p>}
                   </div>
                   <div className="shrink-0 text-right">
                     <p className="font-display text-section font-bold tabular-nums">{formatPrice(r.pricePaise)}</p>

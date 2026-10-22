@@ -77,7 +77,7 @@ async function setTables(tx: Tx, scope: Scope, reservationId: string, tableIds: 
 /** A booking taken by staff (phone or in person). Confirmed straight away. */
 export async function createReservation(
   staff: FloorActor,
-  input: { name: string; phone?: string | null; partySize: number; startAt: number; tableIds?: string[]; occasion?: string | null; notes?: string | null; source?: "phone" | "walk_in" | "staff" },
+  input: { name: string; phone?: string | null; partySize: number; startAt: number; tableIds?: string[]; occasion?: string | null; notes?: string | null; source?: "phone" | "walk_in" | "staff"; advanceReceivedPaise?: number },
   now = new Date(),
 ) {
   assertMay(staff, "booking.manage");
@@ -86,6 +86,8 @@ export async function createReservation(
   if (!name) throw new AppError("invalid_state", "Enter the guest's name.", { reason: "name" });
   const partySize = Number(input.partySize);
   if (!Number.isInteger(partySize) || partySize < 1 || partySize > 50) throw new AppError("invalid_state", "Enter how many guests.", { reason: "party_size" });
+  const advanceReceivedPaise = Number(input.advanceReceivedPaise ?? 0);
+  if (!Number.isSafeInteger(advanceReceivedPaise) || advanceReceivedPaise < 0 || advanceReceivedPaise > 2_000_000_000) throw new AppError("invalid_state", "Enter a valid advance amount.", { reason: "advance" });
   const startAt = new Date(Number(input.startAt));
   if (Number.isNaN(startAt.getTime()) || startAt.getTime() < now.getTime() - 15 * 60_000) throw new AppError("invalid_state", "Choose a time from now on.", { reason: "start" });
   const tableIds = [...new Set(input.tableIds ?? [])];
@@ -105,6 +107,7 @@ export async function createReservation(
       expectedEndAt: endAt,
       status: "confirmed",
       source: input.source ?? "phone",
+      advanceReceivedPaise,
       occasion: input.occasion?.trim().slice(0, 40) || null,
       notes: input.notes?.trim().slice(0, 300) || null,
       confirmedAt: now,
@@ -113,7 +116,7 @@ export async function createReservation(
     });
     await setTables(tx, scope, id, tableIds);
     const sync = await syncTableHolds(tx, scope, now, tableIds);
-    await audit(tx, staff, { action: "reservation.create", entity: "reservation", entityId: id, after: { name, partySize, startAt, tableIds }, now });
+    await audit(tx, staff, { action: "reservation.create", entity: "reservation", entityId: id, after: { name, partySize, startAt, tableIds, advanceReceivedPaise }, now });
     return { id, events: [reservationEvent("reservation.created", id), ...syncEvents(sync)] };
   }, LOCK_THEN_READ);
   await publish(scope, events);

@@ -257,6 +257,20 @@ describe("KPIs", () => {
     expect(d.operations.tables).toMatchObject({ seated: 1, billRequested: 1, reserved: 1, blocked: 1, available: active - 6, total: active });
   });
 
+  it("shows order value on seated tables and the actual amount due after a bill is requested", async () => {
+    const seatedSession = await visit("T1", { status: "open", partySize: 2 });
+    await order(seatedSession, NOW, [{ name: "Cola", qty: 2, unit: 10_000 }]);
+    const billSession = await visit("T2", { status: "bill_requested", partySize: 2 });
+    await order(billSession, NOW, [{ name: "Cola", qty: 1, unit: 15_000 }]);
+    await bill(billSession, { status: "open", total: 17_000, subtotal: 15_000, tax: 2_000 });
+    await setTable("T1", { state: "seated" });
+    await setTable("T2", { state: "bill_requested" });
+
+    const tiles = (await dash()).operations.tableTiles;
+    expect(tiles.find((t) => t.code === "T1")).toMatchObject({ runningPaise: 20_000, runningAmountKind: "orders" });
+    expect(tiles.find((t) => t.code === "T2")).toMatchObject({ runningPaise: 17_000, runningAmountKind: "bill" });
+  });
+
   it("S: upcoming reservations are confirmed or reminded in the next 90 minutes; holds and cancelled holds never count", async () => {
     await booking({ startAt: min(30), status: "confirmed", tables: ["T3"] });
     await booking({ startAt: min(89), status: "reminded" });

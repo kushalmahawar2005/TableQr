@@ -111,6 +111,7 @@ export function ReportsScreen({ report, outlet }: { report: Report; outlet: stri
   const bestDay = report.weekday.reduce((b, d, i) => (d.revenuePaise > report.weekday[b].revenuePaise ? i : b), 0);
   const weekdayData = report.weekday.map((d, i) => ({ label: WEEKDAYS[i], sales: Math.round(d.revenuePaise / 100) }));
   const best = report.days.reduce((b, d) => (d.revenuePaise > b.revenuePaise ? d : b), report.days[0]);
+  const dateRange = report.days.length ? `${day(report.days[0].date)} – ${day(report.days[report.days.length - 1].date)}` : `Last ${report.range} days`;
   const hasSales = t.revenuePaise > 0;
   const hasOrders = t.orders > 0;
   const top = report.topItems[0];
@@ -143,14 +144,16 @@ export function ReportsScreen({ report, outlet }: { report: Report; outlet: stri
   const first = hourData.findIndex((h) => h.orders > 0);
   const last = 23 - [...hourData].reverse().findIndex((h) => h.orders > 0);
   const chartHours = hasOrders ? hourData.slice(Math.max(0, first - 1), Math.min(24, last + 2)) : hourData;
+  const busyHours = report.byHour.map((orders, h) => ({ h, orders })).filter((v) => v.orders > 0).sort((a, b) => b.orders - a.orders).slice(0, 6);
 
   return (
-    <main className="mx-auto w-full max-w-[1200px] px-4 py-5 sm:px-6 lg:px-8 lg:py-7 print:max-w-none print:p-0">
+    <main id="reports-screen" className="mx-auto w-full max-w-[1200px] px-4 py-5 sm:px-6 lg:px-8 lg:py-7 print:max-w-none print:p-0">
+      <div className="print:hidden">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
           <p className="text-caption font-semibold text-muted">{outlet}</p>
           <h1 className="mt-1 font-display text-title font-bold text-ink">Reports</h1>
-          <p className="mt-0.5 text-body text-muted">How your restaurant did in the last {report.range} days.</p>
+          <p className="mt-0.5 text-body text-muted">{dateRange} · {report.range} days</p>
         </div>
         <div className="flex flex-wrap items-center gap-2 print:hidden">
           <Link href="/console/reports/day-close" className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-line bg-surface px-3.5 text-sm font-semibold text-ink hover:border-ink/40"><Receipt className="size-4" aria-hidden="true" />Day close</Link>
@@ -302,6 +305,69 @@ export function ReportsScreen({ report, outlet }: { report: Report; outlet: stri
           </CardContent>
         </Card>
       </div>
+      </div>
+
+      <section id="reports-print" className="hidden text-black print:block" aria-label="Printable restaurant report">
+        <header className="border-b-2 border-black pb-3">
+          <p className="text-sm font-semibold">{outlet}</p>
+          <h1 className="mt-1 text-2xl font-bold">Restaurant report</h1>
+          <p className="mt-1 text-sm">{dateRange} · Sales, orders and operations · Amounts in INR</p>
+        </header>
+
+        <section className="mt-4" aria-label="Summary">
+          <h2 className="text-base font-bold">Summary</h2>
+          <table className="report-paper-table mt-2"><tbody>
+            <tr><th>Total sales</th><td>{money(t.revenuePaise)}</td><th>Paid bills</th><td>{t.bills}</td></tr>
+            <tr><th>Average bill</th><td>{money(avg)}</td><th>Orders</th><td>{t.orders}</td></tr>
+            <tr><th>Guests served</th><td>{x.covers}</td><th>Items sold</th><td>{x.itemsSold}</td></tr>
+            <tr><th>Tax collected</th><td>{money(t.taxPaise)}</td><th>Tips</th><td>{money(t.tipsPaise)}</td></tr>
+            <tr><th>Discounts</th><td>{money(x.discountPaise)}</td><th>Service charge</th><td>{money(x.serviceChargePaise)}</td></tr>
+          </tbody></table>
+        </section>
+
+        {insights.length > 0 && <section className="mt-4"><h2 className="text-base font-bold">Key findings</h2><ul className="mt-1 list-disc pl-5 text-sm">{insights.slice(0, 6).map((s) => <li key={s} className="py-0.5">{s}</li>)}</ul></section>}
+
+        <section className="mt-4">
+          <h2 className="text-base font-bold">Sales by day</h2>
+          <table className="report-paper-table mt-2"><thead><tr><th>Date</th><th>Orders</th><th>Paid bills</th><th>Sales</th></tr></thead><tbody>
+            {report.days.map((d) => <tr key={d.date}><td>{day(d.date)}</td><td>{d.orders}</td><td>{d.bills}</td><td>{money(d.revenuePaise)}</td></tr>)}
+          </tbody></table>
+        </section>
+
+        <div className="mt-4 grid grid-cols-2 gap-5">
+          <section><h2 className="text-base font-bold">Best selling dishes</h2><table className="report-paper-table mt-2"><thead><tr><th>Dish</th><th>Qty</th><th>Sales</th></tr></thead><tbody>
+            {report.topItems.length ? report.topItems.map((i) => <tr key={i.name}><td>{i.name}</td><td>{i.qty}</td><td>{money(i.grossPaise)}</td></tr>) : <tr><td colSpan={3}>No dishes sold.</td></tr>}
+          </tbody></table></section>
+          <section><h2 className="text-base font-bold">Sales by category</h2><table className="report-paper-table mt-2"><thead><tr><th>Category</th><th>Qty</th><th>Sales</th><th>Share</th></tr></thead><tbody>
+            {report.categories.length ? report.categories.map((c) => <tr key={c.name}><td>{c.name}</td><td>{c.qty}</td><td>{money(c.grossPaise)}</td><td>{catTotal ? Math.round((c.grossPaise / catTotal) * 100) : 0}%</td></tr>) : <tr><td colSpan={4}>No category sales.</td></tr>}
+          </tbody></table></section>
+        </div>
+
+        <div className="mt-4 grid grid-cols-2 gap-5">
+          <section><h2 className="text-base font-bold">Payments received</h2><table className="report-paper-table mt-2"><thead><tr><th>Method</th><th>Payments</th><th>Amount</th></tr></thead><tbody>
+            {report.methods.length ? report.methods.map((m) => <tr key={m.method}><td>{METHOD[m.method] ?? m.method}</td><td>{m.count}</td><td>{money(m.paise)}</td></tr>) : <tr><td colSpan={3}>No payments.</td></tr>}
+          </tbody></table></section>
+          <section><h2 className="text-base font-bold">Operations</h2><table className="report-paper-table mt-2"><tbody>
+            <tr><th>Average table stay</th><td>{x.avgStayMin === null ? "—" : `${x.avgStayMin} min`}</td></tr>
+            <tr><th>Average kitchen time</th><td>{x.avgPrepMin === null ? "—" : `${x.avgPrepMin} min`}</td></tr>
+            <tr><th>Cancelled items</th><td>{x.voidedLines} · {money(x.voidedPaise)}</td></tr>
+            <tr><th>Table visits closed</th><td>{x.visits}</td></tr>
+          </tbody></table></section>
+        </div>
+
+        <div className="mt-4 grid grid-cols-2 gap-5">
+          <section><h2 className="text-base font-bold">Sales by weekday</h2><table className="report-paper-table mt-2"><thead><tr><th>Day</th><th>Paid bills</th><th>Sales</th></tr></thead><tbody>
+            {report.weekday.map((d, i) => <tr key={WEEKDAYS[i]}><td>{WEEKDAYS_LONG[i]}</td><td>{d.bills}</td><td>{money(d.revenuePaise)}</td></tr>)}
+          </tbody></table></section>
+          <section><h2 className="text-base font-bold">Busiest hours</h2><table className="report-paper-table mt-2"><thead><tr><th>Time</th><th>Orders</th></tr></thead><tbody>
+            {busyHours.length ? busyHours.map(({ h, orders }) => <tr key={h}><td>{hour(h)}</td><td>{orders}</td></tr>) : <tr><td colSpan={2}>No orders yet.</td></tr>}
+          </tbody></table></section>
+        </div>
+
+        <section className="mt-4"><h2 className="text-base font-bold">How guests arrived</h2><table className="report-paper-table mt-2"><thead><tr><th>Visit source</th><th>Closed visits</th><th>Share</th></tr></thead><tbody>
+          {x.bySource.length ? x.bySource.map((s) => <tr key={s.source}><td>{SOURCE[s.source] ?? s.source}</td><td>{s.count}</td><td>{x.visits ? Math.round((s.count / x.visits) * 100) : 0}%</td></tr>) : <tr><td colSpan={3}>No closed table visits.</td></tr>}
+        </tbody></table></section>
+      </section>
     </main>
   );
 }

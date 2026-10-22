@@ -1,123 +1,86 @@
 "use client";
 import { ArrowRight, BarChart3 } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import type { RevenueTrend } from "@/server/staff/dashboard";
 import { Panel, dayLabel, focusRing, money } from "./dashboard-shared";
 
-/** 7-day revenue, drawn from real trend data only; an all-zero week gets text, not a fake chart */
+const compactMoney = new Intl.NumberFormat("en-IN", {
+  style: "currency",
+  currency: "INR",
+  notation: "compact",
+  maximumFractionDigits: 1,
+});
+
+/** The last seven outlet-local days of paid sales. Bar heights always come from real totals. */
 export function SalesPerformance({ trend }: { trend: RevenueTrend }) {
   const [hover, setHover] = useState<number | null>(null);
-  const chart = useMemo(() => {
-    const W = 560;
-    const H = 150;
-    const PAD_X = 8;
-    const PAD_TOP = 20;
-    const PAD_BOT = 24;
-    const iw = W - PAD_X * 2;
-    const ih = H - PAD_TOP - PAD_BOT;
-    const max = Math.max(...trend.map((d) => d.revenuePaise), 1);
-    const pts = trend.map((d, i) => ({
-      x: PAD_X + (trend.length === 1 ? iw / 2 : (i / (trend.length - 1)) * iw),
-      y: PAD_TOP + ih - (d.revenuePaise / max) * ih,
-      ...d,
-    }));
-    const path =
-      pts.length === 0
-        ? ""
-        : `M${pts.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" L")}`;
-    const area = pts.length === 0 ? "" : `${path} L${pts[pts.length - 1].x.toFixed(1)},${(H - PAD_BOT).toFixed(1)} L${pts[0].x.toFixed(1)},${(H - PAD_BOT).toFixed(1)} Z`;
-    return { W, H, PAD_BOT, pts, path, area };
-  }, [trend]);
-
-  const totalPaise = trend.reduce((sum, d) => sum + d.revenuePaise, 0);
-  const active = hover != null ? chart.pts[hover] : null;
+  const totalPaise = trend.reduce((sum, day) => sum + day.revenuePaise, 0);
+  const maxPaise = Math.max(...trend.map((day) => day.revenuePaise), 1);
+  const today = trend.at(-1)?.date;
+  const active = hover == null ? null : trend[hover];
 
   return (
     <Panel
-      title="Sales Performance"
+      title="Sales, Last 7 Days"
       labelledBy="Sales, Last 7 Days"
-      action={
-        <Link href="/console/reports" className={`inline-flex min-h-10 items-center gap-1 rounded-input px-2 text-xs font-semibold text-muted transition-colors hover:text-forest ${focusRing}`}>
-          <span>View report</span>
-          <ArrowRight className="size-3.5" aria-hidden="true" />
-        </Link>
-      }
+      action={<p className="whitespace-nowrap text-sm font-medium text-muted tabular sm:text-base">{money(totalPaise)} total</p>}
     >
-      <div className="flex items-baseline gap-2">
-        <p className="font-display text-2xl font-bold tracking-tight text-ink tabular">{money(totalPaise)}</p>
-        <p className="text-xs font-medium text-muted">Total, last 7 days</p>
-      </div>
-
-      <div className="relative mt-4">
-        {totalPaise === 0 ? (
-          <p className="flex items-center gap-2 py-2 text-[13px] font-medium text-muted">
-            <BarChart3 className="size-4 shrink-0 text-muted/60" aria-hidden="true" />
-            No sales recorded in the last 7 days — the chart fills in as bills are paid.
-          </p>
-        ) : (
-          <>
-            <svg
-              viewBox={`0 0 ${chart.W} ${chart.H}`}
-              className="block h-auto w-full"
-              role="img"
-              aria-label={`Revenue, last 7 days. ${trend.map((d) => `${dayLabel(d.date, { weekday: "short" })} ${money(d.revenuePaise)}`).join(", ")}.`}
-            >
-              <defs>
-                <linearGradient id="salesArea" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#103B2C" stopOpacity="0.16" />
-                  <stop offset="100%" stopColor="#103B2C" stopOpacity="0" />
-                </linearGradient>
-              </defs>
-              {chart.pts.map((p, i) => (
-                <line key={i} x1={p.x} x2={p.x} y1={10} y2={chart.H - chart.PAD_BOT} stroke="#E9E5DD" strokeDasharray="3 4" />
-              ))}
-              <path d={chart.area} fill="url(#salesArea)" />
-              <path d={chart.path} fill="none" stroke="#103B2C" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-              {chart.pts.map((p, i) => (
-                <circle key={i} cx={p.x} cy={p.y} r={hover === i ? 6 : 4} fill="#103B2C" stroke="#FFFFFF" strokeWidth="2" />
-              ))}
-              {chart.pts.map((p, i) => (
-                <text key={i} x={p.x} y={chart.H - 6} textAnchor="middle" fontSize="11" fontWeight="600" fill="#768078">
-                  {dayLabel(p.date, { weekday: "short" })}
-                </text>
-              ))}
-              {chart.pts.map((p, i) => (
-                <rect
-                  key={i}
-                  x={p.x - 36}
-                  y={0}
-                  width={72}
-                  height={chart.H - chart.PAD_BOT}
-                  fill="transparent"
-                  onMouseEnter={() => setHover(i)}
-                  onMouseLeave={() => setHover(null)}
-                  onFocus={() => setHover(i)}
+      {totalPaise === 0 ? (
+        <p className="flex items-center gap-2 py-2 text-[13px] font-medium text-muted">
+          <BarChart3 className="size-4 shrink-0 text-muted/60" aria-hidden="true" />
+          No sales recorded in the last 7 days — the chart fills in as bills are paid.
+        </p>
+      ) : (
+        <div className="relative" onMouseLeave={() => setHover(null)}>
+          <ul
+            className="grid grid-cols-7 items-end gap-1.5 sm:gap-3"
+            aria-label="Sales for the last 7 days"
+          >
+            {trend.map((day, index) => {
+              const amount = day.revenuePaise;
+              const isToday = day.date === today;
+              const height = amount > 0 ? Math.max(3, (amount / maxPaise) * 100) : 0;
+              const label = isToday ? "Today" : dayLabel(day.date, { weekday: "short" });
+              return (
+                <li
+                  key={day.date}
+                  className="group flex min-w-0 flex-col items-center"
+                  onMouseEnter={() => setHover(index)}
+                  onFocus={() => setHover(index)}
                   onBlur={() => setHover(null)}
                   tabIndex={0}
-                  className="cursor-pointer focus-visible:outline-none"
-                  aria-label={`${dayLabel(p.date, { weekday: "long" })}: ${money(p.revenuePaise)}`}
-                />
-              ))}
-            </svg>
-            {active && (
-              <div
-                className="absolute top-0 -translate-x-1/2 rounded-input bg-ink px-2.5 py-1.5 text-center text-white shadow-modal"
-                style={{ left: `${(active.x / chart.W) * 100}%` }}
-              >
-                <p className="text-[13px] leading-none font-bold tabular">{money(active.revenuePaise)}</p>
-                <p className="mt-1 text-[10px] leading-none font-medium text-white/70">{dayLabel(active.date, { weekday: "short" })}</p>
-              </div>
-            )}
-          </>
-        )}
-      </div>
+                  aria-label={`${dayLabel(day.date, { weekday: "long" })}: ${money(amount)}`}
+                >
+                  <span className={`mb-2 h-4 max-w-full truncate text-center text-[9px] tabular sm:text-[11px] ${isToday ? "font-bold text-ink" : "font-medium text-muted"}`}>
+                    {amount > 0 ? compactMoney.format(amount / 100) : "—"}
+                  </span>
+                  <span className="flex h-32 w-full max-w-12 items-end overflow-hidden rounded-t-md sm:h-40" style={{ backgroundColor: "var(--dashboard-chart-track)" }}>
+                    {amount > 0 && (
+                      <span
+                        className={`block w-full rounded-t-md transition-[height] duration-300 ${isToday ? "bg-forest" : ""}`}
+                        style={{ height: `${height}%`, backgroundColor: isToday ? undefined : `var(${index === trend.length - 2 ? "--dashboard-chart-previous" : "--dashboard-chart-bar"})` }}
+                      />
+                    )}
+                  </span>
+                  <span className={`mt-2 text-[10px] sm:text-xs ${isToday ? "font-bold text-ink" : "font-medium text-muted"}`}>{label}</span>
+                </li>
+              );
+            })}
+          </ul>
 
-      <ul className="sr-only">
-        {trend.map((d) => (
-          <li key={d.date}>{dayLabel(d.date, { weekday: "long", day: "numeric", month: "long" })}: {money(d.revenuePaise)}</li>
-        ))}
-      </ul>
+          {active && (
+            <div
+              className="pointer-events-none absolute top-5 z-10 -translate-x-1/2 rounded-input bg-ink px-2.5 py-1.5 text-center text-white shadow-modal"
+              style={{ left: `${((hover! + 0.5) / trend.length) * 100}%` }}
+              aria-hidden="true"
+            >
+              <p className="text-[13px] font-bold leading-none tabular">{money(active.revenuePaise)}</p>
+              <p className="mt-1 text-[10px] font-medium leading-none text-white/70">{active.date === today ? "Today" : dayLabel(active.date, { weekday: "short" })}</p>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="mt-4 border-t border-line pt-3.5">
         <Link href="/console/reports" className={`inline-flex min-h-10 items-center gap-1.5 text-sm font-semibold text-forest transition-colors hover:underline underline-offset-4 ${focusRing}`}>

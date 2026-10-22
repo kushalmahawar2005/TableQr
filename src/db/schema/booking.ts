@@ -95,6 +95,8 @@ export const reservations = mysqlTable(
     creditRequiredPaise: int("credit_required_paise").notNull().default(0),
     creditPaidPaise: int("credit_paid_paise").notNull().default(0),
     creditAppliedPaise: int("credit_applied_paise").notNull().default(0),
+    /** Advance recorded as received by restaurant staff; separate from online booking credit. */
+    advanceReceivedPaise: int("advance_received_paise").notNull().default(0),
     creditStatus: mysqlEnum("credit_status", ["none", "required", "pending", "paid", "applied", "refunded", "forfeited", "failed"]).notNull().default("none"),
     noShowAt: at("no_show_at"),
     createdByUserId: ref("created_by_user_id"),

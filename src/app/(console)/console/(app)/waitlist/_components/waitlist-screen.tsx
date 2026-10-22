@@ -3,12 +3,12 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
-import { BellRing, Check, Clock, Copy, Link2, Phone, Plus, SkipForward, UserRound, UserX, Users, X } from "lucide-react";
-import { addWaitlistAction, leftAction, notifyAction, seatWaitlistAction, skipAction, type FloorResult } from "../../floor/actions";
+import { ArrowDown, ArrowUp, BellRing, Check, Clock, Copy, Link2, Phone, Plus, SkipForward, UserRound, UserX, Users, X } from "lucide-react";
+import { addWaitlistAction, leftAction, notifyAction, reorderAction, seatWaitlistAction, skipAction, type FloorResult } from "../../floor/actions";
 import type { FloorData } from "@/server/floor/read";
 
 type Entry = FloorData["waitlist"][number];
-type Free = { id: string; code: string; seats: number };
+type Free = { id: string; code: string; seats: number; combinableWith: string[] };
 
 const field = "mt-1 block h-11 w-full rounded-input border border-line bg-surface px-3 text-body text-ink outline-none focus:border-ink focus-visible:ring-2 focus-visible:ring-ink/20";
 const base = "inline-flex min-h-11 items-center justify-center gap-2 rounded-input border px-4 text-body font-semibold transition-colors disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink";
@@ -69,14 +69,37 @@ export function WaitlistScreen({ entries, outlet, outletCode, freeTables, canMan
   const waited = (e: Entry) => Math.max(0, Math.floor((now - e.joinedAt) / 60_000));
   const avg = entries.length ? Math.round(entries.reduce((n, e) => n + waited(e), 0) / entries.length) : 0;
   const people = entries.reduce((n, e) => n + e.partySize, 0);
-  const fits = (e: Entry) => freeTables.filter((t) => t.seats >= e.partySize);
+  const fitGroups = (e: Entry) => {
+    const sorted = [...freeTables].sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
+    const groups: Free[][] = sorted.filter((t) => t.seats >= e.partySize).map((t) => [t]);
+    const remainingSeats = sorted.map((_, i) => sorted.slice(i).reduce((n, t) => n + t.seats, 0));
+    const walk = (start: number, picked: Free[]) => {
+      if (groups.length >= 8) return;
+      if (picked.length > 1 && picked.reduce((n, t) => n + t.seats, 0) >= e.partySize) {
+        groups.push(picked);
+        return;
+      }
+      if (start >= sorted.length || picked.reduce((n, t) => n + t.seats, 0) + (remainingSeats[start] ?? 0) < e.partySize) return;
+      for (let i = start; i < sorted.length; i++) {
+        const candidate = sorted[i];
+        if (picked.some((t) => t.id === candidate.id)) continue;
+        const connected = picked.length === 0 || picked.some((t) => t.combinableWith.includes(candidate.id) || candidate.combinableWith.includes(t.id));
+        if (!connected) continue;
+        walk(i + 1, [...picked, candidate]);
+        if (groups.length >= 8) return;
+      }
+    };
+    walk(0, []);
+    return groups;
+  };
 
   return (
-    <main className="mx-auto w-full max-w-[1200px] px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
+    <main className="mx-auto w-full max-w-[1680px] px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
           <p className="text-caption font-semibold text-muted">{outlet}</p>
           <h1 className="mt-1 font-display text-title font-bold text-ink">Waitlist</h1>
+          <p className="mt-1 text-body text-muted">Live queue · updates automatically</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={copyLink} className={quiet}>{copied ? <Check className="size-4" aria-hidden="true" /> : <Link2 className="size-4" aria-hidden="true" />}{copied ? "Link copied" : "Copy guest link"}</button>
@@ -89,7 +112,7 @@ export function WaitlistScreen({ entries, outlet, outletCode, freeTables, canMan
         {[
           [Users, "Parties waiting", String(entries.length), "#c9482b"],
           [UserRound, "Guests in the queue", String(people), "#315e9e"],
-          [Clock, "Average wait", entries.length ? `${avg} min` : "—", "#a74608"],
+          [Clock, "Average time waiting", entries.length ? `${avg} min` : "—", "#a74608"],
         ].map(([Icon, label, value, tone]) => {
           const I = Icon as typeof Users;
           return (
@@ -104,7 +127,7 @@ export function WaitlistScreen({ entries, outlet, outletCode, freeTables, canMan
       {error && <p role="alert" className="mt-4 rounded-input bg-[var(--state-seated-soft)] px-3 py-2 text-body font-semibold text-danger">{error}</p>}
 
       {entries.length === 0 ? (
-        <section className="mt-5 rounded-card border border-dashed border-line bg-surface px-6 py-14 text-center">
+        <section className="mt-5 rounded-card border border-dashed border-line bg-surface px-6 py-10 text-center sm:py-12">
           <span className="mx-auto grid size-14 place-items-center rounded-full bg-brand-soft text-brand"><Users className="size-7" aria-hidden="true" /></span>
           <h2 className="mt-4 font-display text-section font-bold text-ink">Nobody is waiting</h2>
           <p className="mx-auto mt-1 max-w-md text-body text-muted">When the restaurant is full, add the next party here. Guests can also join by themselves from your QR page, and they will show up in order.</p>
@@ -132,7 +155,7 @@ export function WaitlistScreen({ entries, outlet, outletCode, freeTables, canMan
                     </div>
                     <p className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-body text-muted">
                       <span className="inline-flex items-center gap-1.5"><Users className="size-4" aria-hidden="true" /><b className="text-ink">{w.partySize}</b> {w.partySize === 1 ? "guest" : "guests"}</span>
-                      {w.phone && <span className="inline-flex items-center gap-1.5"><Phone className="size-4" aria-hidden="true" />{w.phone}</span>}
+                      {w.phone && <a href={`tel:${w.phone}`} className="inline-flex items-center gap-1.5 underline-offset-4 hover:underline"><Phone className="size-4" aria-hidden="true" />{w.phone}</a>}
                       {w.seatingPreference && <span className="capitalize">{w.seatingPreference}</span>}
                     </p>
                     {w.notes && <p className="mt-1 text-body text-muted">“{w.notes}”</p>}
@@ -142,15 +165,20 @@ export function WaitlistScreen({ entries, outlet, outletCode, freeTables, canMan
                         <span className={`font-semibold tabular ${late ? "text-danger" : "text-ink"}`}>Waiting {mins} min</span>
                         <span className="text-muted tabular">{quoted ? (late ? `${mins - quoted} min over the ${quoted} min promised` : `${quoted} min promised`) : "No time promised"}</span>
                       </div>
-                      {quoted ? <div className="mt-1 h-1.5 rounded-full bg-ink/[0.07]" role="progressbar" aria-valuenow={mins} aria-valuemin={0} aria-valuemax={quoted}><div className={`h-full rounded-full ${late ? "bg-danger" : "bg-[var(--state-available)]"}`} style={{ width: `${pct}%` }} /></div> : null}
+                      {quoted ? <div className="mt-1 h-1.5 rounded-full bg-ink/[0.07]" role="progressbar" aria-valuenow={Math.min(mins, quoted)} aria-valuemin={0} aria-valuemax={quoted}><div className={`h-full rounded-full ${late ? "bg-danger" : "bg-[var(--state-available)]"}`} style={{ width: `${pct}%` }} /></div> : null}
                     </div>
 
                     {canManage && (
                       <div className="mt-4 flex flex-wrap gap-2">
-                        <button type="button" disabled={pending} onClick={() => setSeating(w)} className={solid}><Check className="size-4" aria-hidden="true" />Seat now{fits(w).length ? ` · ${fits(w).length} ${fits(w).length === 1 ? "table" : "tables"} free` : ""}</button>
-                        {!called && <button type="button" disabled={pending} onClick={() => run(() => notifyAction(w.id))} className={quiet}><BellRing className="size-4" aria-hidden="true" />Call</button>}
+                        <button type="button" disabled={pending} onClick={() => setSeating(w)} className={solid}><Check className="size-4" aria-hidden="true" />Seat now{fitGroups(w).length ? ` · ${fitGroups(w).length} options` : ""}</button>
+                        {!called && <button type="button" disabled={pending} onClick={() => run(() => notifyAction(w.id))} className={quiet}><BellRing className="size-4" aria-hidden="true" />Notify guest</button>}
+                        {w.phone && <a href={`tel:${w.phone}`} className={quiet}><Phone className="size-4" aria-hidden="true" />Call guest</a>}
                         <button type="button" disabled={pending} onClick={() => run(() => skipAction(w.id))} className={quiet}><SkipForward className="size-4" aria-hidden="true" />Skip</button>
                         <button type="button" disabled={pending} onClick={() => run(() => leftAction(w.id))} className={`${base} border-transparent text-danger hover:bg-[var(--state-seated-soft)]`}><UserX className="size-4" aria-hidden="true" />Left</button>
+                        <span className="ml-auto flex gap-1">
+                          <button type="button" aria-label={`Move ${w.name} up in queue`} disabled={pending || i === 0} onClick={() => run(() => reorderAction(w.id, i - 1))} className="grid size-11 place-items-center rounded-input border border-line text-muted hover:text-ink disabled:opacity-40"><ArrowUp className="size-4" aria-hidden="true" /></button>
+                          <button type="button" aria-label={`Move ${w.name} down in queue`} disabled={pending || i === entries.length - 1} onClick={() => run(() => reorderAction(w.id, i + 1))} className="grid size-11 place-items-center rounded-input border border-line text-muted hover:text-ink disabled:opacity-40"><ArrowDown className="size-4" aria-hidden="true" /></button>
+                        </span>
                       </div>
                     )}
                   </div>
@@ -193,13 +221,13 @@ export function WaitlistScreen({ entries, outlet, outletCode, freeTables, canMan
 
       {seating && (
         <Modal title={`Seat ${seating.name}`} subtitle={`${seating.partySize} ${seating.partySize === 1 ? "guest" : "guests"} · pick a free table`} onClose={() => setSeating(null)}>
-          {fits(seating).length === 0 ? (
+          {fitGroups(seating).length === 0 ? (
             <p className="rounded-input bg-[var(--state-held-soft)] p-3 text-body text-[var(--state-held-text)]">No free table seats {seating.partySize} right now. Keep them waiting, or free up a table on the floor.</p>
           ) : (
-            <div className="flex flex-wrap gap-2">
-              {fits(seating).map((t) => (
-                <button key={t.id} type="button" disabled={pending} onClick={() => run(() => seatWaitlistAction(seating.id, [t.id]), () => setSeating(null))} className="min-h-12 min-w-20 rounded-input border border-[var(--state-available)] bg-[var(--state-available-soft)] px-3 text-left leading-tight text-[var(--state-available-text)] hover:brightness-110 disabled:opacity-50">
-                  <span className="block text-body font-bold">{t.code}</span><span className="block text-label">seats {t.seats}</span>
+            <div className="grid gap-2">
+              {fitGroups(seating).map((group) => (
+                <button key={group.map((t) => t.id).join("-")} type="button" disabled={pending} onClick={() => run(() => seatWaitlistAction(seating.id, group.map((t) => t.id)), () => setSeating(null))} className="flex min-h-14 items-center justify-between gap-3 rounded-input border border-[var(--state-available)] bg-[var(--state-available-soft)] px-3 text-left text-[var(--state-available-text)] hover:brightness-110 disabled:opacity-50">
+                  <span><span className="block text-body font-bold">{group.map((t) => t.code).join(" + ")}</span><span className="block text-label">{group.length > 1 ? "Combined tables" : "Table"} · seats {group.reduce((n, t) => n + t.seats, 0)}</span></span><Check className="size-4 shrink-0" aria-hidden="true" />
                 </button>
               ))}
             </div>

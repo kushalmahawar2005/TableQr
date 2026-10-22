@@ -9,6 +9,9 @@ import { loadPolicy } from "../floor/policy";
 import { audit } from "./audit";
 import type { StaffSession } from "./auth";
 import { requireFeature } from "../plan";
+import { publish } from "../realtime/publish";
+import { topics } from "../realtime/token";
+import { assertMay } from "../staff/auth";
 
 // Reservation Calendar read model and guest-detail edits. Every range is the outlet's own calendar
 // day or week; the browser's clock and time zone never decide what is shown or stored.
@@ -47,7 +50,7 @@ export async function getReservationCalendar(staff: StaffSession, input: Calenda
   if (input.source && (s.reservationSources as readonly string[]).includes(input.source)) filters.push(eq(s.reservations.source, input.source as (typeof s.reservationSources)[number]));
   if (input.partySize) filters.push(eq(s.reservations.partySize, Number(input.partySize)));
 
-  const [policy, rows, zones, tables] = await Promise.all([
+  const [policy, rows, zones, tables, groupRequests] = await Promise.all([
     loadPolicy(db, staff),
     db.select().from(s.reservations).where(and(...filters)).orderBy(asc(s.reservations.startAt)),
     db
@@ -60,6 +63,12 @@ export async function getReservationCalendar(staff: StaffSession, input: Calenda
       .from(s.diningTables)
       .where(and(eq(s.diningTables.tenantId, staff.tenantId), eq(s.diningTables.outletId, staff.outletId), eq(s.diningTables.isActive, true)))
       .orderBy(asc(s.diningTables.code)),
+    db
+      .select({ id: s.groupRequests.id, publicReference: s.groupRequests.publicReference, name: s.groupRequests.name, phone: s.groupRequests.phone, partySize: s.groupRequests.partySize, desiredDate: s.groupRequests.desiredDate, desiredStartAt: s.groupRequests.desiredStartAt, notes: s.groupRequests.notes, status: s.groupRequests.status, createdAt: s.groupRequests.createdAt })
+      .from(s.groupRequests)
+      .where(and(eq(s.groupRequests.tenantId, staff.tenantId), eq(s.groupRequests.outletId, staff.outletId), inArray(s.groupRequests.status, ["requested", "contacted"])))
+      .orderBy(asc(s.groupRequests.desiredStartAt), asc(s.groupRequests.createdAt))
+      .limit(50),
   ]);
 
   const ids = rows.map((r) => r.id);
@@ -118,6 +127,7 @@ export async function getReservationCalendar(staff: StaffSession, input: Calenda
       requestedTableClass: r.requestedTableClass,
       occasion: r.occasion,
       notes: r.notes,
+      advanceReceivedPaise: r.advanceReceivedPaise,
       confirmedAt: r.confirmedAt?.getTime() ?? null,
       arrivedAt: r.arrivedAt?.getTime() ?? null,
       seatedAt: r.seatedAt?.getTime() ?? null,
@@ -140,6 +150,7 @@ export async function getReservationCalendar(staff: StaffSession, input: Calenda
     to: to.getTime(),
     graceMinutes: policy.graceMinutes,
     reservations,
+    groupRequests: groupRequests.map((r) => ({ ...r, desiredStartAt: r.desiredStartAt.getTime(), createdAt: r.createdAt.getTime() })),
     zones,
     tables,
     sources: [...s.reservationSources],
@@ -152,6 +163,24 @@ export async function getReservationCalendar(staff: StaffSession, input: Calenda
 }
 
 export type CalendarData = Awaited<ReturnType<typeof getReservationCalendar>>;
+
+/** A manager or host marks a large-group enquiry after personally contacting the guest. */
+export async function updateGroupRequestStatus(staff: StaffSession, id: string, status: "contacted" | "cancelled", now = new Date()) {
+  guard(staff);
+  assertMay(staff, "booking.manage");
+  await requireFeature(staff.tenantId, "reservations");
+  const changed = await db.transaction(async (tx) => {
+    const [old] = await tx.select().from(s.groupRequests).where(and(eq(s.groupRequests.tenantId, staff.tenantId), eq(s.groupRequests.outletId, staff.outletId), eq(s.groupRequests.id, String(id)))).for("update");
+    if (!old) throw new AppError("not_found", "This group enquiry was not found.");
+    if (old.status === "cancelled" || old.status === "converted") throw new AppError("invalid_state", "This group enquiry is already closed.");
+    if (old.status === status) return null;
+    await tx.update(s.groupRequests).set({ status, updatedAt: now }).where(and(eq(s.groupRequests.tenantId, staff.tenantId), eq(s.groupRequests.outletId, staff.outletId), eq(s.groupRequests.id, old.id)));
+    await audit(tx, staff, { action: "group_request.status", entity: "group_request", entityId: old.id, before: { status: old.status }, after: { status }, now });
+    return old.id;
+  });
+  if (!changed) return;
+  await publish({ tenantId: staff.tenantId, outletId: staff.outletId }, [{ topic: topics.floor, type: "booking.group_request", data: { groupRequestId: changed } }]);
+}
 
 /** Fields staff may change on a booking's guest details. Omitted = unchanged; null or "" = cleared. */
 export type ReservationDetailsPatch = { name?: string; phone?: string | null; occasion?: string | null; notes?: string | null; seatingPreference?: string | null };
@@ -196,7 +225,7 @@ export async function editReservationDetails(staff: StaffSession, id: string, in
 /** Staff booking from the calendar: the time is the outlet's wall clock, converted here */
 export async function createCalendarReservation(
   staff: StaffSession,
-  input: { name: string; phone?: string | null; partySize: number; localDateTime: string; tableIds?: string[]; occasion?: string | null; notes?: string | null; source?: "phone" | "walk_in" | "staff" },
+  input: { name: string; phone?: string | null; partySize: number; localDateTime: string; tableIds?: string[]; occasion?: string | null; notes?: string | null; source?: "phone" | "walk_in" | "staff"; advanceReceivedRupees?: number },
   now = new Date(),
 ) {
   guard(staff);
@@ -204,5 +233,7 @@ export async function createCalendarReservation(
   const startAt = parseLocalDateTime(input.localDateTime, staff.outlet.timezone);
   if (!startAt) throw new AppError("invalid_state", "Choose a valid date and time.", { reason: "start" });
   const { name, phone, partySize, tableIds, occasion, notes, source } = input;
-  return createReservation(staff, { name, phone, partySize, startAt: startAt.getTime(), tableIds, occasion, notes, source }, now);
+  const advanceReceivedRupees = Number(input.advanceReceivedRupees ?? 0);
+  if (!Number.isSafeInteger(advanceReceivedRupees) || advanceReceivedRupees < 0 || advanceReceivedRupees > 20_000_000) throw new AppError("invalid_state", "Enter a valid advance amount.", { reason: "advance" });
+  return createReservation(staff, { name, phone, partySize, startAt: startAt.getTime(), tableIds, occasion, notes, source, advanceReceivedPaise: advanceReceivedRupees * 100 }, now);
 }

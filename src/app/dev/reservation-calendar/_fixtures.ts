@@ -50,6 +50,7 @@ const booking = (id: string, over: Partial<Res> & { date?: string; hh?: number; 
     assignments: assign("t10"),
     credit: null,
     ...over,
+    advanceReceivedPaise: over.advanceReceivedPaise ?? 0,
   };
 };
 
@@ -62,6 +63,7 @@ const base = (over: Partial<CalendarData> = {}): CalendarData => ({
   to: at(DATE, 24),
   graceMinutes: 15,
   reservations: [],
+  groupRequests: [],
   zones,
   tables,
   sources: ["online", "phone", "walk_in", "staff"],

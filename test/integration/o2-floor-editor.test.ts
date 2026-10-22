@@ -4,7 +4,7 @@ import * as s from "@/db/schema";
 import { AppError } from "@/server/errors";
 import { resolveStaff, signInStaff, type StaffSession } from "@/server/staff/auth";
 import { getFloor } from "@/server/floor/read";
-import { addDraftTable, addDraftZone, getOrCreateDraft, publishDraft, revokeOrReissueQr, updateDraftTable } from "@/server/floor/editor";
+import { addDraftTable, addDraftZone, getOrCreateDraft, publishDraft, revokeOrReissueQr, updateDraftTable, updateDraftZone } from "@/server/floor/editor";
 import { resetTestDb } from "./setup-db";
 
 let env: Awaited<ReturnType<typeof resetTestDb>>; let owner: StaffSession; let host: StaffSession;
@@ -22,7 +22,11 @@ describe("O2 versioned floor editor", () => {
   });
 
   it("supports new zones/tables and publishes atomically into canonical rows", async () => {
-    const draft = await getOrCreateDraft(owner); const rev = draft.version.revision; await addDraftZone(owner, draft.version.id, "O2 Verification", rev); const fresh = await getOrCreateDraft(owner); const z = fresh.zones.find((x) => x.name === "O2 Verification")!; await addDraftTable(owner, fresh.version.id, { code: "O2X", zoneId: z.id, maxSeats: 4 }, fresh.version.revision); const changed = await getOrCreateDraft(owner); expect(changed.tables.some((t) => t.code === "O2X")).toBe(true); const result = await publishDraft(owner, changed.version.id, changed.version.revision); expect(result.versionId).toBe(changed.version.id); const [table] = await env.db.select().from(s.diningTables).where(and(eq(s.diningTables.tenantId, owner.tenantId), eq(s.diningTables.outletId, owner.outletId), eq(s.diningTables.code, "O2X"))); expect(table.isActive).toBe(true); const [qr] = await env.db.select().from(s.qrCodes).where(and(eq(s.qrCodes.tenantId, owner.tenantId), eq(s.qrCodes.tableId, table.id), eq(s.qrCodes.type, "table"), isNull(s.qrCodes.revokedAt))); expect(qr).toBeTruthy();
+    const draft = await getOrCreateDraft(owner); const rev = draft.version.revision; await addDraftZone(owner, draft.version.id, "O2 Verification", rev); const fresh = await getOrCreateDraft(owner); const z = fresh.zones.find((x) => x.name === "O2 Verification")!; await addDraftTable(owner, fresh.version.id, { code: "O2X", zoneId: z.id, maxSeats: 4 }, fresh.version.revision); const changed = await getOrCreateDraft(owner); expect(changed.tables.some((t) => t.code === "O2X")).toBe(true);
+    await updateDraftZone(owner, changed.version.id, z.id, { width: 26, height: 16 }, changed.version.revision);
+    const resized = await getOrCreateDraft(owner); const result = await publishDraft(owner, resized.version.id, resized.version.revision); expect(result.versionId).toBe(resized.version.id);
+    const nextDraft = await getOrCreateDraft(owner); const carriedZone = nextDraft.zones.find((x) => x.name === "O2 Verification")!; expect(carriedZone.width).toBe(26); expect(carriedZone.height).toBe(16);
+    const [table] = await env.db.select().from(s.diningTables).where(and(eq(s.diningTables.tenantId, owner.tenantId), eq(s.diningTables.outletId, owner.outletId), eq(s.diningTables.code, "O2X"))); expect(table.isActive).toBe(true); const [qr] = await env.db.select().from(s.qrCodes).where(and(eq(s.qrCodes.tenantId, owner.tenantId), eq(s.qrCodes.tableId, table.id), eq(s.qrCodes.type, "table"), isNull(s.qrCodes.revokedAt))); expect(qr).toBeTruthy();
   });
 
   it("allows immediate QR revoke/reissue without changing table identity and denies host", async () => {

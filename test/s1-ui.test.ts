@@ -45,7 +45,7 @@ describe("S1 actions by state and role", () => {
     expect(floor("paid")).toContain(">Mark needs cleaning<");
     expect(floor("cleaning")).toContain(">Ready<");
     const seated = floor("seated");
-    for (const a of ["+15 min", "Move party", "Swap tables"]) expect(seated).toContain(`>${a}<`);
+    for (const a of ["Guest needs more time? +15 min", "Move party", "Swap tables"]) expect(seated).toContain(`>${a}<`);
   });
 
   it("lets only managers block or unblock; hosts see the reason", () => {
@@ -61,8 +61,8 @@ describe("S1 actions by state and role", () => {
   it("disables every change while offline and says so", () => {
     const html = floor("offline");
     expect(html).toContain("Offline. Showing the last floor.");
-    expect(buttonWith(html, "+15 min")).toContain('disabled=""');
-    expect(buttonWith(floor("seated"), "+15 min")).not.toContain('disabled=""');
+    expect(buttonWith(html, "Guest needs more time? +15 min")).toContain('disabled=""');
+    expect(buttonWith(floor("seated"), "Guest needs more time? +15 min")).not.toContain('disabled=""');
   });
 
   it("offers a short turn when a walk-in would run into a booking", () => {

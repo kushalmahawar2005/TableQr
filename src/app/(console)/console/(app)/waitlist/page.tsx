@@ -22,6 +22,6 @@ export default async function WaitlistPage() {
   }
   if (!(await tenantFeatures(staff.tenantId)).reservations) return <FeatureLocked feature="reservations" />;
   const data = await getFloor(staff);
-  const tables = data.tables.filter((t) => t.state === "available").map((t) => ({ id: t.id, code: t.code, seats: t.maxSeats })).sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
+  const tables = data.tables.filter((t) => t.state === "available").map((t) => ({ id: t.id, code: t.code, seats: t.maxSeats, combinableWith: t.combinableWith })).sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
   return <WaitlistScreen entries={data.waitlist} outlet={staff.outlet.name} outletCode={staff.outlet.code} freeTables={tables} canManage={data.may.waitlist} />;
 }

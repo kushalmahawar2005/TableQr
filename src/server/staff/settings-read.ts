@@ -12,23 +12,33 @@ import type { StaffSession } from "./auth";
 type Staff = Pick<StaffSession, "tenantId" | "outletId" | "roles">;
 
 export type OutletSettings = {
-  name: string; code: string; city: string; address: string; gstin: string | null; fssai: string | null; timezone: string;
+  name: string; code: string; city: string; address: string; gstin: string | null; fssai: string | null; timezone: string; logoUrl: string | null;
   sessionMode: string; autoAcceptOrders: boolean; serviceChargeBp: number; tipPresetsBp: number[] | null; reviewUrl: string | null;
   openingHours: Record<string, [string, string][]> | null;
   tables: number; staff: number; plan: string;
 };
 
+/** Brand mark for the signed-in outlet, available to the shared staff header on every role. */
+export async function outletLogoFor(staff: Pick<StaffSession, "tenantId" | "outletId">): Promise<string | null> {
+  const [row] = await db.select({ logoUrl: s.brands.logoUrl })
+    .from(s.outlets)
+    .innerJoin(s.brands, and(eq(s.brands.tenantId, staff.tenantId), eq(s.brands.id, s.outlets.brandId)))
+    .where(and(eq(s.outlets.tenantId, staff.tenantId), eq(s.outlets.id, staff.outletId)));
+  return row?.logoUrl ?? null;
+}
+
 export async function getOutletSettings(staff: Staff): Promise<OutletSettings> {
   if (!canSee(staff.roles, "settings")) throw new AppError("forbidden", "Your role cannot view settings.");
   const [outlet] = await db.select().from(s.outlets).where(and(eq(s.outlets.tenantId, staff.tenantId), eq(s.outlets.id, staff.outletId)));
   if (!outlet) throw new AppError("not_found", "Outlet not found.");
-  const [[tables], [team], [plan]] = await Promise.all([
+  const [[tables], [team], [plan], [brand]] = await Promise.all([
     db.select({ n: count() }).from(s.diningTables).where(and(eq(s.diningTables.tenantId, staff.tenantId), eq(s.diningTables.outletId, staff.outletId))),
     db.select({ n: count() }).from(s.staffRoles).where(and(eq(s.staffRoles.tenantId, staff.tenantId))),
     db.select({ name: s.plans.name }).from(s.tenants).innerJoin(s.plans, eq(s.tenants.planCode, s.plans.code)).where(eq(s.tenants.id, staff.tenantId)),
+    db.select({ logoUrl: s.brands.logoUrl }).from(s.brands).where(and(eq(s.brands.tenantId, staff.tenantId), eq(s.brands.id, outlet.brandId))),
   ]);
   return {
-    name: outlet.name, code: outlet.code, city: outlet.city, address: outlet.address, gstin: outlet.gstin, fssai: outlet.fssai, timezone: outlet.timezone,
+    name: outlet.name, code: outlet.code, city: outlet.city, address: outlet.address, gstin: outlet.gstin, fssai: outlet.fssai, timezone: outlet.timezone, logoUrl: brand?.logoUrl ?? null,
     sessionMode: outlet.sessionMode, autoAcceptOrders: outlet.autoAcceptOrders, serviceChargeBp: outlet.serviceChargeBp, tipPresetsBp: outlet.tipPresetsBp,
     reviewUrl: outlet.reviewUrl, openingHours: outlet.openingHours, tables: Number(tables.n), staff: Number(team.n), plan: plan?.name ?? "",
   };

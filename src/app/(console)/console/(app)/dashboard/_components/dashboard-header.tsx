@@ -33,7 +33,7 @@ export function DashboardHeader({
         <p className="mt-1 text-sm font-medium text-muted">Here&apos;s what&apos;s happening at your restaurant today.</p>
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:justify-start">
         <div className="text-right">
           <p className="text-xs font-semibold text-muted">{dayLabel(data.date, { weekday: "long", day: "numeric", month: "long" })}</p>
           <p className="mt-0.5 flex items-center justify-end gap-1.5 text-[11px] font-medium text-muted tabular" aria-live="polite">

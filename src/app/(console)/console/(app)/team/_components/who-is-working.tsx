@@ -24,7 +24,7 @@ function ago(ms: number) {
   return h < 24 ? `${h} h ago` : `${Math.floor(h / 24)} d ago`;
 }
 
-export function WhoIsWorking({ rows, canChange = false }: { rows: DutyRow[]; canChange?: boolean }) {
+export function WhoIsWorking({ rows, canChange = false, onSelect }: { rows: DutyRow[]; canChange?: boolean; onSelect?: (id: string) => void }) {
   const router = useRouter();
   const [now, setNow] = useState(() => Date.now());
   const [, start] = useTransition();
@@ -59,14 +59,14 @@ export function WhoIsWorking({ rows, canChange = false }: { rows: DutyRow[]; can
       </div>
       {canChange && <p className="mt-1 text-xs text-muted">Set who is on duty. Only staff on duty get the alerts for new requests.</p>}
       {error && <p role="alert" className="mt-2 text-sm font-semibold text-danger">{error}</p>}
-      <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+      <ul className="mt-3 grid gap-2">
         {rows.map((r) => (
           <li key={r.id} className="flex items-center justify-between gap-3 rounded-xl border border-line px-3 py-2.5">
             <div className="min-w-0">
-              <p className="flex items-center gap-2 truncate font-semibold text-ink">
-                <span className={`size-2 shrink-0 rounded-full ${r.online ? "bg-[var(--state-available)]" : "bg-ink/20"}`} aria-hidden="true" />
+              {onSelect ? <button type="button" onClick={() => onSelect(r.id)} className="flex items-center gap-2 truncate rounded-lg text-left font-semibold text-ink outline-none hover:text-brand focus-visible:ring-2 focus-visible:ring-brand">
+                <span className="relative grid size-9 shrink-0 place-items-center rounded-full bg-[var(--state-available-soft)] text-sm font-bold text-[var(--state-available-text)]">{r.name.trim().slice(0, 1).toUpperCase()}<span className={`absolute right-0 bottom-0 size-2.5 rounded-full border-2 border-surface ${r.online ? "bg-[var(--state-available)]" : "bg-ink/30"}`} aria-hidden="true" /></span>
                 {r.name}
-              </p>
+              </button> : <p className="flex items-center gap-2 truncate font-semibold text-ink"><span className="relative grid size-9 shrink-0 place-items-center rounded-full bg-[var(--state-available-soft)] text-sm font-bold text-[var(--state-available-text)]">{r.name.trim().slice(0, 1).toUpperCase()}<span className={`absolute right-0 bottom-0 size-2.5 rounded-full border-2 border-surface ${r.online ? "bg-[var(--state-available)]" : "bg-ink/30"}`} aria-hidden="true" /></span>{r.name}</p>}
               <p className="text-xs text-muted">
                 {r.roles.map((x) => ROLE[x] ?? x).join(", ")} · {r.online ? "app open" : r.lastSeenAt ? `last seen ${ago(now - r.lastSeenAt)}` : "never opened the app"}
               </p>

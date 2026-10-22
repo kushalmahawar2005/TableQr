@@ -29,6 +29,71 @@ async function nextVersion(staff: Scope) {
   return Number(row?.n ?? 0) + 1;
 }
 
+/** A fresh draft starts from the published geometry, not only the canonical table records.
+ * Zone geometry lives on the versioned layout rows and is not represented in `zones`. */
+async function inheritPublishedZoneGeometry(tx: Tx, staff: Scope, draftVersionId: string) {
+  const [published] = await tx
+    .select({ id: s.floorLayoutVersions.id })
+    .from(s.floorLayoutVersions)
+    .where(
+      and(
+        eq(s.floorLayoutVersions.tenantId, staff.tenantId),
+        eq(s.floorLayoutVersions.outletId, staff.outletId),
+        eq(s.floorLayoutVersions.status, "published"),
+      ),
+    )
+    .orderBy(desc(s.floorLayoutVersions.versionNumber))
+    .limit(1);
+  if (!published) return;
+
+  const [publishedZones, draftZones] = await Promise.all([
+    tx
+      .select()
+      .from(s.floorLayoutZones)
+      .where(
+        and(
+          eq(s.floorLayoutZones.tenantId, staff.tenantId),
+          eq(s.floorLayoutZones.versionId, published.id),
+        ),
+      ),
+    tx
+      .select()
+      .from(s.floorLayoutZones)
+      .where(
+        and(
+          eq(s.floorLayoutZones.tenantId, staff.tenantId),
+          eq(s.floorLayoutZones.versionId, draftVersionId),
+        ),
+      ),
+  ]);
+  const byLogicalZone = new Map(
+    publishedZones
+      .filter((zone) => zone.logicalZoneId)
+      .map((zone) => [zone.logicalZoneId!, zone]),
+  );
+  for (const zone of draftZones) {
+    const source = zone.logicalZoneId
+      ? byLogicalZone.get(zone.logicalZoneId)
+      : null;
+    if (!source) continue;
+    await tx
+      .update(s.floorLayoutZones)
+      .set({
+        posX: source.posX,
+        posY: source.posY,
+        width: source.width,
+        height: source.height,
+      })
+      .where(
+        and(
+          eq(s.floorLayoutZones.tenantId, staff.tenantId),
+          eq(s.floorLayoutZones.versionId, draftVersionId),
+          eq(s.floorLayoutZones.id, zone.id),
+        ),
+      );
+  }
+}
+
 /** Refuses when this draft would have more live tables than the restaurant pays for */
 async function assertTableRoom(tx: Tx, staff: Scope, versionId: string, adding: number) {
   const limit = await tenantTableLimit(staff.tenantId);
@@ -44,7 +109,15 @@ async function assertTableRoom(tx: Tx, staff: Scope, versionId: string, adding: 
 export async function getOrCreateDraft(staff: Scope) {
   guard(staff);
   const existing = await db.select().from(s.floorLayoutVersions).where(and(eq(s.floorLayoutVersions.tenantId, staff.tenantId), eq(s.floorLayoutVersions.outletId, staff.outletId), eq(s.floorLayoutVersions.status, "draft"))).limit(1);
-  if (existing[0]) return loadDraft(staff, existing[0]);
+  if (existing[0]) {
+    if (existing[0].revision === 0) {
+      return db.transaction(async (tx) => {
+        await inheritPublishedZoneGeometry(tx, staff, existing[0].id);
+        return loadDraftTx(tx, staff, existing[0]);
+      });
+    }
+    return loadDraft(staff, existing[0]);
+  }
   return db.transaction(async (tx) => {
     const again = await tx.select().from(s.floorLayoutVersions).where(and(eq(s.floorLayoutVersions.tenantId, staff.tenantId), eq(s.floorLayoutVersions.outletId, staff.outletId), eq(s.floorLayoutVersions.status, "draft"))).limit(1);
     if (again[0]) return loadDraftTx(tx, staff, again[0]);
@@ -56,6 +129,7 @@ export async function getOrCreateDraft(staff: Scope) {
       const id = uuidv7(); zoneMap.set(z.id, id);
       await tx.insert(s.floorLayoutZones).values({ id, tenantId: staff.tenantId, versionId, logicalZoneId: z.id, name: z.name, sortOrder: z.sortOrder, archived: !z.isActive, createdAt: new Date(), updatedAt: new Date() });
     }
+    await inheritPublishedZoneGeometry(tx, staff, versionId);
     // Takeaway counters (src/server/floor/takeaway.ts) and rooms are not part of the floor plan
     const tables = (await tx.select().from(s.diningTables).where(and(eq(s.diningTables.tenantId, staff.tenantId), eq(s.diningTables.outletId, staff.outletId)))).filter(onFloor);
     const tableMap = new Map<string, string>();

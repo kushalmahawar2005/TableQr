@@ -364,7 +364,8 @@ export async function createGroupRequest(outletCode: string, input: { requestId:
   if (existing[0]) return existing[0];
   const id = uuidv7(); const reference = publicRef();
   await db.insert(s.groupRequests).values({ id, tenantId: scope.tenantId, outletId: scope.outletId, publicReference: reference, requestId: input.requestId, name: input.name.trim().slice(0, 80), phone: input.phone.trim().slice(0, 15), partySize, desiredDate: input.desiredDate, desiredStartAt: new Date(Number(input.desiredStartAt)), notes: input.notes?.trim().slice(0, 500) || null, status: "requested" });
-  await queueBookingNotification({ tenantId: scope.tenantId, outletId: scope.outletId, type: "booking_confirmation", recipient: input.phone, channel: "sms", idempotencyKey: `group-request:${id}` });
+  // An event enquiry is not a confirmed booking. The guest sees a reference immediately, and the
+  // restaurant follows up manually; never queue the standard booking-confirmation message here.
   await publish(scope, [{ topic: topics.floor, type: "booking.group_request", data: { groupRequestId: id } }]);
   return { id, publicReference: reference };
 }

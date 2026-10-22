@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db as appDb } from "@/db";
 import * as s from "@/db/schema";
 import { AppError } from "@/server/errors";
-import { settleAtCounter } from "@/server/billing/payments";
+import { requestBill, settleAtCounter } from "@/server/billing/payments";
 import { getGuestContext } from "@/server/guest/context";
 import { guestContextForDevice } from "@/server/guest/menu-screen";
 import { addCartLine } from "@/server/guest/cart";

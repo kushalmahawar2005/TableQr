@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { Check, ChefHat, Clock, Flame, Receipt, RefreshCw, Search, Utensils } from "lucide-react";
+import { Check, ChefHat, Clock, Receipt, RefreshCw, Search, Utensils, TriangleAlert } from "lucide-react";
 import type { OrderRow } from "@/server/staff/orders-read";
 import { VisitRecord } from "../../reservations/_components/visit-record";
 import { servedAction } from "../actions";
@@ -20,7 +20,7 @@ const TONE: Record<Status, string> = {
 };
 const LABEL: Record<Status, string> = { placed: "New", accepted: "Accepted", preparing: "Cooking", ready: "Ready to serve", served: "Served", cancelled: "Cancelled" };
 const ACTIVE: Status[] = ["placed", "accepted", "preparing", "ready"];
-const FILTERS = [["all", "All"], ["active", "In progress"], ["served", "Served"], ["cancelled", "Cancelled"]] as const;
+const FILTERS = [["active", "In progress"], ["served", "Served"], ["cancelled", "Cancelled"]] as const;
 type Filter = (typeof FILTERS)[number][0];
 /** An order nobody has picked up for this long is flagged */
 const SLOW_MINUTES = 10;
@@ -52,7 +52,7 @@ export function OrdersScreen({ orders, outlet }: { orders: OrderRow[]; outlet: s
     return () => clearInterval(t);
   }, [router]);
 
-  const inFilter = (o: OrderRow, f: Filter) => f === "all" || (f === "active" ? ACTIVE.includes(o.status) : o.status === f);
+  const inFilter = (o: OrderRow, f: Filter) => f === "active" ? ACTIVE.includes(o.status) : o.status === f;
   const minutes = (iso: string) => Math.max(0, Math.floor((now - new Date(iso).getTime()) / 60_000));
 
   const shown = useMemo(() => {
@@ -70,13 +70,14 @@ export function OrdersScreen({ orders, outlet }: { orders: OrderRow[]; outlet: s
   const count = (f: Filter) => orders.filter((o) => inFilter(o, f)).length;
 
   return (
-    <main className="mx-auto w-full max-w-[1200px] px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
+    <main className="mx-auto w-full max-w-[1560px] px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-caption font-semibold text-muted">{outlet} · last 24 hours</p>
+          <p className="text-caption font-semibold text-muted">{outlet} · live order queue</p>
           <h1 className="mt-1 flex items-center gap-3 font-display text-title font-bold text-ink">Orders
             <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--state-available-soft)] px-2.5 py-0.5 text-caption font-semibold text-[var(--state-available-text)]"><span className="size-1.5 animate-pulse rounded-full bg-[var(--state-available)]" aria-hidden="true" />Live</span>
           </h1>
+          <p className="mt-1 text-body text-muted">Track what is being prepared and what is ready to serve.</p>
         </div>
         <button type="button" onClick={() => start(() => router.refresh())} disabled={pending} className="inline-flex min-h-11 items-center gap-2 rounded-input border border-line bg-surface px-3.5 text-body font-semibold text-ink hover:border-ink/40 disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-ink">
           <RefreshCw className={`size-4 ${pending ? "animate-spin" : ""}`} aria-hidden="true" />{pending ? "Refreshing" : "Refresh"}
@@ -86,7 +87,7 @@ export function OrdersScreen({ orders, outlet }: { orders: OrderRow[]; outlet: s
       <dl className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
         {([
           [Utensils, "In the kitchen", String(active.length), active.length ? "Orders not served yet" : "Nothing pending", "#a74608"],
-          [Flame, "Running slow", String(slow.length), slow.length ? `Waiting over ${SLOW_MINUTES} min` : "All on time", slow.length ? "#b83a3a" : "#237a68"],
+          [TriangleAlert, "Needs attention", String(slow.length), slow.length ? `Not picked up for ${SLOW_MINUTES}+ min` : "No delayed orders", slow.length ? "#b83a3a" : "#237a68"],
           [Clock, "Average time to serve", avgServe === null ? "—" : `${avgServe} min`, served.length ? `From ${served.length} served ${served.length === 1 ? "order" : "orders"}` : "No served orders yet", "#315e9e"],
           [Receipt, "Order value", money(value), `${orders.length} ${orders.length === 1 ? "order" : "orders"} in total`, "#c9482b"],
         ] as const).map(([Icon, label, v, note, tone]) => (
@@ -98,9 +99,9 @@ export function OrdersScreen({ orders, outlet }: { orders: OrderRow[]; outlet: s
         ))}
       </dl>
 
-      <div className="mt-5 flex flex-wrap items-center gap-2">
+      <div className="mt-6 flex flex-wrap items-center gap-2 rounded-card border border-line bg-surface p-2.5 sm:p-3">
         {error && <p role="alert" className="w-full rounded-input bg-danger/10 px-3 py-2 text-body font-semibold text-danger">{error}</p>}
-        <div role="tablist" aria-label="Filter orders" className="flex gap-2 overflow-x-auto">
+        <div role="tablist" aria-label="Filter orders" className="flex max-w-full gap-2 overflow-x-auto">
           {FILTERS.map(([key, label]) => (
             <button key={key} role="tab" aria-selected={filter === key} onClick={() => setFilter(key)} className={`min-h-11 shrink-0 rounded-full border px-4 text-body font-semibold focus-visible:outline-2 focus-visible:outline-ink ${filter === key ? "border-ink bg-ink text-white" : "border-line bg-surface text-muted hover:text-ink"}`}>
               {label} <span className="tabular opacity-70">{count(key)}</span>
@@ -120,20 +121,27 @@ export function OrdersScreen({ orders, outlet }: { orders: OrderRow[]; outlet: s
           <p className="mx-auto mt-1 max-w-md text-body text-muted">{orders.length ? (query ? "Nothing matches your search. Try a table number or a dish name." : "Switch to another tab to see the rest.") : "Orders from guests and waiters will appear here the moment they are placed."}</p>
         </section>
       ) : (
-        <ul className="mt-4 grid gap-3 lg:grid-cols-2">
+        <div className="mt-5">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="font-display text-section font-bold text-ink">{filter === "active" ? "Current orders" : `${FILTERS.find(([key]) => key === filter)?.[1] ?? "Orders"} orders`}</h2>
+            <p className="text-caption text-muted">Showing {shown.length} of {orders.length} · newest updates automatically</p>
+          </div>
+        <ul className="grid gap-3 lg:grid-cols-2">
           {shown.map((o) => {
             const age = minutes(o.placedAt);
             const isSlow = (o.status === "placed" || o.status === "accepted") && age >= SLOW_MINUTES;
             const stepIndex = STEPS.findIndex((s) => s.key === o.status);
             const took = o.servedAt ? Math.max(0, Math.round((new Date(o.servedAt).getTime() - new Date(o.placedAt).getTime()) / 60_000)) : null;
             return (
-              <li key={o.id} className={`rounded-card border bg-surface p-4 sm:p-5 ${isSlow ? "border-danger/60" : "border-line"}`}>
+              <li key={o.id} className={`overflow-hidden rounded-card border bg-surface shadow-[0_1px_2px_rgb(31_41_55/0.04)] ${isSlow ? "border-danger/50" : "border-line"}`}>
+                <div className={`h-1 ${o.status === "ready" ? "bg-[var(--state-available)]" : isSlow ? "bg-danger" : o.status === "preparing" ? "bg-[var(--state-held)]" : "bg-ink/10"}`} aria-hidden="true" />
+                <div className="p-4 sm:p-5">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="font-display text-section font-bold text-ink">{o.takeaway ? `Takeaway ${o.table}` : placeEn(o.table)}{o.roundNo > 1 && <span className="ml-2 text-body font-semibold text-muted">· Round {o.roundNo}</span>}</p>
-                    <p className="mt-0.5 text-caption text-muted tabular">{clock(o.placedAt)} · {ago(age)}{took !== null ? ` · served in ${took} min` : ""}</p>
+                    <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-muted tabular"><span>Placed {clock(o.placedAt)}</span><span aria-hidden="true">·</span><span className={isSlow ? "font-semibold text-danger" : ""}>{ago(age)}</span>{took !== null && <><span aria-hidden="true">·</span><span>Served in {took} min</span></>}</p>
                   </div>
-                  <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-caption font-semibold ${TONE[o.status]}`}>{LABEL[o.status]}</span>
+                  <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-caption font-semibold ${TONE[o.status]}`}><span className={`size-1.5 rounded-full ${o.status === "ready" ? "bg-[var(--state-available)]" : o.status === "cancelled" ? "bg-[var(--state-seated)]" : "bg-current"}`} aria-hidden="true" />{LABEL[o.status]}</span>
                 </div>
 
                 {o.status !== "cancelled" && (
@@ -148,25 +156,27 @@ export function OrdersScreen({ orders, outlet }: { orders: OrderRow[]; outlet: s
                   </ol>
                 )}
 
-                <ul className="mt-3 divide-y divide-line rounded-input border border-line">
-                  {o.items.length ? o.items.map((it, i) => <li key={i} className="flex items-center justify-between gap-3 px-3 py-2 text-body"><span><b className="tabular">{it.qty}</b> × {it.name}</span></li>) : <li className="px-3 py-2 text-body text-muted">No items</li>}
+                <ul className="mt-4 divide-y divide-line rounded-input border border-line bg-ink/[0.02]">
+                  {o.items.length ? o.items.map((it, i) => <li key={i} className="flex items-center gap-3 px-3 py-2.5 text-body"><span className="grid size-7 shrink-0 place-items-center rounded-md bg-surface text-caption font-bold tabular text-ink">{it.qty}×</span><span className="font-medium text-ink">{it.name}</span></li>) : <li className="px-3 py-2 text-body text-muted">No items</li>}
                 </ul>
                 {o.note && <p className="mt-2 rounded-input bg-[var(--state-held-soft)] px-3 py-1.5 text-body text-[var(--state-held-text)]">Note: {o.note}</p>}
                 {isSlow && <p className="mt-2 text-caption font-semibold text-danger">Nobody has started this yet. Check the kitchen screen.</p>}
 
-                <div className="mt-3 flex items-center justify-between gap-3">
-                  <span className="font-display text-section font-bold tabular text-ink">{money(o.totalPaise)}</span>
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-3">
+                  <span><span className="block text-caption text-muted">Order total</span><span className="font-display text-section font-bold tabular text-ink">{money(o.totalPaise)}</span></span>
                   {o.status === "ready" && o.readyLineIds.length > 0 && (
-                    <button type="button" disabled={pending} onClick={() => serve(o)} className="ml-auto min-h-10 rounded-input bg-ink px-3 text-body font-semibold text-white hover:bg-ink/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:opacity-50">
+                    <button type="button" disabled={pending} onClick={() => serve(o)} className="ml-auto min-h-11 rounded-input bg-brand px-4 text-body font-semibold text-white shadow-sm hover:bg-brand/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:opacity-50">
                       Mark served
                     </button>
                   )}
                   <VisitRecord sessionId={o.sessionId} className="rounded-input px-2 py-1 text-body font-semibold text-ink underline underline-offset-4 hover:bg-ink/5 focus-visible:outline-2 focus-visible:outline-ink">View table record</VisitRecord>
                 </div>
+                </div>
               </li>
             );
           })}
         </ul>
+        </div>
       )}
     </main>
   );

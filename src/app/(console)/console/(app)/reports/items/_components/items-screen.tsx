@@ -43,7 +43,7 @@ export function ItemsScreen({ report: r, outletName }: { report: SalesDetail; ou
   const range = r.from === r.to ? nice(r.from) : `${nice(r.from)} – ${nice(r.to)}`;
 
   return (
-    <main className="mx-auto w-full max-w-[1200px] px-4 py-5 text-ink sm:px-6 lg:px-8 lg:py-7 print:max-w-none print:p-0">
+    <main id="items-report-print" className="mx-auto w-full max-w-[1200px] px-4 py-5 text-ink sm:px-6 lg:px-8 lg:py-7 print:max-w-none print:p-0">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-caption font-semibold text-muted">{outletName}</p>
@@ -79,7 +79,7 @@ export function ItemsScreen({ report: r, outletName }: { report: SalesDetail; ou
         </form>
       </div>
 
-      <section className="mt-5 grid grid-cols-3 gap-3" aria-label="Totals">
+      <section className="mt-5 grid grid-cols-3 gap-3 print:break-inside-avoid" aria-label="Totals">
         <div className={`${card} p-4`}><p className="text-caption font-semibold text-muted">Item sales</p><p className="mt-1 font-display text-[24px] font-bold tabular-nums">{rs(r.totals.grossPaise)}</p><p className="text-caption text-muted">Before discount and tax</p></div>
         <div className={`${card} p-4`}><p className="text-caption font-semibold text-muted">Items sold</p><p className="mt-1 font-display text-[24px] font-bold tabular-nums">{r.totals.qty}</p></div>
         <div className={`${card} p-4`}><p className="text-caption font-semibold text-muted">Different dishes</p><p className="mt-1 font-display text-[24px] font-bold tabular-nums">{r.totals.dishes}</p><p className="text-caption text-muted">{r.notSold.length} on the menu did not sell</p></div>
@@ -97,9 +97,9 @@ export function ItemsScreen({ report: r, outletName }: { report: SalesDetail; ou
         {shown.length === 0 ? (
           <p className="px-5 py-8 text-center text-body text-muted">{r.items.length ? "No dish matches." : "Nothing sold in these days."}</p>
         ) : (
-          <div className="mt-3 max-h-[560px] overflow-auto print:max-h-none">
-            <table className="w-full min-w-[620px] text-left text-body tabular-nums">
-              <thead className="sticky top-0 bg-surface"><tr className="text-caption text-muted"><th className="px-5 py-2 font-medium">Dish</th><th className="px-3 py-2 font-medium">Category</th><th className="px-3 py-2 text-right font-medium">Qty</th><th className="px-3 py-2 text-right font-medium">Sales</th><th className="px-5 py-2 text-right font-medium">Share</th></tr></thead>
+          <div className="mt-3 max-h-[560px] overflow-auto print:max-h-none print:overflow-visible">
+            <table className="w-full min-w-[620px] text-left text-body tabular-nums print:min-w-0">
+              <thead className="sticky top-0 bg-surface print:static"><tr className="text-caption text-muted"><th className="px-5 py-2 font-medium">Dish</th><th className="px-3 py-2 font-medium">Category</th><th className="px-3 py-2 text-right font-medium">Qty</th><th className="px-3 py-2 text-right font-medium">Sales</th><th className="px-5 py-2 text-right font-medium">Share</th></tr></thead>
               <tbody>
                 {shown.map((i) => (
                   <tr key={i.itemId} className="border-t border-line">

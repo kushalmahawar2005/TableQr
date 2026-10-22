@@ -10,6 +10,19 @@ const DATE = "2026-10-04";
 /** 8:10 pm at the outlet */
 const NOW = localTime(DATE, 20 * 60 + 10, TZ).getTime();
 const min = (m: number) => NOW + m * 60_000;
+const floorTiles = Array.from({ length: 18 }, (_, index) => {
+  const number = index + 1;
+  const state: DashboardData["operations"]["tableTiles"][number]["state"] = number <= 4 ? "available" : number <= 6 ? "reserved" : number <= 15 ? "seated" : number <= 17 ? "bill_requested" : "blocked";
+  return {
+    id: `table-${number}`,
+    code: `T${number}`,
+    seats: [2, 4, 4, 4, 2, 4, 6, 4, 2, 4, 4, 6, 4, 2, 4, 4, 2, 4][index],
+    state,
+    guests: state === "seated" || state === "bill_requested" ? number % 5 + 1 : undefined,
+    runningPaise: state === "seated" || state === "bill_requested" ? number * 185 * 100 : undefined,
+    runningAmountKind: state === "bill_requested" ? "bill" as const : state === "seated" ? "orders" as const : undefined,
+  };
+});
 
 const trendOf = (rupees: number[]): RevenueTrend => rupees.map((r, i) => ({ date: addDays(DATE, i - 6), revenuePaise: r * 100 }));
 
@@ -41,7 +54,7 @@ const busy: DashboardData = {
       { id: "u4", name: null, partySize: 3, startAt: min(80), status: "confirmed", tables: [] },
     ],
     billRequestedTables: 2,
-    tableTiles: [],
+    tableTiles: floorTiles,
     kitchenOrders: [],
     customerRequests: [],
     recentPayments: [],

@@ -5,7 +5,7 @@ import { rescheduleReservationStaff } from "@/server/booking/core";
 import { staffRealtimeToken, topics } from "@/server/realtime/token";
 import type { StaffSession } from "@/server/staff/auth";
 import { staffFor } from "@/server/staff/request";
-import { createCalendarReservation, editReservationDetails, getReservationCalendar, type CalendarInput, type ReservationDetailsPatch } from "@/server/staff/reservations";
+import { createCalendarReservation, editReservationDetails, getReservationCalendar, updateGroupRequestStatus, type CalendarInput, type ReservationDetailsPatch } from "@/server/staff/reservations";
 import { consoleSectionRoles } from "@/lib/staff-permissions";
 
 // Reservation Calendar server actions. Staff, role and outlet always come from the httpOnly cookie;
@@ -37,6 +37,10 @@ export async function editDetailsAction(id: string, patch: ReservationDetailsPat
 
 export async function reservationCreateAction(input: Parameters<typeof createCalendarReservation>[1]) {
   return run((s) => createCalendarReservation(s, input));
+}
+
+export async function groupRequestStatusAction(id: string, status: "contacted" | "cancelled") {
+  return run((s) => done(updateGroupRequestStatus(s, id, status)));
 }
 
 export async function reservationRescheduleAction(id: string, localDateTime: string, partySize?: number) {

@@ -54,6 +54,7 @@ function StatusBadge({ member, duty }: { member: TeamMember; duty?: DutyRow }) {
 function copy(text: string) {
   try { void navigator.clipboard.writeText(text); } catch { /* clipboard may be blocked; the details stay on screen */ }
 }
+const randomPin = () => String(Math.floor(1000 + Math.random() * 9000));
 
 export function TeamScreen({ initial, canEdit, outletCode, outletName, roles: allowed, duty = [], canChangeDuty = false }: { initial: TeamMember[]; canEdit: boolean; outletCode: string; outletName: string; duty?: DutyRow[]; canChangeDuty?: boolean; roles: readonly string[] }) {
   const router = useRouter();
@@ -74,7 +75,7 @@ export function TeamScreen({ initial, canEdit, outletCode, outletName, roles: al
   const shown = initial.filter((m) => !q.trim() || `${m.name} ${m.phone}`.toLowerCase().includes(q.trim().toLowerCase()));
   const active = initial.filter((m) => m.isActive).length;
   const dutyById = new Map(duty.map((d) => [d.id, d]));
-  const randomPin = () => String(Math.floor(1000 + Math.random() * 9000));
+  const openManage = (id: string) => { setManage(id); setErr(null); setNewPin(randomPin()); };
 
   const openAdd = () => { setName(""); setPhone(""); setRole("waiter"); setPin(randomPin()); setErr(null); setCreated(null); setAdding(true); };
   const done = (text: string) => { setNotice({ ok: true, text }); router.refresh(); };
@@ -107,16 +108,16 @@ export function TeamScreen({ initial, canEdit, outletCode, outletName, roles: al
         <div className="min-w-0">
           <p className="text-caption font-semibold text-muted">{outletName}</p>
           <h1 className="mt-1 font-display text-title font-bold text-ink">Team</h1>
-          <p className="mt-1 text-body text-muted">People who can sign in here. {canEdit ? "Add your managers, waiters and accountants." : "Only the owner can change the team."}</p>
+          <p className="mt-1 text-body text-muted">{canEdit ? "Manage staff access, roles and shifts in one place." : "People who can sign in to this outlet."}</p>
         </div>
         {canEdit && <button type="button" onClick={openAdd} className="inline-flex h-11 items-center gap-2 rounded-xl border border-brand bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-strong"><Plus className="size-4" aria-hidden="true" />Add person</button>}
       </header>
 
-      <div className="mt-5 grid grid-cols-3 divide-x divide-line overflow-hidden rounded-2xl border border-line bg-surface">
-        {([["People", initial.length, null], ["Active", active, "var(--state-available)"], ["Switched off", initial.length - active, null]] as const).map(([k, v, dot]) => (
-          <div key={k} className="px-4 py-3">
-            <p className="flex items-center gap-1.5 text-caption text-muted">{dot && <span className="size-1.5 rounded-full" style={{ background: dot }} aria-hidden="true" />}{k}</p>
-            <p className="mt-0.5 font-display text-title font-bold tabular-nums text-ink">{v}</p>
+      <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {([["People", initial.length, null], ["Can sign in", active, "var(--state-available)"], ["Switched off", initial.length - active, null]] as const).map(([k, v, dot]) => (
+          <div key={k} className="rounded-2xl border border-line bg-surface px-4 py-3">
+            <p className="flex items-center gap-1.5 text-caption font-medium text-muted">{dot && <span className="size-1.5 rounded-full" style={{ background: dot }} aria-hidden="true" />}{k}</p>
+            <p className="mt-1 font-display text-2xl font-bold tabular-nums text-ink">{v}</p>
           </div>
         ))}
       </div>
@@ -124,8 +125,8 @@ export function TeamScreen({ initial, canEdit, outletCode, outletName, roles: al
       {notice && <p role="status" className="mt-4 flex items-center gap-2 rounded-xl border border-success/30 bg-surface px-3 py-2 text-sm font-semibold text-success"><Check className="size-4" aria-hidden="true" />{notice.text}</p>}
 
       <section aria-labelledby="team-people" className="mt-4 overflow-hidden rounded-2xl border border-line bg-surface">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3">
-          <h2 id="team-people" className="font-display text-section font-bold text-ink">Everyone <span className="ml-1 text-sm font-semibold tabular-nums text-muted">{initial.length}</span></h2>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3">
+          <div><h2 id="team-people" className="font-display text-section font-bold text-ink">Everyone <span className="ml-1 text-sm font-semibold tabular-nums text-muted">{initial.length}</span></h2><p className="mt-0.5 text-xs text-muted">Select a person to manage their role, PIN or access.</p></div>
           <div className="relative w-full sm:w-64">
             <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted" aria-hidden="true" />
             <Input aria-label="Search team" className="h-10 rounded-xl pl-9" placeholder="Search name or number" value={q} onChange={(e) => setQ(e.target.value)} />
@@ -147,12 +148,14 @@ export function TeamScreen({ initial, canEdit, outletCode, outletName, roles: al
                 <TableRow key={m.id} className={`border-line hover:bg-ink/[0.03] ${m.isActive ? "" : "opacity-60"}`}>
                   <TableCell className="px-4 py-3 whitespace-normal">
                     <div className="flex items-center gap-3">
-                      <Avatar name={m.name} role={m.roles[0]} online={d?.online} />
-                      <div className="min-w-0">
-                        <p className="truncate font-semibold text-ink">{m.name}{m.isMe && <span className="ml-1.5 text-xs font-normal text-muted">(you)</span>}</p>
-                        <p className="flex items-center gap-1 truncate text-caption text-muted"><Phone className="size-3" aria-hidden="true" />{m.phone}</p>
-                        <p className="mt-1 flex flex-wrap gap-1.5 sm:hidden">{m.roles.map((r) => <RoleBadge key={r} role={r} />)}<StatusBadge member={m} duty={d} /></p>
-                      </div>
+                      {canEdit && !m.locked && !m.isMe ? (
+                        <button type="button" onClick={() => openManage(m.id)} aria-label={`Manage ${m.name}`} className="group/person flex min-w-0 items-center gap-3 rounded-xl text-left outline-none focus-visible:ring-2 focus-visible:ring-brand">
+                          <Avatar name={m.name} role={m.roles[0]} online={d?.online} />
+                          <span className="min-w-0"><span className="block truncate font-semibold text-ink group-hover/person:text-brand">{m.name}<span className="ml-1.5 text-xs font-normal text-muted">(Manage)</span></span><span className="flex items-center gap-1 truncate text-caption text-muted"><Phone className="size-3" aria-hidden="true" />{m.phone}</span><span className="mt-1 flex flex-wrap gap-1.5 sm:hidden">{m.roles.map((r) => <RoleBadge key={r} role={r} />)}<StatusBadge member={m} duty={d} /></span></span>
+                        </button>
+                      ) : (
+                        <div className="flex min-w-0 items-center gap-3"><Avatar name={m.name} role={m.roles[0]} online={d?.online} /><div className="min-w-0"><p className="truncate font-semibold text-ink">{m.name}{m.isMe && <span className="ml-1.5 text-xs font-normal text-muted">(you)</span>}</p><p className="flex items-center gap-1 truncate text-caption text-muted"><Phone className="size-3" aria-hidden="true" />{m.phone}</p><p className="mt-1 flex flex-wrap gap-1.5 sm:hidden">{m.roles.map((r) => <RoleBadge key={r} role={r} />)}<StatusBadge member={m} duty={d} /></p></div></div>
+                      )}
                     </div>
                   </TableCell>
                   <TableCell className="hidden px-4 py-3 sm:table-cell">
@@ -160,7 +163,7 @@ export function TeamScreen({ initial, canEdit, outletCode, outletName, roles: al
                   </TableCell>
                   <TableCell className="hidden px-4 py-3 md:table-cell"><StatusBadge member={m} duty={d} /></TableCell>
                   <TableCell className="px-4 py-3 text-right">
-                    {canEdit && !m.locked && !m.isMe && <button type="button" onClick={() => { setManage(m.id); setErr(null); setNewPin(randomPin()); }} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-line px-3 text-sm font-semibold hover:border-ink/40"><Settings2 className="size-3.5" aria-hidden="true" />Manage</button>}
+                    {canEdit && !m.locked && !m.isMe && <button type="button" onClick={() => openManage(m.id)} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-line px-3 text-sm font-semibold hover:border-ink/40"><Settings2 className="size-3.5" aria-hidden="true" />Manage</button>}
                   </TableCell>
                 </TableRow>
               );
@@ -174,7 +177,7 @@ export function TeamScreen({ initial, canEdit, outletCode, outletName, roles: al
         </Table>
       </section>
 
-      <WhoIsWorking rows={duty} canChange={canChangeDuty} />
+      <WhoIsWorking rows={duty} canChange={canChangeDuty} onSelect={canEdit ? openManage : undefined} />
 
       <section className="mt-4 rounded-2xl border border-line bg-surface p-4">
         <p className="text-sm font-semibold">How your team signs in</p>

@@ -66,7 +66,7 @@ describe("price rules", () => {
 describe("pricing screen", () => {
   it("shows brand, outlet and effective prices with the source", () => {
     const html = render("mixed");
-    for (const text of ["Pricing", "Set a different price for", "Other outlets are not affected.", "Changed here", "Menu ₹380 · +₹40", "₹420", "₹59.50", "Edit", "Select all 5"]) expect(html).toContain(text);
+    for (const text of ["Pricing", "Outlet menu", "Set prices for this outlet.", "Other outlets stay unchanged", "Custom prices", "Menu ₹380 · +₹40", "₹420", "₹59.50", "Edit", "Select all 5", "Showing 5 of 5 dishes"]) expect(html).toContain(text);
   });
 
   it("manager sees prices but no edit actions", () => {

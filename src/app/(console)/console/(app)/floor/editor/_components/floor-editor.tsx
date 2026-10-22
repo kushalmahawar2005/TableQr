@@ -1,88 +1,922 @@
 "use client";
 import Link from "next/link";
 import { TableQr } from "../../_components/table-qr";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useEffect, useRef, useState } from "react";
-import { addTableAction, addZoneAction, draftAction, publishAction, qrAction, updateTableAction, updateZoneAction } from "../actions";
+import {
+  addTableAction,
+  addZoneAction,
+  draftAction,
+  publishAction,
+  qrAction,
+  updateTableAction,
+  updateZoneAction,
+} from "../actions";
 
-type Draft = Awaited<ReturnType<typeof import("@/server/floor/editor").getOrCreateDraft>>;
-export function FloorEditor({ initial, outletName }: { initial: Draft; outletName: string }) {
-  const [data, setData] = useState(initial); const [selected, setSelected] = useState<string | null>(null); const [zone, setZone] = useState<string | null>(null); const [busy, setBusy] = useState(false); const busyRef = useRef(false); const [notice, setNotice] = useState<string | null>(null); const [undo, setUndo] = useState<Draft[]>([]); const [narrow, setNarrow] = useState(false); const [drag, setDrag] = useState<{ id: string; x: number; y: number; baseX: number; baseY: number } | null>(null);
-  useEffect(() => { const update = () => setNarrow(window.innerWidth < 600); update(); window.addEventListener("resize", update); return () => window.removeEventListener("resize", update); }, []);
-  const table = data.tables.find((t) => t.id === selected) ?? null; const activeZones = data.zones.filter((z) => !z.archived); const canEdit = !narrow;
+type Draft = Awaited<
+  ReturnType<typeof import("@/server/floor/editor").getOrCreateDraft>
+>;
+export function FloorEditor({
+  initial,
+  outletName,
+}: {
+  initial: Draft;
+  outletName: string;
+}) {
+  const [data, setData] = useState(initial);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [zone, setZone] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [undo, setUndo] = useState<Draft[]>([]);
+  const [narrow, setNarrow] = useState(false);
+  const [drag, setDrag] = useState<{
+    id: string;
+    x: number;
+    y: number;
+    baseX: number;
+    baseY: number;
+  } | null>(null);
+  useEffect(() => {
+    const update = () => setNarrow(window.innerWidth < 600);
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
+  const table = data.tables.find((t) => t.id === selected) ?? null;
+  const activeZones = data.zones.filter((z) => !z.archived);
+  const canEdit = !narrow;
   type Handle = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
-  const [resize, setResize] = useState<{ kind: "table" | "zone"; id: string; handle: Handle; x: number; y: number; base: { x: number; y: number; w: number; h: number } } | null>(null);
+  const [resize, setResize] = useState<{
+    kind: "table" | "zone";
+    id: string;
+    handle: Handle;
+    x: number;
+    y: number;
+    base: { x: number; y: number; w: number; h: number };
+  } | null>(null);
   const HANDLES: { h: Handle; style: React.CSSProperties; cursor: string }[] = [
-    { h: "nw", style: { left: 0, top: 0 }, cursor: "nwse-resize" }, { h: "n", style: { left: "50%", top: 0 }, cursor: "ns-resize" }, { h: "ne", style: { left: "100%", top: 0 }, cursor: "nesw-resize" },
-    { h: "e", style: { left: "100%", top: "50%" }, cursor: "ew-resize" }, { h: "se", style: { left: "100%", top: "100%" }, cursor: "nwse-resize" }, { h: "s", style: { left: "50%", top: "100%" }, cursor: "ns-resize" },
-    { h: "sw", style: { left: 0, top: "100%" }, cursor: "nesw-resize" }, { h: "w", style: { left: 0, top: "50%" }, cursor: "ew-resize" },
+    { h: "nw", style: { left: 0, top: 0 }, cursor: "nwse-resize" },
+    { h: "n", style: { left: "50%", top: 0 }, cursor: "ns-resize" },
+    { h: "ne", style: { left: "100%", top: 0 }, cursor: "nesw-resize" },
+    { h: "e", style: { left: "100%", top: "50%" }, cursor: "ew-resize" },
+    { h: "se", style: { left: "100%", top: "100%" }, cursor: "nwse-resize" },
+    { h: "s", style: { left: "50%", top: "100%" }, cursor: "ns-resize" },
+    { h: "sw", style: { left: 0, top: "100%" }, cursor: "nesw-resize" },
+    { h: "w", style: { left: 0, top: "50%" }, cursor: "ew-resize" },
   ];
   const resizeTo = (e: React.PointerEvent) => {
     if (!resize) return;
-    const dx = Math.round((e.clientX - resize.x) / 24); const dy = Math.round((e.clientY - resize.y) / 24); const b = resize.base; const h = resize.handle;
+    const dx = Math.round((e.clientX - resize.x) / 24);
+    const dy = Math.round((e.clientY - resize.y) / 24);
+    const b = resize.base;
+    const h = resize.handle;
     let { x, y, w, h: ht } = { x: b.x, y: b.y, w: b.w, h: b.h };
     if (h.includes("e")) w = Math.max(1, b.w + dx);
-    if (h.includes("w")) { x = Math.min(b.x + b.w - 1, Math.max(0, b.x + dx)); w = b.x + b.w - x; }
+    if (h.includes("w")) {
+      x = Math.min(b.x + b.w - 1, Math.max(0, b.x + dx));
+      w = b.x + b.w - x;
+    }
     if (h.includes("s")) ht = Math.max(1, b.h + dy);
-    if (h.includes("n")) { y = Math.min(b.y + b.h - 1, Math.max(0, b.y + dy)); ht = b.y + b.h - y; }
-    setData(resize.kind === "zone" ? { ...data, zones: data.zones.map((z) => z.id === resize.id ? { ...z, posX: x, posY: y, width: Math.max(w, 2), height: Math.max(ht, 2) } : z) } : { ...data, tables: data.tables.map((t) => t.id === resize.id ? { ...t, posX: x, posY: y, width: w, height: ht } : t) });
+    if (h.includes("n")) {
+      y = Math.min(b.y + b.h - 1, Math.max(0, b.y + dy));
+      ht = b.y + b.h - y;
+    }
+    setData(
+      resize.kind === "zone"
+        ? {
+            ...data,
+            zones: data.zones.map((z) =>
+              z.id === resize.id
+                ? {
+                    ...z,
+                    posX: x,
+                    posY: y,
+                    width: Math.max(w, 2),
+                    height: Math.max(ht, 2),
+                  }
+                : z,
+            ),
+          }
+        : {
+            ...data,
+            tables: data.tables.map((t) =>
+              t.id === resize.id
+                ? { ...t, posX: x, posY: y, width: w, height: ht }
+                : t,
+            ),
+          },
+    );
   };
-  const patchZone = async (id: string, patch: { posX?: number; posY?: number; width?: number; height?: number }) => { const next = { ...data, zones: data.zones.map((z) => z.id === id ? { ...z, ...patch } : z), version: { ...data.version, revision: data.version.revision + 1 } } as Draft; await save(() => updateZoneAction(data.version.id, id, patch, data.version.revision), next); };
-  const [zDrag, setZDrag] = useState<{ id: string; x: number; y: number; baseX: number; baseY: number } | null>(null);
-  const finishZoneDrag = async () => { if (!zDrag) return; const z = data.zones.find((x) => x.id === zDrag.id); setZDrag(null); if (z) await patchZone(z.id, { posX: z.posX, posY: z.posY }); };
-  const finishResize = async () => { if (!resize) return; const { kind, id } = resize; setResize(null); if (kind === "zone") { const z = data.zones.find((x) => x.id === id); if (z) await patchZone(id, { posX: z.posX, posY: z.posY, width: z.width, height: z.height }); return; } const t = data.tables.find((x) => x.id === id); if (t) await patchTable({ posX: t.posX, posY: t.posY, width: t.width, height: t.height }); };
+  const patchZone = async (
+    id: string,
+    patch: { posX?: number; posY?: number; width?: number; height?: number },
+  ) => {
+    const next = {
+      ...data,
+      zones: data.zones.map((z) => (z.id === id ? { ...z, ...patch } : z)),
+      version: { ...data.version, revision: data.version.revision + 1 },
+    } as Draft;
+    await save(
+      () => updateZoneAction(data.version.id, id, patch, data.version.revision),
+      next,
+    );
+  };
+  const [zDrag, setZDrag] = useState<{
+    id: string;
+    x: number;
+    y: number;
+    baseX: number;
+    baseY: number;
+  } | null>(null);
+  const finishZoneDrag = async () => {
+    if (!zDrag) return;
+    const z = data.zones.find((x) => x.id === zDrag.id);
+    setZDrag(null);
+    if (z) await patchZone(z.id, { posX: z.posX, posY: z.posY });
+  };
+  const finishResize = async () => {
+    if (!resize) return;
+    const { kind, id } = resize;
+    setResize(null);
+    if (kind === "zone") {
+      const z = data.zones.find((x) => x.id === id);
+      if (z)
+        await patchZone(id, {
+          posX: z.posX,
+          posY: z.posY,
+          width: z.width,
+          height: z.height,
+        });
+      return;
+    }
+    const t = data.tables.find((x) => x.id === id);
+    if (t)
+      await patchTable({
+        posX: t.posX,
+        posY: t.posY,
+        width: t.width,
+        height: t.height,
+      });
+  };
   // Tables this restaurant pays for; going past it asks for an upgrade instead of adding
   const [limitOpen, setLimitOpen] = useState(false);
   const liveTables = data.tables.filter((t) => !t.archived).length;
   const atLimit = data.tableLimit !== null && liveTables >= data.tableLimit;
-  async function save<T>(call: () => Promise<{ ok: boolean; data?: T; error?: string; reason?: string }>, next: Draft) { if (!canEdit || busyRef.current) return; busyRef.current = true; setBusy(true); setNotice("Saving…"); const r = await call(); busyRef.current = false; setBusy(false); if (!r.ok) { if (r.reason === "table_limit") { setNotice("Saved"); setLimitOpen(true); return; } setNotice(r.error ?? "Could not save"); return; } setUndo((u) => [...u.slice(-19), data]); setData(next); setNotice("Saved"); }
-  const patchTable = async (patch: Record<string, unknown>) => { if (!table) return; const next = { ...data, revision: data.version.revision + 1, tables: data.tables.map((t) => t.id === table.id ? { ...t, ...patch } : t), version: { ...data.version, revision: data.version.revision + 1 } } as Draft; await save(() => updateTableAction(data.version.id, table.id, patch, data.version.revision), next); };
-  const finishDrag = async () => { if (!drag) return; const t = data.tables.find((x) => x.id === drag.id); if (!t) return; const nextX = Math.max(0, Math.round(t.posX)); const nextY = Math.max(0, Math.round(t.posY)); setDrag(null); await patchTable({ posX: nextX, posY: nextY }); };
-  const addTable = async (shape: "square" | "round" | "long") => { if (atLimit) { setLimitOpen(true); return; } const z = activeZones[0]; if (!z) return; await save(() => addTableAction(data.version.id, { code: `T${data.tables.length + 1}`, zoneId: z.id, shape, maxSeats: shape === "long" ? 8 : 4 }, data.version.revision), data); const fresh = await draftAction(); if (fresh.ok && fresh.data) setData(fresh.data); };
+  async function save<T>(
+    call: () => Promise<{
+      ok: boolean;
+      data?: T;
+      error?: string;
+      reason?: string;
+    }>,
+    next: Draft,
+  ) {
+    if (!canEdit || busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
+    setNotice("Saving…");
+    const r = await call();
+    busyRef.current = false;
+    setBusy(false);
+    if (!r.ok) {
+      if (r.reason === "table_limit") {
+        setNotice("Saved");
+        setLimitOpen(true);
+        return;
+      }
+      setNotice(r.error ?? "Could not save");
+      return;
+    }
+    setUndo((u) => [...u.slice(-19), data]);
+    setData(next);
+    setNotice("Saved");
+  }
+  const patchTable = async (patch: Record<string, unknown>) => {
+    if (!table) return;
+    const next = {
+      ...data,
+      revision: data.version.revision + 1,
+      tables: data.tables.map((t) =>
+        t.id === table.id ? { ...t, ...patch } : t,
+      ),
+      version: { ...data.version, revision: data.version.revision + 1 },
+    } as Draft;
+    await save(
+      () =>
+        updateTableAction(
+          data.version.id,
+          table.id,
+          patch,
+          data.version.revision,
+        ),
+      next,
+    );
+  };
+  const finishDrag = async () => {
+    if (!drag) return;
+    const t = data.tables.find((x) => x.id === drag.id);
+    if (!t) return;
+    const nextX = Math.max(0, Math.round(t.posX));
+    const nextY = Math.max(0, Math.round(t.posY));
+    setDrag(null);
+    await patchTable({ posX: nextX, posY: nextY });
+  };
+  const addTable = async (shape: "square" | "round" | "long") => {
+    if (atLimit) {
+      setLimitOpen(true);
+      return;
+    }
+    const z = activeZones[0];
+    if (!z) return;
+    await save(
+      () =>
+        addTableAction(
+          data.version.id,
+          {
+            code: `T${data.tables.length + 1}`,
+            zoneId: z.id,
+            shape,
+            maxSeats: shape === "long" ? 8 : 4,
+          },
+          data.version.revision,
+        ),
+      data,
+    );
+    const fresh = await draftAction();
+    if (fresh.ok && fresh.data) setData(fresh.data);
+  };
   const addZone = async () => {
     const before = new Set(data.zones.map((z) => z.id));
-    await save(() => addZoneAction(data.version.id, `Area ${activeZones.length + 1}`, data.version.revision), data);
-    const fresh = await draftAction(); if (!fresh.ok || !fresh.data) return;
+    await save(
+      () =>
+        addZoneAction(
+          data.version.id,
+          `Area ${activeZones.length + 1}`,
+          data.version.revision,
+        ),
+      data,
+    );
+    const fresh = await draftAction();
+    if (!fresh.ok || !fresh.data) return;
     const created = fresh.data.zones.find((z) => !before.has(z.id));
-    if (!created) { setData(fresh.data); return; }
+    if (!created) {
+      setData(fresh.data);
+      return;
+    }
     // Put the new area in free space instead of on top of the others: to the right if it fits, otherwise below.
-    const others = fresh.data.zones.filter((z) => z.id !== created.id && !z.archived);
+    const others = fresh.data.zones.filter(
+      (z) => z.id !== created.id && !z.archived,
+    );
     const right = Math.max(0, ...others.map((z) => z.posX + z.width));
     const bottom = Math.max(0, ...others.map((z) => z.posY + z.height));
-    const spot = right + created.width + 1 <= 36 ? { posX: right + 1, posY: 0 } : { posX: 0, posY: bottom + 1 };
-    const moved = await updateZoneAction(fresh.data.version.id, created.id, spot, fresh.data.version.revision);
+    const spot =
+      right + created.width + 1 <= 36
+        ? { posX: right + 1, posY: 0 }
+        : { posX: 0, posY: bottom + 1 };
+    const moved = await updateZoneAction(
+      fresh.data.version.id,
+      created.id,
+      spot,
+      fresh.data.version.revision,
+    );
     const latest = moved.ok ? await draftAction() : fresh;
     if (latest.ok && latest.data) setData(latest.data);
   };
   const undoLast = async () => {
-    const previous = undo.at(-1); if (!previous) return;
-    const currentTable = selected ? data.tables.find((t) => t.id === selected) : null;
-    const oldTable = selected ? previous.tables.find((t) => t.id === selected) : null;
+    const previous = undo.at(-1);
+    if (!previous) return;
+    const currentTable = selected
+      ? data.tables.find((t) => t.id === selected)
+      : null;
+    const oldTable = selected
+      ? previous.tables.find((t) => t.id === selected)
+      : null;
     if (currentTable && oldTable) {
-      setBusy(true); setNotice("Saving…");
-      const result = await updateTableAction(data.version.id, currentTable.id, { code: oldTable.code, minSeats: oldTable.minSeats, maxSeats: oldTable.maxSeats, tableClass: oldTable.tableClass, shape: oldTable.shape, posX: oldTable.posX, posY: oldTable.posY, width: oldTable.width, height: oldTable.height, isBookableOnline: oldTable.isBookableOnline, archived: oldTable.archived, logicalZoneId: oldTable.logicalZoneId }, data.version.revision);
-      setBusy(false); if (!result.ok) { setNotice(result.error ?? "Could not undo"); return; }
-      const fresh = await draftAction(); if (fresh.ok && fresh.data) setData(fresh.data); setUndo((u) => u.slice(0, -1)); setNotice("Saved"); return;
+      setBusy(true);
+      setNotice("Saving…");
+      const result = await updateTableAction(
+        data.version.id,
+        currentTable.id,
+        {
+          code: oldTable.code,
+          minSeats: oldTable.minSeats,
+          maxSeats: oldTable.maxSeats,
+          tableClass: oldTable.tableClass,
+          shape: oldTable.shape,
+          posX: oldTable.posX,
+          posY: oldTable.posY,
+          width: oldTable.width,
+          height: oldTable.height,
+          isBookableOnline: oldTable.isBookableOnline,
+          archived: oldTable.archived,
+          logicalZoneId: oldTable.logicalZoneId,
+        },
+        data.version.revision,
+      );
+      setBusy(false);
+      if (!result.ok) {
+        setNotice(result.error ?? "Could not undo");
+        return;
+      }
+      const fresh = await draftAction();
+      if (fresh.ok && fresh.data) setData(fresh.data);
+      setUndo((u) => u.slice(0, -1));
+      setNotice("Saved");
+      return;
     }
-    setData(previous); setUndo((u) => u.slice(0, -1));
+    setData(previous);
+    setUndo((u) => u.slice(0, -1));
   };
-  const publish = async () => { if (busyRef.current) { setNotice("Saving… please wait before publishing."); return; } busyRef.current = true; setBusy(true); const r = await publishAction(data.version.id, data.version.revision); busyRef.current = false; setBusy(false); setNotice(r.ok ? "Published" : r.error ?? "Publish failed"); if (r.ok) { const fresh = await draftAction(); if (fresh.ok && fresh.data) setData(fresh.data); } };
-  return <div className="min-h-dvh bg-paper text-ink" data-testid="o2-editor">
-    <header className="flex flex-wrap items-center gap-3 border-b border-line bg-surface px-5 py-4"><div><h1 className="font-display text-title font-bold">Floor plan</h1><p className="text-caption text-muted">{outletName} · Draft v{data.version.versionNumber} · revision {data.version.revision}</p></div><span className="rounded-full bg-amber-100 px-3 py-1 text-caption font-semibold text-amber-900">Draft, not yet live</span><div className="ml-auto flex gap-2"><Link className="min-h-11 rounded-input border border-line px-4 py-2 font-semibold" href="/console/floor">Live floor</Link><Link className="min-h-11 rounded-input border border-line px-4 py-2 font-semibold" href="/console/floor/editor/qr-sheet" target="_blank">Print QR sheet</Link><button className="min-h-11 rounded-input bg-ink px-4 py-2 font-semibold text-white disabled:opacity-50" disabled={busy || !canEdit} onClick={() => void publish()}>Publish</button></div></header>
-    {!canEdit && <div className="m-4 rounded-input border border-line bg-surface p-4 font-semibold">Open Floor Plan Editor on a tablet or desktop to make changes.</div>}
-    <div className="flex flex-wrap gap-2 border-b border-line bg-surface px-5 py-3"><button className="min-h-11 rounded-input border border-line px-3 font-semibold" onClick={() => void addTable("square")}>+ Square table</button><button className="min-h-11 rounded-input border border-line px-3 font-semibold" onClick={() => void addTable("round")}>+ Round table</button><button className="min-h-11 rounded-input border border-line px-3 font-semibold" onClick={() => void addTable("long")}>+ Long table</button><button className="min-h-11 rounded-input border border-line px-3 font-semibold" onClick={() => void addZone()}>+ New area</button><button className="min-h-11 rounded-input border border-line px-3 font-semibold" disabled={!undo.length || busy} onClick={() => void undoLast()}>Undo</button>{data.tableLimit !== null && <span className={`self-center rounded-full px-3 py-1 text-caption font-semibold ${atLimit ? "bg-amber-100 text-amber-900" : "bg-ink/5 text-muted"}`}>Tables {liveTables} / {data.tableLimit}</span>}<span className="ml-auto px-3 py-2 text-body font-semibold" role="status">{notice ?? "Saved"}</span></div>
-    <p className="border-b border-line bg-surface px-5 py-2.5 text-body text-muted">How it works: add tables with the buttons above, drag each one to where it sits in your restaurant, then tap a table to set its name and seats. To resize, drag the white squares on its corners and edges. Areas (dashed boxes) move by their name tag and resize the same way. Your changes stay as a draft until you press <strong className="text-ink">Publish</strong>.</p>
-    <main className="grid min-h-[calc(100dvh-150px)] grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px]"><section className="relative min-h-[620px] overflow-auto p-6"><div className="relative min-h-[560px] min-w-[900px] rounded-input border border-dashed border-line bg-surface/40" style={{ backgroundImage: "linear-gradient(rgb(128 128 128 / 0.22) 1px, transparent 1px), linear-gradient(90deg, rgb(128 128 128 / 0.22) 1px, transparent 1px)", backgroundSize: "24px 24px" }}>{activeZones.map((z, zi) => <div key={z.id} className={`absolute rounded-input border-2 border-dashed ${zone === z.id ? "border-ink bg-ink/5" : "border-line bg-white/20"}`} style={{ left: z.posX * 24, top: z.posY * 24, width: z.width * 24, height: z.height * 24 }} onClick={() => { setZone(z.id); setSelected(null); }}><span title="Drag to move this area" className="absolute left-1.5 cursor-move touch-none select-none rounded-md bg-surface/85 px-1.5 py-0.5 text-caption font-bold text-ink" style={{ top: 6 + zi * 24 }} onPointerDown={(e) => { if (!canEdit) return; e.stopPropagation(); e.currentTarget.setPointerCapture(e.pointerId); setZone(z.id); setSelected(null); setZDrag({ id: z.id, x: e.clientX, y: e.clientY, baseX: z.posX, baseY: z.posY }); }} onPointerMove={(e) => { if (!zDrag || zDrag.id !== z.id) return; const dx = Math.round((e.clientX - zDrag.x) / 24); const dy = Math.round((e.clientY - zDrag.y) / 24); setData({ ...data, zones: data.zones.map((x) => x.id === z.id ? { ...x, posX: Math.max(0, zDrag.baseX + dx), posY: Math.max(0, zDrag.baseY + dy) } : x) }); }} onPointerUp={() => void finishZoneDrag()} onPointerCancel={() => void finishZoneDrag()}>{z.name} <span className="font-semibold text-muted">· {data.tables.filter((t) => !t.archived && t.logicalZoneId === z.id).length} tables</span></span></div>)}{data.tables.filter((t) => !t.archived).map((t) => <button key={t.id} type="button" aria-label={`Table ${t.code}`} aria-pressed={selected === t.id} onClick={() => setSelected(t.id)} onPointerDown={(e) => { if (!canEdit) return; e.currentTarget.setPointerCapture(e.pointerId); setSelected(t.id); setDrag({ id: t.id, x: e.clientX, y: e.clientY, baseX: t.posX, baseY: t.posY }); }} onPointerMove={(e) => { if (!drag || drag.id !== t.id) return; const dx = Math.round((e.clientX - drag.x) / 24); const dy = Math.round((e.clientY - drag.y) / 24); setData({ ...data, tables: data.tables.map((x) => x.id === t.id ? { ...x, posX: Math.max(0, drag.baseX + dx), posY: Math.max(0, drag.baseY + dy) } : x) }); }} onPointerUp={() => void finishDrag()} onKeyDown={(e) => { if (!["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.key)) return; e.preventDefault(); const p = { posX: t.posX + (e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0), posY: t.posY + (e.key === "ArrowDown" ? 1 : e.key === "ArrowUp" ? -1 : 0) }; void patchTable(p); }} className={`absolute grid place-items-center border-2 text-body font-bold shadow-sm focus-visible:outline-4 focus-visible:outline-ink ${selected === t.id ? "border-ink bg-[#f4cf58] text-[#1f2937]" : "border-[#8a7f70] bg-surface text-ink"} ${t.shape === "round" ? "rounded-full" : "rounded-input"}`} style={{ left: t.posX * 24, top: t.posY * 24, width: t.width * 24, height: t.height * 24 }}><span className="pointer-events-none leading-tight">{t.code}{t.height >= 2 && <span className="block text-label font-semibold opacity-70">{t.maxSeats} seats</span>}</span></button>)}{table && !table.archived && canEdit && <div aria-hidden={false} className="pointer-events-none absolute border-2 border-[#7c5cff]" style={{ left: table.posX * 24 - 2, top: table.posY * 24 - 2, width: table.width * 24 + 4, height: table.height * 24 + 4 }}>{HANDLES.map(({ h, style, cursor }) => <span key={h} role="slider" aria-label={`Resize table ${table.code} from the ${h} edge`} aria-valuenow={table.width} tabIndex={-1} className="pointer-events-auto absolute size-3.5 -translate-x-1/2 -translate-y-1/2 touch-none rounded-[4px] border-2 border-[#7c5cff] bg-white shadow" style={{ ...style, cursor }} onPointerDown={(e) => { e.stopPropagation(); e.currentTarget.setPointerCapture(e.pointerId); setResize({ kind: "table", id: table.id, handle: h, x: e.clientX, y: e.clientY, base: { x: table.posX, y: table.posY, w: table.width, h: table.height } }); }} onPointerMove={resizeTo} onPointerUp={() => void finishResize()} onPointerCancel={() => void finishResize()} />)}</div>} {zone && !table && canEdit && (() => { const z = data.zones.find((z) => z.id === zone); if (!z || z.archived) return null; return <div className="pointer-events-none absolute border-2 border-[#7c5cff]" style={{ left: z.posX * 24 - 2, top: z.posY * 24 - 2, width: z.width * 24 + 4, height: z.height * 24 + 4 }}>{HANDLES.map(({ h, style, cursor }) => <span key={h} role="slider" aria-label={`Resize area ${z.name} from the ${h} edge`} aria-valuenow={z.width} tabIndex={-1} className="pointer-events-auto absolute size-3.5 -translate-x-1/2 -translate-y-1/2 touch-none rounded-[4px] border-2 border-[#7c5cff] bg-white shadow" style={{ ...style, cursor }} onPointerDown={(e) => { e.stopPropagation(); e.currentTarget.setPointerCapture(e.pointerId); setResize({ kind: "zone", id: z.id, handle: h, x: e.clientX, y: e.clientY, base: { x: z.posX, y: z.posY, w: z.width, h: z.height } }); }} onPointerMove={resizeTo} onPointerUp={() => void finishResize()} onPointerCancel={() => void finishResize()} />)}</div>; })()}</div></section><aside className="border-l border-line bg-surface p-5">{table ? <div className="space-y-4"><h2 className="font-display text-section font-bold">Table {table.code}</h2><label className="block text-body font-semibold">Table name (shown to staff and on the QR)<input className="mt-1 min-h-11 w-full rounded-input border border-line px-3" value={table.code} onChange={(e) => setData({ ...data, tables: data.tables.map((t) => t.id === table.id ? { ...t, code: e.target.value } : t) })} onBlur={() => void patchTable({ code: table.code })} /></label><div className="grid grid-cols-2 gap-2"><label className="text-body font-semibold">Fewest seats<input type="number" min={1} className="mt-1 min-h-11 w-full rounded-input border border-line px-3" value={table.minSeats} onChange={(e) => void patchTable({ minSeats: Number(e.target.value) })} /></label><label className="text-body font-semibold">Most seats<input type="number" min={1} className="mt-1 min-h-11 w-full rounded-input border border-line px-3" value={table.maxSeats} onChange={(e) => void patchTable({ maxSeats: Number(e.target.value) })} /></label></div><div className="grid grid-cols-2 gap-2"><label className="text-body font-semibold">Across (grid squares)<input type="number" min={0} className="mt-1 min-h-11 w-full rounded-input border border-line px-3" value={table.posX} onChange={(e) => void patchTable({ posX: Number(e.target.value) })} /></label><label className="text-body font-semibold">Down (grid squares)<input type="number" min={0} className="mt-1 min-h-11 w-full rounded-input border border-line px-3" value={table.posY} onChange={(e) => void patchTable({ posY: Number(e.target.value) })} /></label><label className="text-body font-semibold">Width (squares)<input type="number" min={1} className="mt-1 min-h-11 w-full rounded-input border border-line px-3" value={table.width} onChange={(e) => void patchTable({ width: Number(e.target.value) })} /></label><label className="text-body font-semibold">Height (squares)<input type="number" min={1} className="mt-1 min-h-11 w-full rounded-input border border-line px-3" value={table.height} onChange={(e) => void patchTable({ height: Number(e.target.value) })} /></label></div><label className="flex min-h-11 items-center gap-2 text-body font-semibold"><input type="checkbox" checked={table.isBookableOnline} onChange={(e) => void patchTable({ isBookableOnline: e.target.checked })} /> Bookable online</label><button className="min-h-11 w-full rounded-input border border-line px-3 text-left font-semibold" onClick={() => void patchTable({ archived: !table.archived })}>{table.archived ? "Restore table" : "Remove table"}</button><div className="border-t border-line pt-3"><TableQr tableId={table.id} canSheet /><button className="min-h-11 rounded-input border border-line px-3 font-semibold" onClick={() => void qrAction(table.logicalTableId ?? table.id, true)}>Revoke & reissue QR</button></div></div> : zone ? <div className="space-y-4"><h2 className="font-display text-section font-bold">Zone</h2><input className="min-h-11 w-full rounded-input border border-line px-3" value={data.zones.find((z) => z.id === zone)?.name ?? ""} onChange={(e) => setData({ ...data, zones: data.zones.map((z) => z.id === zone ? { ...z, name: e.target.value } : z) })} onBlur={() => { const z = data.zones.find((x) => x.id === zone); if (z) void updateZoneAction(data.version.id, zone, { name: z.name }, data.version.revision); }} /><button className="min-h-11 rounded-input border border-line px-3 font-semibold" onClick={() => void updateZoneAction(data.version.id, zone, { archived: true }, data.version.revision)}>Archive zone</button></div> : <p className="text-muted">Select a table or zone to edit.</p>}</aside></main>
-    <Dialog open={limitOpen} onOpenChange={setLimitOpen}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Upgrade your plan to add tables</DialogTitle>
-          <DialogDescription>Your plan includes {data.tableLimit} table{data.tableLimit === 1 ? "" : "s"}, and all of them are on the floor. To add more, ask TableQR to upgrade your plan. You can still move, rename or remove the tables you have.</DialogDescription>
-        </DialogHeader>
-        <div className="flex justify-end">
-          <button type="button" className="min-h-11 rounded-input bg-ink px-4 font-semibold text-white" onClick={() => setLimitOpen(false)}>OK</button>
+  const publish = async () => {
+    if (busyRef.current) {
+      setNotice("Saving… please wait before publishing.");
+      return;
+    }
+    busyRef.current = true;
+    setBusy(true);
+    const r = await publishAction(data.version.id, data.version.revision);
+    busyRef.current = false;
+    setBusy(false);
+    setNotice(r.ok ? "Published" : (r.error ?? "Publish failed"));
+    if (r.ok) {
+      const fresh = await draftAction();
+      if (fresh.ok && fresh.data) {
+        setData(fresh.data);
+        setSelected(null);
+        setZone(null);
+        setUndo([]);
+      }
+    }
+  };
+  return (
+    <div className="min-h-dvh bg-paper text-ink" data-testid="o2-editor">
+      <header className="sticky top-16 z-20 flex flex-wrap items-center gap-3 border-b border-line bg-surface/95 px-4 py-4 shadow-sm backdrop-blur sm:px-6 lg:top-[4.5rem]">
+        <div className="min-w-0">
+          <h1 className="font-display text-title font-bold">Floor plan</h1>
+          <p className="truncate text-caption text-muted">
+            {outletName} · Draft v{data.version.versionNumber} · revision{" "}
+            {data.version.revision}
+          </p>
         </div>
-      </DialogContent>
-    </Dialog>
-  </div>;
+        <span className="rounded-full bg-warning/15 px-3 py-1 text-caption font-semibold text-warning">
+          Draft, not yet live
+        </span>
+        <div className="ml-auto flex flex-wrap gap-2">
+          <Link
+            className="inline-flex min-h-11 items-center rounded-xl border border-line bg-paper px-4 py-2 font-semibold transition-colors hover:border-forest/40 hover:bg-surface"
+            href="/console/floor"
+          >
+            Live floor
+          </Link>
+          <Link
+            className="inline-flex min-h-11 items-center rounded-xl border border-line bg-paper px-4 py-2 font-semibold transition-colors hover:border-forest/40 hover:bg-surface"
+            href="/console/floor/editor/qr-sheet"
+            target="_blank"
+          >
+            Print QR sheet
+          </Link>
+          <button
+            className="min-h-11 rounded-xl bg-forest px-4 py-2 font-semibold text-white transition-colors hover:bg-forest-hover disabled:opacity-50"
+            disabled={busy || !canEdit}
+            onClick={() => void publish()}
+          >
+            Publish
+          </button>
+        </div>
+      </header>
+      {!canEdit && (
+        <div className="m-4 rounded-input border border-line bg-surface p-4 font-semibold">
+          Open Floor Plan Editor on a tablet or desktop to make changes.
+        </div>
+      )}
+      <div className="flex flex-wrap items-center gap-2 border-b border-line bg-surface px-4 py-3 sm:px-6">
+        <span className="mr-1 w-full text-label font-bold tracking-wide text-muted uppercase sm:w-auto">
+          Add to floor
+        </span>
+        <button
+          className="min-h-11 rounded-xl border border-line bg-paper px-3 font-semibold transition-colors hover:border-forest/40 hover:bg-surface"
+          onClick={() => void addTable("square")}
+        >
+          + Square table
+        </button>
+        <button
+          className="min-h-11 rounded-xl border border-line bg-paper px-3 font-semibold transition-colors hover:border-forest/40 hover:bg-surface"
+          onClick={() => void addTable("round")}
+        >
+          + Round table
+        </button>
+        <button
+          className="min-h-11 rounded-xl border border-line bg-paper px-3 font-semibold transition-colors hover:border-forest/40 hover:bg-surface"
+          onClick={() => void addTable("long")}
+        >
+          + Long table
+        </button>
+        <button
+          className="min-h-11 rounded-xl border border-line bg-paper px-3 font-semibold transition-colors hover:border-forest/40 hover:bg-surface"
+          onClick={() => void addZone()}
+        >
+          + New area
+        </button>
+        <button
+          className="min-h-11 rounded-xl border border-line bg-paper px-3 font-semibold transition-colors hover:border-forest/40 hover:bg-surface disabled:opacity-45"
+          disabled={!undo.length || busy}
+          onClick={() => void undoLast()}
+        >
+          Undo
+        </button>
+        {data.tableLimit !== null && (
+          <span
+            className={`self-center rounded-full px-3 py-1 text-caption font-semibold ${atLimit ? "bg-warning/15 text-warning" : "bg-paper text-muted"}`}
+          >
+            Tables {liveTables} / {data.tableLimit}
+          </span>
+        )}
+        <span
+          className="ml-auto px-2 py-2 text-caption font-semibold text-muted"
+          role="status"
+        >
+          {notice ?? "Saved"}
+        </span>
+      </div>
+      <p className="border-b border-line bg-surface px-4 py-3 text-body text-muted sm:px-6">
+        How it works: add tables with the buttons above, drag each one to where
+        it sits in your restaurant, then tap a table to set its name and seats.
+        To resize, drag the handles on its corners and edges. Areas (dashed
+        boxes) move by their name tag and resize the same way. Your changes stay
+        as a draft until you press <strong className="text-ink">Publish</strong>
+        .
+      </p>
+      <main className="grid min-h-[calc(100dvh-150px)] grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <section className="relative min-h-[620px] overflow-auto bg-paper/35 p-3 sm:p-5">
+          <div
+            className="relative min-h-[560px] min-w-[900px] rounded-2xl border border-line bg-surface shadow-inner"
+            style={{
+              backgroundImage:
+                "linear-gradient(rgb(128 128 128 / 0.22) 1px, transparent 1px), linear-gradient(90deg, rgb(128 128 128 / 0.22) 1px, transparent 1px)",
+              backgroundSize: "24px 24px",
+            }}
+          >
+            {activeZones.map((z, zi) => (
+              <div
+                key={z.id}
+                className={`absolute rounded-input border-2 border-dashed ${zone === z.id ? "border-forest bg-forest/10" : "border-line bg-paper/70"}`}
+                style={{
+                  left: z.posX * 24,
+                  top: z.posY * 24,
+                  width: z.width * 24,
+                  height: z.height * 24,
+                }}
+                onClick={() => {
+                  setZone(z.id);
+                  setSelected(null);
+                }}
+              >
+                <span
+                  title="Drag to move this area"
+                  className="absolute left-1.5 cursor-move touch-none select-none rounded-lg border border-line bg-surface px-2 py-1 text-caption font-bold text-ink shadow-sm"
+                  style={{ top: 6 + zi * 24 }}
+                  onPointerDown={(e) => {
+                    if (!canEdit) return;
+                    e.stopPropagation();
+                    e.currentTarget.setPointerCapture(e.pointerId);
+                    setZone(z.id);
+                    setSelected(null);
+                    setZDrag({
+                      id: z.id,
+                      x: e.clientX,
+                      y: e.clientY,
+                      baseX: z.posX,
+                      baseY: z.posY,
+                    });
+                  }}
+                  onPointerMove={(e) => {
+                    if (!zDrag || zDrag.id !== z.id) return;
+                    const dx = Math.round((e.clientX - zDrag.x) / 24);
+                    const dy = Math.round((e.clientY - zDrag.y) / 24);
+                    setData({
+                      ...data,
+                      zones: data.zones.map((x) =>
+                        x.id === z.id
+                          ? {
+                              ...x,
+                              posX: Math.max(0, zDrag.baseX + dx),
+                              posY: Math.max(0, zDrag.baseY + dy),
+                            }
+                          : x,
+                      ),
+                    });
+                  }}
+                  onPointerUp={() => void finishZoneDrag()}
+                  onPointerCancel={() => void finishZoneDrag()}
+                >
+                  {z.name}{" "}
+                  <span className="font-semibold text-muted">
+                    ·{" "}
+                    {
+                      data.tables.filter(
+                        (t) => !t.archived && t.logicalZoneId === z.id,
+                      ).length
+                    }{" "}
+                    tables
+                  </span>
+                </span>
+              </div>
+            ))}
+            {data.tables
+              .filter((t) => !t.archived)
+              .map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  aria-label={`Table ${t.code}`}
+                  aria-pressed={selected === t.id}
+                  onClick={() => setSelected(t.id)}
+                  onPointerDown={(e) => {
+                    if (!canEdit) return;
+                    e.currentTarget.setPointerCapture(e.pointerId);
+                    setSelected(t.id);
+                    setDrag({
+                      id: t.id,
+                      x: e.clientX,
+                      y: e.clientY,
+                      baseX: t.posX,
+                      baseY: t.posY,
+                    });
+                  }}
+                  onPointerMove={(e) => {
+                    if (!drag || drag.id !== t.id) return;
+                    const dx = Math.round((e.clientX - drag.x) / 24);
+                    const dy = Math.round((e.clientY - drag.y) / 24);
+                    setData({
+                      ...data,
+                      tables: data.tables.map((x) =>
+                        x.id === t.id
+                          ? {
+                              ...x,
+                              posX: Math.max(0, drag.baseX + dx),
+                              posY: Math.max(0, drag.baseY + dy),
+                            }
+                          : x,
+                      ),
+                    });
+                  }}
+                  onPointerUp={() => void finishDrag()}
+                  onKeyDown={(e) => {
+                    if (
+                      ![
+                        "ArrowUp",
+                        "ArrowDown",
+                        "ArrowLeft",
+                        "ArrowRight",
+                      ].includes(e.key)
+                    )
+                      return;
+                    e.preventDefault();
+                    const p = {
+                      posX:
+                        t.posX +
+                        (e.key === "ArrowRight"
+                          ? 1
+                          : e.key === "ArrowLeft"
+                            ? -1
+                            : 0),
+                      posY:
+                        t.posY +
+                        (e.key === "ArrowDown"
+                          ? 1
+                          : e.key === "ArrowUp"
+                            ? -1
+                            : 0),
+                    };
+                    void patchTable(p);
+                  }}
+                  className={`absolute grid place-items-center border-2 text-body font-bold shadow-md focus-visible:outline-4 focus-visible:outline-forest ${selected === t.id ? "border-forest bg-forest text-white" : "border-line bg-surface text-ink"} ${t.shape === "round" ? "rounded-full" : "rounded-input"}`}
+                  style={{
+                    left: t.posX * 24,
+                    top: t.posY * 24,
+                    width: t.width * 24,
+                    height: t.height * 24,
+                  }}
+                >
+                  <span className="pointer-events-none leading-tight">
+                    {t.code}
+                    {t.height >= 2 && (
+                      <span className="block text-label font-semibold opacity-70">
+                        {t.maxSeats} seats
+                      </span>
+                    )}
+                  </span>
+                </button>
+              ))}
+            {table && !table.archived && canEdit && (
+              <div
+                aria-hidden={false}
+                className="pointer-events-none absolute border-2 border-[#7c5cff]"
+                style={{
+                  left: table.posX * 24 - 2,
+                  top: table.posY * 24 - 2,
+                  width: table.width * 24 + 4,
+                  height: table.height * 24 + 4,
+                  borderColor: "var(--forest)",
+                }}
+              >
+                {HANDLES.map(({ h, style, cursor }) => (
+                  <span
+                    key={h}
+                    role="slider"
+                    aria-label={`Resize table ${table.code} from the ${h} edge`}
+                    aria-valuenow={table.width}
+                    tabIndex={-1}
+                    className="pointer-events-auto absolute size-3.5 -translate-x-1/2 -translate-y-1/2 touch-none rounded-[5px] border-2 border-forest bg-surface shadow"
+                    style={{ ...style, cursor }}
+                    onPointerDown={(e) => {
+                      e.stopPropagation();
+                      e.currentTarget.setPointerCapture(e.pointerId);
+                      setResize({
+                        kind: "table",
+                        id: table.id,
+                        handle: h,
+                        x: e.clientX,
+                        y: e.clientY,
+                        base: {
+                          x: table.posX,
+                          y: table.posY,
+                          w: table.width,
+                          h: table.height,
+                        },
+                      });
+                    }}
+                    onPointerMove={resizeTo}
+                    onPointerUp={() => void finishResize()}
+                    onPointerCancel={() => void finishResize()}
+                  />
+                ))}
+              </div>
+            )}{" "}
+            {zone &&
+              !table &&
+              canEdit &&
+              (() => {
+                const z = data.zones.find((z) => z.id === zone);
+                if (!z || z.archived) return null;
+                return (
+                  <div
+                    className="pointer-events-none absolute border-2 border-[#7c5cff]"
+                    style={{
+                      left: z.posX * 24 - 2,
+                      top: z.posY * 24 - 2,
+                      width: z.width * 24 + 4,
+                      height: z.height * 24 + 4,
+                      borderColor: "var(--forest)",
+                    }}
+                  >
+                    {HANDLES.map(({ h, style, cursor }) => (
+                      <span
+                        key={h}
+                        role="slider"
+                        aria-label={`Resize area ${z.name} from the ${h} edge`}
+                        aria-valuenow={z.width}
+                        tabIndex={-1}
+                        className="pointer-events-auto absolute size-3.5 -translate-x-1/2 -translate-y-1/2 touch-none rounded-[5px] border-2 border-forest bg-surface shadow"
+                        style={{ ...style, cursor }}
+                        onPointerDown={(e) => {
+                          e.stopPropagation();
+                          e.currentTarget.setPointerCapture(e.pointerId);
+                          setResize({
+                            kind: "zone",
+                            id: z.id,
+                            handle: h,
+                            x: e.clientX,
+                            y: e.clientY,
+                            base: {
+                              x: z.posX,
+                              y: z.posY,
+                              w: z.width,
+                              h: z.height,
+                            },
+                          });
+                        }}
+                        onPointerMove={resizeTo}
+                        onPointerUp={() => void finishResize()}
+                        onPointerCancel={() => void finishResize()}
+                      />
+                    ))}
+                  </div>
+                );
+              })()}
+          </div>
+        </section>
+        <aside className="border-t border-line bg-surface p-4 shadow-[0_-8px_24px_rgb(0_0_0/0.04)] sm:p-5 lg:border-l lg:border-t-0 lg:shadow-none">
+          {table ? (
+            <div className="space-y-4">
+              <h2 className="font-display text-section font-bold">
+                Table {table.code}
+              </h2>
+              <label className="block text-body font-semibold">
+                Table name (shown to staff and on the QR)
+                <input
+                  className="mt-1 min-h-11 w-full rounded-xl border border-line bg-paper px-3 text-ink outline-none transition focus:border-forest focus:ring-2 focus:ring-forest/20"
+                  value={table.code}
+                  onChange={(e) =>
+                    setData({
+                      ...data,
+                      tables: data.tables.map((t) =>
+                        t.id === table.id ? { ...t, code: e.target.value } : t,
+                      ),
+                    })
+                  }
+                  onBlur={() => void patchTable({ code: table.code })}
+                />
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="text-body font-semibold">
+                  Fewest seats
+                  <input
+                    type="number"
+                    min={1}
+                    className="mt-1 min-h-11 w-full rounded-xl border border-line bg-paper px-3 text-ink outline-none transition focus:border-forest focus:ring-2 focus:ring-forest/20"
+                    value={table.minSeats}
+                    onChange={(e) =>
+                      void patchTable({ minSeats: Number(e.target.value) })
+                    }
+                  />
+                </label>
+                <label className="text-body font-semibold">
+                  Most seats
+                  <input
+                    type="number"
+                    min={1}
+                    className="mt-1 min-h-11 w-full rounded-xl border border-line bg-paper px-3 text-ink outline-none transition focus:border-forest focus:ring-2 focus:ring-forest/20"
+                    value={table.maxSeats}
+                    onChange={(e) =>
+                      void patchTable({ maxSeats: Number(e.target.value) })
+                    }
+                  />
+                </label>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="text-body font-semibold">
+                  Across (grid squares)
+                  <input
+                    type="number"
+                    min={0}
+                    className="mt-1 min-h-11 w-full rounded-xl border border-line bg-paper px-3 text-ink outline-none transition focus:border-forest focus:ring-2 focus:ring-forest/20"
+                    value={table.posX}
+                    onChange={(e) =>
+                      void patchTable({ posX: Number(e.target.value) })
+                    }
+                  />
+                </label>
+                <label className="text-body font-semibold">
+                  Down (grid squares)
+                  <input
+                    type="number"
+                    min={0}
+                    className="mt-1 min-h-11 w-full rounded-xl border border-line bg-paper px-3 text-ink outline-none transition focus:border-forest focus:ring-2 focus:ring-forest/20"
+                    value={table.posY}
+                    onChange={(e) =>
+                      void patchTable({ posY: Number(e.target.value) })
+                    }
+                  />
+                </label>
+                <label className="text-body font-semibold">
+                  Width (squares)
+                  <input
+                    type="number"
+                    min={1}
+                    className="mt-1 min-h-11 w-full rounded-xl border border-line bg-paper px-3 text-ink outline-none transition focus:border-forest focus:ring-2 focus:ring-forest/20"
+                    value={table.width}
+                    onChange={(e) =>
+                      void patchTable({ width: Number(e.target.value) })
+                    }
+                  />
+                </label>
+                <label className="text-body font-semibold">
+                  Height (squares)
+                  <input
+                    type="number"
+                    min={1}
+                    className="mt-1 min-h-11 w-full rounded-xl border border-line bg-paper px-3 text-ink outline-none transition focus:border-forest focus:ring-2 focus:ring-forest/20"
+                    value={table.height}
+                    onChange={(e) =>
+                      void patchTable({ height: Number(e.target.value) })
+                    }
+                  />
+                </label>
+              </div>
+              <label className="flex min-h-11 items-center gap-2 text-body font-semibold">
+                <input
+                  type="checkbox"
+                  checked={table.isBookableOnline}
+                  onChange={(e) =>
+                    void patchTable({ isBookableOnline: e.target.checked })
+                  }
+                />{" "}
+                Bookable online
+              </label>
+              <button
+                className="min-h-11 w-full rounded-input border border-line px-3 text-left font-semibold"
+                onClick={() => void patchTable({ archived: !table.archived })}
+              >
+                {table.archived ? "Restore table" : "Remove table"}
+              </button>
+              <div className="border-t border-line pt-3">
+                <TableQr tableId={table.id} canSheet />
+                <button
+                  className="min-h-11 rounded-input border border-line px-3 font-semibold"
+                  onClick={() =>
+                    void qrAction(table.logicalTableId ?? table.id, true)
+                  }
+                >
+                  Revoke & reissue QR
+                </button>
+              </div>
+            </div>
+          ) : zone ? (
+            <div className="space-y-4">
+              <h2 className="font-display text-section font-bold">Zone</h2>
+              <input
+                className="min-h-11 w-full rounded-input border border-line px-3"
+                value={data.zones.find((z) => z.id === zone)?.name ?? ""}
+                onChange={(e) =>
+                  setData({
+                    ...data,
+                    zones: data.zones.map((z) =>
+                      z.id === zone ? { ...z, name: e.target.value } : z,
+                    ),
+                  })
+                }
+                onBlur={() => {
+                  const z = data.zones.find((x) => x.id === zone);
+                  if (z)
+                    void updateZoneAction(
+                      data.version.id,
+                      zone,
+                      { name: z.name },
+                      data.version.revision,
+                    );
+                }}
+              />
+              <button
+                className="min-h-11 rounded-input border border-line px-3 font-semibold"
+                onClick={() =>
+                  void updateZoneAction(
+                    data.version.id,
+                    zone,
+                    { archived: true },
+                    data.version.revision,
+                  )
+                }
+              >
+                Archive zone
+              </button>
+            </div>
+          ) : (
+            <div className="flex min-h-48 flex-col items-center justify-center rounded-2xl border border-dashed border-line bg-paper/60 p-6 text-center">
+              <span
+                className="size-2 rounded-full bg-forest"
+                aria-hidden="true"
+              />
+              <p className="mt-3 max-w-xs text-body font-semibold text-muted">
+                Select a table or zone to edit.
+              </p>
+              <p className="mt-1 text-caption text-muted">
+                Its settings and QR tools will appear here.
+              </p>
+            </div>
+          )}
+        </aside>
+      </main>
+      <Dialog open={limitOpen} onOpenChange={setLimitOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Upgrade your plan to add tables</DialogTitle>
+            <DialogDescription>
+              Your plan includes {data.tableLimit} table
+              {data.tableLimit === 1 ? "" : "s"}, and all of them are on the
+              floor. To add more, ask TableQR to upgrade your plan. You can
+              still move, rename or remove the tables you have.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end">
+            <button
+              type="button"
+              className="min-h-11 rounded-input bg-ink px-4 font-semibold text-white"
+              onClick={() => setLimitOpen(false)}
+            >
+              OK
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
 }

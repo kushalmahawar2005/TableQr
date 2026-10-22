@@ -7,7 +7,7 @@ import { canSee, staffRoles } from "@/lib/staff-permissions";
 import { createBookingHold, rescheduleBookingPublic, rescheduleReservationStaff } from "@/server/booking/core";
 import { cancelReservation, createReservation } from "@/server/floor/reservations";
 import { resolveStaff, signInStaff, type StaffSession } from "@/server/staff/auth";
-import { createCalendarReservation, editReservationDetails, getReservationCalendar } from "@/server/staff/reservations";
+import { createCalendarReservation, editReservationDetails, getReservationCalendar, updateGroupRequestStatus } from "@/server/staff/reservations";
 import { resetTestDb } from "./setup-db";
 
 let env: Awaited<ReturnType<typeof resetTestDb>>;
@@ -45,12 +45,33 @@ afterEach(() => {
 afterAll(async () => env.conn.end());
 
 describe("reservation calendar read model", () => {
+  it("shows outlet-scoped large-group enquiries and lets a host track a real call", async () => {
+    const id = uuidv7();
+    const date = dayAhead(8);
+    await env.db.insert(s.groupRequests).values({ id, tenantId: owner.tenantId, outletId: owner.outletId, publicReference: `GR-${id.slice(-6)}`, requestId: `group-${id}`, name: "Event Guest", phone: "9876543210", partySize: 24, desiredDate: date, desiredStartAt: at(date, 19), notes: "Birthday dinner", status: "requested" });
+    const before = await getReservationCalendar(owner, { date: dayAhead(1) });
+    expect(before.groupRequests).toHaveLength(1);
+    expect(before.groupRequests[0]).toMatchObject({ id, name: "Event Guest", partySize: 24, status: "requested", notes: "Birthday dinner" });
+
+    await updateGroupRequestStatus(host, id, "contacted");
+    const after = await getReservationCalendar(owner, { date: dayAhead(1) });
+    expect(after.groupRequests[0].status).toBe("contacted");
+    const [entry] = await auditFor(id, "group_request.status");
+    expect(entry.actorUserId).toBe(host.userId);
+    expect(entry.before).toEqual({ status: "requested" });
+    expect(entry.after).toEqual({ status: "contacted" });
+    await expect(updateGroupRequestStatus(waiter, id, "cancelled")).rejects.toMatchObject({ code: "forbidden" });
+    await updateGroupRequestStatus(host, id, "cancelled");
+    expect((await getReservationCalendar(owner)).groupRequests).toEqual([]);
+  });
+
   it("scopes and groups day/week reservations without changing booking allocation", async () => {
     const date = dayAhead(1);
-    const created = await createReservation(owner, { name: "Calendar Guest", phone: "9876543210", partySize: 2, startAt: at(date, 20).getTime(), tableIds: [env.demo.tableIds.T10], source: "phone", occasion: "Birthday" });
+    const created = await createReservation(owner, { name: "Calendar Guest", phone: "9876543210", partySize: 2, startAt: at(date, 20).getTime(), tableIds: [env.demo.tableIds.T10], source: "phone", occasion: "Birthday", advanceReceivedPaise: 50_000 });
     const day = await getReservationCalendar(owner, { date, view: "day", search: "Calendar" });
     const week = await getReservationCalendar(owner, { date, view: "week", statuses: ["confirmed"] });
-    expect(day.reservations.some((r) => r.id === created.reservationId && r.phone === "9876543210" && r.occasion === "Birthday")).toBe(true);
+    expect(day.reservations.some((r) => r.id === created.reservationId && r.phone === "9876543210" && r.occasion === "Birthday" && r.advanceReceivedPaise === 50_000)).toBe(true);
+    expect((await row(created.reservationId)).advanceReceivedPaise).toBe(50_000);
     expect(week.view).toBe("week");
     expect(week.timezone).toBe(owner.outlet.timezone);
     const [assignment] = await env.db.select().from(s.reservationTables).where(and(eq(s.reservationTables.tenantId, owner.tenantId), eq(s.reservationTables.reservationId, created.reservationId)));

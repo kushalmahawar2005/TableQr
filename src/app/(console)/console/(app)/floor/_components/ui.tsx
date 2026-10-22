@@ -36,14 +36,14 @@ export const STATE_STYLE: Record<string, { tone: string; soft: string; text: str
   blocked: { tone: "var(--state-blocked)", soft: "var(--state-blocked-soft)", text: "var(--state-blocked-text)", icon: LockIcon },
 };
 
-export function StateChip({ state, label, size = "md" }: { state: string; label: string; size?: "sm" | "md" }) {
+export function StateChip({ state, label, size = "md" }: { state: string; label: string; size?: "sm" | "md" | "lg" }) {
   const st = STATE_STYLE[state] ?? STATE_STYLE.available;
   return (
     <span
-      className={`inline-flex shrink-0 items-center gap-1 rounded-full border font-semibold ${size === "sm" ? "px-1.5 py-px text-label" : "px-2 py-0.5 text-caption"}`}
+      className={`inline-flex shrink-0 items-center gap-1 rounded-full border font-semibold ${size === "sm" ? "px-1.5 py-px text-label" : size === "lg" ? "gap-1.5 px-3 py-1 text-body" : "px-2 py-0.5 text-caption"}`}
       style={{ borderColor: st.tone, background: st.soft, color: st.text }}
     >
-      <HugeiconsIcon icon={st.icon} size={size === "sm" ? 11 : 13} aria-hidden />
+      <HugeiconsIcon icon={st.icon} size={size === "sm" ? 11 : size === "lg" ? 16 : 13} aria-hidden />
       {label}
     </span>
   );
@@ -88,7 +88,7 @@ export function Dialog({ title, onClose, children, closeLabel, wide = false }: {
         onClose();
       }}
       aria-labelledby="s1-dialog-title"
-      className={`m-auto w-[calc(100%-32px)] ${wide ? "max-w-xl" : "max-w-md"} rounded-card border border-line bg-surface p-0 text-ink shadow-[var(--shadow-modal)] backdrop:bg-ink/40`}
+      className={`m-auto w-[calc(100%-32px)] ${wide ? "max-w-xl" : "max-w-md"} rounded-card border border-line bg-surface p-0 text-ink shadow-[var(--shadow-modal)] backdrop:bg-black/55`}
     >
       <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-3.5">
         <h2 id="s1-dialog-title" className="font-display text-section font-bold">

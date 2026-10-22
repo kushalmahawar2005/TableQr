@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import { ArrowLeft01Icon, Cancel01Icon, CheckmarkCircle02Icon, Tick02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { openCheckout } from "@/lib/payments/checkout";
 import { FEATURE_KEYS, FEATURE_LABELS, type Features } from "@/lib/plan-features";
 import { refreshFeePaymentAction, startFeePaymentAction } from "./plan-request-actions";
@@ -60,41 +61,39 @@ export function PlanPass({ plan }: { plan: PlanView }) {
   const st = standing(plan);
   const { days } = planDue(plan);
   const running = plan.access.state === "ok";
-  const pct = days === null ? 100 : Math.max(3, Math.min(100, Math.round((days / 30) * 100)));
+  const metrics: [string, string | number][] = [
+    ...(plan.features.dineIn ? [["Tables", plan.features.maxTables ?? "Any"] as [string, string | number]] : []),
+    ...(plan.features.rooms ? [["Rooms", plan.features.maxRooms ?? "Any"] as [string, string | number]] : []),
+    ["Staff logins", plan.features.maxStaff ?? "Any"],
+    ["Outlets", plan.fee.outletCount],
+  ];
   return (
-    <section aria-label="Current plan" className="rounded-2xl border border-line bg-surface p-6 shadow-[0_1px_2px_rgb(0_0_0/0.04)]">
+    <section aria-label="Current plan" className="rounded-2xl border border-line bg-surface p-5 shadow-[0_1px_2px_rgb(0_0_0/0.04)] sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-body text-muted">Current plan</p>
+          <p className="text-caption font-semibold uppercase tracking-[0.08em] text-muted">Your current plan</p>
           <div className="mt-1 flex items-center gap-2.5">
-            <h2 className="font-display text-title font-bold text-ink">{plan.planName}</h2>
+            <h2 className="font-display text-title font-bold text-ink sm:text-[1.75rem]">{plan.planName}</h2>
             <span className={`rounded-full px-2.5 py-0.5 text-caption font-semibold ${TONE[st.tone].chip}`}>{st.chip}</span>
           </div>
         </div>
         <div className="text-right">
-          <p className="font-display text-title font-bold text-ink tabular">{money(plan.fee.totalPaise)}</p>
-          <p className="text-caption text-muted">per month{plan.fee.outletCount > 1 ? `, ${plan.fee.outletCount} outlets` : ""}</p>
+          <p className="font-display text-title font-bold text-ink tabular">{money(plan.fee.totalPaise)}<span className="ml-1 text-body font-medium text-muted">/ month</span></p>
+          <p className="text-caption text-muted">{plan.fee.outletCount > 1 ? `Across ${plan.fee.outletCount} outlets` : "For this outlet"}</p>
         </div>
       </div>
 
-      <div className="mt-6">
-        <div className="flex items-baseline justify-between gap-3 text-body">
-          <span className={running ? "text-ink" : "font-semibold text-danger"}>{running && days !== null ? `${st.line}` : st.line}</span>
-          {running && days !== null && <span className="text-muted">{days <= 0 ? "ends today" : `${days} ${days === 1 ? "day" : "days"} left`}</span>}
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-paper px-4 py-3.5">
+        <div>
+          <p className="text-caption text-muted">{plan.access.reason === "trial" ? "Trial ends" : running ? "Paid through" : "Access ended"}</p>
+          <p className={`mt-0.5 text-body font-semibold ${running ? "text-ink" : "text-danger"}`}>{day(plan.access.endsAt)}</p>
         </div>
-        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-ink/10" aria-hidden="true">
-          <div className={`h-full rounded-full ${TONE[st.tone].tick}`} style={{ width: `${running ? pct : 100}%` }} />
-        </div>
+        {running && days !== null && <span className={`rounded-full px-3 py-1.5 text-caption font-semibold ${TONE[st.tone].chip}`}>{days <= 0 ? "Ends today" : `${days} ${days === 1 ? "day" : "days"} left`}</span>}
+        {!running && <span className="text-caption font-medium text-danger">{st.line}</span>}
       </div>
 
-      <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {[
-          ...(plan.features.dineIn ? [["Tables", plan.features.maxTables ?? "Any"]] : []),
-          ...(plan.features.rooms ? [["Rooms", plan.features.maxRooms ?? "Any"]] : []),
-          ["Staff logins", plan.features.maxStaff ?? "Any"],
-          ["Outlets", plan.fee.outletCount],
-          [plan.access.reason === "trial" ? "Trial until" : "Paid until", plan.access.endsAt === null ? "—" : new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" }).format(new Date(plan.access.endsAt))],
-        ].map(([label, value]) => (
+      <div className={`mt-5 grid grid-cols-2 gap-3 ${metrics.length > 2 ? "sm:grid-cols-4" : "sm:grid-cols-2"}`}>
+        {metrics.map(([label, value]) => (
           <div key={label as string} className="rounded-xl bg-paper px-4 py-3">
             <p className="text-caption text-muted">{label}</p>
             <p className="font-display text-section font-bold text-ink tabular">{value}</p>
@@ -127,7 +126,7 @@ function Sent({ upgrade, paymentId }: { upgrade?: string; paymentId?: string }) 
       </span>
       <h3 className="mt-4 font-display text-section font-bold text-ink">Payment is being confirmed</h3>
       <p className="mt-1.5 max-w-xs text-body text-muted">
-        Cashfree is checking the payment. {upgrade ? `${upgrade} starts automatically after confirmation.` : "Your plan extends automatically after confirmation."}
+        Cashfree is checking the payment. {upgrade ? `Your plan switches to ${upgrade} after confirmation.` : "Your plan extends automatically after confirmation."}
       </p>
       <button type="button" disabled={refreshing} onClick={() => void refresh()} className={`mt-5 inline-flex min-h-11 items-center rounded-xl border border-line px-4 text-button font-semibold text-ink hover:bg-ink/5 disabled:opacity-50 ${focus}`}>{refreshing ? "Checking…" : "Refresh status"}</button>
       {refreshError && <p role="alert" className="mt-2 text-caption text-danger">{refreshError}</p>}
@@ -140,7 +139,7 @@ export function PayCard({ plan, target, bare = false }: { plan: PlanView; target
   const [months, setMonths] = useState<(typeof MONTHS)[number]>(1);
   const [state, setState] = useState<"idle" | "busy" | "sent">(plan.waiting && !target ? "sent" : "idle");
   const [error, setError] = useState<string | null>(null);
-  const requests = useRef(new Map<string, string>());
+  const [startedPaymentId, setStartedPaymentId] = useState<string | undefined>();
 
   const perMonth = target?.monthlyPricePaise != null ? target.monthlyPricePaise * plan.fee.outletCount : plan.fee.totalPaise;
   const amount = perMonth * months;
@@ -148,14 +147,15 @@ export function PayCard({ plan, target, bare = false }: { plan: PlanView; target
   const pay = async () => {
     setState("busy");
     setError(null);
-    const requestId = crypto.randomUUID();
-    const r = await startFeePaymentAction({ months, planCode: target?.code ?? null, requestId });
-    if (!r.ok) {
-      setError(r.error);
-      setState("idle");
-      return;
-    }
     try {
+      const requestId = crypto.randomUUID();
+      const r = await startFeePaymentAction({ months, planCode: target?.code ?? null, requestId });
+      if (!r.ok) {
+        setError(r.error);
+        setState("idle");
+        return;
+      }
+      setStartedPaymentId(r.payment.id);
       await openCheckout(r.payment.checkout);
       setState("sent");
     } catch (checkoutError) {
@@ -165,37 +165,57 @@ export function PayCard({ plan, target, bare = false }: { plan: PlanView; target
   };
 
   const shell = bare ? "" : "overflow-hidden rounded-[22px] border border-line bg-surface";
-  const pendingId = plan.payments.find((payment) => payment.method === "cashfree" && payment.status === "claimed")?.id;
+  const pendingId = startedPaymentId ?? plan.payments.find((payment) => payment.method === "cashfree" && payment.status === "claimed")?.id;
   if (state === "sent") return <section aria-label="Pay TableQR" className={shell}><Sent upgrade={target?.name} paymentId={pendingId} /></section>;
 
   return (
     <section aria-label="Pay TableQR" className={shell}>
+      {!bare && <div className="border-b border-line px-5 py-4 sm:px-6">
+        <p className="text-caption font-semibold uppercase tracking-[0.08em] text-muted">{target ? "Plan change" : "Subscription payment"}</p>
+        <h2 className="mt-1 font-display text-section font-bold text-ink">{target ? `Switch to ${target.name}` : "Pay for your plan"}</h2>
+        <p className="mt-1 text-caption text-muted">Your plan updates after Cashfree confirms the payment.</p>
+      </div>}
+
       <div className="p-5 sm:p-6">
-        {!bare && <h2 className="font-display text-section font-bold text-ink">Pay for {target ? target.name : "your plan"}</h2>}
+        <div className="flex items-start justify-between gap-4 rounded-2xl bg-paper p-4">
+          <div>
+            <p className="text-caption text-muted">Plan</p>
+            <p className="mt-0.5 font-display text-section font-bold text-ink">{target?.name ?? plan.planName}</p>
+            <p className="mt-1 text-caption text-muted">{money(perMonth)} per month{plan.fee.outletCount > 1 ? ` across ${plan.fee.outletCount} outlets` : ""}</p>
+          </div>
+          <span className="rounded-full bg-surface px-3 py-1 text-caption font-semibold text-muted">INR</span>
+        </div>
 
         <fieldset className={bare ? "" : "mt-4"}>
-          <legend className="text-caption text-muted">Pay for</legend>
-          <div className="mt-1.5 grid grid-cols-4 gap-1.5">
+          <legend className="text-body font-semibold text-ink">Choose billing period</legend>
+          <p className="mt-0.5 text-caption text-muted">The total below covers {plan.fee.outletCount} {plan.fee.outletCount === 1 ? "outlet" : "outlets"}.</p>
+          <div className="mt-2.5 grid grid-cols-2 gap-2 sm:grid-cols-4">
             {MONTHS.map((m) => (
               <button
                 key={m}
                 type="button"
                 aria-pressed={months === m}
                 onClick={() => setMonths(m)}
-                className={`flex min-h-14 flex-col items-center justify-center rounded-xl border text-center transition-colors ${focus} ${months === m ? "border-ink bg-ink text-paper" : "border-line text-ink hover:border-ink/40"}`}
+                className={`flex min-h-[4.25rem] flex-col items-center justify-center rounded-xl border text-center transition-colors ${focus} ${months === m ? "border-brand bg-brand-soft text-brand-strong shadow-[inset_0_0_0_1px_var(--brand-main)]" : "border-line bg-surface text-ink hover:border-ink/40"}`}
               >
                 <span className="text-body font-semibold">{m === 12 ? "1 yr" : `${m} mo`}</span>
-                <span className={`text-[11px] tabular ${months === m ? "opacity-80" : "text-muted"}`}>{money(perMonth * m)}</span>
+                <span className={`mt-0.5 text-[11px] tabular ${months === m ? "text-brand-strong" : "text-muted"}`}>{money(perMonth * m)}</span>
               </button>
             ))}
           </div>
         </fieldset>
 
-        <div className="mt-5 rounded-2xl bg-paper p-4 text-center">
-          <p className="text-caption text-muted">Total payable</p>
-          <p className="mt-1 font-display text-title font-bold text-ink tabular">{money(amount)}</p>
-          <p className="mt-1 text-caption text-muted">UPI, cards and other available methods are shown securely by Cashfree.</p>
+        <div className="mt-5 overflow-hidden rounded-2xl border border-line">
+          <div className="flex items-center justify-between gap-4 px-4 py-3 text-body">
+            <span className="text-muted">Billing period</span>
+            <span className="font-semibold text-ink">{PERIOD[months]}</span>
+          </div>
+          <div className="flex items-center justify-between gap-4 border-t border-line bg-paper px-4 py-3.5">
+            <span className="font-semibold text-ink">Total payable</span>
+            <span className="font-display text-section font-bold text-ink tabular">{money(amount)}</span>
+          </div>
         </div>
+        <p className="mt-3 text-caption leading-relaxed text-muted">UPI, cards and other payment options are shown securely by Cashfree. You’ll review and confirm the payment there.</p>
       </div>
 
       <form
@@ -206,9 +226,8 @@ export function PayCard({ plan, target, bare = false }: { plan: PlanView; target
         }}
       >
         <button type="submit" disabled={state === "busy" || amount <= 0} className={`flex min-h-12 w-full items-center justify-center rounded-xl bg-brand px-4 text-button font-semibold text-brand-on hover:bg-brand-hover disabled:opacity-40 ${focus}`}>
-          {state === "busy" ? "Opening Cashfree…" : `Pay ${money(amount)} securely`}
+          {state === "busy" ? "Opening secure checkout…" : `Continue to pay ${money(amount)}`}
         </button>
-        <p className="text-center text-caption text-muted">Your plan updates automatically after Cashfree confirms the payment.</p>
         {error && <p role="alert" className="text-caption text-danger">{error}</p>}
       </form>
     </section>
@@ -229,7 +248,7 @@ export function PayOrPaid({ plan }: { plan: PlanView }) {
       <p className="mt-1 text-body text-muted">
         You are paid until {day(plan.access.endsAt)}. A reminder shows here a week before that{days !== null ? `, in ${Math.max(0, days - 7)} days` : ""}.
       </p>
-      <button type="button" onClick={() => setOpen(true)} className={`mt-5 inline-flex min-h-11 items-center rounded-xl border border-line px-4 text-button font-semibold text-ink hover:bg-ink/5 ${focus}`}>
+      <button type="button" onClick={() => setOpen(true)} className={`mt-5 inline-flex min-h-11 items-center justify-center rounded-xl bg-ink px-4 text-button font-semibold text-paper hover:bg-ink/90 ${focus}`}>
         Pay in advance
       </button>
     </section>
@@ -245,35 +264,41 @@ const TAGLINE: Record<string, string> = {
 
 /** The plans as pricing cards; the current one is marked, bigger ones open the switch in steps */
 export function ComparePlans({ plan }: { plan: PlanView }) {
-  const currentIndex = plan.plans.findIndex((p) => p.code === plan.planCode);
   const [target, setTarget] = useState<PlanOption | null>(null);
   if (plan.plans.length < 2) return null;
   const popular = plan.plans.find((p) => p.code === "growth")?.code;
+  const orderedPlans = [...plan.plans].sort((a, b) => {
+    if (a.code === plan.planCode) return -1;
+    if (b.code === plan.planCode) return 1;
+    return (a.monthlyPricePaise ?? Number.MAX_SAFE_INTEGER) - (b.monthlyPricePaise ?? Number.MAX_SAFE_INTEGER);
+  });
+  const currentPrice = plan.fee.totalPaise;
 
   return (
     <section aria-label="Plans">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
           <h2 className="font-display text-section font-bold text-ink">Plans</h2>
-          <p className="text-body text-muted">Switch to a bigger plan any time. Your menu, tables and bills stay as they are.</p>
+          <p className="text-body text-muted">Choose the right fit. We’ll show every feature and limit change before payment.</p>
         </div>
       </div>
-      <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {plan.plans.map((p, i) => {
+      <div className="mt-4 grid items-stretch gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {orderedPlans.map((p) => {
           const current = p.code === plan.planCode;
-          const smaller = currentIndex !== -1 && i < currentIndex;
+          const monthlyTotal = p.monthlyPricePaise === null ? null : p.monthlyPricePaise * plan.fee.outletCount;
+          const cheaper = monthlyTotal !== null && monthlyTotal < currentPrice;
           return (
-            <div key={p.code} className={`relative flex flex-col rounded-2xl border bg-surface p-5 ${current ? "border-ink shadow-[0_0_0_1px_var(--ink)]" : "border-line"}`}>
+            <article key={p.code} className={`relative flex h-full flex-col rounded-2xl border bg-surface p-5 ${current ? "border-brand shadow-[0_0_0_1px_var(--brand-main)]" : "border-line"}`}>
               <div className="flex items-center justify-between gap-2">
                 <h3 className="font-display text-section font-bold text-ink">{p.name}</h3>
                 {current ? (
-                  <span className="rounded-full bg-ink px-2.5 py-0.5 text-caption font-semibold text-paper">Current plan</span>
+                  <span className="rounded-full bg-brand-soft px-2.5 py-0.5 text-caption font-semibold text-brand-strong">Current plan</span>
                 ) : p.code === popular ? (
                   <span className="rounded-full bg-brand-soft px-2.5 py-0.5 text-caption font-semibold text-brand-strong">Popular</span>
                 ) : null}
               </div>
-              {TAGLINE[p.code] && <p className="mt-1 min-h-10 text-caption text-muted">{TAGLINE[p.code]}</p>}
-              <p className="mt-4">
+              <p className="mt-1 min-h-10 text-caption text-muted">{TAGLINE[p.code] ?? "\u00a0"}</p>
+              <p className="mt-4 flex min-h-10 items-baseline">
                 <span className="font-display text-[2rem] font-extrabold leading-none text-ink tabular">{p.monthlyPricePaise === null ? "Custom" : money(p.monthlyPricePaise)}</span>
                 {p.monthlyPricePaise !== null && <span className="text-body text-muted"> /month</span>}
               </p>
@@ -282,8 +307,6 @@ export function ComparePlans({ plan }: { plan: PlanView }) {
               <div className="mt-5">
                 {current ? (
                   <span className="flex min-h-11 w-full items-center justify-center rounded-xl border border-line text-button font-semibold text-muted">Your plan</span>
-                ) : smaller ? (
-                  <span className="flex min-h-11 w-full items-center justify-center rounded-xl border border-line text-button font-semibold text-muted">Smaller plan</span>
                 ) : p.monthlyPricePaise === null ? (
                   <span className="flex min-h-11 w-full items-center justify-center rounded-xl border border-line text-button font-semibold text-muted">Call TableQR</span>
                 ) : (
@@ -292,8 +315,13 @@ export function ComparePlans({ plan }: { plan: PlanView }) {
                   </button>
                 )}
               </div>
+              <p className="mt-2 min-h-5 text-center text-caption font-medium text-muted">{!current && cheaper ? `${money(currentPrice - monthlyTotal!)} less per month across your outlets` : "\u00a0"}</p>
 
-              <ul className="mt-5 space-y-2.5 border-t border-line pt-5">
+              <div className="mt-5 flex items-center justify-between border-t border-line pt-4">
+                <h4 className="text-caption font-semibold uppercase tracking-[0.06em] text-muted">What’s included</h4>
+                <span className="text-caption text-muted">{FEATURE_KEYS.filter((k) => p.features[k]).length} features</span>
+              </div>
+              <ul className="mt-3 space-y-2.5">
                 <li className="flex gap-2 text-body text-ink"><HugeiconsIcon icon={Tick02Icon} size={18} className="mt-0.5 shrink-0 text-success" aria-hidden />{p.features.dineIn ? `${p.features.maxTables ?? "Any number of"} tables, ` : ""}{p.features.rooms ? `${p.features.maxRooms ?? "Any number of"} rooms, ` : ""}{p.features.maxStaff ?? "any"} staff</li>
                 <li className="flex gap-2 text-body text-ink"><HugeiconsIcon icon={Tick02Icon} size={18} className="mt-0.5 shrink-0 text-success" aria-hidden />QR ordering, billing, KOT</li>
                 {FEATURE_KEYS.map((k) => (
@@ -304,7 +332,7 @@ export function ComparePlans({ plan }: { plan: PlanView }) {
                   </li>
                 ))}
               </ul>
-            </div>
+            </article>
           );
         })}
       </div>
@@ -313,31 +341,44 @@ export function ComparePlans({ plan }: { plan: PlanView }) {
   );
 }
 
-const STEPS = ["What changes", "Pay"] as const;
+const STEPS = ["Review changes", "Pay"] as const;
 
-/** The switch to a bigger plan, as a sheet with three steps */
+/** Compare the real plan changes before opening checkout. */
 function SwitchPlan({ plan, target, onClose }: { plan: PlanView; target: PlanOption; onClose: () => void }) {
   const [step, setStep] = useState(0);
-  const box = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    box.current?.focus();
-    const esc = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    document.addEventListener("keydown", esc);
-    return () => document.removeEventListener("keydown", esc);
-  }, [onClose]);
+  const [acknowledged, setAcknowledged] = useState(false);
   const gained = FEATURE_KEYS.filter((k) => target.features[k] && !plan.features[k]);
-  const current = plan.plans.find((p) => p.code === plan.planCode);
-  const diff = target.monthlyPricePaise !== null && current?.monthlyPricePaise != null ? (target.monthlyPricePaise - current.monthlyPricePaise) * plan.fee.outletCount : null;
+  const lost = FEATURE_KEYS.filter((k) => plan.features[k] && !target.features[k]);
+  const currentMonthly = plan.fee.totalPaise;
+  const targetMonthly = (target.monthlyPricePaise ?? 0) * plan.fee.outletCount;
+  const diff = target.monthlyPricePaise === null ? null : targetMonthly - currentMonthly;
+  const limit = (included: boolean, value: number | null) => !included ? "Not included" : value === null ? "No limit" : `${value}`;
+  const limits = [
+    { label: "Tables", from: limit(plan.features.dineIn, plan.features.maxTables), to: limit(target.features.dineIn, target.features.maxTables) },
+    { label: "Rooms", from: limit(plan.features.rooms, plan.features.maxRooms), to: limit(target.features.rooms, target.features.maxRooms) },
+    { label: "Staff logins", from: limit(true, plan.features.maxStaff), to: limit(true, target.features.maxStaff) },
+  ];
+  const limitLosses = limits.filter(({ from, to }) => {
+    if (from === to || from === "Not included") return false;
+    if (to === "Not included") return true;
+    if (to === "No limit") return false;
+    if (from === "No limit") return true;
+    return Number(to) < Number(from);
+  });
+  const needsAcknowledgement = lost.length > 0 || limitLosses.length > 0 || (diff !== null && diff < 0);
+  const close = useCallback(() => onClose(), [onClose]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 sm:items-center sm:p-4" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div ref={box} tabIndex={-1} role="dialog" aria-modal="true" aria-label={`Switch to ${target.name}`} className="max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-t-[22px] border border-line bg-surface outline-none sm:rounded-[22px]">
-        <div className="sticky top-0 z-10 border-b border-line bg-surface px-6 py-4">
+    <Dialog open onOpenChange={(open) => !open && close()}>
+      <DialogContent showCloseButton={false} className="flex max-h-[92dvh] max-w-xl flex-col gap-0 overflow-hidden rounded-t-[22px] border border-line bg-surface p-0 text-ink sm:rounded-[22px] sm:max-w-xl">
+        <div className="z-10 shrink-0 border-b border-line bg-surface px-5 py-4 sm:px-6">
           <div className="flex items-center justify-between gap-3">
-            <p className="font-display text-section font-bold text-ink">
-              {plan.planName} to {target.name}
-            </p>
-            <button type="button" onClick={onClose} aria-label="Close" className={`grid size-9 place-items-center rounded-lg text-muted hover:bg-ink/5 ${focus}`}>
+            <div>
+              <p className="text-caption font-semibold uppercase tracking-[0.08em] text-muted">Plan change</p>
+              <DialogTitle className="mt-1 font-display text-section font-bold text-ink">Switch to {target.name}</DialogTitle>
+              <DialogDescription className="mt-1 text-caption text-muted">Review what changes from {plan.planName} before you continue.</DialogDescription>
+            </div>
+            <button type="button" onClick={close} aria-label="Close" className={`grid size-9 shrink-0 place-items-center rounded-lg text-muted hover:bg-ink/5 ${focus}`}>
               <HugeiconsIcon icon={Cancel01Icon} size={18} aria-hidden />
             </button>
           </div>
@@ -351,53 +392,84 @@ function SwitchPlan({ plan, target, onClose }: { plan: PlanView; target: PlanOpt
           </ol>
         </div>
 
-        {step === 0 && (
-          <div className="space-y-5 p-6">
-            <div>
-              <p className="text-body text-muted">You get</p>
-              <ul className="mt-2 space-y-2">
-                {gained.map((k) => (
-                  <li key={k} className="flex gap-3">
-                    <HugeiconsIcon icon={Tick02Icon} size={18} className="mt-0.5 shrink-0 text-success" aria-hidden />
-                    <span>
-                      <span className="block text-body font-semibold text-ink">{FEATURE_LABELS[k].label}</span>
-                      <span className="block text-caption text-muted">{FEATURE_LABELS[k].hint}</span>
-                    </span>
-                  </li>
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {step === 0 && (
+            <div className="space-y-5 p-5 sm:p-6">
+              <div className="grid gap-3 sm:grid-cols-2">
+                {[
+                  { name: plan.planName, price: currentMonthly, label: "Current plan", selected: false },
+                  { name: target.name, price: targetMonthly, label: "New plan", selected: true },
+                ].map((item) => (
+                  <div key={item.label} className={`rounded-2xl border p-4 ${item.selected ? "border-brand bg-brand-soft/40" : "border-line bg-paper"}`}>
+                    <p className="text-caption font-medium text-muted">{item.label}</p>
+                    <p className="mt-1 font-display text-section font-bold text-ink">{item.name}</p>
+                    <p className="mt-2 text-body text-ink"><span className="font-semibold tabular">{money(item.price)}</span><span className="text-muted"> / month{plan.fee.outletCount > 1 ? ` · ${plan.fee.outletCount} outlets` : ""}</span></p>
+                  </div>
                 ))}
-                <li className="flex gap-3">
-                  <HugeiconsIcon icon={Tick02Icon} size={18} className="mt-0.5 shrink-0 text-success" aria-hidden />
-                  <span className="text-body text-ink">
-                    Up to {target.features.dineIn && <><span className="font-semibold">{target.features.maxTables ?? "any number of"} tables</span>, </>}{target.features.rooms && <><span className="font-semibold">{target.features.maxRooms ?? "any number of"} rooms</span>, </>}and <span className="font-semibold">{target.features.maxStaff ?? "any number of"} staff logins</span>
-                  </span>
-                </li>
-              </ul>
-            </div>
-            <div className="flex items-baseline justify-between rounded-xl bg-paper px-4 py-3">
-              <span className="text-body text-muted">New price</span>
-              <span className="text-body text-ink">
-                <span className="font-display text-section font-bold tabular">{money((target.monthlyPricePaise ?? 0) * plan.fee.outletCount)}</span> a month
-                {diff !== null && diff > 0 && <span className="block text-right text-caption text-muted">{money(diff)} more than now</span>}
-              </span>
-            </div>
-            <button type="button" onClick={() => setStep(1)} className={`flex min-h-12 w-full items-center justify-center rounded-xl bg-ink px-4 text-button font-semibold text-paper ${focus}`}>
-              Continue to pay
-            </button>
-          </div>
-        )}
+              </div>
 
-        {step === 1 && (
-          <div>
-            <button type="button" onClick={() => setStep(0)} className={`ml-5 mt-4 inline-flex items-center gap-1 rounded-lg px-1 text-caption font-semibold text-muted hover:text-ink ${focus}`}>
-              <HugeiconsIcon icon={ArrowLeft01Icon} size={14} aria-hidden />
-              What changes
-            </button>
-            <PayCard plan={{ ...plan, waiting: false }} target={target} bare />
-          </div>
-        )}
+              <div className="overflow-hidden rounded-2xl border border-line">
+                <div className="grid grid-cols-[1fr_auto_auto] gap-4 bg-paper px-4 py-2.5 text-caption font-semibold text-muted">
+                  <span>Plan limits</span><span>Now</span><span>With {target.name}</span>
+                </div>
+                {limits.map((item) => (
+                  <div key={item.label} className="grid grid-cols-[1fr_auto_auto] gap-4 border-t border-line px-4 py-2.5 text-body">
+                    <span className="text-muted">{item.label}</span><span className="text-ink">{item.from}</span><span className="font-semibold text-ink">{item.to}</span>
+                  </div>
+                ))}
+              </div>
 
-      </div>
-    </div>
+              <div>
+                <p className="text-body font-semibold text-ink">Included with {target.name}</p>
+                {gained.length ? (
+                  <ul className="mt-2 grid gap-3 sm:grid-cols-2">
+                    {gained.map((k) => (
+                      <li key={k} className="flex gap-2.5 rounded-xl bg-paper p-3">
+                        <HugeiconsIcon icon={Tick02Icon} size={18} className="mt-0.5 shrink-0 text-success" aria-hidden />
+                        <span>
+                          <span className="block text-body font-semibold text-ink">{FEATURE_LABELS[k].label}</span>
+                          <span className="mt-0.5 block text-caption leading-relaxed text-muted">{FEATURE_LABELS[k].hint}</span>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : <p className="mt-1 text-caption text-muted">Your features stay the same; the plan limits and billing will change.</p>}
+              </div>
+
+              {diff !== null && diff !== 0 && <p className="rounded-xl bg-paper px-4 py-3 text-caption text-muted">The new plan is <span className="font-semibold text-ink">{money(Math.abs(diff))} {diff > 0 ? "more" : "less"} per month</span> across your outlets.</p>}
+
+              {needsAcknowledgement && (
+                <div className="rounded-2xl border border-[var(--state-held)]/30 bg-[var(--state-held-soft)] p-4">
+                  <p className="text-body font-semibold text-[var(--state-held-text)]">{lost.length || limitLosses.length ? "What changes on this plan" : "Confirm this plan change"}</p>
+                  {!lost.length && !limitLosses.length && <p className="mt-1 text-caption text-[var(--state-held-text)]">This plan has a lower monthly price. Your subscription will switch after payment is confirmed.</p>}
+                  <ul className="mt-2 space-y-1.5 text-caption text-[var(--state-held-text)]">
+                    {lost.map((k) => <li key={k}>• {FEATURE_LABELS[k].label}</li>)}
+                    {limitLosses.map(({ label, from, to }) => <li key={label}>• {label}: {from} now → {to}</li>)}
+                  </ul>
+                  <label className="mt-3 flex cursor-pointer items-start gap-2.5 border-t border-[var(--state-held)]/20 pt-3 text-caption font-medium text-ink">
+                    <input type="checkbox" checked={acknowledged} onChange={(event) => setAcknowledged(event.target.checked)} className="mt-0.5 size-4 accent-[var(--brand-main)]" />
+                    <span>I understand the plan, feature and billing changes shown above.</span>
+                  </label>
+                </div>
+              )}
+              <button type="button" disabled={needsAcknowledgement && !acknowledged} onClick={() => setStep(1)} className={`flex min-h-12 w-full items-center justify-center rounded-xl bg-brand px-4 text-button font-semibold text-brand-on hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-45 ${focus}`}>
+                Choose payment period
+              </button>
+            </div>
+          )}
+
+          {step === 1 && (
+            <div>
+              <button type="button" onClick={() => setStep(0)} className={`ml-5 mt-4 inline-flex items-center gap-1 rounded-lg px-1 text-caption font-semibold text-muted hover:text-ink ${focus}`}>
+                <HugeiconsIcon icon={ArrowLeft01Icon} size={14} aria-hidden />
+                Back to plan comparison
+              </button>
+              <PayCard plan={{ ...plan, waiting: false }} target={target} bare />
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -436,7 +508,7 @@ export function PlanPayments({ plan }: { plan: PlanView }) {
                 </td>
                 <td className="px-3 py-3 text-muted">
                   {METHOD[p.method]}
-                  {p.reference && <span className="block text-caption tabular">{p.reference}</span>}
+                  {p.reference && <span className="block max-w-36 truncate text-caption tabular" title={p.reference}>{p.reference}</span>}
                 </td>
                 <td className="px-3 py-3 text-right font-semibold text-ink tabular">{money(p.amountPaise)}</td>
                 <td className="px-6 py-3 text-right"><span className={`rounded-full px-2.5 py-0.5 text-caption font-semibold ${STATUS[p.status].tone}`}>{STATUS[p.status].label}</span></td>

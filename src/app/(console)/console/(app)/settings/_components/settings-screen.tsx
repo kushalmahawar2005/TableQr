@@ -2,11 +2,12 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
-import { Check, CheckCircle2, Circle, ClipboardList, Clock, Copy, CreditCard, Lock, Plus, Receipt, Store, Wallet, X, type LucideIcon } from "lucide-react";
+import { Check, CheckCircle2, Circle, ClipboardList, Clock, Copy, CreditCard, Lock, Plus, Receipt, Store, Trash2, Upload, Wallet, X, type LucideIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { OutletSettings } from "@/server/staff/settings-read";
-import { saveSettingsAction } from "../actions";
+import { removeRestaurantLogoAction, saveSettingsAction, uploadRestaurantLogoAction } from "../actions";
+import { shrinkPhoto } from "@/lib/shrink-photo";
 
 const DAYS = [["mon", "Monday"], ["tue", "Tuesday"], ["wed", "Wednesday"], ["thu", "Thursday"], ["fri", "Friday"], ["sat", "Saturday"], ["sun", "Sunday"]] as const;
 const MODE: Record<string, string> = { open: "Open: anyone who scans can order", verified: "Verified: guests confirm their phone number first", host_confirmed: "Host confirms: staff approve each table" };
@@ -80,6 +81,10 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [copied, setCopied] = useState(false);
   const [activeId, setActiveId] = useState<string>(NAV[0][0]);
+  const [logoUrl, setLogoUrl] = useState(o.logoUrl);
+  const [logoBusy, setLogoBusy] = useState(false);
+  const [selectedLogo, setSelectedLogo] = useState<{ file: File; preview: string } | null>(null);
+  const [logoMessage, setLogoMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
   // What is on screen against what was last saved, so the save bar can say if anything changed
   const snapshot = JSON.stringify({ city, address, gstin, fssai, sc, tips, auto, review, hours: hoursOn ? hours : null });
@@ -97,15 +102,95 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
   // Light up the section in the left list that is at the top of the screen
   useEffect(() => {
     const seen = new IntersectionObserver((entries) => {
+      const hash = window.location.hash.slice(1);
+      const atPageEnd = window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 8;
+      // The last sections cannot reach the top of the viewport because there is little content
+      // after them. Keep the clicked anchor selected while the browser is pinned at the bottom.
+      if (atPageEnd && NAV.some(([id]) => id === hash)) {
+        setActiveId(hash);
+        return;
+      }
       const top = entries.filter((e) => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
       if (top) setActiveId(top.target.id);
     }, { rootMargin: "-80px 0px -60% 0px" });
     NAV.forEach(([id]) => { const el = document.getElementById(id); if (el) seen.observe(el); });
-    return () => seen.disconnect();
+    const syncHash = () => {
+      const hash = window.location.hash.slice(1);
+      if (NAV.some(([id]) => id === hash)) setActiveId(hash);
+    };
+    window.addEventListener("hashchange", syncHash);
+    syncHash();
+    return () => { seen.disconnect(); window.removeEventListener("hashchange", syncHash); };
   }, []);
 
   function copyCode() {
     try { void navigator.clipboard.writeText(o.code); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* clipboard may be blocked; the code stays on screen */ }
+  }
+
+  function selectLogo(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0];
+    if (!file) return;
+    if (selectedLogo) URL.revokeObjectURL(selectedLogo.preview);
+    setSelectedLogo({ file, preview: URL.createObjectURL(file) });
+    setLogoMessage(null);
+    event.currentTarget.value = "";
+  }
+
+  function cancelLogoSelection() {
+    if (selectedLogo) URL.revokeObjectURL(selectedLogo.preview);
+    setSelectedLogo(null);
+    setLogoMessage(null);
+  }
+
+  async function saveLogo() {
+    if (!selectedLogo) return;
+    const chosen = selectedLogo;
+    setLogoMessage(null);
+    setLogoBusy(true);
+    try {
+      const prepared = await shrinkPhoto(chosen.file, { preserveTransparency: true });
+      const result = await uploadRestaurantLogoAction(prepared.name, prepared.type, prepared.base64);
+      if (!result.ok) {
+        setLogoMessage({ ok: false, text: result.message });
+        return;
+      }
+      if (!result.url) {
+        setLogoMessage({ ok: false, text: "The logo could not be saved. Try again." });
+        return;
+      }
+      URL.revokeObjectURL(chosen.preview);
+      setSelectedLogo(null);
+      setLogoUrl(result.url);
+      setLogoMessage({ ok: true, text: "Logo saved and set for guest welcome screens and menus." });
+      router.refresh();
+    } catch {
+      setLogoMessage({ ok: false, text: "Could not upload this image. Try a JPG, PNG or WebP." });
+    } finally {
+      setLogoBusy(false);
+    }
+  }
+
+  async function removeLogo() {
+    if (selectedLogo) {
+      cancelLogoSelection();
+      return;
+    }
+    setLogoMessage(null);
+    setLogoBusy(true);
+    try {
+      const result = await removeRestaurantLogoAction();
+      if (!result.ok) {
+        setLogoMessage({ ok: false, text: result.message });
+        return;
+      }
+      setLogoUrl(null);
+      setLogoMessage({ ok: true, text: "Logo removed. Guests will see your restaurant initial instead." });
+      router.refresh();
+    } catch {
+      setLogoMessage({ ok: false, text: "Could not remove the logo. Try again." });
+    } finally {
+      setLogoBusy(false);
+    }
   }
 
   function save() {
@@ -126,44 +211,80 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
   }
 
   return (
-    <main className="mx-auto w-full max-w-[1100px] px-4 pt-5 pb-28 sm:px-6 lg:px-8 lg:pt-7">
-      <header>
-        <p className="text-caption font-semibold text-muted">{o.name}</p>
-        <h1 className="mt-1 font-display text-title font-bold text-ink">Settings</h1>
-        <p className="mt-1 text-body text-muted">{canEdit ? "Change your restaurant details here. Name, code and plan are managed by TableQR." : "View only. Only the owner can change settings."}</p>
+    <main className="mx-auto w-full max-w-[1280px] px-4 pt-5 pb-28 sm:px-6 lg:px-8 lg:pt-7">
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-caption font-semibold uppercase tracking-[0.12em] text-muted">{o.name} · Outlet settings</p>
+          <h1 className="mt-1 font-display text-title font-bold text-ink">Settings</h1>
+          <p className="mt-1 max-w-2xl text-body text-muted">{canEdit ? "Keep your restaurant details, guest bills and ordering preferences up to date." : "View only. Ask the outlet owner to change these settings."}</p>
+        </div>
+        <span className="inline-flex items-center gap-2 rounded-full border border-line bg-surface px-3 py-1.5 text-xs font-semibold text-muted">
+          <span className={`size-2 rounded-full ${canEdit ? "bg-[var(--state-available)]" : "bg-ink/30"}`} aria-hidden="true" />
+          {canEdit ? "Owner access" : "View only"}
+        </span>
       </header>
 
       {done < checklist.length && (
-        <div className="mt-5 flex flex-wrap items-center gap-x-6 gap-y-3 rounded-2xl border border-brand-border bg-brand-soft/40 px-5 py-4">
+        <div className="mt-5 grid gap-4 rounded-2xl border border-brand-border bg-brand-soft/40 p-4 sm:grid-cols-[minmax(13rem,0.8fr)_2fr] sm:items-center sm:p-5">
           <div className="min-w-0">
-            <p className="font-display text-section font-bold">Finish your setup <span className="text-muted">· {done}/{checklist.length}</span></p>
-            <div className="mt-2 h-1.5 w-48 max-w-full rounded-full bg-ink/10"><div className="h-full rounded-full bg-brand" style={{ width: `${(done / checklist.length) * 100}%` }} /></div>
+            <div className="flex items-center justify-between gap-3">
+              <p className="font-display text-section font-bold">Finish your setup</p>
+              <span className="rounded-full bg-surface px-2.5 py-1 text-xs font-bold tabular-nums">{done}/{checklist.length}</span>
+            </div>
+            <p className="mt-1 text-xs text-muted">Complete these basics for your guests.</p>
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-ink/10"><div className="h-full rounded-full bg-brand transition-[width]" style={{ width: `${(done / checklist.length) * 100}%` }} /></div>
           </div>
-          <ul className="flex flex-wrap gap-x-4 gap-y-1.5 text-sm">
-            {checklist.map(([k, v, to]) => <li key={k}><a href={`#${to}`} className={`flex items-center gap-1.5 ${v ? "text-muted" : "font-semibold hover:underline"}`}>{v ? <CheckCircle2 className="size-4 text-[#16a34a]" aria-hidden="true" /> : <Circle className="size-4 text-muted" aria-hidden="true" />}{k}</a></li>)}
+          <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            {checklist.map(([k, v, to]) => <li key={k}><a href={`#${to}`} className={`flex min-h-10 items-center gap-2 rounded-xl border px-3 py-2 text-sm transition-colors ${v ? "border-success/20 bg-surface text-muted" : "border-line bg-surface font-semibold text-ink hover:border-brand hover:text-brand"}`}>{v ? <CheckCircle2 className="size-4 shrink-0 text-success" aria-hidden="true" /> : <Circle className="size-4 shrink-0 text-muted" aria-hidden="true" />}{k}</a></li>)}
           </ul>
         </div>
       )}
 
       <nav aria-label="Settings sections" className="-mx-4 mt-5 flex gap-1.5 overflow-x-auto px-4 pb-1 lg:hidden">
-        {NAV.map(([id, label]) => <a key={id} href={`#${id}`} className={`shrink-0 rounded-full border px-3 py-1.5 text-sm font-semibold ${activeId === id ? "border-ink bg-ink text-paper" : "border-line text-muted hover:text-ink"}`}>{label}</a>)}
+        {NAV.map(([id, label]) => <a key={id} href={`#${id}`} onClick={() => setActiveId(id)} className={`shrink-0 rounded-full border px-3 py-1.5 text-sm font-semibold ${activeId === id ? "border-ink bg-ink text-paper" : "border-line text-muted hover:text-ink"}`}>{label}</a>)}
       </nav>
 
-      <div className="mt-4 grid gap-6 lg:mt-6 lg:grid-cols-[13rem_minmax(0,1fr)]">
+      <div className="mt-4 grid gap-6 lg:mt-6 lg:grid-cols-[15rem_minmax(0,1fr)]">
         <nav aria-label="Settings sections" className="hidden lg:block">
-          <ul className="sticky top-20 space-y-0.5">
+          <div className="sticky top-20 rounded-2xl border border-line bg-surface p-2">
+          <p className="px-3 pb-2 pt-1 text-[11px] font-bold uppercase tracking-wider text-muted">Settings menu</p>
+          <ul className="space-y-1">
             {NAV.map(([id, label, Icon]) => (
               <li key={id}>
-                <a href={`#${id}`} aria-current={activeId === id ? "true" : undefined} className={`flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-semibold transition-colors ${activeId === id ? "bg-ink/[0.06] text-ink" : "text-muted hover:bg-ink/[0.03] hover:text-ink"}`}>
+                <a href={`#${id}`} onClick={() => setActiveId(id)} aria-current={activeId === id ? "true" : undefined} className={`flex min-h-10 items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-semibold transition-colors ${activeId === id ? "bg-brand-soft text-brand-strong" : "text-muted hover:bg-ink/[0.03] hover:text-ink"}`}>
                   <Icon className="size-4" aria-hidden="true" />{label}
                 </a>
               </li>
             ))}
           </ul>
+          <div className="mx-2 mt-3 border-t border-line pt-3 text-xs text-muted">{done} of {checklist.length} setup steps complete</div>
+          </div>
         </nav>
 
         <div className="min-w-0 space-y-4">
           <Section id="restaurant" icon={Store} title="Restaurant" desc="Shown on bills and the guest page.">
+            <Row label="Restaurant logo" hint="A square image (300 px or larger) works best. Shown on the QR welcome screen and menu across all outlets.">
+              <div className="flex flex-wrap items-center gap-3 sm:justify-end">
+                <div className="grid size-16 shrink-0 place-items-center overflow-hidden rounded-2xl border border-line bg-paper">
+                  {selectedLogo || logoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={selectedLogo?.preview ?? logoUrl ?? undefined} alt={`${o.name} logo preview`} className="size-full object-contain p-1" />
+                  ) : <Store className="size-6 text-muted" aria-hidden="true" />}
+                </div>
+                {canEdit && <>
+                  <label className={`inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-xl border border-line bg-surface px-3 text-sm font-semibold text-ink hover:border-brand hover:text-brand ${logoBusy ? "pointer-events-none opacity-50" : ""}`}>
+                    <Upload className="size-4" aria-hidden="true" />{selectedLogo ? "Choose another" : logoUrl ? "Change logo" : "Upload logo"}
+                    <input type="file" accept="image/jpeg,image/png,image/webp,image/avif" className="sr-only" disabled={logoBusy} onChange={selectLogo} />
+                  </label>
+                  {selectedLogo ? <>
+                    <button type="button" disabled={logoBusy} onClick={() => void saveLogo()} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-brand px-4 text-sm font-semibold text-brand-on hover:bg-brand-hover disabled:opacity-50"><Check className="size-4" aria-hidden="true" />{logoBusy ? "Saving…" : "Save logo"}</button>
+                    <button type="button" disabled={logoBusy} onClick={cancelLogoSelection} className="inline-flex min-h-10 items-center rounded-xl px-3 text-sm font-semibold text-muted hover:bg-ink/5 hover:text-ink disabled:opacity-50">Cancel</button>
+                  </> : logoUrl && <button type="button" disabled={logoBusy} onClick={() => void removeLogo()} className="inline-flex min-h-10 items-center gap-2 rounded-xl px-3 text-sm font-semibold text-muted hover:bg-danger/10 hover:text-danger disabled:opacity-50"><Trash2 className="size-4" aria-hidden="true" />Remove</button>}
+                </>}
+              </div>
+              {canEdit && <p className="mt-2 text-xs text-muted" aria-live="polite">{selectedLogo ? "Preview only — save this logo to show it to guests." : logoUrl ? "Logo is saved and visible on guest welcome screens and menus." : "No logo set. Upload one to show your brand to guests."}</p>}
+              {logoMessage && <p role={logoMessage.ok ? "status" : "alert"} className={`mt-2 text-xs ${logoMessage.ok ? "text-[var(--state-available-text)]" : "text-danger"}`}>{logoMessage.text}</p>}
+            </Row>
             <Row label="Name" hint="Changed by TableQR."><Fixed>{o.name}</Fixed></Row>
             <Row label="Outlet code" hint="Your team types this to sign in.">
               <div className="flex items-center gap-2 sm:justify-end">

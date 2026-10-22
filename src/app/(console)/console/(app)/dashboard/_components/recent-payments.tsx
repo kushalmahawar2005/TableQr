@@ -1,6 +1,6 @@
 import { Banknote, CheckCircle2, CreditCard, Smartphone, Wallet } from "lucide-react";
 import Link from "next/link";
-import type { DashboardData, RecentPaymentItem } from "@/server/staff/dashboard";
+import type { RecentPaymentItem } from "@/server/staff/dashboard";
 import { EmptyLine, Panel, formatTimeAgo, money, viewAllClass } from "./dashboard-shared";
 
 const methodIcon = (m: string) =>
@@ -30,7 +30,7 @@ export function RecentPayments({ payments, timezone }: { payments: RecentPayment
             const failed = p.status === "failed" || p.status === "payment_failed";
             const pending = p.status === "pending" || p.status === "awaiting_payment";
             return (
-              <div key={p.id} className="flex items-center justify-between gap-3 py-2.5 first:pt-0 last:pb-0">
+              <div key={p.key} className="flex items-center justify-between gap-3 py-2.5 first:pt-0 last:pb-0">
                 <div className="flex min-w-0 items-center gap-3">
                   <span className="grid size-9 shrink-0 place-items-center rounded-input bg-sage text-forest">
                     <Icon className="size-4.5" aria-hidden="true" />

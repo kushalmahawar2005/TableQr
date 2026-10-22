@@ -158,6 +158,7 @@ export type TableTileItem = {
   state: string;
   guests?: number;
   runningPaise?: number;
+  runningAmountKind?: "orders" | "bill";
 };
 
 export type KitchenOrderItem = {
@@ -180,8 +181,7 @@ export type CustomerRequestItem = {
 };
 
 export type RecentPaymentItem = {
-  id: string;
-  billId: string;
+  key: string;
   tableCode: string;
   amountPaise: number;
   method: "upi" | "card" | "wallet" | "cash";
@@ -285,8 +285,6 @@ export async function getDashboard(staff: Staff, now = new Date()) {
       .limit(8),
     db
       .select({
-        id: s.payments.id,
-        billId: s.payments.billId,
         amountPaise: s.payments.amountPaise,
         method: s.payments.method,
         status: s.payments.status,
@@ -327,12 +325,16 @@ export async function getDashboard(staff: Staff, now = new Date()) {
       .limit(20),
     db
       .select({
+        id: s.tableSessions.id,
         tableId: s.tableSessions.tableId,
         partySize: s.tableSessions.partySize,
-        billPaise: sql<string>`coalesce(sum(${s.bills.totalPaise}), 0)`,
+        billPaise: sql<string>`coalesce(max(${s.bills.totalPaise}), 0)`,
+        hasBill: sql<number>`max(case when ${s.bills.id} is null then 0 else 1 end)`,
+        orderedPaise: sql<string>`coalesce(sum(${s.orderLines.unitPricePaise} * ${s.orderLines.qty}), 0)`,
       })
       .from(s.tableSessions)
       .leftJoin(s.bills, and(eq(s.bills.tenantId, s.tableSessions.tenantId), eq(s.bills.sessionId, s.tableSessions.id)))
+      .leftJoin(s.orderLines, and(eq(s.orderLines.tenantId, s.tableSessions.tenantId), eq(s.orderLines.sessionId, s.tableSessions.id), notInArray(s.orderLines.status, [...DEAD_LINES])))
       .where(and(eq(s.tableSessions.tenantId, scope.tenantId), eq(s.tableSessions.outletId, scope.outletId), ne(s.tableSessions.status, "closed")))
       .groupBy(s.tableSessions.id, s.tableSessions.tableId, s.tableSessions.partySize),
   ]);
@@ -356,7 +358,11 @@ export async function getDashboard(staff: Staff, now = new Date()) {
     .filter((b) => b.requestedAt! < billAlertBefore)
     .map((b) => ({ sessionId: b.sessionId, tableCode: b.tableCode, waitedMinutes: waitedMinutes(b.requestedAt!.getTime(), now.getTime()) }));
 
-  const sessionByTable = new Map(openSessions.map((os) => [os.tableId, { guests: os.partySize ?? undefined, runningPaise: Number(os.billPaise) }]));
+  const sessionByTable = new Map(openSessions.map((os) => [os.tableId, {
+    guests: os.partySize ?? undefined,
+    runningPaise: Number(os.hasBill ? os.billPaise : os.orderedPaise),
+    runningAmountKind: os.hasBill ? "bill" as const : "orders" as const,
+  }]));
   const tableTiles = rawTables.map((t) => {
     const sess = sessionByTable.get(t.id);
     return {
@@ -366,6 +372,7 @@ export async function getDashboard(staff: Staff, now = new Date()) {
       state: t.state,
       guests: sess?.guests,
       runningPaise: sess?.runningPaise,
+      runningAmountKind: sess?.runningAmountKind,
     };
   });
 
@@ -415,9 +422,8 @@ export async function getDashboard(staff: Staff, now = new Date()) {
     elapsedMinutes: Math.max(0, Math.floor((now.getTime() - r.createdAt.getTime()) / 60_000)),
   }));
 
-  const recentPayments: RecentPaymentItem[] = rawPayments.map((p) => ({
-    id: p.id,
-    billId: p.billId,
+  const recentPayments: RecentPaymentItem[] = rawPayments.map((p, index) => ({
+    key: `${p.tableCode}-${p.createdAt.getTime()}-${index}`,
     tableCode: p.tableCode,
     amountPaise: p.amountPaise,
     method: p.method,
@@ -428,10 +434,10 @@ export async function getDashboard(staff: Staff, now = new Date()) {
   // Build live activity feed from real events matching Target design
   const activityFeed: ActivityFeedItem[] = [
     ...recentPayments.map((p) => ({
-      id: `pay-${p.id}`,
+      id: `pay-${p.key}`,
       type: "payment" as const,
       title: "Payment received",
-      subtitle: `₹${(p.amountPaise / 100).toLocaleString("en-IN")} · Table ${p.tableCode}`,
+      subtitle: `Table ${p.tableCode}`,
       timestamp: p.createdAt,
       amountPaise: p.amountPaise,
     })),

@@ -18,6 +18,19 @@ export function floorPreview(tiles: TableTileItem[]): TableTileItem[] {
     .map(({ t }) => t);
 }
 
+/** A small floor gets larger tiles; the dashboard stays readable as the table count grows. */
+export function floorGridClass(count: number): string {
+  if (count <= 1) return "grid-cols-1 max-w-sm";
+  if (count === 2) return "grid-cols-2 max-w-xl";
+  if (count <= 4) return "grid-cols-2";
+  if (count <= 6) return "grid-cols-2 sm:grid-cols-3";
+  return "grid-cols-2 sm:grid-cols-3 xl:grid-cols-4";
+}
+
+export function floorTileClass(count: number): string {
+  return count <= 4 ? "min-h-[124px] p-3.5" : "min-h-[106px] p-3";
+}
+
 /**
  * Live Floor, sized by the tables that actually exist:
  * - few tables → fewer, larger tiles and a compact card (no invented filler, no empty void)
@@ -30,18 +43,8 @@ export function LiveFloor({ data }: { data: DashboardData }) {
   const preview = floorPreview(tiles);
   const hidden = tiles.length - preview.length;
   const n = preview.length;
-
-  const gridClass =
-    n <= 1
-      ? "grid-cols-1 max-w-sm"
-      : n === 2
-        ? "grid-cols-2 max-w-xl"
-        : n <= 4
-          ? "grid-cols-2"
-          : n <= 6
-            ? "grid-cols-2 sm:grid-cols-3"
-            : "grid-cols-2 sm:grid-cols-3 xl:grid-cols-4";
-  const tileClass = n <= 4 ? "min-h-[124px] p-3.5" : "min-h-[106px] p-3";
+  const gridClass = floorGridClass(n);
+  const tileClass = floorTileClass(n);
 
   return (
     <section className="rounded-card border border-line bg-surface p-5" aria-label="Live Floor">
@@ -109,7 +112,7 @@ export function LiveFloor({ data }: { data: DashboardData }) {
                   <Link
                     key={table.id}
                     href="/console/floor"
-                    aria-label={`Table ${table.code}, ${statusLabel}, ${table.seats} seats`}
+                    aria-label={`Table ${table.code}, ${statusLabel}, ${table.seats} seats${table.runningPaise !== undefined ? `, ${table.runningAmountKind === "bill" ? "bill due" : "orders so far"} ${money(table.runningPaise)}` : ""}`}
                     className={`group flex flex-col justify-between rounded-input border transition-shadow hover:shadow-float ${tileClass} ${focusRing}`}
                     style={{
                       backgroundColor: `var(--state-${stateVar}-soft)`,
@@ -124,12 +127,14 @@ export function LiveFloor({ data }: { data: DashboardData }) {
                     <div>
                       <p className="text-xs font-bold leading-tight">{statusLabel}</p>
                       <p className="mt-0.5 text-xs font-medium leading-tight text-ink/70">
-                        {table.seats} seats
-                        {isOccupied && table.runningPaise ? (
-                          <>{" · "}<span className="font-bold text-ink tabular">{money(table.runningPaise)}</span></>
-                        ) : null}
-                        {isOccupied && table.guests ? ` · ${table.guests} guests` : ""}
+                        {table.seats} seats{isOccupied && table.guests ? ` · ${table.guests} guests` : ""}
                       </p>
+                      {isOccupied && table.runningPaise !== undefined && (
+                        <p className="mt-1 text-xs font-semibold leading-tight text-ink tabular">
+                          {table.runningAmountKind === "bill" ? "Bill due" : table.runningPaise > 0 ? "Orders so far" : "No orders yet"}
+                          {(table.runningPaise > 0 || table.runningAmountKind === "bill") && <> · {money(table.runningPaise)}</>}
+                        </p>
+                      )}
                     </div>
                   </Link>
                 );

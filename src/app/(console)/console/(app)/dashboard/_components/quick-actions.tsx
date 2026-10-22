@@ -5,10 +5,10 @@ import { focusRing } from "./dashboard-shared";
 /** Every quick action is a real route that already exists; Day Close keeps its own safety flow */
 export function QuickActions() {
   return (
-    <nav aria-label="Quick links" className="flex items-center gap-3 overflow-x-auto pb-1 no-scrollbar">
+    <nav aria-label="Quick links" className="flex flex-wrap items-center gap-2 pb-1">
       <Link
         href="/console/floor"
-        className={`inline-flex h-11 shrink-0 items-center gap-2 rounded-card bg-forest px-5 text-sm font-semibold text-white shadow-float transition-all hover:bg-forest-hover active:scale-[0.98] ${focusRing}`}
+        className={`inline-flex h-11 shrink-0 items-center gap-2 rounded-card bg-forest px-4 text-sm font-semibold text-white shadow-float transition-all hover:bg-forest-hover active:scale-[0.98] ${focusRing}`}
       >
         <Plus className="size-4 stroke-[2.5]" aria-hidden="true" />
         <span>Open Floor</span>
@@ -25,7 +25,7 @@ export function QuickActions() {
         <Link
           key={label}
           href={href}
-          className={`inline-flex h-11 shrink-0 items-center gap-2.5 rounded-card border border-line bg-surface px-4 text-sm font-semibold text-ink transition-all hover:border-forest/40 hover:bg-paper active:scale-[0.98] ${focusRing}`}
+          className={`inline-flex h-11 shrink-0 items-center gap-2 rounded-card border border-line bg-surface px-3 text-sm font-semibold text-ink transition-all hover:border-forest/40 hover:bg-paper active:scale-[0.98] ${focusRing}`}
         >
           <Icon className="size-4 text-terracotta" aria-hidden="true" />
           <span>{label}</span>

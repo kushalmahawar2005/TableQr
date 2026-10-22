@@ -365,13 +365,8 @@ export const cashfreeMode = (): CashfreeMode | null => parseCashfreeConfig(proce
 /** The mock is for development and tests; production must configure a real gateway. */
 export const mockAllowed = () => process.env.NODE_ENV !== "production" || process.env.PAYMENTS_MOCK === "1";
 
-/**
- * The gateway for guest bill payments. Prefers a restaurant-configured Cashfree account when
- * CASHFREE_CLIENT_ID / CASHFREE_CLIENT_SECRET are set; falls back to the mock in development.
- */
+/** Guest bill gateway. TableQR's Cashfree account is deliberately excluded from this path. */
 export function gatewayFor(): PaymentGateway | null {
-  const cf = configuredCashfree();
-  if (cf) return cf;
   return mockAllowed() ? mockGateway : null;
 }
 
@@ -388,6 +383,5 @@ export function guestGateway(): PaymentGateway | null {
 /** The gateway an existing payment went through, for status checks, webhooks and refunds */
 export function gatewayByName(name: string): PaymentGateway | null {
   if (name === "mock") return mockAllowed() ? mockGateway : null;
-  if (name === "cashfree") return configuredCashfree();
   return null;
 }

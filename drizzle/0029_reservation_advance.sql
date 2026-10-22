@@ -1,0 +1,1 @@
+ALTER TABLE `reservations` ADD `advance_received_paise` int DEFAULT 0 NOT NULL;
