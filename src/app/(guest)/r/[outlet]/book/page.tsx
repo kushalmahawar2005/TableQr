@@ -8,6 +8,8 @@ export const metadata: Metadata = { title: "Book a table" };
 // B1 Guests, date and time. Reached from the entrance QR or the booking link.
 export default async function BookPage(props: PageProps<"/r/[outlet]/book">) {
   const { outlet } = await props.params;
+  const query = await props.searchParams;
+  const hindi = query.lang === "hi";
   const zones = await getBookingZones(outlet).catch((e: unknown) => {
     if (e instanceof AppError && e.code === "forbidden") return null;
     throw e;
@@ -23,5 +25,5 @@ export default async function BookPage(props: PageProps<"/r/[outlet]/book">) {
       </main>
     );
   }
-  return <BookingClient outletCode={outlet} zones={zones} />;
+  return <BookingClient outletCode={outlet} zones={zones} hindi={hindi} />;
 }
