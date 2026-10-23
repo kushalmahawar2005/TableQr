@@ -1,19 +1,25 @@
 import { eq } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { db as appDb } from "@/db";
+import { uuidv7 } from "@/db/id";
 import * as s from "@/db/schema";
 import { serviceDate } from "@/domain/booking-policy";
 import { bookingByToken, createBookingHold, createGroupRequest, getBookingAvailability, getBookingZones } from "@/server/booking/core";
 import { getRestaurantHome } from "@/server/guest/restaurant-home";
 import { getOutletSettings } from "@/server/staff/settings-read";
-import { updateOutletSettings, type SettingsPatch } from "@/server/staff/settings-write";
+import { saveRestaurantCashfree, updateBookingPaymentQr, updateBrandLogo, updateOutletSettings, type SettingsPatch } from "@/server/staff/settings-write";
 import { resetTestDb } from "./setup-db";
 
 let env: Awaited<ReturnType<typeof resetTestDb>>;
-const owner = () => ({ tenantId: env.demo.tenantId, outletId: env.demo.outletId, roles: ["owner" as const], userId: env.demo.staffIds.owner, name: "Owner" });
+let secondOutletId: string;
+const owner = (outletId = env.demo.outletId) => ({ tenantId: env.demo.tenantId, outletId, roles: ["owner" as const], userId: env.demo.staffIds.owner, name: "Owner" });
 const patch = (overrides: Partial<SettingsPatch> = {}): SettingsPatch => ({ city: "Jaipur", address: "Test restaurant", gstin: "", fssai: "", serviceChargeBp: 0, tipPresetsBp: null, autoAcceptOrders: false, reviewUrl: "", openingHours: null, roomServices: [], wifiSsid: "", wifiPassword: "", ...overrides });
-beforeAll(async () => { env = await resetTestDb(); });
-afterAll(async () => { await env.conn.end(); await appDb.$client.end(); });
+beforeAll(async () => {
+  env = await resetTestDb();
+  secondOutletId = uuidv7();
+  await env.db.insert(s.outlets).values({ id: secondOutletId, tenantId: env.demo.tenantId, brandId: env.demo.brandId, code: "SRJ02", name: "Spice Route Two", city: "Jaipur", address: "MI Road" });
+});
+afterAll(async () => { vi.unstubAllEnvs(); await env.conn.end(); await appDb.$client.end(); });
 
 describe("public restaurant service choices", () => {
   it("defaults existing restaurants to their package's services and never grants an excluded feature", async () => {
@@ -48,5 +54,26 @@ describe("public restaurant service choices", () => {
     const [outlet] = await env.db.select().from(s.outlets).where(eq(s.outlets.id, env.demo.outletId));
     expect(outlet.guestServices).toEqual([]);
     expect(outlet.guestOnlinePayments).toBe(false);
+  });
+
+  it("keeps payment, QR, service, and Wi-Fi settings isolated per outlet while sharing the tenant brand", async () => {
+    vi.stubEnv("NODE_ENV", "test");
+    vi.stubEnv("PAYMENT_CREDENTIALS_KEY", "c".repeat(64));
+    const firstOwner = owner();
+    const secondOwner = owner(secondOutletId);
+
+    await updateBrandLogo(firstOwner, "/uploads/shared-brand-logo.png");
+    await updateBookingPaymentQr(firstOwner, "/uploads/branch-one-qr.png");
+    await updateBookingPaymentQr(secondOwner, "/uploads/branch-two-qr.png");
+    await saveRestaurantCashfree(firstOwner, { mode: "sandbox", clientId: "merchant_branch_001", clientSecret: "branch_one_secret_123" });
+    await saveRestaurantCashfree(secondOwner, { mode: "sandbox", clientId: "merchant_branch_002", clientSecret: "branch_two_secret_456" });
+    await updateOutletSettings(firstOwner, patch({ guestServices: ["dineIn"], guestOnlinePayments: false, bookingPaymentMode: "manual_qr", wifiSsid: "Branch One WiFi", wifiPassword: "branch-one-pass" }));
+    await updateOutletSettings(secondOwner, patch({ guestServices: ["reservations"], guestOnlinePayments: false, bookingPaymentMode: "manual_qr", wifiSsid: "Branch Two WiFi", wifiPassword: "branch-two-pass" }));
+
+    const [first, second] = await Promise.all([getOutletSettings(firstOwner), getOutletSettings(secondOwner)]);
+    expect(first).toMatchObject({ logoUrl: "/uploads/shared-brand-logo.png", bookingPaymentQrUrl: "/uploads/branch-one-qr.png", guestServices: ["dineIn"], wifiSsid: "Branch One WiFi", wifiPassword: "branch-one-pass", paymentGateway: { configured: true, appIdHint: "••••_001" } });
+    expect(second).toMatchObject({ logoUrl: "/uploads/shared-brand-logo.png", bookingPaymentQrUrl: "/uploads/branch-two-qr.png", guestServices: ["reservations"], wifiSsid: "Branch Two WiFi", wifiPassword: "branch-two-pass", paymentGateway: { configured: true, appIdHint: "••••_002" } });
+    expect(first.bookingPaymentQrUrl).not.toBe(second.bookingPaymentQrUrl);
+    expect(first.paymentGateway.appIdHint).not.toBe(second.paymentGateway.appIdHint);
   });
 });
