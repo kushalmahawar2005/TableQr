@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build --webpack",
+    "build:production": "npm run db:migrate && npm run build",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
