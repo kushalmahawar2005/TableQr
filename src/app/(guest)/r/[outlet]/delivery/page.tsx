@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { deliveryMenu } from "@/server/delivery/catalog";
 import { deliveryStatus } from "@/server/delivery/checkout";
 import { cookies } from "next/headers";
@@ -29,6 +30,7 @@ export default async function DeliveryPage({ params, searchParams }: { params: P
   }
   catch (error) {
     if (!(error instanceof AppError)) throw error;
+    if (error.code === "not_found" || error.code === "outlet_unavailable") notFound();
     menuError = error.message;
   }
   if (menuError) return <main className="py-10"><Link href={`/r/${encodeURIComponent(outlet)}`} className="text-brand-strong">← Restaurant</Link><h1 className="mt-6 text-2xl font-bold">Delivery</h1><p className="mt-3 text-muted">{menuError}</p></main>;

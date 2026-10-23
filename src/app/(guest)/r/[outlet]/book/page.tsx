@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { BookingClient } from "./booking-client";
 import { getBookingPageConfig } from "@/server/booking/core";
 import { AppError } from "@/server/errors";
@@ -13,6 +14,7 @@ export default async function BookPage(props: PageProps<"/r/[outlet]/book">) {
   const hindi = query.lang === "hi";
   const config = await getBookingPageConfig(outlet).catch((e: unknown) => {
     if (e instanceof AppError && e.code === "forbidden") return null;
+    if (e instanceof AppError && (e.code === "not_found" || e.code === "outlet_unavailable")) notFound();
     throw e;
   });
   // The restaurant's plan has no online booking
