@@ -12,6 +12,7 @@ import {
   reservationCreateAction,
   reservationConfirmAdvanceAction,
   reservationNoShowAction,
+  reservationRemindedAction,
   reservationReassignAction,
   reservationRescheduleAction,
   reservationSeatAction,
@@ -448,6 +449,7 @@ function Drawer({ reservation: r, data, preview, onDone, onClose }: { reservatio
           </>
         )}
       </dl>
+      {r.phone && <div className="flex flex-wrap gap-2"><a href={`tel:${r.phone}`} className="inline-flex min-h-10 items-center rounded-input bg-brand px-3 text-body font-semibold text-white">Call guest · {r.phone}</a>{r.status === "confirmed" && data.mayEdit && <button type="button" disabled={working || preview} className={plainButton} onClick={() => void act(() => reservationRemindedAction(r.id))}>Mark call confirmed</button>}</div>}
       {r.notes && <p className="text-muted">{r.notes}</p>}
       {r.manualAdvance?.confirmedAt && ["requested", "cancelled", "no_show"].includes(r.status) && <p className="rounded-xl border border-line bg-brand-soft p-3 text-sm font-semibold">Advance receipt is recorded, but the booking is not confirmed. Contact the guest to arrange a new booking or a refund.</p>}
       {r.manualAdvance && !r.manualAdvance.confirmedAt && <section className="rounded-xl border border-line bg-brand-soft p-4 text-sm">

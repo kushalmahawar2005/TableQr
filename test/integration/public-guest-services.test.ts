@@ -40,7 +40,7 @@ describe("public restaurant service choices", () => {
     await expect(getBookingAvailability("SRJ01", { date, partySize: 2 })).rejects.toMatchObject({ code: "forbidden" });
     await expect(getBookingZones("SRJ01")).rejects.toMatchObject({ code: "forbidden" });
     await expect(createBookingHold("SRJ01", { date, startAt: slot.startAt, partySize: 2, requestId: "paused-hold", holdToken: "paused-token" })).rejects.toMatchObject({ code: "forbidden" });
-    await expect(createGroupRequest("SRJ01", { requestId: "paused-group", name: "Group", phone: "9876543210", partySize: 20, desiredDate: date, desiredStartAt: slot.startAt })).rejects.toMatchObject({ code: "forbidden" });
+    await expect(createGroupRequest("SRJ01", { requestId: "paused-group", name: "Group", phone: "9876543210", partySize: 20, desiredDate: date, desiredLocalDateTime: `${date}T19:00` })).rejects.toMatchObject({ code: "forbidden" });
     expect((await bookingByToken("SRJ01", held.manageToken)).row.id).toBe(held.reservationId);
     expect(await getRestaurantHome("CNJ01")).toEqual(otherBefore);
   });

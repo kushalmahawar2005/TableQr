@@ -130,6 +130,22 @@ const FROM: Record<string, ReservationStatus[]> = {
   cancel: ["requested", "confirmed", "reminded", "arrived"],
 };
 
+/** Record that staff personally called the guest to reconfirm the upcoming booking. */
+export async function markReservationReminded(staff: FloorActor, id: string, now = new Date()) {
+  assertMay(staff, "booking.manage");
+  const scope = scopeOf(staff);
+  const events = await db.transaction(async (tx) => {
+    const r = await lockReservation(tx, scope, id);
+    if (r.status === "reminded") return [];
+    if (r.status !== "confirmed") throw new AppError("invalid_state", "Only a confirmed booking can be marked as called.", { status: r.status });
+    await tx.update(s.reservations).set({ status: "reminded", remindedAt: now, updatedAt: now }).where(and(eq(s.reservations.tenantId, scope.tenantId), eq(s.reservations.id, r.id)));
+    await tx.insert(s.reservationHistory).values({ tenantId: scope.tenantId, reservationId: r.id, kind: "reminded", before: { status: r.status }, after: { status: "reminded", remindedAt: now, method: "staff_call" }, createdAt: now });
+    await audit(tx, staff, { action: "reservation.reminded", entity: "reservation", entityId: r.id, before: { status: r.status }, after: { status: "reminded", remindedAt: now, method: "staff_call" }, now });
+    return [reservationEvent("reservation.updated", r.id)];
+  }, LOCK_THEN_READ);
+  if (events.length) await publish(scope, events);
+}
+
 async function transition(staff: FloorActor, id: string, step: keyof typeof FROM, now: Date, reason?: string | null) {
   assertMay(staff, "booking.manage");
   const scope = scopeOf(staff);

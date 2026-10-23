@@ -43,7 +43,7 @@ export type BookingSlot = {
   creditReason: string | null;
 };
 
-type OutletScope = { tenantId: string; brandId: string; outletId: string; outletCode: string; timezone: string; openingHours: WeeklyHours | null; name: string; address: string; city: string; guestServices?: GuestService[] | null; bookingPaymentMode?: "gateway" | "manual_qr"; bookingPaymentQrUrl?: string | null; paymentGatewayConfig?: string | null };
+type OutletScope = { tenantId: string; brandId: string; outletId: string; outletCode: string; timezone: string; openingHours: WeeklyHours | null; name: string; address: string; city: string; guestServices?: GuestService[] | null; bookingPaymentMode?: "gateway" | "manual_qr"; bookingPaymentQrUrl?: string | null; bookingAdvancePaise?: number; paymentGatewayConfig?: string | null };
 
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const publicRef = () => `TQ-${randomBytes(5).toString("hex").toUpperCase()}`;
@@ -51,7 +51,7 @@ const liveStatuses = [...LIVE];
 
 async function outletScope(run: Runner, outletCode: string): Promise<OutletScope> {
   // isolation-exempt: the tenant is resolved from the public outlet code before scoped queries.
-  const [o] = await run.select({ tenantId: s.outlets.tenantId, brandId: s.outlets.brandId, outletId: s.outlets.id, outletCode: s.outlets.code, timezone: s.outlets.timezone, openingHours: s.outlets.openingHours, name: s.outlets.name, address: s.outlets.address, city: s.outlets.city, guestServices: s.outlets.guestServices, bookingPaymentMode: s.outlets.bookingPaymentMode, bookingPaymentQrUrl: s.outlets.bookingPaymentQrUrl, paymentGatewayConfig: s.outlets.paymentGatewayConfig })
+  const [o] = await run.select({ tenantId: s.outlets.tenantId, brandId: s.outlets.brandId, outletId: s.outlets.id, outletCode: s.outlets.code, timezone: s.outlets.timezone, openingHours: s.outlets.openingHours, name: s.outlets.name, address: s.outlets.address, city: s.outlets.city, guestServices: s.outlets.guestServices, bookingPaymentMode: s.outlets.bookingPaymentMode, bookingPaymentQrUrl: s.outlets.bookingPaymentQrUrl, bookingAdvancePaise: s.outlets.bookingAdvancePaise, paymentGatewayConfig: s.outlets.paymentGatewayConfig })
     .from(s.outlets).where(eq(s.outlets.code, String(outletCode).trim().toUpperCase()));
   if (!o) throw new AppError("not_found", "We could not find this restaurant.");
   return o;
@@ -66,6 +66,25 @@ export async function getBookingZones(outletCode: string) {
   const scope = await outletScope(db, outletCode);
   await requireOnlineBookings(scope);
   return db.select({ id: s.zones.id, name: s.zones.name }).from(s.zones).where(and(eq(s.zones.tenantId, scope.tenantId), eq(s.zones.outletId, scope.outletId), eq(s.zones.isActive, true))).orderBy(asc(s.zones.sortOrder), asc(s.zones.name));
+}
+
+/** Guest-facing date/time rules must use the restaurant's timezone and cancellation policy. */
+export async function getBookingPageConfig(outletCode: string) {
+  const scope = await outletScope(db, outletCode);
+  await requireOnlineBookings(scope);
+  const [zones, policy] = await Promise.all([
+    db.select({ id: s.zones.id, name: s.zones.name }).from(s.zones)
+      .where(and(eq(s.zones.tenantId, scope.tenantId), eq(s.zones.outletId, scope.outletId), eq(s.zones.isActive, true)))
+      .orderBy(asc(s.zones.sortOrder), asc(s.zones.name)),
+    loadPolicy(db, scope),
+  ]);
+  return { zones, timezone: scope.timezone, today: serviceDate(new Date(), scope.timezone), freeCancellationMinutes: policy.freeCancellationMinutes };
+}
+
+export async function getBookingDetailsConfig(outletCode: string, token: string) {
+  const { scope } = await bookingByToken(outletCode, token);
+  const policy = await loadPolicy(db, scope);
+  return { timezone: scope.timezone, freeCancellationMinutes: policy.freeCancellationMinutes };
 }
 
 async function validateZone(run: Runner, scope: OutletScope, zoneId?: string | null) {
@@ -194,7 +213,7 @@ export async function getBookingAvailability(outletCode: string, input: { date: 
     const paused = exception?.onlineBookingsPaused === true;
     const credit = creditFor(policy, floor.claims, start);
     const chosen = !tooSoon && !outside && !paused ? pickTables(floor, start, end, party, input.preference ?? {}) : null;
-    slots.push({ startAt: start.getTime(), endAt: end.getTime(), available: !!chosen, reason: paused ? "blackout" : tooSoon ? "cutoff" : outside ? "outside_window" : chosen ? "available" : "full", alternatives: [], creditRequiredPaise: credit.amountPaise, creditReason: credit.reason });
+    slots.push({ startAt: start.getTime(), endAt: end.getTime(), available: !!chosen, reason: paused ? "blackout" : tooSoon ? "cutoff" : outside ? "outside_window" : chosen ? "available" : "full", alternatives: [], creditRequiredPaise: Math.max(scope.bookingAdvancePaise ?? 0, credit.amountPaise), creditReason: credit.reason ?? ((scope.bookingAdvancePaise ?? 0) > 0 ? "Reservation advance" : null) });
   }
   const available = slots.filter((x) => x.available).map((x) => x.startAt);
   for (const slot of slots) if (!slot.available) slot.alternatives = available.sort((a, b) => Math.abs(a - slot.startAt) - Math.abs(b - slot.startAt)).slice(0, 3);
@@ -209,22 +228,33 @@ export async function createBookingHold(outletCode: string, input: { date: strin
   const policy = policyWithFallback(await loadPolicy(db, scope));
   const startAt = new Date(Number(input.startAt));
   if (Number.isNaN(startAt.getTime()) || startAt.getTime() < now.getTime() + policy.onlineCutoffMinutes * 60_000) throw new AppError("conflict", "Choose a later online booking time.", { reason: "cutoff" });
-  const endAt = new Date(startAt.getTime() + diningMinutesFor(Number(input.partySize), policy) * 60_000);
+  const partySize = Number(input.partySize);
+  if (!Number.isInteger(partySize) || partySize < policy.minPartySize || partySize > policy.maxPartySize) throw new AppError("invalid_state", "Choose a valid party size for online booking.", { reason: "party_size" });
+  const date = String(input.date);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || serviceDate(startAt, scope.timezone) !== date || !slotStarts(date, scope, policy).some((slot) => slot.getTime() === startAt.getTime())) {
+    throw new AppError("invalid_state", "Choose one of the restaurant's available booking times.", { reason: "slot" });
+  }
+  const latest = new Date(now.getTime() + policy.bookingWindowDays * 86_400_000);
+  if (startAt > latest) throw new AppError("invalid_state", "This time is outside the restaurant's booking window.", { reason: "window" });
+  const exception = await exceptionFor(db, scope, date);
+  if (exception?.onlineBookingsPaused) throw new AppError("conflict", "Online bookings are paused for this date.", { reason: "paused" });
+  const endAt = new Date(startAt.getTime() + diningMinutesFor(partySize, policy) * 60_000);
   const holdExpiresAt = new Date(now.getTime() + BOOKING_HOLD_MINUTES * 60_000);
   const tokenHash = hash(input.holdToken);
   const result = await db.transaction(async (tx) => {
     const [existing] = await tx.select().from(s.reservations).where(and(eq(s.reservations.tenantId, scope.tenantId), eq(s.reservations.bookingRequestId, input.requestId))).for("update");
     if (existing && existing.holdExpiresAt && existing.holdExpiresAt > now && existing.manageTokenHash === hash(input.holdToken)) return existing;
-    const chosen = await chooseTables(tx, scope, startAt, endAt, Number(input.partySize), input.preference ?? {}, now, true);
+    const chosen = await chooseTables(tx, scope, startAt, endAt, partySize, input.preference ?? {}, now, true);
     if (!chosen) throw new AppError("conflict", "That time is no longer available.", { reason: "full" });
-    const credit = await slotCredit(tx, scope, policy, startAt);
+    const slotCreditAmount = await slotCredit(tx, scope, policy, startAt);
+    const credit = { amountPaise: Math.max(scope.bookingAdvancePaise ?? 0, slotCreditAmount.amountPaise), reason: slotCreditAmount.reason };
     if (credit.amountPaise > 0 && scope.bookingPaymentMode !== "manual_qr" && !outletGatewayFromConfig(scope.paymentGatewayConfig)) {
       throw new AppError("invalid_state", "This restaurant has not connected online advance payments yet. Please contact the restaurant or choose another time.", { reason: "booking_payment_unavailable" });
     }
     const id = uuidv7();
     const manage = input.holdToken;
     const reference = publicRef();
-    await tx.insert(s.reservations).values({ id, tenantId: scope.tenantId, outletId: scope.outletId, name: "Pending guest", publicReference: reference, manageTokenHash: hash(manage), manageTokenExpiresAt: new Date(now.getTime() + 90 * 86_400_000), bookingRequestId: input.requestId, partySize: Number(input.partySize), startAt, expectedEndAt: endAt, status: "requested", source: "online", seatingPreference: input.preference?.seatingPreference ?? null, requestedZoneId: input.preference?.zoneId ?? null, requestedTableClass: input.preference?.tableClass ?? null, holdExpiresAt, holdOwnerHash: tokenHash, advancePaymentMode: scope.bookingPaymentMode ?? "gateway", advancePaymentQrUrl: scope.bookingPaymentQrUrl ?? null, creditRequiredPaise: credit.amountPaise, creditPaidPaise: 0, creditAppliedPaise: 0, creditStatus: credit.amountPaise ? "required" : "none", createdAt: now, updatedAt: now });
+    await tx.insert(s.reservations).values({ id, tenantId: scope.tenantId, outletId: scope.outletId, name: "Pending guest", publicReference: reference, manageTokenHash: hash(manage), manageTokenExpiresAt: new Date(now.getTime() + 90 * 86_400_000), bookingRequestId: input.requestId, partySize, startAt, expectedEndAt: endAt, status: "requested", source: "online", seatingPreference: input.preference?.seatingPreference ?? null, requestedZoneId: input.preference?.zoneId ?? null, requestedTableClass: input.preference?.tableClass ?? null, holdExpiresAt, holdOwnerHash: tokenHash, advancePaymentMode: scope.bookingPaymentMode ?? "gateway", advancePaymentQrUrl: scope.bookingPaymentQrUrl ?? null, creditRequiredPaise: credit.amountPaise, creditPaidPaise: 0, creditAppliedPaise: 0, creditStatus: credit.amountPaise ? "required" : "none", createdAt: now, updatedAt: now });
     await tx.insert(s.reservationTables).values(chosen.map((t) => ({ id: uuidv7(), tenantId: scope.tenantId, reservationId: id, tableId: t.id })));
     await tx.insert(s.reservationHistory).values({ tenantId: scope.tenantId, reservationId: id, kind: "hold_created", after: { startAt, endAt, tableIds: chosen.map((t) => t.id) }, createdAt: now });
     return { ...(await tx.select().from(s.reservations).where(and(eq(s.reservations.tenantId, scope.tenantId), eq(s.reservations.id, id))))[0], manageToken: manage } as typeof s.reservations.$inferSelect & { manageToken: string };
@@ -318,17 +348,20 @@ export async function confirmBooking(outletCode: string, token: string, input: {
 
 export async function cancelBookingPublic(outletCode: string, token: string, reason = "guest_cancelled", now = new Date()) {
   const { row, scope } = await bookingByToken(outletCode, token);
-  if (["cancelled", "no_show"].includes(row.status)) return { status: row.status };
-  const free = now.getTime() <= row.startAt.getTime() - 120 * 60_000;
+  if (["cancelled", "no_show"].includes(row.status)) return { status: row.status, freeCancellation: false, manualRefundNeedsRestaurant: false };
+  const policy = policyWithFallback(await loadPolicy(db, scope));
+  let free = false;
   await db.transaction(async (tx) => {
     const [locked] = await tx.select().from(s.reservations).where(and(eq(s.reservations.tenantId, scope.tenantId), eq(s.reservations.id, row.id))).for("update");
     if (!locked) throw new AppError("not_found", "This booking is no longer available.");
+    if (["cancelled", "no_show"].includes(locked.status)) return;
+    free = now.getTime() <= locked.startAt.getTime() - policy.freeCancellationMinutes * 60_000;
     await tx.update(s.reservations).set({ status: "cancelled", cancelledAt: now, holdExpiresAt: null, holdReleasedAt: now, holdReleaseReason: reason, updatedAt: now }).where(and(eq(s.reservations.tenantId, scope.tenantId), eq(s.reservations.id, row.id)));
     await tx.insert(s.reservationHistory).values({ tenantId: scope.tenantId, reservationId: row.id, kind: "cancelled", before: { status: locked.status }, after: { status: "cancelled", free, reason }, reason, createdAt: now });
   }, LOCK_THEN_READ);
   await publish(scope, [{ topic: topics.floor, type: "booking.cancelled", data: { reservationId: row.id } }]);
   if (free && row.creditPaidPaise > 0) await (await import("./credit")).refundReservationCredit(scope.tenantId, row.id);
-  return { status: "cancelled", freeCancellation: free };
+  return { status: "cancelled", freeCancellation: free, manualRefundNeedsRestaurant: free && row.advanceReceivedPaise > 0 };
 }
 
 export async function lateBookingPublic(outletCode: string, token: string, now = new Date()) {
@@ -342,15 +375,20 @@ export async function lateBookingPublic(outletCode: string, token: string, now =
   return { minutes: policy.lateExtensionMinutes };
 }
 
-export async function rescheduleBookingPublic(outletCode: string, token: string, input: { date: string; startAt: number }, now = new Date()) {
+export async function rescheduleBookingPublic(outletCode: string, token: string, input: { localDateTime: string }, now = new Date()) {
   const scope = await outletScope(db, outletCode);
   const result = await db.transaction(async (tx) => {
     const [row] = await tx.select().from(s.reservations).where(and(eq(s.reservations.tenantId, scope.tenantId), eq(s.reservations.outletId, scope.outletId), eq(s.reservations.manageTokenHash, hash(token)))).for("update");
     if (!row || ["cancelled", "no_show", "completed", "seated"].includes(row.status)) throw new AppError("invalid_state", "This booking cannot be rescheduled now.");
     const policy = policyWithFallback(await loadPolicy(tx, scope));
     await validateZone(tx, scope, row.requestedZoneId);
-    const startAt = new Date(Number(input.startAt));
-    if (Number.isNaN(startAt.getTime()) || startAt.getTime() < now.getTime() + policy.onlineCutoffMinutes * 60_000) throw new AppError("conflict", "Choose a later online booking time.", { reason: "cutoff" });
+    const startAt = parseLocalDateTime(input.localDateTime, scope.timezone);
+    const date = startAt ? serviceDate(startAt, scope.timezone) : "";
+    if (!startAt || startAt.getTime() < now.getTime() + policy.onlineCutoffMinutes * 60_000) throw new AppError("conflict", "Choose a later online booking time.", { reason: "cutoff" });
+    if (!slotStarts(date, scope, policy).some((slot) => slot.getTime() === startAt.getTime())) throw new AppError("invalid_state", "Choose one of the restaurant's available booking times.", { reason: "slot" });
+    const latest = new Date(now.getTime() + policy.bookingWindowDays * 86_400_000);
+    if (startAt > latest) throw new AppError("invalid_state", "This time is outside the restaurant's booking window.", { reason: "window" });
+    if ((await exceptionFor(tx, scope, date))?.onlineBookingsPaused) throw new AppError("conflict", "Online bookings are paused for this date.", { reason: "paused" });
     const endAt = new Date(startAt.getTime() + diningMinutesFor(row.partySize, policy) * 60_000);
     const chosen = await chooseTables(tx, scope, startAt, endAt, row.partySize, { seatingPreference: row.seatingPreference, tableClass: row.requestedTableClass, zoneId: row.requestedZoneId }, now, true, row.id);
     if (!chosen) throw new AppError("conflict", "That new time is no longer available.", { reason: "full" });
@@ -424,14 +462,16 @@ export async function arriveBookingPublic(outletCode: string, token: string, now
   return { status: "arrived" as const };
 }
 
-export async function createGroupRequest(outletCode: string, input: { requestId: string; name: string; phone: string; partySize: number; desiredDate: string; desiredStartAt: number; notes?: string | null }) {
+export async function createGroupRequest(outletCode: string, input: { requestId: string; name: string; phone: string; partySize: number; desiredDate: string; desiredLocalDateTime: string; notes?: string | null }) {
   const scope = await outletScope(db, outletCode); const partySize = Number(input.partySize);
   await requireOnlineBookings(scope);
   if (partySize <= 12 || partySize > 100 || !input.name.trim() || !input.phone.trim()) throw new AppError("invalid_state", "Group requests are for parties above 12 guests.");
+  const desiredStartAt = parseLocalDateTime(input.desiredLocalDateTime, scope.timezone);
+  if (!desiredStartAt || serviceDate(desiredStartAt, scope.timezone) !== input.desiredDate) throw new AppError("invalid_state", "Choose a valid event date and time.");
   const existing = await db.select({ id: s.groupRequests.id, publicReference: s.groupRequests.publicReference }).from(s.groupRequests).where(and(eq(s.groupRequests.tenantId, scope.tenantId), eq(s.groupRequests.requestId, input.requestId))).limit(1);
   if (existing[0]) return existing[0];
   const id = uuidv7(); const reference = publicRef();
-  await db.insert(s.groupRequests).values({ id, tenantId: scope.tenantId, outletId: scope.outletId, publicReference: reference, requestId: input.requestId, name: input.name.trim().slice(0, 80), phone: input.phone.trim().slice(0, 15), partySize, desiredDate: input.desiredDate, desiredStartAt: new Date(Number(input.desiredStartAt)), notes: input.notes?.trim().slice(0, 500) || null, status: "requested" });
+  await db.insert(s.groupRequests).values({ id, tenantId: scope.tenantId, outletId: scope.outletId, publicReference: reference, requestId: input.requestId, name: input.name.trim().slice(0, 80), phone: input.phone.trim().slice(0, 15), partySize, desiredDate: input.desiredDate, desiredStartAt, notes: input.notes?.trim().slice(0, 500) || null, status: "requested" });
   // An event enquiry is not a confirmed booking. The guest sees a reference immediately, and the
   // restaurant follows up manually; never queue the standard booking-confirmation message here.
   await publish(scope, [{ topic: topics.floor, type: "booking.group_request", data: { groupRequestId: id } }]);

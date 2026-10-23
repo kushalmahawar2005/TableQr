@@ -337,6 +337,20 @@
       "when": 1792790150697,
       "tag": "0047_serious_iron_man",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "5",
+      "when": 1792790150698,
+      "tag": "0048_reservation_call_reminder",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "5",
+      "when": 1792790150699,
+      "tag": "0049_reservation_deposit",
+      "breakpoints": true
     }
   ]
 }

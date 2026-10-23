@@ -47,6 +47,24 @@ describe("B1-B4 booking domain", () => {
     await expect(saveBookingPreorder("SRJ01", hold.manageToken, [{ itemId: item.id, qty: 0 }], holdNow)).rejects.toBeInstanceOf(AppError);
   });
 
+  it("includes the restaurant's fixed advance in the slot and preserves it when a preorder is added", async () => {
+    const [before] = await env.db.select({ bookingAdvancePaise: s.outlets.bookingAdvancePaise, bookingPaymentMode: s.outlets.bookingPaymentMode, bookingPaymentQrUrl: s.outlets.bookingPaymentQrUrl }).from(s.outlets).where(eq(s.outlets.id, env.demo.outletId));
+    try {
+      await env.db.update(s.outlets).set({ bookingAdvancePaise: 10_000, bookingPaymentMode: "manual_qr", bookingPaymentQrUrl: "/uploads/test-payment-qr.png" }).where(eq(s.outlets.id, env.demo.outletId));
+      const holdNow = new Date(now.getTime() - 2 * 3600_000);
+      const availability = await getBookingAvailability("SRJ01", { date, partySize: 2 }, holdNow);
+      const slot = availability.slots.find((value) => value.available)!;
+      expect(slot.creditRequiredPaise).toBe(10_000);
+      const hold = await createBookingHold("SRJ01", { date, startAt: slot.startAt, partySize: 2, requestId: "fixed-deposit-hold", holdToken: "fixed-deposit-token" }, holdNow);
+      expect(hold.creditRequiredPaise).toBe(10_000);
+      const item = (await bookingPreorderMenu("SRJ01")).find((value) => value.nameEn === "Masala Papad")!;
+      const saved = await saveBookingPreorder("SRJ01", hold.manageToken, [{ itemId: item.id, qty: 1 }], holdNow);
+      expect(saved.creditRequiredPaise).toBe(10_000 + item.pricePaise + Math.floor(item.pricePaise * item.taxRateBp / 10_000 + 0.5));
+    } finally {
+      await env.db.update(s.outlets).set(before).where(eq(s.outlets.id, env.demo.outletId));
+    }
+  });
+
   it("sends a saved preorder to the kitchen when staff seats the party", async () => {
     const holdNow = new Date(now.getTime() - 2 * 3600_000);
     const availability = await getBookingAvailability("SRJ01", { date, partySize: 2 }, holdNow);
@@ -88,7 +106,7 @@ describe("B1-B4 booking domain", () => {
   });
 
   it("persists group requests above twelve without creating a reservation", async () => {
-    const request = await createGroupRequest("SRJ01", { requestId: "group-req-1", name: "Large Party", phone: "9876543212", partySize: 15, desiredDate: date, desiredStartAt: now.getTime(), notes: "Private room if possible" });
+    const request = await createGroupRequest("SRJ01", { requestId: "group-req-1", name: "Large Party", phone: "9876543212", partySize: 15, desiredDate: date, desiredLocalDateTime: `${date}T19:00`, notes: "Private room if possible" });
     expect(request.publicReference).toMatch(/^TQ-/);
     const [reservation] = await env.db.select().from(s.reservations).where(eq(s.reservations.bookingRequestId, "group-req-1"));
     expect(reservation).toBeUndefined();
@@ -97,17 +115,18 @@ describe("B1-B4 booking domain", () => {
   });
 
   it("prevents simultaneous holds for the only twelve-top", async () => {
-    const at = now.getTime() + 4 * 3600_000;
+    const holdNow = new Date(now.getTime() - 2 * 3600_000);
+    const at = (await getBookingAvailability("SRJ01", { date, partySize: 12 }, holdNow)).slots.find((slot) => slot.available)!.startAt;
     const results = await Promise.allSettled([
-      createBookingHold("SRJ01", { date, startAt: at, partySize: 12, requestId: "race-a", holdToken: "race-a-token" }, now),
-      createBookingHold("SRJ01", { date, startAt: at, partySize: 12, requestId: "race-b", holdToken: "race-b-token" }, now),
+      createBookingHold("SRJ01", { date, startAt: at, partySize: 12, requestId: "race-a", holdToken: "race-a-token" }, holdNow),
+      createBookingHold("SRJ01", { date, startAt: at, partySize: 12, requestId: "race-b", holdToken: "race-b-token" }, holdNow),
     ]);
     expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
     expect(results.filter((r) => r.status === "rejected")).toHaveLength(1);
   });
 
   it("reuses OTP rules for booking context and confirms the held reservation", async () => {
-    const at = now.getTime() + 6 * 3600_000;
+    const at = (await getBookingAvailability("SRJ01", { date, partySize: 2 }, now)).slots.find((slot) => slot.available)!.startAt;
     const hold = await createBookingHold("SRJ01", { date, startAt: at, partySize: 2, requestId: "otp-booking", holdToken: "otp-booking-token" }, now);
     const sent = await sendBookingOtp("SRJ01", hold.manageToken, "booking-device", "9876543210", now);
     expect(sent.devCode).toMatch(/^\d{4}$/);
@@ -120,8 +139,12 @@ describe("B1-B4 booking domain", () => {
     expect(r?.guestId).toBe(verified.guestId);
   });
 
+  it("rejects a timestamp that is not one of the restaurant's published slots", async () => {
+    await expect(createBookingHold("SRJ01", { date, startAt: now.getTime() + 3 * 60_000, partySize: 2, requestId: "invalid-slot", holdToken: "invalid-slot-token" }, new Date(now.getTime() - 2 * 3600_000))).rejects.toMatchObject({ code: "invalid_state" });
+  });
+
   it("keeps public management opaque and supports cancellation", async () => {
-    const at = now.getTime() + 8 * 3600_000;
+    const at = (await getBookingAvailability("SRJ01", { date, partySize: 2 }, now)).slots.find((slot) => slot.available)!.startAt;
     const hold = await createBookingHold("SRJ01", { date, startAt: at, partySize: 2, requestId: "manage-booking", holdToken: "manage-booking-token" }, now);
     expect((await bookingByToken("SRJ01", hold.manageToken)).row.id).toBe(hold.reservationId);
     await cancelBookingPublic("SRJ01", hold.manageToken, "guest_cancelled", now);

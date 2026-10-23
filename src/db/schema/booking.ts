@@ -171,7 +171,7 @@ export const reservationTables = mysqlTable(
 
 export const reservationHistoryKinds = [
   "created", "hold_created", "hold_released", "confirmed", "cancelled", "restaurant_cancelled",
-  "rescheduled", "late_extended", "arrived", "seated", "completed", "no_show",
+  "rescheduled", "late_extended", "reminded", "arrived", "seated", "completed", "no_show",
 ] as const;
 
 export const reservationHistory = mysqlTable(

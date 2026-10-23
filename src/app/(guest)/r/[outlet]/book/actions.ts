@@ -37,7 +37,7 @@ export async function bookingPreorderMenuAction(outletCode: string) {
   try { return { ok: true as const, data: await bookingPreorderMenu(outletCode) }; } catch (e) { return fail(e); }
 }
 
-export async function saveBookingPreorderAction(outletCode: string, token: string, lines: { itemId: string; qty: number }[]) {
+export async function saveBookingPreorderAction(outletCode: string, token: string, lines: { itemId: string; qty: number; modifierIds?: string[] }[]) {
   try { return { ok: true as const, data: await saveBookingPreorder(outletCode, token, lines) }; } catch (e) { return fail(e); }
 }
 
@@ -61,7 +61,7 @@ export async function lateBookingAction(outletCode: string, token: string) {
   try { return { ok: true as const, data: await lateBookingPublic(outletCode, token) }; } catch (e) { return fail(e); }
 }
 
-export async function rescheduleBookingAction(outletCode: string, token: string, input: { date: string; startAt: number }) {
+export async function rescheduleBookingAction(outletCode: string, token: string, input: { localDateTime: string }) {
   try { return { ok: true as const, data: await rescheduleBookingPublic(outletCode, token, input) }; } catch (e) { return fail(e); }
 }
 
@@ -69,7 +69,7 @@ export async function arriveBookingAction(outletCode: string, token: string) {
   try { return { ok: true as const, data: await arriveBookingPublic(outletCode, token) }; } catch (e) { return fail(e); }
 }
 
-export async function groupRequestAction(outletCode: string, input: { requestId: string; name: string; phone: string; partySize: number; desiredDate: string; desiredStartAt: number; notes?: string }) {
+export async function groupRequestAction(outletCode: string, input: { requestId: string; name: string; phone: string; partySize: number; desiredDate: string; desiredLocalDateTime: string; notes?: string }) {
   try { return { ok: true as const, data: await createGroupRequest(outletCode, input) }; } catch (e) { return fail(e); }
 }
 

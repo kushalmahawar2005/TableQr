@@ -26,6 +26,7 @@ export type SettingsPatch = {
   roomServices: RoomRequestKind[]; wifiSsid: string; wifiPassword: string;
   guestServices?: GuestService[];
   bookingPaymentMode?: "gateway" | "manual_qr";
+  bookingAdvancePaise?: number;
 };
 
 const bad = (message: string) => new AppError("invalid_state", message, { reason: "settings" });
@@ -34,6 +35,7 @@ export async function updateOutletSettings(staff: Staff, input: SettingsPatch, n
   if (!staff.roles.includes("owner")) throw new AppError("forbidden", "Only the owner can change settings.");
   if (input.guestOnlinePayments !== undefined && typeof input.guestOnlinePayments !== "boolean") throw bad("Choose a valid online payment preference.");
   if (input.bookingPaymentMode !== undefined && !["gateway", "manual_qr"].includes(input.bookingPaymentMode)) throw bad("Choose a valid booking payment method.");
+  if (input.bookingAdvancePaise !== undefined && (!Number.isSafeInteger(input.bookingAdvancePaise) || input.bookingAdvancePaise < 0 || input.bookingAdvancePaise > 1_000_000_000)) throw bad("Reservation advance must be between ₹0 and ₹10,000,000.");
   let deliveryPolicy: DeliveryPolicy | undefined;
   if (input.deliveryPolicy !== undefined) {
     await requireFeature(staff.tenantId, "delivery");
@@ -87,12 +89,15 @@ export async function updateOutletSettings(staff: Staff, input: SettingsPatch, n
     if (onlinePayments && !outletGatewayFromConfig(before.paymentGatewayConfig)) throw bad("Connect this restaurant’s own Cashfree account before enabling guest online payments.");
     if (bookingPaymentMode === "gateway" && before.bookingPaymentMode !== "gateway" && !outletGatewayFromConfig(before.paymentGatewayConfig)) throw bad("Connect this restaurant’s own Cashfree account before enabling online booking advances, or use the restaurant QR option.");
     if (bookingPaymentMode === "manual_qr" && !before.bookingPaymentQrUrl) throw bad("Upload your payment QR before enabling manual booking advances.");
+    if ((input.bookingAdvancePaise ?? before.bookingAdvancePaise) > 0 && bookingPaymentMode === "gateway" && !outletGatewayFromConfig(before.paymentGatewayConfig)) throw bad("Connect this restaurant’s own Cashfree account or choose its QR before requiring reservation advances.");
+    if ((input.bookingAdvancePaise ?? before.bookingAdvancePaise) > 0 && bookingPaymentMode === "manual_qr" && !before.bookingPaymentQrUrl) throw bad("Upload your restaurant payment QR before requiring reservation advances.");
     if (deliveryPolicy?.paymentMode === "manual_qr" && !before.bookingPaymentQrUrl) throw bad("Upload your restaurant payment QR before selecting manual delivery payments.");
-    await tx.update(s.outlets).set({ ...next, ...(deliveryPolicy ? { deliveryPolicy } : {}), guestServices: nextGuestServices, bookingPaymentMode }).where(and(eq(s.outlets.tenantId, staff.tenantId), eq(s.outlets.id, staff.outletId)));
+    const bookingAdvancePaise = input.bookingAdvancePaise ?? before.bookingAdvancePaise;
+    await tx.update(s.outlets).set({ ...next, ...(deliveryPolicy ? { deliveryPolicy } : {}), guestServices: nextGuestServices, bookingPaymentMode, bookingAdvancePaise }).where(and(eq(s.outlets.tenantId, staff.tenantId), eq(s.outlets.id, staff.outletId)));
     await audit(tx, staff, {
       action: "outlet.settings_changed", entity: "outlet", entityId: staff.outletId, now,
-      before: { deliveryPolicy: before.deliveryPolicy, city: before.city, address: before.address, gstin: before.gstin, fssai: before.fssai, serviceChargeBp: before.serviceChargeBp, tipPresetsBp: before.tipPresetsBp, autoAcceptOrders: before.autoAcceptOrders, guestOnlinePayments: before.guestOnlinePayments, guestServices: before.guestServices, bookingPaymentMode: before.bookingPaymentMode, reviewUrl: before.reviewUrl, openingHours: before.openingHours, roomServices: before.roomServices, wifiSsid: before.wifiSsid, hasWifiPassword: !!before.wifiPassword },
-      after: { ...next, deliveryPolicy: deliveryPolicy ?? before.deliveryPolicy, guestServices: nextGuestServices, bookingPaymentMode, wifiPassword: "[redacted]", hasWifiPassword: !!wifiPassword },
+      before: { deliveryPolicy: before.deliveryPolicy, city: before.city, address: before.address, gstin: before.gstin, fssai: before.fssai, serviceChargeBp: before.serviceChargeBp, tipPresetsBp: before.tipPresetsBp, autoAcceptOrders: before.autoAcceptOrders, guestOnlinePayments: before.guestOnlinePayments, guestServices: before.guestServices, bookingPaymentMode: before.bookingPaymentMode, bookingAdvancePaise: before.bookingAdvancePaise, reviewUrl: before.reviewUrl, openingHours: before.openingHours, roomServices: before.roomServices, wifiSsid: before.wifiSsid, hasWifiPassword: !!before.wifiPassword },
+      after: { ...next, deliveryPolicy: deliveryPolicy ?? before.deliveryPolicy, guestServices: nextGuestServices, bookingPaymentMode, bookingAdvancePaise, wifiPassword: "[redacted]", hasWifiPassword: !!wifiPassword },
     });
   });
 }

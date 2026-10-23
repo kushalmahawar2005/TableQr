@@ -6,6 +6,7 @@ export const metadata: Metadata = { title: "Manage booking", robots: { index: fa
 export default async function ManageBookingPage(props: { params: Promise<{ outlet: string; opaqueToken: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const { outlet, opaqueToken } = await props.params;
   const query = await props.searchParams;
-  let row; try { row = (await bookingByToken(outlet, opaqueToken)).row; } catch { return <main className="mx-auto max-w-[520px] px-5 py-10"><h1 className="font-display text-3xl font-bold">Booking not found</h1><p className="mt-3 text-muted">This secure link is invalid or expired.</p></main>; }
-  return <ManageBookingClient outletCode={outlet} token={opaqueToken} hindi={query.lang === "hi"} booking={{ reference: row.publicReference, name: row.name, startAt: row.startAt.getTime(), partySize: row.partySize, status: row.status }} />;
+  let result; try { result = await bookingByToken(outlet, opaqueToken); } catch { return <main className="mx-auto max-w-[520px] px-5 py-10"><h1 className="font-display text-3xl font-bold">Booking not found</h1><p className="mt-3 text-muted">This secure link is invalid or expired.</p></main>; }
+  const { row, scope } = result;
+  return <ManageBookingClient outletCode={outlet} token={opaqueToken} timezone={scope.timezone} hindi={query.lang === "hi"} booking={{ reference: row.publicReference, name: row.name, startAt: row.startAt.getTime(), partySize: row.partySize, status: row.status }} />;
 }

@@ -1,6 +1,6 @@
 "use server";
 import { AppError } from "@/server/errors";
-import { cancelReservation, checkInReservation, markNoShow, reassignReservation, seatReservation } from "@/server/floor/reservations";
+import { cancelReservation, checkInReservation, markNoShow, markReservationReminded, reassignReservation, seatReservation } from "@/server/floor/reservations";
 import { rescheduleReservationStaff } from "@/server/booking/core";
 import { staffRealtimeToken, topics } from "@/server/realtime/token";
 import type { StaffSession } from "@/server/staff/auth";
@@ -66,6 +66,10 @@ export async function reservationReassignAction(id: string, tableIds: string[]) 
 
 export async function reservationNoShowAction(id: string) {
   return run((s) => done(markNoShow(s, id)));
+}
+
+export async function reservationRemindedAction(id: string) {
+  return run((s) => done(markReservationReminded(s, id)));
 }
 
 export async function reservationCancelAction(id: string) {

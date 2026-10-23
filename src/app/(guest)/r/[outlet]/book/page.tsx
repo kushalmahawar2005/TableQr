@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { BookingClient } from "./booking-client";
-import { getBookingZones } from "@/server/booking/core";
+import { getBookingPageConfig } from "@/server/booking/core";
 import { AppError } from "@/server/errors";
 
 export const metadata: Metadata = { title: "Book a table" };
@@ -11,12 +11,12 @@ export default async function BookPage(props: PageProps<"/r/[outlet]/book">) {
   const { outlet } = await props.params;
   const query = await props.searchParams;
   const hindi = query.lang === "hi";
-  const zones = await getBookingZones(outlet).catch((e: unknown) => {
+  const config = await getBookingPageConfig(outlet).catch((e: unknown) => {
     if (e instanceof AppError && e.code === "forbidden") return null;
     throw e;
   });
   // The restaurant's plan has no online booking
-  if (!zones) {
+  if (!config) {
     return (
       <main className="grid min-h-dvh place-items-center p-6 text-center text-ink">
         <div className="max-w-md">
@@ -27,5 +27,5 @@ export default async function BookPage(props: PageProps<"/r/[outlet]/book">) {
       </main>
     );
   }
-  return <BookingClient outletCode={outlet} zones={zones} hindi={hindi} />;
+  return <BookingClient outletCode={outlet} zones={config.zones} timezone={config.timezone} today={config.today} freeCancellationMinutes={config.freeCancellationMinutes} hindi={hindi} />;
 }

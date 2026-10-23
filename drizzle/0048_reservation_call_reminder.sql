@@ -1,0 +1,1 @@
+ALTER TABLE `reservation_history` MODIFY COLUMN `kind` enum('created','hold_created','hold_released','confirmed','cancelled','restaurant_cancelled','rescheduled','late_extended','reminded','arrived','seated','completed','no_show') NOT NULL;

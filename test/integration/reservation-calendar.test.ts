@@ -5,7 +5,7 @@ import * as s from "@/db/schema";
 import { localTime, serviceDate } from "@/domain/booking-policy";
 import { canSee, staffRoles } from "@/lib/staff-permissions";
 import { createBookingHold, rescheduleBookingPublic, rescheduleReservationStaff } from "@/server/booking/core";
-import { cancelReservation, createReservation } from "@/server/floor/reservations";
+import { cancelReservation, createReservation, markReservationReminded } from "@/server/floor/reservations";
 import { resolveStaff, signInStaff, type StaffSession } from "@/server/staff/auth";
 import { createCalendarReservation, editReservationDetails, getReservationCalendar, updateGroupRequestStatus } from "@/server/staff/reservations";
 import { resetTestDb } from "./setup-db";
@@ -45,6 +45,14 @@ afterEach(() => {
 afterAll(async () => env.conn.end());
 
 describe("reservation calendar read model", () => {
+  it("records a staff-confirmed guest call in the reservation history and audit log", async () => {
+    const id = await createReservation(owner, { name: "Call confirmation", phone: "+919876543210", partySize: 2, startAt: at(dayAhead(1), 19).getTime() }).then(result => result.reservationId);
+    const calledAt = at(dayAhead(1), 18);
+    await markReservationReminded(owner, id, calledAt);
+    expect(await row(id)).toMatchObject({ status: "reminded", remindedAt: calledAt });
+    expect(await historyFor(id)).toMatchObject([expect.objectContaining({ kind: "reminded", after: expect.objectContaining({ method: "staff_call" }) })]);
+    expect(await auditFor(id, "reservation.reminded")).toHaveLength(1);
+  });
   it("shows outlet-scoped large-group enquiries and lets a host track a real call", async () => {
     const id = uuidv7();
     const date = dayAhead(8);
@@ -313,10 +321,10 @@ describe("staff reschedule time window", () => {
 
   it("a guest moving their own booking to 30 minutes from now is still refused by the online cutoff", async () => {
     const hold = await createBookingHold("SRJ01", { date, startAt: at(date, 21).getTime(), partySize: 2, requestId: "staff-window-public", holdToken: "staff-window-public-token" }, at(date, 12));
-    await expect(rescheduleBookingPublic("SRJ01", hold.manageToken, { date, startAt: at(date, 19, 30).getTime() }, now)).rejects.toMatchObject({ code: "conflict", details: { reason: "cutoff" } });
+    await expect(rescheduleBookingPublic("SRJ01", hold.manageToken, { localDateTime: local(19, 30) }, now)).rejects.toMatchObject({ code: "conflict", details: { reason: "cutoff" } });
     expect((await row(hold.reservationId)).startAt.getTime()).toBe(at(date, 21).getTime());
     // The cutoff itself is unchanged: 60 minutes ahead is accepted
-    await rescheduleBookingPublic("SRJ01", hold.manageToken, { date, startAt: at(date, 20).getTime() }, now);
+    await rescheduleBookingPublic("SRJ01", hold.manageToken, { localDateTime: local(20, 0) }, now);
     expect((await row(hold.reservationId)).startAt.getTime()).toBe(at(date, 20).getTime());
   });
 

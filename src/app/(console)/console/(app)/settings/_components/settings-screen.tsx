@@ -83,6 +83,7 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
   const [guestOnlinePayments, setGuestOnlinePayments] = useState(o.guestOnlinePayments);
   const [publicServices, setPublicServices] = useState<GuestService[]>(o.guestServices);
   const [bookingPaymentMode, setBookingPaymentMode] = useState(o.bookingPaymentMode);
+  const [bookingAdvance, setBookingAdvance] = useState(o.bookingAdvancePaise ? String(o.bookingAdvancePaise / 100) : "0");
   const [paymentQr, setPaymentQr] = useState(o.bookingPaymentQrUrl);
   const [qrBusy, setQrBusy] = useState(false);
   const [review, setReview] = useState(o.reviewUrl ?? "");
@@ -101,12 +102,13 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
   const [logoMessage, setLogoMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
   // What is on screen against what was last saved, so the save bar can say if anything changed
-  const snapshot = JSON.stringify({ city, address, gstin, fssai, sc, tips, auto, guestOnlinePayments, publicServices, bookingPaymentMode, deliveryPolicy, review, roomServices, wifiSsid, wifiPassword, hours: hoursOn ? hours : null });
+  const snapshot = JSON.stringify({ city, address, gstin, fssai, sc, tips, auto, guestOnlinePayments, publicServices, bookingPaymentMode, bookingAdvance, deliveryPolicy, review, roomServices, wifiSsid, wifiPassword, hours: hoursOn ? hours : null });
   const [savedSnapshot, setSavedSnapshot] = useState(snapshot);
   const dirty = snapshot !== savedSnapshot;
 
   const setDay = (d: string, ranges: [string, string][]) => setHours((h) => ({ ...h, [d]: ranges }));
   const scNum = sc.trim() === "" ? 0 : Number(sc);
+  const bookingAdvanceNum = bookingAdvance.trim() === "" ? 0 : Number(bookingAdvance);
 
   const checklist = [
     ["GST number", !!o.gstin, "tax"], ["FSSAI licence", !!o.fssai, "tax"], ["Opening hours", !!o.openingHours, "hours"], ["Review link", !!o.reviewUrl, "orders"],
@@ -219,6 +221,7 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
   function save() {
     setMsg(null);
     if (!Number.isFinite(scNum) || scNum < 0 || scNum > 20) return setMsg({ ok: false, text: "Service charge must be between 0 and 20." });
+    if (!Number.isFinite(bookingAdvanceNum) || bookingAdvanceNum < 0 || bookingAdvanceNum > 10_000_000) return setMsg({ ok: false, text: "Reservation advance must be between ₹0 and ₹10,000,000." });
     const sent = snapshot;
     start(async () => {
       const res = await saveSettingsAction({
@@ -228,6 +231,7 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
         autoAcceptOrders: auto, guestOnlinePayments, reviewUrl: review, roomServices, wifiSsid, wifiPassword,
         guestServices: publicServices,
         bookingPaymentMode,
+        bookingAdvancePaise: Math.round(bookingAdvanceNum * 100),
         ...(o.deliveryAvailable ? { deliveryPolicy } : {}),
         openingHours: hoursOn ? hours : null,
       });
@@ -367,6 +371,7 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
               <div className="flex sm:justify-end"><Toggle on={publicServices.includes(service)} onChange={enabled => setPublicServices(current => enabled ? [...current, service] : current.filter(value => value !== service))} label={`Show ${GUEST_SERVICE_LABELS[service].title}`} disabled={!canEdit} /></div>
             </Row>)}
             <div className="py-4 text-sm text-muted">Only services included in your package can appear. Turning off party reservations also pauses new public bookings. Existing bookings and table or room QR codes stay accessible.</div>
+            <Row label="Booking advance per reservation" hint="This fixed deposit is charged when a guest books and is credited to their final bill. Set ₹0 to collect only preorder or peak-slot advances."><div className="relative sm:ml-auto sm:max-w-xs"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted">₹</span><Input inputMode="decimal" type="number" min="0" max="10000000" step="0.01" className={`${fieldCls} w-full pl-8`} value={bookingAdvance} onChange={event => setBookingAdvance(event.target.value)} disabled={!canEdit} /></div></Row>
             <Row label="Booking advance payments" hint={!o.bookingGatewayAvailable ? "Online gateway checkout is not connected. Use the restaurant QR option to collect advances and verify them in bookings." : "Choose how guests pay for reservation advances and preordered food."}><select className={`${fieldCls} w-full border border-line bg-surface px-3`} value={bookingPaymentMode} onChange={event => setBookingPaymentMode(event.target.value as typeof bookingPaymentMode)} disabled={!canEdit}><option value="gateway" disabled={!o.bookingGatewayAvailable}>Online gateway checkout {!o.bookingGatewayAvailable ? "(not connected)" : ""}</option><option value="manual_qr" disabled={!paymentQr}>Restaurant’s UPI QR · staff verifies receipt</option></select></Row>
             <div className="py-4">
               <p className="text-sm font-semibold">Restaurant payment QR</p><p className="mt-1 text-xs text-muted">Upload the merchant QR issued by your bank or payment app. QR uploads save immediately; save changes to switch the booking payment method.</p>
