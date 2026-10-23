@@ -8,6 +8,7 @@ import { publish } from "../realtime/publish";
 import { topics } from "../realtime/token";
 import { audit } from "./audit";
 import type { StaffSession } from "./auth";
+import { rebalanceWaiterVisit } from "./waiter-coverage";
 
 // Who is working right now. The manager or owner sets each person's shift (on duty, on a break,
 // off duty) from the dashboard; staff only see theirs. The staff app checks in while it is open,
@@ -34,6 +35,10 @@ export async function setDuty(staff: Staff, userId: string, status: DutyStatus, 
   if (member.status === status) return { status, since: member.since };
   await db.update(s.users).set({ dutyStatus: status, dutyChangedAt: now }).where(and(eq(s.users.tenantId, staff.tenantId), eq(s.users.id, member.id)));
   await audit(db, staff, { action: "staff.duty", entity: "user", entityId: member.id, before: { status: member.status }, after: { status, name: member.name }, now });
+  if (status !== "on") {
+    const visits = await db.select({ id: s.tableSessions.id }).from(s.tableSessions).where(and(eq(s.tableSessions.tenantId, staff.tenantId), eq(s.tableSessions.outletId, staff.outletId), eq(s.tableSessions.waiterUserId, member.id), inArray(s.tableSessions.status, ["open", "bill_requested"])));
+    for (const visit of visits) await rebalanceWaiterVisit(staff, visit.id, now);
+  }
   // Staff apps and other dashboards pick the change up straight away
   await publish({ tenantId: staff.tenantId, outletId: staff.outletId }, [{ topic: topics.tasks, type: "staff.duty", data: { userId: member.id, status } }]);
   return { status, since: now.getTime() };

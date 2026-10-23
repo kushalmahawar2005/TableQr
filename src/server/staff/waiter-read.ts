@@ -1,20 +1,21 @@
 import "server-only";
 import { checkIn, myDuty } from "./duty";
-import { and, eq, gt, inArray, isNotNull, isNull, ne } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, ne } from "drizzle-orm";
 import { db } from "@/db";
 import * as s from "@/db/schema";
 import { requireStaffRole, getWaiterTasks } from "./waiter";
 import type { StaffSession } from "./auth";
 import { AppError } from "../errors";
+import { waiterCoverage } from "./waiter-coverage";
 import { loadItems, isWithinCategoryWindow } from "../guest/menu";
 
 /** A fixed set of batch reads. No floor reconciliation or per-table reads. */
 export async function waiterBoard(staff: StaffSession, now = new Date()) {
   await requireStaffRole(staff);
-  const [tasks, tables, assignments, sessions, bindings, duty] = await Promise.all([
+  const [tasks, tables, coverage, sessions, bindings, duty] = await Promise.all([
     getWaiterTasks(staff, now),
     db.select().from(s.diningTables).where(and(eq(s.diningTables.tenantId, staff.tenantId), eq(s.diningTables.outletId, staff.outletId))).orderBy(s.diningTables.code),
-    db.select().from(s.waiterTableAssignments).where(and(eq(s.waiterTableAssignments.tenantId, staff.tenantId), eq(s.waiterTableAssignments.outletId, staff.outletId), eq(s.waiterTableAssignments.waiterUserId, staff.userId), eq(s.waiterTableAssignments.active, true), gt(s.waiterTableAssignments.expiresAt, now))),
+    waiterCoverage(staff, now),
     db.select().from(s.tableSessions).where(and(eq(s.tableSessions.tenantId, staff.tenantId), eq(s.tableSessions.outletId, staff.outletId), ne(s.tableSessions.status, "closed"))),
     db.select().from(s.sessionTables).where(and(eq(s.sessionTables.tenantId, staff.tenantId), eq(s.sessionTables.outletId, staff.outletId), isNotNull(s.sessionTables.activeKey))),
     // The app is open: this counts as "online now"
@@ -31,11 +32,13 @@ export async function waiterBoard(staff: StaffSession, now = new Date()) {
     const binding = bindings.find(b => b.tableId === t.id);
     const visit = sessions.find(v => v.id === binding?.sessionId);
     const mainId = visit?.tableId ?? t.id;
-    const assigned = assignments.some(a => a.tableId === mainId);
+    const owner = visit ? coverage.owner(visit.waiterUserId) : coverage.owner(coverage.shifts.find(a => a.tableId === mainId)?.waiterUserId);
+    const assigned = owner?.id === staff.userId;
+    const shared = !!visit && !coverage.activeOwner(visit.waiterUserId);
     const label = visit ? bindings.filter(b => b.sessionId === visit.id).sort((a,b) => Number(b.isPrimary)-Number(a.isPrimary)).map(b => tables.find(x => x.id === b.tableId)?.code).join(" + ") : t.code;
-    return { id: t.id, code: t.code, label, assigned, primary: mainId === t.id, state: t.state, sessionId: visit?.id ?? null, partySize: visit ? Math.max(visit.partySize ?? 0, people.filter(p => p.sessionId === visit.id).length) : 0, openedAt: visit?.openedAt.getTime() ?? null, expectedEndAt: visit?.expectedEndAt?.getTime() ?? null, orderingPaused: visit?.orderingLocked ?? false, readyCount: lines.filter(l => l.sessionId === visit?.id).reduce((n,l)=>n+l.qty,0), requestCount: tasks.requests.filter(r => r.tableCode === t.code).length, unpaidPaise: bills.some(b => b.sessionId === visit?.id) ? shares.filter(sh => sh.sessionId === visit?.id).reduce((n,sh)=>n+Math.max(0,sh.amount-sh.paid),0) : null };
+    return { id: t.id, code: t.code, label, assigned, shared, primary: mainId === t.id, state: t.state, sessionId: visit?.id ?? null, partySize: visit ? Math.max(visit.partySize ?? 0, people.filter(p => p.sessionId === visit.id).length) : 0, openedAt: visit?.openedAt.getTime() ?? null, expectedEndAt: visit?.expectedEndAt?.getTime() ?? null, orderingPaused: visit?.orderingLocked ?? false, readyCount: lines.filter(l => l.sessionId === visit?.id).reduce((n,l)=>n+l.qty,0), requestCount: tasks.requests.filter(r => r.tableCode === t.code).length, unpaidPaise: bills.some(b => b.sessionId === visit?.id) ? shares.filter(sh => sh.sessionId === visit?.id).reduce((n,sh)=>n+Math.max(0,sh.amount-sh.paid),0) : null };
   });
-  return { renderedAt: now.getTime(), identity: { name: staff.name, roles: staff.roles, outlet: staff.outlet.name, duty: duty.status }, requests: tasks.requests, ready: tasks.ready, tables: cards.filter(t => t.assigned && t.primary), orderTables: cards.filter(t => t.sessionId && t.primary) };
+  return { renderedAt: now.getTime(), identity: { name: staff.name, roles: staff.roles, outlet: staff.outlet.name, duty: duty.status }, requests: tasks.requests, ready: tasks.ready, tables: cards.filter(t => t.assigned && t.primary), unassignedTables: cards.filter(t => t.shared && t.primary), orderTables: cards.filter(t => t.sessionId && t.primary) };
 }
 export type WaiterBoard = Awaited<ReturnType<typeof waiterBoard>>;
 

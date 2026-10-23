@@ -1,10 +1,11 @@
 import "server-only";
 import { createHash } from "node:crypto";
 import webpush, { type PushSubscription as WebPushSubscription } from "web-push";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull, or } from "drizzle-orm";
 import { db } from "@/db";
 import * as s from "@/db/schema";
 import { uuidv7 } from "@/db/id";
+import { rebalanceWaiterVisit, sessionOwner } from "./waiter-coverage";
 import type { StaffSession } from "./auth";
 
 export type PushSubscriptionInput = s.StaffPushSubscription;
@@ -53,17 +54,21 @@ export async function removeStaffPushSubscription(staff: StaffSession, rawEndpoi
 export type StaffPushMessage = { title: string; body: string; url?: string; tag?: string };
 
 /** Send after the business transaction commits; push failures never undo an order or request. */
-export async function sendOutletPush(scope: { tenantId: string; outletId: string }, message: StaffPushMessage) {
+export async function sendOutletPush(scope: { tenantId: string; outletId: string }, message: StaffPushMessage, audience?: { sessionId: string; kind: "service" | "ready" | "order" }) {
   const config = staffPushConfig();
   const privateKey = process.env.VAPID_PRIVATE_KEY?.trim();
   const subject = process.env.VAPID_SUBJECT?.trim();
-  if (!config.enabled || !privateKey || !subject) return;
-
   try {
-    const devices = await db.select({ id: s.staffPushSubscriptions.id, subscription: s.staffPushSubscriptions.subscription })
+    if (audience) await rebalanceWaiterVisit(scope, audience.sessionId);
+    if (!config.enabled || !privateKey || !subject) return;
+    const owner = audience ? await sessionOwner(scope, audience.sessionId) : null;
+    const roles = await db.select({ id: s.users.id, duty: s.users.dutyStatus, role: s.staffRoles.role }).from(s.users).innerJoin(s.staffRoles, and(eq(s.staffRoles.tenantId, s.users.tenantId), eq(s.staffRoles.userId, s.users.id))).where(and(eq(s.users.tenantId, scope.tenantId), eq(s.users.isActive, true), or(isNull(s.staffRoles.outletId), eq(s.staffRoles.outletId, scope.outletId))));
+    const eligible = new Set(roles.filter(r => r.role === "owner" || r.role === "manager" || (r.role === "waiter" && r.duty === "on" && (!owner || r.id === owner)) || (r.role === "kitchen" && (!audience || audience.kind === "order"))).map(r => r.id));
+    const devices = await db.select({ userId: s.staffPushSubscriptions.userId, id: s.staffPushSubscriptions.id, subscription: s.staffPushSubscriptions.subscription })
       .from(s.staffPushSubscriptions)
       .where(and(eq(s.staffPushSubscriptions.tenantId, scope.tenantId), eq(s.staffPushSubscriptions.outletId, scope.outletId)));
-    if (!devices.length) return;
+    const recipients = devices.filter(device => eligible.has(device.userId));
+    if (!recipients.length) return;
 
     const payload = JSON.stringify({
       title: message.title.slice(0, 120),
@@ -72,7 +77,7 @@ export async function sendOutletPush(scope: { tenantId: string; outletId: string
       tag: (message.tag ?? "tableqr-staff").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 32) || "tableqr-staff",
       icon: "/staff-icon/192",
     });
-    await Promise.allSettled(devices.map(async (device) => {
+    await Promise.allSettled(recipients.map(async (device) => {
       try {
       await webpush.sendNotification(device.subscription as WebPushSubscription, payload, {
         vapidDetails: { subject, publicKey: config.publicKey, privateKey },

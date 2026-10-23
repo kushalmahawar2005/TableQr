@@ -7,6 +7,7 @@ import type { Tx } from "../db-types";
 import { AppError } from "../errors";
 import { assignTable } from "./assignments";
 import { LIVE_BOOKING } from "./sync";
+import { shiftWaiterId } from "../staff/waiter-coverage";
 
 // Building blocks for floor actions: locking tables, finding the visit at a table, checking
 // capacity and bookings, and opening a staff-seated visit. Everything runs inside the caller's
@@ -142,6 +143,7 @@ export async function openVisit(
     tenantId: scope.tenantId,
     outletId: scope.outletId,
     tableId: primary.id,
+    waiterUserId: await shiftWaiterId(tx, scope, primary.id, opts.now),
     mode: outlet.mode,
     status: "open",
     source: opts.source,

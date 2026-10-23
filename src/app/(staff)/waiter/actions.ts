@@ -2,7 +2,7 @@
 import { staffFor } from "@/server/staff/request";
 import { AppError } from "@/server/errors";
 import { waiterBoard, waiterDetail, waiterMenu } from "@/server/staff/waiter-read";
-import { waiterRealtimeToken } from "@/server/staff/waiter";
+import { claimWaiterVisit, waiterRealtimeToken } from "@/server/staff/waiter";
 import { completeServiceRequest } from "@/server/guest/service-requests";
 import { markServed } from "@/server/kitchen/actions";
 import { addPhonelessDiner, staffPlaceOrder, waiterRequestBill, waiterReopenBill, changeWaiterLine, type Approval } from "@/server/staff/waiter-mutations";
@@ -29,3 +29,5 @@ export async function reopenAction(sessionId:string,approval?:Approval){return r
 export async function lineAction(input:Parameters<typeof changeWaiterLine>[1]){return run(s=>changeWaiterLine(s,input));}
 export async function settleAction(input:{sessionId:string;forParticipantIds?:string[];method:"cash"|"card";receivedPaise?:number;clientRequestId:string;externalReference?:string}){return run(s=>{if(typeof input.clientRequestId !== "string" || !input.clientRequestId)throw new AppError("invalid_state","A settlement request id is required.");return settleAtCounter(s,input);});}
 export async function cleanAction(id:string){return run(s=>markReady(s,id));}
+
+export async function claimTableAction(sessionId: string) { return run(s => claimWaiterVisit(s, String(sessionId))); }

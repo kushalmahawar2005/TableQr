@@ -56,6 +56,8 @@ export const tableSessions = mysqlTable(
     /** When the table is expected back, from the dining-duration policy plus any extensions */
     expectedEndAt: at("expected_end_at"),
     openedByUserId: ref("opened_by_user_id"),
+    /** Visit owner: stays with the party when it moves to another physical table. */
+    waiterUserId: ref("waiter_user_id"),
     reservationId: ref("reservation_id"),
     /** No FK: participants reference the session, so this would be circular */
     hostParticipantId: ref("host_participant_id"),
@@ -78,6 +80,7 @@ export const tableSessions = mysqlTable(
     sameTenant("fk_sessions_outlet", t, t.outletId, outlets),
     sameTenant("fk_sessions_table", t, t.tableId, diningTables),
     sameTenant("fk_sessions_opened_by", t, t.openedByUserId, users),
+    sameTenant("fk_sessions_waiter", t, t.waiterUserId, users),
   ],
 );
 

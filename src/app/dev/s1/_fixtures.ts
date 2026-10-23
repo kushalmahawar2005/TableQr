@@ -5,6 +5,10 @@ import type { FloorData, FloorTable, TableDetail } from "@/server/floor/read";
 
 export const NOW = Date.parse("2026-10-02T14:45:00Z"); // 8:15 pm IST
 const MIN = 60_000;
+const sampleWaiters = [
+  { id: "preview-rahul", name: "Rahul Verma", duty: "on" as const, online: true, tableCount: 3, activeTables: 2, pendingRequests: 1, readyOrders: 0 },
+  { id: "preview-mahi", name: "Mahi", duty: "on" as const, online: true, tableCount: 2, activeTables: 1, pendingRequests: 0, readyOrders: 0 },
+];
 const zones = [
   { id: "z-in", name: "Indoor" },
   { id: "z-te", name: "Terrace" },
@@ -79,6 +83,7 @@ const held = booking("r-online", "Online guest", 2, 90, ["B3"], { status: "reque
 function table(spec: Spec, over: Partial<FloorTable> = {}): FloorTable {
   return {
     id: id(spec.code),
+    assignedWaiter: spec.code === "T3" ? sampleWaiters[0] : null,
     code: spec.code,
     zoneId: spec.zone,
     minSeats: spec.min,
@@ -131,7 +136,8 @@ export function floorData(over: Record<string, Partial<FloorTable>> = dinner, ex
     outlet: { code: "SRJ01", name: "Spice Route", timezone: "Asia/Kolkata" },
     serviceDate: "2026-10-02",
     roles: ["host"],
-    may: { seat: true, reset: true, block: false, bookings: true, pause: true, capacity: false, waitlist: true, billing: false },
+    waiters: sampleWaiters,
+    may: { assignWaiter: true, seat: true, reset: true, block: false, bookings: true, pause: true, capacity: false, waitlist: true, billing: false },
     layout: { version: "live", zones },
     tables: FLOOR.map((sp) => table(sp, over[sp.code] ?? {})),
     arrivals: [late, iyer, mehta, das],

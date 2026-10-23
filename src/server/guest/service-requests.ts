@@ -10,6 +10,7 @@ import { announceBill, requestBillInTransaction } from "../billing/payments";
 import { publish } from "../realtime/publish";
 import { topics } from "../realtime/token";
 import { visitChanged } from "../floor/assignments";
+import { rebalanceWaiterVisit } from "../staff/waiter-coverage";
 import { sendOutletPush } from "../staff/web-push";
 import type { StaffContext } from "../staff/context";
 import type { GuestContext } from "./context";
@@ -89,7 +90,7 @@ export async function createServiceRequest(ctx: GuestContext, kind: StoredServic
       visitChanged(ctx.sessionId, "service_request"),
     ]);
     if (kind === "request_bill") announceBill(ctx, { tableIds: result.tableIds, state: "bill_requested" });
-    await sendOutletPush(ctx, { title: "New table request", body: `A guest requested ${kind.replaceAll("_", " ")}. Open TableQR to respond.`, url: "/console", tag: `request-${result.id}` });
+    await sendOutletPush(ctx, { title: "New table request", body: `A guest requested ${kind.replaceAll("_", " ")}. Open TableQR to respond.`, url: "/console", tag: `request-${result.id}` }, { sessionId: ctx.sessionId, kind: "service" });
   }
   return { id: result.id, createdAt: result.createdAt, replayed: result.replayed, cooldownUntil: result.createdAt + SERVICE_COOLDOWN_MS };
 }
@@ -143,6 +144,10 @@ export async function escalateServiceRequests(scope: { tenantId: string; outletI
       { topic: topics.tasks, type: "service_request.escalated", data: { requestId: r.id, tableId: r.tableId } },
       { topic: topics.session(r.sessionId), type: "service_request.escalated", data: { requestId: r.id } },
     ]));
+  }
+  for (const sessionId of new Set(changed.map(r => r.sessionId))) {
+    await rebalanceWaiterVisit(scope, sessionId, now, true);
+    await sendOutletPush(scope, { title: "Table needs attention", body: "A table request is overdue. Available staff have been notified.", url: "/waiter", tag: `overdue-${sessionId}` }, { sessionId, kind: "service" });
   }
   return changed.length;
 }

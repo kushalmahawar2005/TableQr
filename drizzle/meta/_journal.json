@@ -218,6 +218,13 @@
       "when": 1792738560008,
       "tag": "0030_fantastic_karma",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "5",
+      "when": 1792746387567,
+      "tag": "0031_visit_waiter",
+      "breakpoints": true
     }
   ]
 }

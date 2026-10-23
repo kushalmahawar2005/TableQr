@@ -145,11 +145,8 @@ export function WaiterScreen({
     refreshRef.current = refresh;
     const stop = connectRealtime({
       url: realtimeUrl, getToken: actions.tokenAction, pollMs: 25000, onResync: () => void refresh(), onStatus: (s) => setConnection(s),
-      onEvents: (events) => {
-        for (const e of events) {
-          const id = e.data?.requestId;
-          if (e.type === "service_request.created" && typeof id === "string" && !seen.current.has(id)) { seen.current.add(id); pingRef.current(copy[language].newTask); }
-        }
+      onEvents: () => {
+        // Refresh first: outlet-wide events are hints; only this waiter’s routed tasks may ring.
         clearTimeout(debounce); debounce = setTimeout(() => void refresh(), 350);
       },
     });
@@ -185,12 +182,18 @@ export function WaiterScreen({
     return () => clearInterval(t);
   }, [ringing]);
   useEffect(() => { dutyRef.current = board.identity.duty; }, [board.identity.duty]);
-  function accept(ids: string[]) {
-    setAcked((prev) => {
+  function accept(ids: string[], sessionId?: string) {
+    const acknowledge = () => setAcked(prev => {
       const next = new Set([...prev, ...ids]);
-      try { localStorage.setItem("tq_waiter_acked", JSON.stringify([...next].slice(-300))); } catch { /* ignore */ }
+      try { localStorage.setItem("tq_waiter_acked", JSON.stringify([...next].slice(-300))); } catch { /* storage unavailable */ }
       return next;
     });
+    if (preview) { acknowledge(); return; }
+    const sessions = sessionId ? [sessionId] : [...new Set([...board.requests, ...board.ready].filter(task => ids.includes(task.id)).map(task => task.sessionId))];
+    void perform(async () => {
+      for (const id of sessions) { const result = await actions.claimTableAction(id); if (!result.ok) return result; }
+      return { ok: true as const, data: null };
+    }, acknowledge);
   }
   const isNew = (id: string) => pending.some((p) => p.id === id);
   const disabled = offline || busy;
@@ -310,7 +313,7 @@ export function WaiterScreen({
                           </div>
                           <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ${urgency === "urgent" ? "bg-danger text-white" : urgency === "warning" ? "bg-warning text-black" : "bg-ink/10 text-muted"}`}>{urgency !== "waiting" && <AlertTriangle className="size-3" aria-hidden="true" />}{age(r.createdAt)}</span>
                         </div>
-                        {isNew(r.id) ? <button className={`${primary} mt-3 w-full`} onClick={() => accept([r.id])}><BellRing className="size-5" aria-hidden="true" />{L("Accept", "स्वीकारें")}</button> : <button disabled={disabled} className={`${primary} mt-3 w-full`} onClick={() => perform(() => actions.doneAction(r.id))}><Check className="size-5" aria-hidden="true" />{c.done}</button>}
+                        {isNew(r.id) ? <button className={`${primary} mt-3 w-full`} disabled={disabled} onClick={() => accept([r.id], r.sessionId)}><BellRing className="size-5" aria-hidden="true" />{L("Accept", "स्वीकारें")}</button> : <button disabled={disabled} className={`${primary} mt-3 w-full`} onClick={() => perform(() => actions.doneAction(r.id))}><Check className="size-5" aria-hidden="true" />{c.done}</button>}
                       </article>
                     );
                   })}
@@ -328,7 +331,7 @@ export function WaiterScreen({
                         <span className="rounded-full bg-ink/10 px-2.5 py-1 text-xs font-bold text-muted">{age(g.readyAt)}</span>
                       </div>
                       <ul className="my-3 space-y-1.5">{g.lines.map((l) => <li key={l.id} className="flex items-baseline gap-2 text-base"><b className="min-w-6 tabular-nums">{l.qty}×</b>{hi ? l.nameHi || l.name : l.name}</li>)}</ul>
-                      {isNew(g.id) ? <button className={`${primary} w-full`} onClick={() => accept([g.id])}><BellRing className="size-5" aria-hidden="true" />{L("Accept", "स्वीकारें")}</button> : <button disabled={disabled} className={`${primary} w-full`} onClick={() => perform(() => actions.servedAction(g.lines.map((l) => l.id)))}><Utensils className="size-5" aria-hidden="true" />{c.served}</button>}
+                      {isNew(g.id) ? <button className={`${primary} w-full`} disabled={disabled} onClick={() => accept([g.id], g.sessionId)}><BellRing className="size-5" aria-hidden="true" />{L("Accept", "स्वीकारें")}</button> : <button disabled={disabled} className={`${primary} w-full`} onClick={() => perform(() => actions.servedAction(g.lines.map((l) => l.id)))}><Utensils className="size-5" aria-hidden="true" />{c.served}</button>}
                     </article>
                   ))}
                 </div>
@@ -341,6 +344,11 @@ export function WaiterScreen({
           <section className="mt-5">
             <h2 className="font-display text-2xl font-bold">{c.tables}</h2>
             {!board.tables.length && <p className={`${card} mt-3 text-center text-muted`}>{c.noTables}</p>}
+            {(board.unassignedTables?.length ?? 0) > 0 && <div className="mt-4 rounded-2xl border border-brand-border bg-brand-soft/30 p-4">
+              <h3 className="font-semibold">{L("Tables needing a waiter", "जिन टेबलों को वेटर चाहिए")}</h3>
+              <p className="mt-1 text-sm text-muted">{L("Take a table to receive its requests and ready-food alerts.", "अनुरोध और तैयार खाने के अलर्ट पाने के लिए टेबल लें।")}</p>
+              <div className="mt-3 grid gap-2">{board.unassignedTables.map(t => <div key={t.id} className="flex items-center justify-between gap-3 rounded-xl border border-line bg-surface p-3"><span className="font-bold">{t.label}</span><button type="button" className={btn} disabled={disabled || duty !== "on"} onClick={() => void perform(() => actions.claimTableAction(t.sessionId!))}>{L("Take table", "टेबल लें")}</button></div>)}</div>
+            </div>}
             <div className="mt-3 grid grid-cols-2 gap-3">
               {board.tables.map((t) => {
                 const tone = STATE_TONE[t.state] ?? STATE_TONE.available;

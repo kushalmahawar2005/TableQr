@@ -15,6 +15,7 @@ import { verifyStaffPin, type StaffSession } from "./auth";
 import { audit } from "./audit";
 import { lockOrder, syncTickets, syncOrderStatus } from "../kitchen/order-state";
 import type { StaffRole } from "@/lib/staff-permissions";
+import { checkFirstName, isPlaceholderName } from "@/domain/guest-name";
 import { sendOutletPush } from "./web-push";
 
 export type Approval = { phone: string; pin: string };
@@ -28,12 +29,12 @@ export async function managerApproval(staff: StaffSession, approval?: Approval, 
 }
 export async function addPhonelessDiner(staff: StaffSession, sessionId: string, name = "", now = new Date()) {
   await requireStaffRole(staff);
+  const checked = checkFirstName(String(name));
+  if (!checked.ok) throw new AppError("invalid_state", "Enter the customer’s name before taking an order.");
   const result = await db.transaction(async tx=>{
     const session = await lockSession(tx,{...staff,sessionId});
     if (session.status !== "open") throw new AppError("table_settling", "Reopen the bill before adding a diner.");
-    const people = await tx.select({name:s.participants.displayName}).from(s.participants).where(and(eq(s.participants.tenantId,staff.tenantId),eq(s.participants.sessionId,sessionId)));
-    let n=1; while(people.some(p=>p.name === `Guest ${n}`)) n++;
-    const displayName = name.trim().slice(0,40) || `Guest ${n}`;
+    const displayName = checked.name;
     const id=uuidv7();
     await tx.insert(s.participants).values({id,tenantId:staff.tenantId,sessionId,displayName,deviceId:null,guestId:null,addedByUserId:staff.userId,joinedAt:now});
     await audit(tx,staff,{action:"waiter.diner_added",entity:"participant",entityId:id,after:{sessionId,displayName},now});
@@ -45,10 +46,12 @@ export async function addPhonelessDiner(staff: StaffSession, sessionId: string, 
 export async function staffPlaceOrder(staff: StaffSession, input: {sessionId:string; tableId:string; participantId:string; clientRequestId:string; lines:StaffDraftLine[]},now=new Date()) {
   await requireStaffRole(staff);
   if (!/^[a-zA-Z0-9_-]{8,64}$/.test(input.clientRequestId) || !Array.isArray(input.lines) || !input.lines.length || input.lines.length>100 || input.lines.some(l=>typeof l.itemId !== "string" || !Number.isInteger(l.qty) || !Array.isArray(l.modifierIds) || l.modifierIds.some(m=>typeof m !== "string"))) throw new AppError("invalid_state","Invalid draft order.");
+  const [person] = await db.select({ name: s.participants.displayName }).from(s.participants).where(and(eq(s.participants.tenantId, staff.tenantId), eq(s.participants.sessionId, input.sessionId), eq(s.participants.id, input.participantId)));
+  if (!person || isPlaceholderName(person.name) || !checkFirstName(person.name).ok) throw new AppError("invalid_state", "Enter the customer’s name before placing this order.");
   const [outlet] = await db.select().from(s.outlets).where(and(eq(s.outlets.tenantId,staff.tenantId),eq(s.outlets.id,staff.outletId)));
   const result=await placeOrderTx({...staff,sessionId:input.sessionId,tableId:input.tableId,participantId:input.participantId,brandId:outlet.brandId,timezone:outlet.timezone},{requestId:input.clientRequestId},now,{userId:staff.userId,lines:input.lines});
   if (!result.replayed) await publish(staff,[{topic:topics.kitchen,type:"ticket.created",data:{orderId:result.orderId}},{topic:topics.session(input.sessionId),type:"order.status",data:{orderId:result.orderId}},{topic:topics.floor,type:"visit.updated"},...result.soldOutItemIds.map(itemId=>({topic:topics.menu,type:"item.availability",data:{itemId,available:false}}))]);
-  if (!result.replayed) await sendOutletPush(staff, { title: "New table order", body: "A staff member sent a new order to the kitchen.", url: "/console", tag: `order-${result.orderId}` });
+  if (!result.replayed) await sendOutletPush(staff, { title: "New table order", body: "A staff member sent a new order to the kitchen.", url: "/console", tag: `order-${result.orderId}` }, { sessionId: input.sessionId, kind: "order" });
   return result;
 }
 export async function waiterRequestBill(staff:StaffSession,sessionId:string,now=new Date()) {

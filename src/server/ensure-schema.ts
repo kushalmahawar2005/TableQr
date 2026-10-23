@@ -3,7 +3,7 @@ import type { Pool, RowDataPacket } from "mysql2/promise";
 
 // Brings the live database up to what this release needs, once, when the server starts.
 // Hostinger builds and starts the app straight from Git and never runs `db:migrate`, so these
-// steps mirror drizzle/0016-0028. Every step checks first, so running it again (another server
+// steps mirror drizzle/0016-0031. Every step checks first, so running it again (another server
 // instance, a restart) changes nothing. Works on MySQL and MariaDB.
 
 type Step = { tag: string; when: number; hash: string; apply: (db: Pool) => Promise<void> };
@@ -251,6 +251,33 @@ const STEPS: Step[] = [
       await addColumn(db, "fee_payments", "checked_at", "datetime(3)");
       await addUniqueIndex(db, "fee_payments", "fee_payments_request_uq", "`tenant_id`,`client_request_id`");
       await addUniqueIndex(db, "fee_payments", "fee_payments_gateway_ref_uq", "`gateway_ref`");
+    },
+  },
+  {
+    tag: "0029_reservation_advance", when: 1792696666093, hash: "6a0151571dac954aaf22318f8a12f539a8501978f9401c3a4f7080914b3a094e",
+    apply: async (db) => {
+      await addColumn(db, "reservations", "advance_received_paise", "int DEFAULT 0 NOT NULL");
+    },
+  },
+  {
+    tag: "0030_fantastic_karma", when: 1792738560008, hash: "639d825ce0d151de6cbb33d9b4d20089a8614fc3765c0163e3d0c93f79ad8d26",
+    apply: async (db) => {
+      await db.query("CREATE TABLE IF NOT EXISTS `staff_push_subscriptions` (\n\t`id` char(36) NOT NULL,\n\t`tenant_id` char(36) NOT NULL,\n\t`outlet_id` char(36) NOT NULL,\n\t`user_id` char(36) NOT NULL,\n\t`endpoint_hash` char(64) NOT NULL,\n\t`subscription` json NOT NULL,\n\t`created_at` datetime(3) NOT NULL,\n\t`updated_at` datetime(3) NOT NULL,\n\tCONSTRAINT `staff_push_subscriptions_id` PRIMARY KEY(`id`),\n\tCONSTRAINT `staff_push_endpoint_uq` UNIQUE(`endpoint_hash`)\n, CONSTRAINT `fk_staff_push_outlet` FOREIGN KEY (`tenant_id`,`outlet_id`) REFERENCES `outlets`(`tenant_id`,`id`), CONSTRAINT `fk_staff_push_user` FOREIGN KEY (`tenant_id`,`user_id`) REFERENCES `users`(`tenant_id`,`id`), INDEX `staff_push_outlet_idx` (`tenant_id`,`outlet_id`), INDEX `staff_push_user_idx` (`tenant_id`,`user_id`))");
+    },
+  },
+  {
+    tag: "0031_visit_waiter", when: 1792746387567, hash: "30b1ae38b1c1c2ef70914afb7eb2ea85681e272242b83cc61fcc4ad5a89cf197",
+    apply: async (db) => {
+      const added = await addColumn(db, "table_sessions", "waiter_user_id", "char(36)");
+      const [keys] = await db.query<RowDataPacket[]>("SELECT COUNT(*) AS n FROM information_schema.REFERENTIAL_CONSTRAINTS WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'table_sessions' AND CONSTRAINT_NAME = 'fk_sessions_waiter'");
+      if (!Number(keys[0]?.n ?? 0)) {
+        try { await db.query("ALTER TABLE `table_sessions` ADD CONSTRAINT `fk_sessions_waiter` FOREIGN KEY (`tenant_id`,`waiter_user_id`) REFERENCES `users`(`tenant_id`,`id`)"); }
+        catch (error) {
+          const [existing] = await db.query<RowDataPacket[]>("SELECT COUNT(*) AS n FROM information_schema.REFERENTIAL_CONSTRAINTS WHERE CONSTRAINT_SCHEMA = DATABASE() AND CONSTRAINT_NAME = 'fk_sessions_waiter'");
+          if (!Number(existing[0]?.n ?? 0)) throw error;
+        }
+      }
+      if (added) await db.query("UPDATE `table_sessions` v INNER JOIN `waiter_table_assignments` a ON a.`tenant_id` = v.`tenant_id` AND a.`outlet_id` = v.`outlet_id` AND a.`table_id` = v.`table_id` SET v.`waiter_user_id` = a.`waiter_user_id` WHERE v.`status` <> 'closed' AND v.`waiter_user_id` IS NULL AND a.`active` = 1 AND a.`expires_at` > UTC_TIMESTAMP(3)");
     },
   },
 ];

@@ -1,4 +1,5 @@
 "use server";
+import { assignWaitersToTables } from "@/server/staff/waiter";
 import { AppError } from "@/server/errors";
 import { getOnlineAvailability, setOnlineBookingsPaused, setSlotCapacity } from "@/server/floor/pacing";
 import { getFloor, getTableDetail } from "@/server/floor/read";
@@ -123,3 +124,5 @@ export async function tableQrAction(tableId: string): Promise<{ ok: true; qr: Ta
     return { ok: false, message: err instanceof AppError ? err.message : "The QR could not be loaded." };
   }
 }
+
+export const assignWaiterAction = async (tableIds: string[], waiterId: string | null) => act(s => assignWaitersToTables(s, tableIds, waiterId, new Date().toISOString().slice(0, 10)));

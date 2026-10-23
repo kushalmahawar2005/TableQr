@@ -8,7 +8,7 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { BlockReason } from "@/db/schema";
 import type { Lang } from "@/lib/i18n";
 import type { FloorData, FloorTable, TableDetail } from "@/server/floor/read";
@@ -44,6 +44,7 @@ import { s1Copy, type S1Copy } from "../_copy";
 import * as pos from "@/server/staff/pos-actions";
 import { billHtml, printHtml } from "@/app/pos/_components/bill-print";
 import { combinableFree } from "./floor-logic";
+import { WaiterAssignment } from "./waiter-assignment";
 import { FloorMap } from "./floor-map";
 import { useFloorSync } from "./use-floor-sync";
 import {
@@ -161,7 +162,9 @@ export function FloorScreen({
     const t = setTimeout(() => setToast(null), 4000);
     return () => clearTimeout(t);
   }, [toast, preview]);
+  const toastSequence = useRef(0);
   const [busy, setBusy] = useState(false);
+  const [assignmentIds, setAssignmentIds] = useState<string[] | null>(null);
   const [view, setView] = useState<"grid" | "map">("grid");
   const [stateFilter, setStateFilter] = useState<string | null>(null);
   const [dragging, setDragging] = useState(!!preview?.dragging);
@@ -197,7 +200,7 @@ export function FloorScreen({
       const res = await call();
       if (res.ok) {
         setSheet(null);
-        setToast({ text: ok, key: Date.now() });
+        setToast({ text: ok, key: ++toastSequence.current });
       } else if (res.code === "staff_signed_out") {
         router.replace("/console/login");
       } else if (!onFail?.(res)) {
@@ -343,6 +346,7 @@ export function FloorScreen({
             </nav>
 
             <div className="flex shrink-0 flex-wrap items-center gap-2">
+              {data.may.assignWaiter && <button type="button" disabled={disabled} className={btnLine} onClick={() => setAssignmentIds([])}>{lang === "hi" ? "वेटर असाइन करें" : "Assign waiters"}</button>}
               <div
                 role="group"
                 aria-label="View"
@@ -517,7 +521,8 @@ export function FloorScreen({
             ))}
           </div>
           <div role="tabpanel" className="no-scrollbar min-h-0 flex-1 overflow-y-auto">
-            {tab === "table" && (
+            {tab === "table" && <>
+              {selected && <div className="mx-4 mt-4 rounded-xl border border-line bg-paper p-3"><div className="flex items-center gap-3"><span className="grid size-10 shrink-0 place-items-center rounded-full bg-forest/10 text-lg font-bold text-forest">{selected.assignedWaiter?.name.slice(0, 1).toUpperCase() ?? "?"}</span><div className="min-w-0 flex-1"><p className="text-xs text-muted">{lang === "hi" ? "असाइन किया वेटर" : "Assigned waiter"}</p><p className="truncate font-semibold">{selected.assignedWaiter?.name ?? (lang === "hi" ? "शेयर्ड सूची" : "Shared queue")}</p></div>{data.may.assignWaiter && <button type="button" className={btnLine} disabled={disabled} onClick={() => setAssignmentIds([selected.id])}>{lang === "hi" ? "बदलें" : selected.assignedWaiter ? "Change" : "Assign"}</button>}</div>{selected.assignedWaiter && selected.assignedWaiter.duty !== "on" && <p className="mt-2 text-xs text-warning">{lang === "hi" ? "वेटर ड्यूटी पर नहीं है। कवरेज बदलें या उपलब्ध स्टाफ अनुरोध ले सकता है।" : "Waiter is away. Reassign coverage; available staff can take pending requests."}</p>}</div>}
               <TablePanel
                 table={selected}
                 detail={detail}
@@ -528,7 +533,7 @@ export function FloorScreen({
                 disabled={disabled}
                 onAction={onTableAction}
               />
-            )}
+            </>}
             {tab === "arrivals" && (
               <ArrivalsPanel
                 data={data}
@@ -634,6 +639,7 @@ export function FloorScreen({
         </aside>
       </div>
 
+      {assignmentIds && <WaiterAssignment data={data} initialIds={assignmentIds} hi={lang === "hi"} onClose={() => setAssignmentIds(null)} onSaved={refresh} />}
       {sheet?.kind === "seat" && (
         <SeatSheet
           sheet={sheet}

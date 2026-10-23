@@ -282,6 +282,7 @@ function Tile({
         <span className="font-display text-section leading-none font-bold text-ink">
           {t.code}
         </span>
+        {t.assignedWaiter && <span title={t.assignedWaiter.name} aria-label={`Waiter: ${t.assignedWaiter.name}`} className="ml-auto grid size-6 shrink-0 place-items-center rounded-full border border-current/20 bg-surface text-xs font-bold text-ink">{t.assignedWaiter.name.slice(0, 1).toUpperCase()}</span>}
         {v && v.openRequests > 0 && (
           <HugeiconsIcon
             icon={Notification01Icon}

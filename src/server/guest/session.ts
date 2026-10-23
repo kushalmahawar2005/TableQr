@@ -13,6 +13,7 @@ import { assignTable, visitChanged } from "../floor/assignments";
 import { assertCanSeat, findMovedSession, findOpenSession, findTableByQr, wasRemoved } from "./table";
 import { findRecentVerification } from "./verify";
 import { ROOM_CLASS } from "@/domain/rooms";
+import { shiftWaiterId } from "../staff/waiter-coverage";
 
 // Start ordering / Join this table (PS 3.2, 3.6). One open session per table.
 
@@ -119,6 +120,7 @@ async function seat(input: SeatInput): Promise<Seated | { refused: JoinCodeRefus
         tenantId,
         outletId: t.outlet.id,
         tableId: t.table.id,
+        waiterUserId: await shiftWaiterId(tx, { tenantId, outletId: t.outlet.id }, t.table.id, now),
         mode: t.outlet.sessionMode,
         openKey: t.table.id,
         openedAt: now,

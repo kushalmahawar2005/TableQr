@@ -10,6 +10,7 @@ import { configuredReceiptChannels } from "../receipts/channels";
 import { getPacing } from "./pacing";
 import { loadPolicy } from "./policy";
 import { LIVE_BOOKING, reconcileFloor } from "./sync";
+import { waiterCoverage } from "../staff/waiter-coverage";
 import { expectedEnd } from "./visits";
 
 // Everything S1 Host Floor shows, read in one call (staff-scoped, never through guest APIs).
@@ -31,7 +32,7 @@ export async function getFloor(staff: Staff, now = new Date()) {
   const scope = { tenantId: staff.tenantId, outletId: staff.outletId };
   await reconcileFloor(scope, now);
   const policy = await loadPolicy(db, scope);
-  const layout = await getActiveLayout(scope);
+  const [layout, coverage] = await Promise.all([getActiveLayout(scope), waiterCoverage(scope, now)]);
   const [outlet] = await db.select({ openingHours: s.outlets.openingHours }).from(s.outlets).where(and(eq(s.outlets.tenantId, scope.tenantId), eq(s.outlets.id, scope.outletId)));
 
   const assignments = await db
@@ -117,6 +118,7 @@ export async function getFloor(staff: Staff, now = new Date()) {
     const next = bookingRows.filter((r) => tablesFor(r.id).includes(t.id) && r.startAt.getTime() > now.getTime() - 6 * 3600_000)[0];
     return {
       id: t.id,
+      assignedWaiter: a ? coverage.owner(a.session.waiterUserId) : coverage.owner(coverage.shifts.find(w => w.tableId === t.id)?.waiterUserId),
       code: t.code,
       zoneId: t.zoneId,
       minSeats: t.minSeats,
@@ -148,7 +150,9 @@ export async function getFloor(staff: Staff, now = new Date()) {
     outlet: staff.outlet,
     serviceDate: date,
     roles: staff.roles,
+    waiters: coverage.waiters,
     may: {
+      assignWaiter: staff.roles.some(r => ["host", "manager", "owner"].includes(r)),
       seat: can(staff.roles, "floor.seat"),
       reset: can(staff.roles, "floor.reset"),
       block: can(staff.roles, "floor.block"),

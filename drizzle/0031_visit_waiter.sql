@@ -1,0 +1,3 @@
+ALTER TABLE `table_sessions` ADD `waiter_user_id` char(36);--> statement-breakpoint
+ALTER TABLE `table_sessions` ADD CONSTRAINT `fk_sessions_waiter` FOREIGN KEY (`tenant_id`,`waiter_user_id`) REFERENCES `users`(`tenant_id`,`id`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+UPDATE `table_sessions` v INNER JOIN `waiter_table_assignments` a ON a.`tenant_id` = v.`tenant_id` AND a.`outlet_id` = v.`outlet_id` AND a.`table_id` = v.`table_id` SET v.`waiter_user_id` = a.`waiter_user_id` WHERE v.`status` <> 'closed' AND v.`waiter_user_id` IS NULL AND a.`active` = 1 AND a.`expires_at` > UTC_TIMESTAMP(3);

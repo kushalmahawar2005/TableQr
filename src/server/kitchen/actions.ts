@@ -9,17 +9,18 @@ import { AppError } from "../errors";
 import { publish } from "../realtime/publish";
 import { topics } from "../realtime/token";
 import type { StaffContext } from "../staff/context";
+import { sendOutletPush } from "../staff/web-push";
 import { requireStaffRole } from "../staff/waiter";
 import { lockOrder, syncOrderStatus, syncTickets } from "./order-state";
 
 // Kitchen actions from the KDS (PS 5.1, 5.2). Each locks the order, changes lines, then
 // re-derives the order status so the guest tracker and the ticket always agree.
 
-type Changed = { orderId: string; sessionId: string; status: OrderStatus; lineIds?: string[] };
+type Changed = { orderId: string; sessionId: string; status: OrderStatus; lineIds?: string[]; ready?: boolean };
 
 /** After commit: the KDS and that table's phones refresh */
-function announce(ctx: StaffContext, changes: Changed[]) {
-  void publish(
+async function announce(ctx: StaffContext, changes: Changed[]) {
+  await publish(
     ctx,
     changes.flatMap((c) => [
       { topic: topics.kitchen, type: "ticket.updated", data: { orderId: c.orderId } },
@@ -27,6 +28,7 @@ function announce(ctx: StaffContext, changes: Changed[]) {
       { topic: topics.session(c.sessionId), type: "order.status", data: { orderId: c.orderId, status: c.status } },
     ]),
   );
+  await Promise.all(changes.filter(change => change.ready).map(change => sendOutletPush(ctx, { title: "Food ready to serve", body: "The kitchen has food ready for your table.", url: "/waiter", tag: `ready-${change.orderId}` }, { sessionId: change.sessionId, kind: "ready" })));
 }
 
 /** Kitchen changes are audited inside their transaction: who (user or screen), what, which order */
@@ -67,7 +69,7 @@ export async function acceptOrder(ctx: StaffContext, orderId: string, now = new 
       .where(and(eq(s.orderLines.tenantId, ctx.tenantId), eq(s.orderLines.orderId, orderId), eq(s.orderLines.status, "placed")));
     return { orderId, sessionId: order.sessionId, status: await syncOrderStatus(tx, ctx.tenantId, orderId, now), changed: true };
   }, LOCK_THEN_READ);
-  if (res.changed) announce(ctx, [res]);
+  if (res.changed) await announce(ctx, [res]);
   return res.status;
 }
 
@@ -91,7 +93,7 @@ export async function acceptTicket(ctx: StaffContext, ticketId: string, now = ne
     await auditKitchen(tx, ctx, "kitchen.accept", "ticket", ticketId, { station: ticket.station, lines: placed.length }, now);
     return { orderId: order.id, sessionId: order.sessionId, status: await syncOrderStatus(tx, ctx.tenantId, order.id, now), changed: true, lineIds: placed.map((l) => l.id) };
   }, LOCK_THEN_READ);
-  if (res.changed) announce(ctx, [res]);
+  if (res.changed) await announce(ctx, [res]);
   return res.status;
 }
 
@@ -116,7 +118,7 @@ export async function startTicket(ctx: StaffContext, ticketId: string, now = new
     await auditKitchen(tx, ctx, "kitchen.start", "ticket", ticketId, { station: ticket.station, lines: toStart.length }, now);
     return { orderId: order.id, sessionId: order.sessionId, status: await syncOrderStatus(tx, ctx.tenantId, order.id, now), changed: true, lineIds: toStart.map((l) => l.id) };
   }, LOCK_THEN_READ);
-  if (res.changed) announce(ctx, [res]);
+  if (res.changed) await announce(ctx, [res]);
   return res.status;
 }
 
@@ -146,9 +148,9 @@ export async function bumpLine(ctx: StaffContext, lineId: string, now = new Date
       .where(and(eq(s.orderLines.tenantId, ctx.tenantId), eq(s.orderLines.id, lineId)));
     await syncTickets(tx, ctx.tenantId, order.id, now);
     await auditKitchen(tx, ctx, "kitchen.bump_line", "order_line", lineId, { station: line.station, orderId: order.id }, now);
-    return { orderId: order.id, sessionId: order.sessionId, status: await syncOrderStatus(tx, ctx.tenantId, order.id, now), changed: true, lineIds: [lineId] };
+    return { orderId: order.id, sessionId: order.sessionId, status: await syncOrderStatus(tx, ctx.tenantId, order.id, now), changed: true, ready: true, lineIds: [lineId] };
   }, LOCK_THEN_READ);
-  if (res.changed) announce(ctx, [res]);
+  if (res.changed) await announce(ctx, [res]);
   return res.status;
 }
 
@@ -169,9 +171,9 @@ export async function bumpTicket(ctx: StaffContext, ticketId: string, now = new 
       .where(and(eq(s.orderLines.tenantId, ctx.tenantId), inArray(s.orderLines.id, open.map((l) => l.id))));
     await syncTickets(tx, ctx.tenantId, order.id, now);
     await auditKitchen(tx, ctx, "kitchen.bump_ticket", "ticket", ticketId, { station: ticket.station, lines: open.length }, now);
-    return { orderId: order.id, sessionId: order.sessionId, status: await syncOrderStatus(tx, ctx.tenantId, order.id, now), changed: true, lineIds: open.map((l) => l.id) };
+    return { orderId: order.id, sessionId: order.sessionId, status: await syncOrderStatus(tx, ctx.tenantId, order.id, now), changed: true, ready: true, lineIds: open.map((l) => l.id) };
   }, LOCK_THEN_READ);
-  if (res.changed) announce(ctx, [res]);
+  if (res.changed) await announce(ctx, [res]);
   return res.status;
 }
 
@@ -201,7 +203,7 @@ export async function recallTicket(ctx: StaffContext, ticketId: string, now = ne
       .where(and(eq(s.tickets.tenantId, ctx.tenantId), eq(s.tickets.id, ticketId)));
     return { orderId: order.id, sessionId: order.sessionId, status: await syncOrderStatus(tx, ctx.tenantId, order.id, now), lineIds: eligible.map((l) => l.id) };
   }, LOCK_THEN_READ);
-  announce(ctx, [res]);
+  await announce(ctx, [res]);
   return res.status;
 }
 
@@ -248,7 +250,7 @@ export async function markServed(ctx: StaffContext, lineIds: string[], now = new
     }
     return out;
   }, LOCK_THEN_READ);
-  announce(ctx, changes);
+  await announce(ctx, changes);
   if(changes.length) await publish(ctx,[{topic:topics.floor,type:"visit.updated"}]);
 }
 
