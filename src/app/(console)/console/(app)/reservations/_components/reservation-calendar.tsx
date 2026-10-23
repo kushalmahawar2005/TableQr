@@ -374,6 +374,7 @@ function ReservationCard({ r, selected, onSelect }: { r: CalendarReservation; se
         <span className="capitalize">{r.source.replace("_", " ")}</span>
       </p>
       {r.occasion && <p className="mt-1 text-caption text-muted">{r.occasion}</p>}
+      {r.preorder.length > 0 && <p className="mt-1 text-caption font-semibold text-brand-strong">Preorder · {r.preorder.reduce((sum, line) => sum + line.qty, 0)} items · ₹{(r.preorderTotalPaise / 100).toLocaleString("en-IN")}</p>}
       {r.advanceReceivedPaise > 0 && <p className="mt-1 text-caption font-semibold text-[var(--state-available-text)]">Advance received · ₹{(r.advanceReceivedPaise / 100).toLocaleString("en-IN")}</p>}
       {r.lateMinutes > 0 && <p className="mt-1 text-caption font-semibold text-warning">{r.lateMinutes} min late</p>}
       {r.credit && <p className="mt-1 text-caption font-semibold text-warning">Credit: ₹{(r.credit.amountPaise / 100).toLocaleString("en-IN")} · {r.credit.status}</p>}
@@ -431,6 +432,7 @@ function Drawer({ reservation: r, data, preview, onDone, onClose }: { reservatio
         <dd>{r.assignments.map((a) => a.code).join(" + ") || "Unassigned"}</dd>
         <dt className="text-muted">Advance received</dt>
         <dd>{r.advanceReceivedPaise > 0 ? `₹${(r.advanceReceivedPaise / 100).toLocaleString("en-IN")} · credited on final bill` : "No advance recorded"}</dd>
+        {r.preorder.length > 0 && <><dt className="text-muted">Preordered food</dt><dd>{r.preorder.map((line) => `${line.qty} × ${line.nameEn}`).join(", ")} · ₹{(r.preorderTotalPaise / 100).toLocaleString("en-IN")} advance</dd></>}
         {r.occasion && (
           <>
             <dt className="text-muted">Occasion</dt>

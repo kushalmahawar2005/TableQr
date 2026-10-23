@@ -16,7 +16,7 @@ import { getKitchenDisplay } from "@/server/kitchen/display";
 import { kdsAccept, kdsActor, kdsBoard, kdsBumpLine, kdsBumpTicket, kdsRecall, kdsSearch, kdsStart, kdsStock, viewStation } from "@/server/kitchen/kds";
 import { onPublish, type RealtimeEvent } from "@/server/realtime/publish";
 import { resolveStaff, signInStaff } from "@/server/staff/auth";
-import { resetTestDb } from "./setup-db";
+import { attachVerifiedTestGuest, resetTestDb } from "./setup-db";
 
 // S2 Kitchen Display: trusted screen credential, station permissions, lifecycle, recall,
 // urgency, order-time snapshots, stock and tenant isolation.
@@ -55,7 +55,7 @@ beforeAll(async () => {
   env = await resetTestDb();
   onPublish((_scope, e) => events.push(...e));
   const { participantId } = await startOrJoinTable({ outletCode: "SRJ01", shortCode: "k7Qm", deviceId: "s2-aarav", displayName: "Aarav" });
-  guest = await getGuestContext("SRJ01", "k7Qm", participantId, "s2-aarav");
+  guest = await attachVerifiedTestGuest(appDb, await getGuestContext("SRJ01", "k7Qm", participantId, "s2-aarav"), "Aarav");
   await addCartLine(guest, { itemId: env.demo.itemIds["Butter Chicken"], qty: 1, modifierIds: [env.demo.modifierIds.butterNaan] });
   await addCartLine(guest, { itemId: env.demo.itemIds["Paneer Tikka"], qty: 2, note: "extra charred" });
   await addCartLine(guest, { itemId: env.demo.itemIds["Hara Bhara Kebab"], qty: 1 });

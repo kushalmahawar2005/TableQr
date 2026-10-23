@@ -12,7 +12,7 @@ import { cancelOrderLine, getOrderTracker } from "@/server/guest/tracker";
 import { acceptOrder, bumpLine, bumpTicket, markServed, recallTicket, setOutOfStock, startTicket } from "@/server/kitchen/actions";
 import { getKitchenDisplay } from "@/server/kitchen/display";
 import type { StaffContext } from "@/server/staff/context";
-import { resetTestDb } from "./setup-db";
+import { attachVerifiedTestGuest, resetTestDb } from "./setup-db";
 
 let env: Awaited<ReturnType<typeof resetTestDb>>;
 let kitchen: StaffContext;
@@ -38,7 +38,7 @@ beforeAll(async () => {
   kitchen = { tenantId: env.demo.tenantId, outletId: env.demo.outletId, userId: null };
 
   const { participantId } = await startOrJoinTable({ outletCode: "SRJ01", shortCode: "k7Qm", deviceId: "k-aarav", displayName: "Aarav" });
-  guest = await getGuestContext("SRJ01", "k7Qm", participantId, "k-aarav");
+  guest = await attachVerifiedTestGuest(appDb, await getGuestContext("SRJ01", "k7Qm", participantId, "k-aarav"), "Aarav");
   await addCartLine(guest, { itemId: env.demo.itemIds["Butter Chicken"], qty: 1, modifierIds: [env.demo.modifierIds.butterNaan], note: "less spicy" });
   await addCartLine(guest, { itemId: env.demo.itemIds["Paneer Tikka"], qty: 1 });
   await addCartLine(guest, { itemId: env.demo.itemIds["Cola"], qty: 1 });

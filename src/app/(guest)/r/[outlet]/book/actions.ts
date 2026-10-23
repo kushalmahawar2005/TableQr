@@ -3,7 +3,7 @@
 import { cookies } from "next/headers";
 import { DEVICE_COOKIE } from "@/lib/guest-device";
 import { AppError } from "@/server/errors";
-import { arriveBookingPublic, bookingByToken, cancelBookingPublic, createBookingHold, createGroupRequest, getBookingAvailability, confirmBooking, lateBookingPublic, rescheduleBookingPublic } from "@/server/booking/core";
+import { arriveBookingPublic, bookingByToken, bookingPreorderMenu, cancelBookingPublic, createBookingHold, createGroupRequest, getBookingAvailability, confirmBooking, lateBookingPublic, rescheduleBookingPublic, saveBookingPreorder } from "@/server/booking/core";
 import { sendBookingOtp, verifyBookingOtp } from "@/server/booking/otp";
 import { startReservationCredit } from "@/server/booking/credit";
 
@@ -19,7 +19,15 @@ export async function holdAction(outletCode: string, input: { date: string; star
 }
 
 export async function bookingSummaryAction(outletCode: string, token: string) {
-  try { const { row } = await bookingByToken(outletCode, token); return { ok: true as const, data: { reference: row.publicReference, name: row.name, phone: row.phone, partySize: row.partySize, startAt: row.startAt.getTime(), endAt: row.expectedEndAt.getTime(), status: row.status, holdExpiresAt: row.holdExpiresAt?.getTime() ?? null, seatingPreference: row.seatingPreference, creditRequiredPaise: row.creditRequiredPaise, creditPaidPaise: row.creditPaidPaise } }; } catch (e) { return fail(e); }
+  try { const { row } = await bookingByToken(outletCode, token); return { ok: true as const, data: { reference: row.publicReference, name: row.name, phone: row.phone, partySize: row.partySize, startAt: row.startAt.getTime(), endAt: row.expectedEndAt.getTime(), status: row.status, holdExpiresAt: row.holdExpiresAt?.getTime() ?? null, seatingPreference: row.seatingPreference, creditRequiredPaise: row.creditRequiredPaise, creditPaidPaise: row.creditPaidPaise, preorder: row.preorder ?? [] } }; } catch (e) { return fail(e); }
+}
+
+export async function bookingPreorderMenuAction(outletCode: string) {
+  try { return { ok: true as const, data: await bookingPreorderMenu(outletCode) }; } catch (e) { return fail(e); }
+}
+
+export async function saveBookingPreorderAction(outletCode: string, token: string, lines: { itemId: string; qty: number }[]) {
+  try { return { ok: true as const, data: await saveBookingPreorder(outletCode, token, lines) }; } catch (e) { return fail(e); }
 }
 
 export async function sendBookingOtpAction(outletCode: string, token: string, phone: string) {

@@ -84,6 +84,7 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
   const [hoursOn, setHoursOn] = useState(!!o.openingHours);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [guestLinkCopied, setGuestLinkCopied] = useState(false);
   const [activeId, setActiveId] = useState<string>(NAV[0][0]);
   const [logoUrl, setLogoUrl] = useState(o.logoUrl);
   const [logoBusy, setLogoBusy] = useState(false);
@@ -129,6 +130,14 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
 
   function copyCode() {
     try { void navigator.clipboard.writeText(o.code); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* clipboard may be blocked; the code stays on screen */ }
+  }
+
+  function copyGuestLink() {
+    try {
+      void navigator.clipboard.writeText(`${window.location.origin}/r/${encodeURIComponent(o.code)}`);
+      setGuestLinkCopied(true);
+      setTimeout(() => setGuestLinkCopied(false), 1800);
+    } catch { setGuestLinkCopied(false); }
   }
 
   function selectLogo(event: React.ChangeEvent<HTMLInputElement>) {
@@ -294,6 +303,12 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
               <div className="flex items-center gap-2 sm:justify-end">
                 <span className="font-mono text-sm font-semibold text-ink">{o.code}</span>
                 <button type="button" onClick={copyCode} aria-label="Copy outlet code" className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-line px-2 text-xs font-semibold hover:border-ink/40">{copied ? <Check className="size-3.5" aria-hidden="true" /> : <Copy className="size-3.5" aria-hidden="true" />}{copied ? "Copied" : "Copy"}</button>
+              </div>
+            </Row>
+            <Row label="Guest restaurant link" hint="Share this page so guests can see your restaurant and book a table.">
+              <div className="flex min-w-0 items-center gap-2 sm:justify-end">
+                <a href={`/r/${encodeURIComponent(o.code)}`} target="_blank" rel="noreferrer" className="min-w-0 truncate text-sm font-medium text-brand-strong underline underline-offset-2">/r/{o.code}</a>
+                <button type="button" onClick={copyGuestLink} aria-label="Copy guest restaurant link" className="inline-flex min-h-8 shrink-0 items-center gap-1 rounded-lg border border-line px-2 text-xs font-semibold hover:border-ink/40">{guestLinkCopied ? <Check className="size-3.5" aria-hidden="true" /> : <Copy className="size-3.5" aria-hidden="true" />}{guestLinkCopied ? "Copied" : "Copy"}</button>
               </div>
             </Row>
             <Row label="Time zone"><Fixed>{o.timezone}</Fixed></Row>

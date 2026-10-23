@@ -16,7 +16,7 @@ import { getSettingsData } from "@/server/admin/settings";
 import type { AnalyticsData, AnalyticsRange, AuditData, SettingsData, TenantDetail } from "./admin-types";
 import { requirePlatformAdmin, signInPlatformAdmin, signOutPlatformAdmin } from "@/server/admin/auth";
 import { randomInt } from "node:crypto";
-import { effectiveFeatures, hasKitchenDisplay, tenantFeatures } from "@/server/plan";
+import { effectiveFeatures, tenantFeatures } from "@/server/plan";
 import { FEATURE_KEYS, readFeatures, type Features } from "@/lib/plan-features";
 
 export type AdminLoginState = { error: string | null };
@@ -80,6 +80,15 @@ export async function createTenantAction(_prev: TenantState, form: FormData): Pr
     const contactPhone = text(form, "contactPhone");
     const contactEmail = text(form, "contactEmail").toLowerCase();
     const planCode = text(form, "planCode");
+    const customPackage = text(form, "customizeFeatures") === "on";
+    let selectedFeatures: Features | null = null;
+    if (customPackage) {
+      try { selectedFeatures = readFeatures(JSON.parse(text(form, "customFeatures"))); }
+      catch { return { error: "The custom feature selection is invalid. Please review it and try again.", success: null }; }
+      if (selectedFeatures.maxTables !== null && (selectedFeatures.maxTables < 1 || selectedFeatures.maxTables > 500)) return { error: "Table limit must be from 1 to 500, or empty for no limit.", success: null };
+      if (selectedFeatures.maxStaff !== null && (selectedFeatures.maxStaff < 1 || selectedFeatures.maxStaff > 500)) return { error: "Staff limit must be from 1 to 500, or empty for no limit.", success: null };
+      if (selectedFeatures.maxRooms !== null && (selectedFeatures.maxRooms < 1 || selectedFeatures.maxRooms > 1000)) return { error: "Room limit must be from 1 to 1000, or empty for no limit.", success: null };
+    }
     const typedCode = text(form, "outletCode").toUpperCase();
     const outletName = text(form, "outletName");
     const city = text(form, "city");
@@ -106,16 +115,16 @@ export async function createTenantAction(_prev: TenantState, form: FormData): Pr
       const outletId = uuidv7();
       const zoneId = uuidv7();
       const userId = uuidv7();
-      const kitchenDisplay = kitchenChoice === null || kitchenChoice === hasKitchenDisplay(plan.features) ? null : kitchenChoice;
+      const planFeatures = selectedFeatures ?? readFeatures(plan.features);
+      const kitchenDisplay = kitchenChoice === null || kitchenChoice === planFeatures.kitchenDisplay ? null : kitchenChoice;
       // The plan's table limit applies; only tables beyond it are stored as this restaurant's own limit
-      const planTables = readFeatures(plan.features).maxTables;
+      const planTables = planFeatures.maxTables;
       const tableLimit = planTables !== null && tableCount > planTables ? tableCount : null;
-      await tx.insert(s.tenants).values({ id: tenantId, name: tenantName, planCode, contactName, contactPhone, contactEmail: contactEmail || null, createdByAdminId: admin.id, kitchenDisplay, tableLimit, trialEndsAt: new Date(Date.now() + trialDays * 86_400_000) });
+      await tx.insert(s.tenants).values({ id: tenantId, name: tenantName, planCode, contactName, contactPhone, contactEmail: contactEmail || null, createdByAdminId: admin.id, kitchenDisplay, tableLimit, customFeatures: selectedFeatures, trialEndsAt: new Date(Date.now() + trialDays * 86_400_000) });
       await tx.insert(s.brands).values({ id: brandId, tenantId, name: brandName });
       await tx.insert(s.outlets).values({ id: outletId, tenantId, brandId, code: outletCode, name: outletName, city, address });
       await tx.insert(s.users).values({ id: userId, tenantId, phone: ownerPhone, name: ownerName, pinHash: await hashPin(ownerPin) });
       await tx.insert(s.staffRoles).values({ id: uuidv7(), tenantId, userId, outletId, role: "owner" });
-      const planFeatures = readFeatures(plan.features);
       await addStarterFloor(tx, tenantId, outletId, zoneId, planFeatures.dineIn ? tableCount : 0);
       // Hotel plans: rooms 101, 102 … with their QR codes; the owner can renumber them in Rooms
       if (planFeatures.rooms) {
@@ -331,7 +340,6 @@ export async function setCustomPackageAction(tenantId: string, input: { features
     if (input.features.maxRooms != null && !(input.features.maxRooms >= 1 && input.features.maxRooms <= 1000)) return { error: "Rooms must be from 1 to 1000, or empty for no limit." };
     const [tenant] = await db.select({ planCode: s.tenants.planCode, customFeatures: s.tenants.customFeatures, customPricePaise: s.tenants.customPricePaise }).from(s.tenants).where(eq(s.tenants.id, tenantId));
     if (!tenant) return { error: "Tenant not found." };
-    if (tenant.planCode !== CUSTOM_PLAN) return { error: "Put this restaurant on the Custom plan first." };
     const features = cleanFeatures(input.features);
     await db.update(s.tenants).set({ customFeatures: features, customPricePaise: price * 100, kitchenDisplay: null, tableLimit: null }).where(eq(s.tenants.id, tenantId));
     await logAdminAction(admin, tenantId, "admin.custom_package_saved", { features: tenant.customFeatures ? readFeatures(tenant.customFeatures) : null, pricePaise: tenant.customPricePaise }, { features, pricePaise: price * 100 });

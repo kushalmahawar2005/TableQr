@@ -12,6 +12,7 @@ import { Separator } from "@/components/ui/separator";
 import { SuggestInput, type Suggestion } from "@/components/suggest-input";
 import { searchCities } from "@/domain/india-cities";
 import { createTenantAction, type TenantState } from "./actions";
+import { FEATURE_KEYS, FEATURE_LABELS, readFeatures, type Features } from "@/lib/plan-features";
 
 // City suggestions come from the built-in list; address suggestions from OpenStreetMap (Photon,
 // free, no key), kept inside India and leaning on the city typed above
@@ -60,7 +61,7 @@ const sections: { title: string; help: string; fields: Field[] }[] = [
   ] },
 ];
 
-export function CreateTenantDialog({ open, onOpenChange, plans }: { open: boolean; onOpenChange: (open: boolean) => void; plans: { code: string; name: string; kitchen: boolean; rooms: boolean; dineIn: boolean }[] }) {
+export function CreateTenantDialog({ open, onOpenChange, plans }: { open: boolean; onOpenChange: (open: boolean) => void; plans: { code: string; name: string; features: Features }[] }) {
   const router = useRouter();
   const [state, action, pending] = useActionState<TenantState, FormData>(createTenantAction, { error: null, success: null });
 
@@ -87,9 +88,11 @@ export function CreateTenantDialog({ open, onOpenChange, plans }: { open: boolea
   };
   const [step, setStep] = useState(0);
   const [planCode, setPlanCode] = useState(plans[0]?.code ?? "");
+  const [customize, setCustomize] = useState(false);
+  const [features, setFeatures] = useState<Features>(() => plans[0]?.features ?? readFeatures(null));
   // Kitchen screen follows the chosen plan until the admin sets it themselves
   const [kitchen, setKitchen] = useState<boolean | null>(null);
-  const kitchenOn = kitchen ?? plans.find((p) => p.code === planCode)?.kitchen ?? false;
+  const kitchenOn = kitchen ?? features.kitchenDisplay;
   const chosen = plans.find((p) => p.code === planCode);
   const [roomCount, setRoomCount] = useState("10");
   const [review, setReview] = useState<Record<string, string>>({});
@@ -183,15 +186,26 @@ export function CreateTenantDialog({ open, onOpenChange, plans }: { open: boolea
           <legend className="mb-1"><span className="block text-base font-semibold">Plan</span><span className="block text-sm text-muted-foreground">Pick a plan and check the details</span></legend>
           <div role="radiogroup" aria-label="Plan" className="grid gap-2 sm:grid-cols-2">
             {plans.map((p) => <label key={p.code} className="flex cursor-pointer items-center gap-3 rounded-xl border p-3 text-sm transition-colors hover:bg-muted/50 has-[:checked]:border-primary has-[:checked]:bg-primary/5 has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring/50">
-              <input type="radio" name="planCode" value={p.code} checked={planCode === p.code} onChange={() => setPlanCode(p.code)} required className="size-4 accent-[var(--primary)]" />
+              <input type="radio" name="planCode" value={p.code} checked={planCode === p.code} onChange={() => { setPlanCode(p.code); setFeatures(p.features); setKitchen(null); }} required className="size-4 accent-[var(--primary)]" />
               <span className="font-medium">{p.name}</span>
-              <span className="ml-auto text-xs text-muted-foreground">{p.rooms ? (p.dineIn ? "Hotel + restaurant" : "Hotel") : p.kitchen ? "Kitchen included" : ""}</span>
+              <span className="ml-auto text-xs text-muted-foreground">{p.features.rooms ? (p.features.dineIn ? "Hotel + restaurant" : "Hotel") : p.features.kitchenDisplay ? "Kitchen included" : ""}</span>
             </label>)}
           </div>
-          {chosen?.rooms && <div className="space-y-1.5 rounded-xl border p-3">
+          <label className="flex items-start gap-3 rounded-xl border p-3 text-sm has-[:checked]:border-primary has-[:checked]:bg-primary/5">
+            <input type="checkbox" checked={customize} onChange={(e) => setCustomize(e.target.checked)} className="mt-0.5 size-4 accent-[var(--primary)]" />
+            <span><span className="block font-medium">Customize this restaurant&apos;s package</span><span className="block text-xs text-muted-foreground">Choose which existing features this tenant gets. You can adjust these later from the tenant&apos;s package settings.</span></span>
+          </label>
+          {customize && <div className="grid gap-2 rounded-xl border p-3 sm:grid-cols-2">
+            {FEATURE_KEYS.map((key) => <label key={key} className="flex items-start gap-2 text-sm"><input type="checkbox" checked={features[key]} onChange={(e) => setFeatures({ ...features, [key]: e.target.checked })} className="mt-0.5 size-4 accent-[var(--primary)]" /><span>{FEATURE_LABELS[key].label}<span className="block text-xs text-muted-foreground">{FEATURE_LABELS[key].hint}</span></span></label>)}
+            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={features.poweredBy} onChange={(e) => setFeatures({ ...features, poweredBy: e.target.checked })} className="size-4 accent-[var(--primary)]" />Show “Powered by TableQR”</label>
+            {(["maxTables", "maxStaff", "maxRooms"] as const).map((key) => <label key={key} className="space-y-1 text-sm">{key === "maxTables" ? "Table limit" : key === "maxStaff" ? "Staff login limit" : "Room limit"}<Input type="number" min={1} max={key === "maxRooms" ? 1000 : 500} value={features[key] ?? ""} onChange={(e) => setFeatures({ ...features, [key]: e.target.value === "" ? null : Math.max(1, Number(e.target.value)) })} placeholder="No limit" /></label>)}
+            <input type="hidden" name="customizeFeatures" value="on" />
+            <input type="hidden" name="customFeatures" value={JSON.stringify(features)} />
+          </div>}
+          {(customize ? features.rooms : chosen?.features.rooms) && <div className="space-y-1.5 rounded-xl border p-3">
             <Label htmlFor="roomCount">Number of rooms</Label>
             <Input id="roomCount" name="roomCount" type="number" min={0} max={200} value={roomCount} onChange={(e) => setRoomCount(e.target.value)} />
-            <p className="text-xs text-muted-foreground">Made with a QR code each, numbered 101, 102 … The owner can change numbers in Rooms.{chosen.dineIn ? "" : " This plan has no restaurant tables, so no tables are made."}</p>
+            <p className="text-xs text-muted-foreground">Made with a QR code each, numbered 101, 102 … The owner can change numbers in Rooms.{(customize ? features.dineIn : chosen?.features.dineIn) ? "" : " This package has no restaurant tables, so no tables are made."}</p>
           </div>}
           <label className="flex cursor-pointer items-start gap-3 rounded-xl border p-3 text-sm has-[:checked]:border-primary has-[:checked]:bg-primary/5">
             <input type="checkbox" checked={kitchenOn} onChange={(e) => setKitchen(e.target.checked)} className="mt-0.5 size-4 accent-[var(--primary)]" />
@@ -199,7 +213,7 @@ export function CreateTenantDialog({ open, onOpenChange, plans }: { open: boolea
             <span><span className="block font-medium">Kitchen screen</span><span className="block text-xs text-muted-foreground">Gives the Kitchen staff role and the wall kitchen screen. Comes with the plan when ticked by default; you can change it for this restaurant.</span></span>
           </label>
           <dl className="divide-y rounded-xl border text-sm">
-            {([["Brand", review.brandName], ["Contact", [review.contactName, review.contactPhone].filter(Boolean).join(" · ")], ["Outlet", [review.outletName, review.city].filter(Boolean).join(", ")], ["Outlet code", review.outletCode || "Made when created"], ["Tables", chosen && !chosen.dineIn ? "None" : review.tableCount], ...(chosen?.rooms ? [["Rooms", roomCount]] as const : []), ["Owner", [review.ownerName, review.ownerPhone].filter(Boolean).join(" · ")], ["Kitchen screen", kitchenOn ? "Yes" : "No"]] as const).map(([k, v]) => <div key={k} className="flex items-center justify-between gap-4 px-4 py-2.5"><dt className="text-muted-foreground">{k}</dt><dd className="min-w-0 break-words text-right font-medium">{v}</dd></div>)}
+            {([["Brand", review.brandName], ["Contact", [review.contactName, review.contactPhone].filter(Boolean).join(" · ")], ["Outlet", [review.outletName, review.city].filter(Boolean).join(", ")], ["Outlet code", review.outletCode || "Made when created"], ["Tables", (customize ? features.dineIn : chosen?.features.dineIn) ? review.tableCount : "None"], ...((customize ? features.rooms : chosen?.features.rooms) ? [["Rooms", roomCount]] as const : []), ["Owner", [review.ownerName, review.ownerPhone].filter(Boolean).join(" · ")], ["Kitchen screen", kitchenOn ? "Yes" : "No"], ...(customize ? [["Package", "Custom tenant feature set"]] as const : [])] as const).map(([k, v]) => <div key={k} className="flex items-center justify-between gap-4 px-4 py-2.5"><dt className="text-muted-foreground">{k}</dt><dd className="min-w-0 break-words text-right font-medium">{v}</dd></div>)}
           </dl>
         </fieldset>
         {state.error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{state.error}</p>}

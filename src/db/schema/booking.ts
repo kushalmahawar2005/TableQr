@@ -98,6 +98,8 @@ export const reservations = mysqlTable(
     /** Advance recorded as received by restaurant staff; separate from online booking credit. */
     advanceReceivedPaise: int("advance_received_paise").notNull().default(0),
     creditStatus: mysqlEnum("credit_status", ["none", "required", "pending", "paid", "applied", "refunded", "forfeited", "failed"]).notNull().default("none"),
+    /** Guest-selected dishes captured at booking; converted into a kitchen order when seated. */
+    preorder: json("preorder").$type<{ itemId: string; nameEn: string; nameHi: string | null; qty: number; unitPricePaise: number; taxRateBp: number; station: string; prepMinutes: number; allergens: string[] | null; isJain: boolean; spiceLevel: number | null; modifierChoices: { groupId: string; modifierId: string }[]; modifiers: { nameEn: string; nameHi: string | null; priceDeltaPaise: number }[] }[]>(),
     noShowAt: at("no_show_at"),
     createdByUserId: ref("created_by_user_id"),
     createdAt: createdAt(),

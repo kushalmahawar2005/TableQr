@@ -13,7 +13,7 @@ import { placeOrder } from "@/server/guest/order";
 import { startOrJoinTable } from "@/server/guest/session";
 import { mockGateway } from "@/server/payments/gateway";
 import type { StaffContext } from "@/server/staff/context";
-import { resetTestDb } from "./setup-db";
+import { attachVerifiedTestGuest, resetTestDb } from "./setup-db";
 
 // The worked example from PS 3.6, played end to end: four friends at Table 12, GST 5%.
 // Paneer Tikka is shared by all four, Masala Papad by Aarav and Bhavna.
@@ -57,7 +57,7 @@ beforeAll(async () => {
   for (const [key, name] of [["A", "Aarav"], ["B", "Bhavna"], ["C", "Chirag"], ["D", "Divya"]] as const) {
     const device = `bill-${key}`;
     const { participantId } = await startOrJoinTable({ outletCode: "SRJ01", shortCode: "k7Qm", deviceId: device, displayName: name });
-    g[key] = await getGuestContext("SRJ01", "k7Qm", participantId, device);
+    g[key] = await attachVerifiedTestGuest(appDb, await getGuestContext("SRJ01", "k7Qm", participantId, device), name);
   }
   const all = [g.A, g.B, g.C, g.D].map((x) => x.participantId);
 
@@ -259,7 +259,7 @@ describe("simultaneous final payments", () => {
     for (const device of ["t11-x", "t11-y"]) {
       const qr = env.demo.tableQr.T11;
       const { participantId } = await startOrJoinTable({ outletCode: "SRJ01", shortCode: qr, deviceId: device, displayName: "Jaya" });
-      const ctx = await getGuestContext("SRJ01", qr, participantId, device);
+      const ctx = await attachVerifiedTestGuest(appDb, await getGuestContext("SRJ01", qr, participantId, device), "Jaya");
       await addCartLine(ctx, { itemId: env.demo.itemIds["Jeera Rice"], qty: 1 });
       await placeOrder(ctx);
       guests.push(ctx);

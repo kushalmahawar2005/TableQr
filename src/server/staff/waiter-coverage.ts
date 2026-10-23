@@ -75,7 +75,7 @@ export async function rebalanceWaiterVisit(scope: OutletScope, sessionId: string
     const next = chooseWaiter(coverage.waiters, null, overdue ? visit.waiterUserId : null);
     if (!next || next.id === visit.waiterUserId) return false;
     await tx.update(s.tableSessions).set({ waiterUserId: next.id }).where(and(eq(s.tableSessions.tenantId, scope.tenantId), eq(s.tableSessions.id, sessionId)));
-    await tx.insert(s.auditLog).values({ ...scope, actorLabel: "Automatic coverage", action: "waiter.auto_routed", entity: "session", entityId: sessionId, before: { waiterUserId: visit.waiterUserId }, after: { waiterUserId: next.id, reason: overdue ? "overdue" : "unavailable" }, createdAt: now });
+    await tx.insert(s.auditLog).values({ tenantId: scope.tenantId, outletId: scope.outletId, actorLabel: "Automatic coverage", action: "waiter.auto_routed", entity: "session", entityId: sessionId, before: { waiterUserId: visit.waiterUserId }, after: { waiterUserId: next.id, reason: overdue ? "overdue" : "unavailable" }, createdAt: now });
     return true;
   }, LOCK_THEN_READ);
   if (changed) await publish(scope, [{ topic: topics.floor, type: "waiter_assignment.changed" }, { topic: topics.tasks, type: "waiter_assignment.changed" }]);

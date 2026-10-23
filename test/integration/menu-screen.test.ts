@@ -10,7 +10,7 @@ import { getMenuScreen } from "@/server/guest/menu-screen";
 import { placeOrder } from "@/server/guest/order";
 import { startOrJoinTable } from "@/server/guest/session";
 import { onPublish, type RealtimeEvent } from "@/server/realtime/publish";
-import { resetTestDb } from "./setup-db";
+import { attachVerifiedTestGuest, resetTestDb } from "./setup-db";
 
 // G3 Menu: the screen's data, the stepper's cart writes and the rules around them.
 
@@ -39,7 +39,7 @@ async function failsWith(p: Promise<unknown>, code: AppError["code"]) {
 async function seat(table: string, deviceId: string, displayName?: string): Promise<GuestContext> {
   const qr = env.demo.tableQr[table];
   const { participantId } = await startOrJoinTable({ outletCode: "SRJ01", shortCode: qr, deviceId, displayName });
-  return getGuestContext("SRJ01", qr, participantId, deviceId);
+  return attachVerifiedTestGuest(appDb, await getGuestContext("SRJ01", qr, participantId, deviceId), displayName ?? "Guest");
 }
 
 const item = (name: string) => env.demo.itemIds[name];

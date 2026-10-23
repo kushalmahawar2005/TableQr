@@ -9,7 +9,7 @@ import { startOrJoinTable } from "@/server/guest/session";
 import { acceptOrder, setOutOfStock } from "@/server/kitchen/actions";
 import { onPublish, type RealtimeEvent } from "@/server/realtime/publish";
 import type { StaffContext } from "@/server/staff/context";
-import { resetTestDb } from "./setup-db";
+import { attachVerifiedTestGuest, resetTestDb } from "./setup-db";
 
 // Every change announces itself to exactly the screens that show it, and only after it commits.
 
@@ -38,7 +38,7 @@ afterAll(async () => {
 describe("realtime events", () => {
   it("seating a new table tells the floor map and the table", async () => {
     const { participantId } = await startOrJoinTable({ outletCode: "SRJ01", shortCode: "k7Qm", deviceId: "rt-a", displayName: "Kiran" });
-    guest = await getGuestContext("SRJ01", "k7Qm", participantId, "rt-a");
+    guest = await attachVerifiedTestGuest(appDb, await getGuestContext("SRJ01", "k7Qm", participantId, "rt-a"), "Kiran");
     expect(flat()).toEqual(["session participant.joined", "floor table.state_changed", "floor floor.session_updated"]);
     expect(sent[0].outletId).toBe(env.demo.outletId);
   });

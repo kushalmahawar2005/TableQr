@@ -16,7 +16,7 @@ import { resolveStaff, signInStaff, type StaffSession } from "@/server/staff/aut
 import { bulkPrice, saveModifierGroup } from "@/server/staff/menu-manager";
 import { bulkOutletPrice, clearOutletPrice, getPricingData, setOutletPrice } from "@/server/staff/pricing";
 import { staffPlaceOrder } from "@/server/staff/waiter-mutations";
-import { resetTestDb } from "./setup-db";
+import { attachVerifiedTestGuest, resetTestDb } from "./setup-db";
 
 // O4 Pricing: outlet overrides, the approved O3 money fixes, and open-cart price safety.
 
@@ -49,7 +49,7 @@ async function failsWith(p: Promise<unknown>, code: AppError["code"]) {
 async function seat(table: string, deviceId: string): Promise<GuestContext> {
   const qr = env.demo.tableQr[table];
   const { participantId } = await startOrJoinTable({ outletCode: "SRJ01", shortCode: qr, deviceId, displayName: "Aarav" });
-  return getGuestContext("SRJ01", qr, participantId, deviceId);
+  return attachVerifiedTestGuest(env.db, await getGuestContext("SRJ01", qr, participantId, deviceId), "Aarav");
 }
 const clearAll = () => env.db.update(s.outletItemOverrides).set({ pricePaise: null }).where(eq(s.outletItemOverrides.outletId, env.demo.outletId));
 

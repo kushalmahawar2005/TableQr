@@ -13,7 +13,7 @@ import { getGuestContext } from "@/server/guest/context";
 import { placeOrder } from "@/server/guest/order";
 import { startOrJoinTable } from "@/server/guest/session";
 import { resolveStaff, signInStaff, type StaffSession } from "@/server/staff/auth";
-import { resetTestDb } from "./setup-db";
+import { attachVerifiedTestGuest, resetTestDb } from "./setup-db";
 
 // The bill goes to the guest's WhatsApp as a PDF through WhatsApp Business; nothing opens on the
 // cashier's phone. WhatsApp itself is faked here.
@@ -28,7 +28,7 @@ beforeAll(async () => {
   owner = (await resolveStaff((await signInStaff({ outletCode: "SRJ01", phone: "9000000001", pin: "1111" })).token))!;
   const qr = env.demo.tableQr.T3;
   const { participantId } = await startOrJoinTable({ outletCode: "SRJ01", shortCode: qr, deviceId: "sb-a", displayName: "Meera" });
-  const g = await getGuestContext("SRJ01", qr, participantId, "sb-a");
+  const g = await attachVerifiedTestGuest(appDb, await getGuestContext("SRJ01", qr, participantId, "sb-a"), "Meera");
   await addCartLine(g, { itemId: env.demo.itemIds["Dal Makhani"], qty: 2 });
   await placeOrder(g);
   sessionId = g.sessionId;

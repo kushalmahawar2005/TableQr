@@ -61,7 +61,9 @@ const guestByPhone = async (phone: string) =>
 
 describe("G2 verify number", () => {
   it("asks Verified-mode tables for a number, then joins with the verified name", async () => {
-    await failsWith(startOrJoinTable({ outletCode: "SRJ01", shortCode: env.demo.tableQr.T1, deviceId: "d-happy", now: T0 }), "verification_required");
+    // Guests can enter and browse first; OTP is required at order placement.
+    const beforeOtp = await startOrJoinTable({ outletCode: "SRJ01", shortCode: env.demo.tableQr.T1, deviceId: "d-happy", now: T0 });
+    expect(beforeOtp.isHost).toBe(true);
 
     const sent = await send("T1", "d-happy", "98765 43210");
     expect(sent).toMatchObject({ phone: "+919876543210", expiresIn: 300, resendIn: 30 });
@@ -217,11 +219,14 @@ describe("G2 verify number", () => {
     expect(p.displayName).toBe("Meera");
 
     // Another table asks again; so does this one after 12 hours
-    await failsWith(startOrJoinTable({ outletCode: "SRJ01", shortCode: env.demo.tableQr.B4, deviceId: "d-skip", now: at(7200) }), "verification_required");
+    const anotherTable = await startOrJoinTable({ outletCode: "SRJ01", shortCode: env.demo.tableQr.B4, deviceId: "d-skip", now: at(7200) });
+    const [anotherParticipant] = await env.db.select().from(s.participants).where(eq(s.participants.id, anotherTable.participantId));
+    expect(anotherParticipant.guestId).toBeNull();
+    expect(await isRecentlyVerified("SRJ01", env.demo.tableQr.B4, "d-skip", at(7200))).toBe(false);
     expect(await isRecentlyVerified("SRJ01", qr, "d-skip", at(12 * 3600 + 2))).toBe(false);
   });
 
-  it("does not send codes for Open-mode tables or tables that are not ready", async () => {
+  it("still sends codes in Open mode, but rejects a table that is not ready", async () => {
     await env.db.update(s.diningTables).set({ state: "needs_cleaning" }).where(eq(s.diningTables.id, env.demo.tableIds.B5));
     await failsWith(
       sendCode({ outletCode: "SRJ01", shortCode: env.demo.tableQr.B5, deviceId: "d-state", country: "IN", phone: "9876500070", now: T0 }),
@@ -230,10 +235,8 @@ describe("G2 verify number", () => {
     await env.db.update(s.diningTables).set({ state: "available" }).where(eq(s.diningTables.id, env.demo.tableIds.B5));
 
     await env.db.update(s.outlets).set({ sessionMode: "open" }).where(eq(s.outlets.id, env.other.outletId));
-    await failsWith(
-      sendCode({ outletCode: "CNJ01", shortCode: env.other.tableQr, deviceId: "d-state", country: "IN", phone: "9876500070", now: T0 }),
-      "invalid_state",
-    );
+    const sent = await sendCode({ outletCode: "CNJ01", shortCode: env.other.tableQr, deviceId: "d-state", country: "IN", phone: "9876500070", now: T0 });
+    expect(sent.ok).toBe(true);
     await env.db.update(s.outlets).set({ sessionMode: "verified" }).where(eq(s.outlets.id, env.other.outletId));
   });
 
@@ -258,6 +261,8 @@ describe("G2 verify number", () => {
     expect((await verify("T12", "d-iso", sent.challengeId, sent.devCode, at(2))).ok).toBe(true);
     const otherGuests = await env.db.select().from(s.guests).where(eq(s.guests.tenantId, env.other.tenantId));
     expect(otherGuests).toHaveLength(0);
-    await failsWith(startOrJoinTable({ outletCode: "CNJ01", shortCode: env.other.tableQr, deviceId: "d-iso", now: at(3) }), "verification_required");
+    const otherJoined = await startOrJoinTable({ outletCode: "CNJ01", shortCode: env.other.tableQr, deviceId: "d-iso", now: at(3) });
+    const [otherParticipant] = await env.db.select().from(s.participants).where(eq(s.participants.id, otherJoined.participantId));
+    expect(otherParticipant.guestId).toBeNull();
   });
 });

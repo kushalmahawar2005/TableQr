@@ -11,7 +11,7 @@ import { placeOrder } from "@/server/guest/order";
 import { startOrJoinTable } from "@/server/guest/session";
 import { resolveStaff, signInStaff, type StaffSession } from "@/server/staff/auth";
 import { getDashboard, getRevenueTrend } from "@/server/staff/dashboard";
-import { resetTestDb } from "./setup-db";
+import { attachVerifiedTestGuest, resetTestDb } from "./setup-db";
 
 // O1 Owner Dashboard read model against the real MySQL test database. Rows are written directly
 // with known timestamps so every boundary is exact; one test plays the real order-to-paid flow.
@@ -153,7 +153,7 @@ describe("today's revenue", () => {
     const now = new Date();
     const device = "o1-credit";
     const { participantId } = await startOrJoinTable({ outletCode: "SRJ01", shortCode: env.demo.tableQr.T12, deviceId: device, displayName: "Kavya" });
-    const g = await getGuestContext("SRJ01", env.demo.tableQr.T12, participantId, device);
+    const g = await attachVerifiedTestGuest(appDb, await getGuestContext("SRJ01", env.demo.tableQr.T12, participantId, device), "Kavya");
     await env.db.insert(s.reservations).values({ tenantId: g.tenantId, outletId: g.outletId, name: "Kavya", partySize: 2, startAt: min(-30, now), expectedEndAt: min(60, now), status: "seated", source: "online", confirmedAt: min(-600, now), sessionId: g.sessionId, creditRequiredPaise: 20_000, creditPaidPaise: 20_000, creditStatus: "paid" });
     await addCartLine(g, { itemId: item("Paneer Tikka"), qty: 2 });
     await placeOrder(g);

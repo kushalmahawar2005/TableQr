@@ -23,6 +23,7 @@ import { getRecentOrders } from "@/server/staff/orders-read";
 import { posBillDetail, posQueue } from "@/server/staff/pos-read";
 import { getPricingData, setOutletPrice } from "@/server/staff/pricing";
 import { getReport } from "@/server/staff/reports-read";
+import { attachVerifiedTestGuest } from "./setup-db";
 import { getOutletSettings } from "@/server/staff/settings-read";
 import { addMember, changeRole, listTeam, resetPin, setMemberActive } from "@/server/staff/team";
 import { waiterBoard, waiterDetail } from "@/server/staff/waiter-read";
@@ -126,7 +127,7 @@ beforeAll(async () => {
     // A guest scans this restaurant's table, orders and the bill is paid at the counter
     const deviceId = `iso-guest-${x.key}`;
     const { participantId } = await startOrJoinTable({ outletCode: x.code, shortCode: made.tableQr, deviceId, displayName: `${x.key} Guest` });
-    const guest = await getGuestContext(x.code, made.tableQr, participantId, deviceId);
+    const guest = await attachVerifiedTestGuest(appDb, await getGuestContext(x.code, made.tableQr, participantId, deviceId), `${x.key} Guest`);
     await addCartLine(guest, { itemId, qty: 1 });
     await placeOrder(guest);
 

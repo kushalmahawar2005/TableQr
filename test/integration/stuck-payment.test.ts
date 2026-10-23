@@ -11,7 +11,7 @@ import { placeOrder } from "@/server/guest/order";
 import { startOrJoinTable } from "@/server/guest/session";
 import { mockGateway } from "@/server/payments/gateway";
 import { resolveStaff, signInStaff, type StaffSession } from "@/server/staff/auth";
-import { resetTestDb } from "./setup-db";
+import { attachVerifiedTestGuest, resetTestDb } from "./setup-db";
 
 // An online payment the gateway never answers for blocks cash at the counter. The cashier can ask
 // again; after 10 minutes a manager can release it, and then take the money at the counter.
@@ -26,7 +26,7 @@ beforeAll(async () => {
   manager = (await resolveStaff((await signInStaff({ outletCode: "SRJ01", phone: "9000000002", pin: "2222" })).token))!;
   const qr = env.demo.tableQr.T2;
   const { participantId } = await startOrJoinTable({ outletCode: "SRJ01", shortCode: qr, deviceId: "stuck-a", displayName: "Isha" });
-  g = await getGuestContext("SRJ01", qr, participantId, "stuck-a");
+  g = await attachVerifiedTestGuest(appDb, await getGuestContext("SRJ01", qr, participantId, "stuck-a"), "Isha");
   await addCartLine(g, { itemId: env.demo.itemIds["Dal Makhani"], qty: 1 });
   await placeOrder(g);
   await requestBill({ tenantId: g.tenantId, outletId: g.outletId, sessionId: g.sessionId });
@@ -57,7 +57,7 @@ describe("stuck online payment", () => {
   it("takes the gateway's answer when there is one", async () => {
     const qr = env.demo.tableQr.T3;
     const { participantId } = await startOrJoinTable({ outletCode: "SRJ01", shortCode: qr, deviceId: "stuck-b", displayName: "Om" });
-    const h = await getGuestContext("SRJ01", qr, participantId, "stuck-b");
+    const h = await attachVerifiedTestGuest(appDb, await getGuestContext("SRJ01", qr, participantId, "stuck-b"), "Om");
     await addCartLine(h, { itemId: env.demo.itemIds["Dal Makhani"], qty: 1 });
     await placeOrder(h);
     await requestBill({ tenantId: h.tenantId, outletId: h.outletId, sessionId: h.sessionId });

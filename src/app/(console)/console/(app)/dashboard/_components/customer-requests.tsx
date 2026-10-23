@@ -2,7 +2,7 @@
 import { Bell, CheckCircle2, Droplets, Receipt, Sparkles, UtensilsCrossed } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import type { CustomerRequestItem } from "@/server/staff/dashboard";
 import { resolveServiceRequestAction } from "../actions";
 import { Panel, viewAllClass } from "./dashboard-shared";
@@ -14,13 +14,10 @@ import { Panel, viewAllClass } from "./dashboard-shared";
 export function CustomerRequests({ initialRequests }: { initialRequests: CustomerRequestItem[] }) {
   const router = useRouter();
   const [, start] = useTransition();
-  const [requests, setRequests] = useState(initialRequests);
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(() => new Set());
+  const requests = initialRequests.filter((request) => !dismissedIds.has(request.id));
   const [resolvingId, setResolvingId] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    setRequests(initialRequests);
-  }, [initialRequests]);
 
   const handleResolve = (id: string) => {
     setResolvingId(id);
@@ -29,7 +26,7 @@ export function CustomerRequests({ initialRequests }: { initialRequests: Custome
       const res = await resolveServiceRequestAction(id).catch(() => null);
       setResolvingId(null);
       if (res?.ok) {
-        setRequests((prev) => prev.filter((r) => r.id !== id));
+        setDismissedIds((prev) => new Set(prev).add(id));
         router.refresh();
       } else {
         setFailed(true);

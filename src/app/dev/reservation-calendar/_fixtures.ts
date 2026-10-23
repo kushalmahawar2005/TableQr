@@ -49,6 +49,8 @@ const booking = (id: string, over: Partial<Res> & { date?: string; hh?: number; 
     canNoShow: false,
     assignments: assign("t10"),
     credit: null,
+    preorder: [],
+    preorderTotalPaise: 0,
     ...over,
     advanceReceivedPaise: over.advanceReceivedPaise ?? 0,
   };

@@ -4,6 +4,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { and, asc, eq, inArray, isNull, lte, ne } from "drizzle-orm";
 import { db } from "@/db";
 import { uuidv7 } from "@/db/id";
+import { roundHalfUp } from "@/domain/money";
 import * as s from "@/db/schema";
 import { localClock, type WeeklyHours } from "@/domain/hours";
 import { diningMinutesFor, localTime, overlaps, parseLocalDateTime, serviceDate, type BookingPolicy } from "@/domain/booking-policy";
@@ -17,6 +18,9 @@ import { topics } from "../realtime/token";
 import { queueBookingNotification } from "./notifications";
 import { audit } from "../staff/audit";
 import type { StaffSession } from "../staff/auth";
+import { loadItems } from "../guest/menu";
+import { priceLine } from "@/domain/pricing";
+import { isWithinCategoryWindow } from "../guest/menu";
 
 export const BOOKING_HOLD_MINUTES = 5;
 const LIVE = ["requested", "confirmed", "reminded", "arrived"] as const;
@@ -36,7 +40,7 @@ export type BookingSlot = {
   creditReason: string | null;
 };
 
-type OutletScope = { tenantId: string; outletId: string; outletCode: string; timezone: string; openingHours: WeeklyHours | null; name: string; address: string; city: string };
+type OutletScope = { tenantId: string; brandId: string; outletId: string; outletCode: string; timezone: string; openingHours: WeeklyHours | null; name: string; address: string; city: string };
 
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const publicRef = () => `TQ-${randomBytes(5).toString("hex").toUpperCase()}`;
@@ -44,7 +48,7 @@ const liveStatuses = [...LIVE];
 
 async function outletScope(run: Runner, outletCode: string): Promise<OutletScope> {
   // isolation-exempt: the tenant is resolved from the public outlet code before scoped queries.
-  const [o] = await run.select({ tenantId: s.outlets.tenantId, outletId: s.outlets.id, outletCode: s.outlets.code, timezone: s.outlets.timezone, openingHours: s.outlets.openingHours, name: s.outlets.name, address: s.outlets.address, city: s.outlets.city })
+  const [o] = await run.select({ tenantId: s.outlets.tenantId, brandId: s.outlets.brandId, outletId: s.outlets.id, outletCode: s.outlets.code, timezone: s.outlets.timezone, openingHours: s.outlets.openingHours, name: s.outlets.name, address: s.outlets.address, city: s.outlets.city })
     .from(s.outlets).where(eq(s.outlets.code, String(outletCode).trim().toUpperCase()));
   if (!o) throw new AppError("not_found", "We could not find this restaurant.");
   return o;
@@ -224,6 +228,58 @@ export async function bookingByToken(outletCode: string, token: string) {
   return { row, scope };
 }
 
+/** Guest preorder menu, priced from the same tenant/outlet menu used by table ordering. */
+export async function bookingPreorderMenu(outletCode: string) {
+  const scope = await outletScope(db, outletCode);
+  await requireFeature(scope.tenantId, "reservations");
+  const loaded = await loadItems(db, scope, new Date());
+  return loaded.filter(({ pricing }) => pricing.isAvailable).map(({ item, pricing }) => ({
+    id: item.id, nameEn: item.nameEn, nameHi: item.nameHi, pricePaise: pricing.pricePaise,
+    taxRateBp: item.taxRateBp, station: item.station, prepMinutes: Math.max(1, item.prepMinutes),
+    allergens: item.allergens ?? null, isJain: item.isJain, spiceLevel: item.spiceLevel ?? null,
+    groups: pricing.groups,
+  }));
+}
+
+/** Save a bounded preorder and require its full amount as booking credit before confirmation. */
+export async function saveBookingPreorder(outletCode: string, token: string, lines: { itemId: string; qty: number; modifierIds?: string[] }[], now = new Date()) {
+  const scope = await outletScope(db, outletCode);
+  await requireFeature(scope.tenantId, "reservations");
+  if (!Array.isArray(lines) || lines.length > 30) throw new AppError("invalid_state", "Choose up to 30 preorder items.");
+  if (new Set(lines.map((line) => String(line.itemId))).size !== lines.length) throw new AppError("invalid_state", "Each preorder dish can only be listed once.");
+  return db.transaction(async (tx) => {
+    const [row] = await tx.select().from(s.reservations).where(and(eq(s.reservations.tenantId, scope.tenantId), eq(s.reservations.outletId, scope.outletId), eq(s.reservations.manageTokenHash, hash(token)))).for("update");
+    if (!row) throw new AppError("not_found", "This booking link is not valid.");
+    if (row.status !== "requested" || !row.holdExpiresAt || row.holdExpiresAt <= now) throw new AppError("invalid_state", "Your table hold has expired. Start a new booking to change its preorder.");
+    const [started] = await tx.select({ status: s.reservationCredits.status }).from(s.reservationCredits).where(and(eq(s.reservationCredits.tenantId, scope.tenantId), eq(s.reservationCredits.reservationId, row.id), inArray(s.reservationCredits.status, ["pending", "paid"]))).limit(1);
+    if (started) throw new AppError("invalid_state", "The advance payment has already started, so the preorder is locked.");
+    const items = await loadItems(tx, scope, now, [...new Set(lines.map((line) => String(line.itemId))) ]);
+    const byId = new Map(items.map((loaded) => [loaded.item.id, loaded]));
+    const snapshot: NonNullable<typeof row.preorder> = [];
+    for (const line of lines) {
+      const loaded = byId.get(String(line.itemId));
+      const qty = Number(line.qty);
+      if (!loaded || !isWithinCategoryWindow(loaded.categoryWindow, scope.timezone, row.startAt)) throw new AppError("invalid_state", "A selected dish is not available at your booked time.");
+      const priced = priceLine(loaded.pricing, qty, [...new Set((line.modifierIds ?? []).map(String))]);
+      if (!priced.ok) throw new AppError("invalid_state", "Please review the options for a selected dish.");
+      snapshot.push({ itemId: loaded.item.id, nameEn: loaded.item.nameEn, nameHi: loaded.item.nameHi, qty, unitPricePaise: priced.line.unitPricePaise, taxRateBp: loaded.item.taxRateBp, station: loaded.item.station, prepMinutes: Math.max(1, loaded.item.prepMinutes), allergens: loaded.item.allergens ?? null, isJain: loaded.item.isJain, spiceLevel: loaded.item.spiceLevel ?? null, modifierChoices: priced.line.modifiers.map(({ groupId, modifierId }) => ({ groupId, modifierId })), modifiers: priced.line.modifiers.map(({ nameEn, nameHi, priceDeltaPaise }) => ({ nameEn, nameHi, priceDeltaPaise })) });
+    }
+    const previousTaxByRate = new Map<number, number>();
+    for (const line of row.preorder ?? []) previousTaxByRate.set(line.taxRateBp, (previousTaxByRate.get(line.taxRateBp) ?? 0) + (line.qty * line.unitPricePaise * line.taxRateBp) / 10_000);
+    const previousPreorderTotal = (row.preorder ?? []).reduce((sum, line) => sum + line.qty * line.unitPricePaise, 0)
+      + [...previousTaxByRate.values()].reduce((sum, tax) => sum + roundHalfUp(tax), 0);
+    const baseAdvance = Math.max(0, row.creditRequiredPaise - previousPreorderTotal);
+    const preorderSubtotal = snapshot.reduce((sum, line) => sum + line.qty * line.unitPricePaise, 0);
+    const taxByRate = new Map<number, number>();
+    for (const line of snapshot) taxByRate.set(line.taxRateBp, (taxByRate.get(line.taxRateBp) ?? 0) + (line.qty * line.unitPricePaise * line.taxRateBp) / 10_000);
+    const preorderTax = [...taxByRate.values()].reduce((sum, tax) => sum + roundHalfUp(tax), 0);
+    const preorderTotal = preorderSubtotal + preorderTax;
+    if (!Number.isSafeInteger(preorderTotal) || baseAdvance + preorderTotal > 2_000_000_000) throw new AppError("invalid_state", "Your preorder total is too high. Contact the restaurant to book.");
+    await tx.update(s.reservations).set({ preorder: snapshot, creditRequiredPaise: baseAdvance + preorderTotal, creditStatus: baseAdvance + preorderTotal > 0 ? "required" : "none", updatedAt: now }).where(and(eq(s.reservations.tenantId, scope.tenantId), eq(s.reservations.id, row.id)));
+    return { preorder: snapshot, preorderTotalPaise: preorderTotal, creditRequiredPaise: baseAdvance + preorderTotal };
+  }, LOCK_THEN_READ);
+}
+
 export async function confirmBooking(outletCode: string, token: string, input: { name: string; phone: string; guestId?: string | null; marketingConsent?: boolean }, now = new Date()) {
   const scope = await outletScope(db, outletCode);
   const result = await db.transaction(async (tx) => {
@@ -306,7 +362,7 @@ export async function rescheduleBookingPublic(outletCode: string, token: string,
  */
 export async function rescheduleReservationStaff(staff: Pick<StaffSession, "tenantId" | "outletId" | "outlet" | "roles" | "userId" | "name">, reservationId: string, input: { localDateTime: string; partySize?: number }, now = new Date()) {
   if (!staff.roles.some((r) => r === "owner" || r === "manager")) throw new AppError("forbidden", "Only managers and owners can reschedule reservations.");
-  const scope = { tenantId: staff.tenantId, outletId: staff.outletId, outletCode: staff.outlet.code, timezone: staff.outlet.timezone, openingHours: null as WeeklyHours | null, name: staff.outlet.name, address: "", city: "" };
+  const scope = { tenantId: staff.tenantId, brandId: "", outletId: staff.outletId, outletCode: staff.outlet.code, timezone: staff.outlet.timezone, openingHours: null as WeeklyHours | null, name: staff.outlet.name, address: "", city: "" };
   const startAt = parseLocalDateTime(input.localDateTime, staff.outlet.timezone);
   if (!startAt) throw new AppError("invalid_state", "Choose a valid date and time.", { reason: "start" });
   const events = await db.transaction(async (tx) => {

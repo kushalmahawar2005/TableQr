@@ -5,7 +5,9 @@ import { uuidv7 } from "@/db/id";
 import * as s from "@/db/schema";
 import { serviceDate } from "@/domain/booking-policy";
 import { AppError } from "@/server/errors";
-import { bookingByToken, cancelBookingPublic, confirmBooking, createBookingHold, createGroupRequest, getBookingAvailability, getBookingZones } from "@/server/booking/core";
+import { bookingByToken, bookingPreorderMenu, cancelBookingPublic, confirmBooking, createBookingHold, createGroupRequest, getBookingAvailability, getBookingZones, saveBookingPreorder } from "@/server/booking/core";
+import { seatReservation } from "@/server/floor/reservations";
+import { resolveStaff, signInStaff } from "@/server/staff/auth";
 import { sendBookingOtp, verifyBookingOtp } from "@/server/booking/otp";
 import { estimateWait, joinPublicWaitlist, leavePublicWaitlist, publicWaitlistStatus } from "@/server/booking/waitlist";
 import { resetTestDb } from "./setup-db";
@@ -27,6 +29,41 @@ describe("B1-B4 booking domain", () => {
     expect(hold.holdExpiresAt - (now.getTime() - 2 * 3600_000)).toBe(5 * 60_000);
     const [tables] = await env.db.select({ n: s.reservationTables.id }).from(s.reservationTables).where(eq(s.reservationTables.reservationId, hold.reservationId));
     expect(tables).toBeDefined();
+  });
+
+  it("prices and saves a reservation preorder on the server, adding it to the required advance", async () => {
+    const holdNow = new Date(now.getTime() - 2 * 3600_000);
+    const availability = await getBookingAvailability("SRJ01", { date, partySize: 2 }, holdNow);
+    const slot = availability.slots.find((x) => x.available)!;
+    const hold = await createBookingHold("SRJ01", { date, startAt: slot.startAt, partySize: 2, requestId: "preorder-hold", holdToken: "preorder-token" }, holdNow);
+    const menu = await bookingPreorderMenu("SRJ01");
+    const item = menu.find((x) => x.groups.every((group) => group.minSelect === 0) && x.id === env.demo.itemIds["Masala Papad"])!;
+    const saved = await saveBookingPreorder("SRJ01", hold.manageToken, [{ itemId: item.id, qty: 2 }], holdNow);
+    expect(saved.preorder).toMatchObject([{ itemId: item.id, qty: 2, unitPricePaise: item.pricePaise }]);
+    const taxPaise = Math.floor(item.pricePaise * 2 * item.taxRateBp / 10_000 + 0.5);
+    expect(saved.preorderTotalPaise).toBe(item.pricePaise * 2 + taxPaise);
+    expect(saved.creditRequiredPaise).toBe(hold.creditRequiredPaise + item.pricePaise * 2 + taxPaise);
+    await expect(saveBookingPreorder("SRJ01", hold.manageToken, [{ itemId: item.id, qty: 0 }], holdNow)).rejects.toBeInstanceOf(AppError);
+  });
+
+  it("sends a saved preorder to the kitchen when staff seats the party", async () => {
+    const holdNow = new Date(now.getTime() - 2 * 3600_000);
+    const availability = await getBookingAvailability("SRJ01", { date, partySize: 2 }, holdNow);
+    const slot = availability.slots.find((x) => x.available)!;
+    const hold = await createBookingHold("SRJ01", { date, startAt: slot.startAt, partySize: 2, requestId: "preorder-seat-hold", holdToken: "preorder-seat-token" }, holdNow);
+    const item = (await bookingPreorderMenu("SRJ01")).find((x) => x.nameEn === "Masala Papad")!;
+    await saveBookingPreorder("SRJ01", hold.manageToken, [{ itemId: item.id, qty: 1 }], holdNow);
+    await env.db.update(s.reservations).set({ status: "confirmed", holdExpiresAt: null, confirmedAt: holdNow }).where(eq(s.reservations.id, hold.reservationId));
+
+    const staff = await resolveStaff((await signInStaff({ outletCode: "SRJ01", phone: "9000000001", pin: "1111" })).token);
+    expect(staff).not.toBeNull();
+    const seated = await seatReservation(staff!, { reservationId: hold.reservationId }, new Date(slot.startAt));
+    const [order] = await env.db.select().from(s.orders).where(eq(s.orders.sessionId, seated.sessionId));
+    expect(order).toMatchObject({ status: "placed", note: expect.stringContaining("Preorder") });
+    const lines = await env.db.select().from(s.orderLines).where(eq(s.orderLines.orderId, order.id));
+    expect(lines).toMatchObject([{ itemId: item.id, qty: 1, status: "placed", personalForPickup: false }]);
+    const tickets = await env.db.select().from(s.tickets).where(eq(s.tickets.orderId, order.id));
+    expect(tickets.length).toBeGreaterThan(0);
   });
 
   it("accepts only tenant-scoped configured zones", async () => {

@@ -13,7 +13,7 @@ import { mockGateway } from "@/server/payments/gateway";
 import { resolveStaff, signInStaff, type StaffSession } from "@/server/staff/auth";
 import { getDashboard } from "@/server/staff/dashboard";
 import { posBillDetail, posQueue } from "@/server/staff/pos-read";
-import { resetTestDb } from "./setup-db";
+import { attachVerifiedTestGuest, resetTestDb } from "./setup-db";
 
 // Staff refunds (payment and refund production blockers, pass 1): the real database and the mock gateway.
 
@@ -40,7 +40,7 @@ async function onlinePayment(tip = 0) {
   const device = `refund-dev-${++n}`;
   const qr = env.demo.tableQr.T1;
   const { participantId } = await startOrJoinTable({ outletCode: "SRJ01", shortCode: qr, deviceId: device, displayName: "Kavya" });
-  const g = await getGuestContext("SRJ01", qr, participantId, device);
+  const g = await attachVerifiedTestGuest(appDb, await getGuestContext("SRJ01", qr, participantId, device), "Kavya");
   await addCartLine(g, { itemId: env.demo.itemIds["Paneer Tikka"], qty: 1 });
   await placeOrder(g);
   await requestBill({ tenantId: g.tenantId, outletId: g.outletId, sessionId: g.sessionId });
@@ -58,7 +58,7 @@ async function counterPayment() {
   const device = `refund-cash-${++n}`;
   const qr = env.demo.tableQr.T2;
   const { participantId } = await startOrJoinTable({ outletCode: "SRJ01", shortCode: qr, deviceId: device, displayName: "Cash Guest" });
-  const g = await getGuestContext("SRJ01", qr, participantId, device);
+  const g = await attachVerifiedTestGuest(appDb, await getGuestContext("SRJ01", qr, participantId, device), "Cash Guest");
   await addCartLine(g, { itemId: env.demo.itemIds["Dal Makhani"], qty: 1 });
   await placeOrder(g);
   await requestBill({ tenantId: g.tenantId, outletId: g.outletId, sessionId: g.sessionId });

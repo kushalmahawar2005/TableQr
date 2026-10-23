@@ -98,9 +98,6 @@ export function placeOrderTx(ctx: GuestContext, input: PlaceInput, now: Date, st
           .where(and(eq(s.rooms.tenantId, ctx.tenantId), eq(s.rooms.outletId, ctx.outletId), eq(s.rooms.tableId, ctx.tableId), eq(s.rooms.isActive, true)))
           .limit(1)
       : [];
-    if (!staffDraft && !me.guestId && !activeRoomStay) {
-      throw new AppError("verification_required", "Verify your phone number before placing this order.");
-    }
     if (session.status === "bill_requested") {
       throw new AppError("table_settling", "The bill has been requested, so new orders are paused. Ask staff to reopen the bill.");
     }
@@ -112,6 +109,9 @@ export function placeOrderTx(ctx: GuestContext, input: PlaceInput, now: Date, st
             .where(and(eq(s.participants.tenantId, ctx.tenantId), eq(s.participants.id, session.hostParticipantId)))
         : [];
       throw new AppError("ordering_locked", `Ordering paused by ${host?.name ?? "the host"}.`);
+    }
+    if (!staffDraft && !me.guestId && !activeRoomStay) {
+      throw new AppError("verification_required", "Verify your phone number before placing this order.");
     }
 
     // OTP verification already saved the guest's name on the participant before order placement.

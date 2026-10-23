@@ -218,6 +218,36 @@ export async function seatReservation(staff: FloorActor, input: { reservationId:
     const [clash] = await bookingConflicts(tx, scope, tableIds, now, until, policy, r.id);
     if (clash) throw bookingConflictError(clash, staff.outlet.timezone);
     const sessionId = await openVisit(tx, scope, list, { source: "reservation", partySize: r.partySize, guestName: r.name, expectedEndAt: until, reservationId: r.id, userId: staff.userId, now });
+    let preorderOrderId: string | null = null;
+    let preorderStations: string[] = [];
+    let preorderStatus: "accepted" | "placed" = "placed";
+    if (r.preorder?.length) {
+      const itemIds = [...new Set(r.preorder.map((line) => line.itemId))];
+      const overrides = await tx.select().from(s.outletItemOverrides).where(and(eq(s.outletItemOverrides.tenantId, scope.tenantId), eq(s.outletItemOverrides.outletId, scope.outletId), inArray(s.outletItemOverrides.itemId, itemIds))).orderBy(s.outletItemOverrides.itemId).for("update");
+      const overrideByItem = new Map(overrides.map((override) => [override.itemId, override]));
+      for (const line of r.preorder) {
+        const available = overrideByItem.get(line.itemId);
+        if (available && (!available.isAvailable || available.portionsLeft !== null && available.portionsLeft < line.qty)) {
+          throw new AppError("conflict", `${line.nameEn} is no longer available in the preorder quantity. Update the booking before seating.`, { reason: "preorder_unavailable", itemId: line.itemId });
+        }
+      }
+      const [{ rounds }] = await tx.select({ rounds: sql<number>`count(*)` }).from(s.orders).where(and(eq(s.orders.tenantId, scope.tenantId), eq(s.orders.sessionId, sessionId)));
+      const roundNo = Number(rounds) + 1;
+      const [outlet] = await tx.select({ autoAccept: s.outlets.autoAcceptOrders }).from(s.outlets).where(and(eq(s.outlets.tenantId, scope.tenantId), eq(s.outlets.id, scope.outletId)));
+      const accepted = outlet.autoAccept;
+      preorderStatus = accepted ? "accepted" : "placed";
+      preorderOrderId = uuidv7();
+      await tx.insert(s.orders).values({ id: preorderOrderId, tenantId: scope.tenantId, outletId: scope.outletId, sessionId, roundNo, placedByUserId: staff.userId, clientRequestId: `reservation-preorder:${r.id}`, status: accepted ? "accepted" : "placed", note: `Preorder · ${r.name}`.slice(0, 140), placedAt: now, acceptedAt: accepted ? now : null });
+      await tx.insert(s.orderLines).values(r.preorder.map((line) => ({ tenantId: scope.tenantId, orderId: preorderOrderId!, sessionId, participantId: null, itemId: line.itemId, nameEn: line.nameEn, nameHi: line.nameHi, modifiers: line.modifiers, modifierChoices: line.modifierChoices, unitPricePaise: line.unitPricePaise, qty: line.qty, taxRateBp: line.taxRateBp, station: line.station, prepMinutes: line.prepMinutes, allergensSnapshot: line.allergens, isJainSnapshot: line.isJain, spiceLevelSnapshot: line.spiceLevel, sharedWith: null, personalForPickup: false, status: accepted ? "accepted" as const : "placed" as const, createdAt: now })));
+      preorderStations = [...new Set(r.preorder.map((line) => line.station))];
+      await tx.insert(s.tickets).values(preorderStations.map((station) => ({ tenantId: scope.tenantId, outletId: scope.outletId, orderId: preorderOrderId!, station, createdAt: now })));
+      const qtyByItem = new Map<string, number>();
+      for (const line of r.preorder) qtyByItem.set(line.itemId, (qtyByItem.get(line.itemId) ?? 0) + line.qty);
+      for (const [itemId, qty] of qtyByItem) {
+        const override = overrideByItem.get(itemId);
+        if (override?.portionsLeft !== null && override?.portionsLeft !== undefined) await tx.update(s.outletItemOverrides).set({ portionsLeft: sql`${s.outletItemOverrides.portionsLeft} - ${qty}` }).where(and(eq(s.outletItemOverrides.tenantId, scope.tenantId), eq(s.outletItemOverrides.outletId, scope.outletId), eq(s.outletItemOverrides.itemId, itemId)));
+      }
+    }
     await tx
       .update(s.reservations)
       .set({ status: "seated", seatedAt: now, arrivedAt: r.arrivedAt ?? now, sessionId })
@@ -225,7 +255,12 @@ export async function seatReservation(staff: FloorActor, input: { reservationId:
     if (tableIds.join() !== assigned.join()) await setTables(tx, scope, r.id, tableIds);
     const sync = await syncTableHolds(tx, scope, now, assigned.filter((id) => !tableIds.includes(id)));
     await audit(tx, staff, { action: "reservation.seat", entity: "reservation", entityId: r.id, before: { status: r.status }, after: { status: "seated", sessionId, tableIds }, now });
-    return { sessionId, events: [reservationEvent("reservation.updated", r.id), ...tableStateEvents(tableIds, "seated"), visitChanged(sessionId, "seated"), ...syncEvents(sync)] };
+    const preorderEvents: RealtimeEvent[] = preorderOrderId ? [
+      { topic: topics.kitchen, type: "ticket.created", data: { orderId: preorderOrderId, stations: preorderStations } },
+      { topic: topics.session(sessionId), type: "order.status", data: { orderId: preorderOrderId, status: preorderStatus } },
+      visitChanged(sessionId, "order"),
+    ] : [];
+    return { sessionId, events: [reservationEvent("reservation.updated", r.id), ...tableStateEvents(tableIds, "seated"), visitChanged(sessionId, "seated"), ...preorderEvents, ...syncEvents(sync)] };
   }, LOCK_THEN_READ);
   await publish(scope, events);
   return { sessionId };

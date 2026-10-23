@@ -16,7 +16,7 @@ import { bookingByToken, cancelBookingPublic, confirmBooking, createBookingHold 
 import { sendBookingOtp, verifyBookingOtp } from "@/server/booking/otp";
 import { recordReservationRefundResult, refundReservationCredit, reconcileReservationCredit, startReservationCredit } from "@/server/booking/credit";
 import { joinPublicWaitlist, publicWaitlistStatus } from "@/server/booking/waitlist";
-import { resetTestDb } from "./setup-db";
+import { attachVerifiedTestGuest, resetTestDb } from "./setup-db";
 import type { StaffSession } from "@/server/staff/auth";
 
 let env: Awaited<ReturnType<typeof resetTestDb>>;
@@ -71,7 +71,7 @@ describe("B1-B4 final credit and security evidence", () => {
   });
 
   it("applies paid credit once when bill sync runs repeatedly", async () => {
-    const h = await hold("bill", 14, true); const checkout = await payCredit(h); await (await import("@/server/floor/reservations")).seatReservation(host, { reservationId: h.reservationId }, now); const joined = await startOrJoinTable({ outletCode: "SRJ01", shortCode: env.demo.tableQr.T1, deviceId: `bill-${h.reservationId}`, displayName: "Credit Guest" }); const ctx = await getGuestContext("SRJ01", env.demo.tableQr.T1, joined.participantId, `bill-${h.reservationId}`); await addCartLine(ctx, { itemId: env.demo.itemIds.Cola, qty: 1 }); await placeOrder(ctx); await requestBill({ tenantId: ctx.tenantId, outletId: ctx.outletId, sessionId: ctx.sessionId }); const [a] = await env.db.select().from(s.bills).where(eq(s.bills.sessionId, ctx.sessionId)); await requestBill({ tenantId: ctx.tenantId, outletId: ctx.outletId, sessionId: ctx.sessionId }); const [b] = await env.db.select().from(s.bills).where(eq(s.bills.sessionId, ctx.sessionId)); expect(a.bookingCreditPaise).toBe(b.bookingCreditPaise); expect(a.totalPaise).toBe(b.totalPaise); expect(a.bookingCreditReservationId).toBe(h.reservationId); expect(checkout.creditId).toBeTruthy();
+    const h = await hold("bill", 14, true); const checkout = await payCredit(h); await (await import("@/server/floor/reservations")).seatReservation(host, { reservationId: h.reservationId }, now); const joined = await startOrJoinTable({ outletCode: "SRJ01", shortCode: env.demo.tableQr.T1, deviceId: `bill-${h.reservationId}`, displayName: "Credit Guest" }); const ctx = await attachVerifiedTestGuest(appDb, await getGuestContext("SRJ01", env.demo.tableQr.T1, joined.participantId, `bill-${h.reservationId}`), "Credit Guest"); await addCartLine(ctx, { itemId: env.demo.itemIds.Cola, qty: 1 }); await placeOrder(ctx); await requestBill({ tenantId: ctx.tenantId, outletId: ctx.outletId, sessionId: ctx.sessionId }); const [a] = await env.db.select().from(s.bills).where(eq(s.bills.sessionId, ctx.sessionId)); await requestBill({ tenantId: ctx.tenantId, outletId: ctx.outletId, sessionId: ctx.sessionId }); const [b] = await env.db.select().from(s.bills).where(eq(s.bills.sessionId, ctx.sessionId)); expect(a.bookingCreditPaise).toBe(b.bookingCreditPaise); expect(a.totalPaise).toBe(b.totalPaise); expect(a.bookingCreditReservationId).toBe(h.reservationId); expect(checkout.creditId).toBeTruthy();
   });
 
   it("rejects guessed/reference/token/cross-outlet access and stale confirmation", async () => {

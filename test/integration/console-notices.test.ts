@@ -7,7 +7,7 @@ import { createServiceRequest } from "@/server/guest/service-requests";
 import { startOrJoinTable } from "@/server/guest/session";
 import { resolveStaff, signInStaff } from "@/server/staff/auth";
 import { getConsoleNotices } from "@/server/staff/notifications";
-import { resetTestDb } from "./setup-db";
+import { attachVerifiedTestGuest, resetTestDb } from "./setup-db";
 
 // Console bell: what happened at this outlet since a moment, and nothing from another restaurant.
 
@@ -30,14 +30,14 @@ describe("console notices", () => {
 
     const qr = env.demo.tableQr.T1;
     const { participantId } = await startOrJoinTable({ outletCode: "SRJ01", shortCode: qr, deviceId: "bell-a", displayName: "Aarav" });
-    const ctx = await getGuestContext("SRJ01", qr, participantId, "bell-a");
+    const ctx = await attachVerifiedTestGuest(appDb, await getGuestContext("SRJ01", qr, participantId, "bell-a"), "Aarav");
     await addCartLine(ctx, { itemId: env.demo.itemIds.Cola, qty: 2 });
     await placeOrder(ctx);
     await createServiceRequest(ctx, "water", "bell-water-1");
 
     // Another restaurant's order never shows here
     const { participantId: otherP } = await startOrJoinTable({ outletCode: "CNJ01", shortCode: env.other.tableQr, deviceId: "bell-b" });
-    const other = await getGuestContext("CNJ01", env.other.tableQr, otherP, "bell-b");
+    const other = await attachVerifiedTestGuest(appDb, await getGuestContext("CNJ01", env.other.tableQr, otherP, "bell-b"), "Isha");
     await addCartLine(other, { itemId: env.other.itemId, qty: 1 });
     await placeOrder(other, { name: "Isha" });
 

@@ -9,7 +9,7 @@ import { placeOrder } from "@/server/guest/order";
 import { startOrJoinTable } from "@/server/guest/session";
 import { resolveStaff, signInStaff, type StaffSession } from "@/server/staff/auth";
 import { getDayClose, istToday } from "@/server/staff/day-close";
-import { resetTestDb } from "./setup-db";
+import { attachVerifiedTestGuest, resetTestDb } from "./setup-db";
 
 // Day close adds up one IST day at this outlet: sales, money by method, open tables.
 
@@ -33,7 +33,7 @@ describe("day close", () => {
 
     const qr = env.demo.tableQr.T1;
     const { participantId } = await startOrJoinTable({ outletCode: "SRJ01", shortCode: qr, deviceId: "dc-a", displayName: "Aarav" });
-    const g = await getGuestContext("SRJ01", qr, participantId, "dc-a");
+    const g = await attachVerifiedTestGuest(appDb, await getGuestContext("SRJ01", qr, participantId, "dc-a"), "Aarav");
     await addCartLine(g, { itemId: env.demo.itemIds["Dal Makhani"], qty: 1 });
     await placeOrder(g);
     let open = await getDayClose(owner, istToday());

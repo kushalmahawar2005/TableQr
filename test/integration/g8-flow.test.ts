@@ -26,7 +26,7 @@ import { startOrJoinTable } from "@/server/guest/session";
 import { mockGateway, type WebhookEvent } from "@/server/payments/gateway";
 import { onPublish, type RealtimeEvent } from "@/server/realtime/publish";
 import type { StaffContext } from "@/server/staff/context";
-import { resetTestDb } from "./setup-db";
+import { attachVerifiedTestGuest, resetTestDb } from "./setup-db";
 
 // G8 Bill, split and pay: removed people, paid and left, reopen, service charge, refunds,
 // webhooks and the return from the gateway. The worked example from PS 3.6 is the table.
@@ -76,7 +76,7 @@ beforeEach(async () => {
   for (const [key, name] of [["A", "Aarav"], ["B", "Bhavna"], ["C", "Chirag"], ["D", undefined]] as const) {
     const device = `g8-${key}`;
     const { participantId } = await startOrJoinTable({ outletCode: "SRJ01", shortCode: "k7Qm", deviceId: device, displayName: name });
-    g[key] = await getGuestContext("SRJ01", "k7Qm", participantId, device);
+    g[key] = await attachVerifiedTestGuest(env.db, await getGuestContext("SRJ01", "k7Qm", participantId, device), name ?? "Divya");
   }
   const all = [g.A, g.B, g.C, g.D].map((x) => x.participantId);
   await addCartLine(g.A, { itemId: item("Veg Biryani"), qty: 1 });

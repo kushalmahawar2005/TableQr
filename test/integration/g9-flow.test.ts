@@ -14,7 +14,7 @@ import { mockGateway } from "@/server/payments/gateway";
 import { onPublish, type RealtimeEvent } from "@/server/realtime/publish";
 import { configuredReceiptChannels, registerReceiptSender, sendReceipt } from "@/server/receipts/channels";
 import type { StaffContext } from "@/server/staff/context";
-import { resetTestDb } from "./setup-db";
+import { attachVerifiedTestGuest, resetTestDb } from "./setup-db";
 
 // G9 Paid, receipt and next visit: progress, the 24-hour read-only visit, the receipt, one
 // rating, the manager alert, the review link for everyone, and receipt channels.
@@ -50,7 +50,7 @@ beforeEach(async () => {
   cashier = { tenantId: env.demo.tenantId, outletId: env.demo.outletId, userId: null };
   for (const [key, name] of [["A", "Aarav"], ["B", "Bhavna"], ["C", "Chirag"]] as const) {
     const { participantId } = await startOrJoinTable({ outletCode: "SRJ01", shortCode: "k7Qm", deviceId: `g9-${key}`, displayName: name });
-    g[key] = await getGuestContext("SRJ01", "k7Qm", participantId, `g9-${key}`);
+    g[key] = await attachVerifiedTestGuest(env.db, await getGuestContext("SRJ01", "k7Qm", participantId, `g9-${key}`), name);
     await addCartLine(g[key], { itemId: env.demo.itemIds[key === "A" ? "Veg Biryani" : key === "B" ? "Dal Makhani" : "Cola"], qty: 1 });
     await placeOrder(g[key]);
   }
@@ -159,6 +159,7 @@ describe("receipt channels", () => {
     expect(configuredReceiptChannels()).toEqual(["sms"]);
     const visit = await requireVisit("SRJ01", "k7Qm", "g9-A");
     // Open mode: no verified number, so nothing is sent and nothing is recorded as sent
+    await env.db.update(s.participants).set({ guestId: null }).where(eq(s.participants.id, visit.participantId));
     await expect(sendReceipt(visit, "sms", { outletName: "Spice Route", amountText: "₹294", link: "/x" })).rejects.toMatchObject({ details: { reason: "no_destination" } });
     const [guest] = await env.db.insert(s.guests).values({ tenantId: visit.tenantId, phone: "+919876543210", name: "Aarav" }).$returningId();
     await env.db.update(s.participants).set({ guestId: guest.id }).where(and(eq(s.participants.id, visit.participantId)));

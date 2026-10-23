@@ -18,7 +18,7 @@ import { getTrackerScreen } from "@/server/guest/tracker-screen";
 import { acceptOrder, bumpLine, markServed, startTicket } from "@/server/kitchen/actions";
 import { onPublish, type RealtimeEvent } from "@/server/realtime/publish";
 import type { StaffContext } from "@/server/staff/context";
-import { resetTestDb } from "./setup-db";
+import { attachVerifiedTestGuest, resetTestDb } from "./setup-db";
 
 let env: Awaited<ReturnType<typeof resetTestDb>>;
 let host: GuestContext;
@@ -39,7 +39,7 @@ async function failsWith(p: Promise<unknown>, code: AppError["code"]) {
 
 async function join(deviceId: string, displayName: string, qr = "k7Qm", outlet = "SRJ01") {
   const { participantId } = await startOrJoinTable({ outletCode: outlet, shortCode: qr, deviceId, displayName });
-  return getGuestContext(outlet, qr, participantId, deviceId);
+  return attachVerifiedTestGuest(env.db, await getGuestContext(outlet, qr, participantId, deviceId), displayName);
 }
 
 async function order(ctx: GuestContext, name = "Cola", qty = 1, now = T0) {

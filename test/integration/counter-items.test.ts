@@ -10,7 +10,7 @@ import { getGuestContext, type GuestContext } from "@/server/guest/context";
 import { placeOrder } from "@/server/guest/order";
 import { startOrJoinTable } from "@/server/guest/session";
 import { resolveStaff, signInStaff, type StaffSession } from "@/server/staff/auth";
-import { resetTestDb } from "./setup-db";
+import { attachVerifiedTestGuest, resetTestDb } from "./setup-db";
 
 // A guest at the counter adds a chocolate after asking for the bill: it lands on the bill in one
 // step, is marked handed over (no kitchen), and the bill is ready to pay again.
@@ -27,7 +27,7 @@ beforeAll(async () => {
   owner = (await resolveStaff((await signInStaff({ outletCode: "SRJ01", phone: "9000000001", pin: "1111" })).token))!;
   const qr = env.demo.tableQr.T5;
   const { participantId } = await startOrJoinTable({ outletCode: "SRJ01", shortCode: qr, deviceId: "counter-a", displayName: "Neha" });
-  g = await getGuestContext("SRJ01", qr, participantId, "counter-a");
+  g = await attachVerifiedTestGuest(appDb, await getGuestContext("SRJ01", qr, participantId, "counter-a"), "Neha");
   await addCartLine(g, { itemId: env.demo.itemIds["Dal Makhani"], qty: 1 });
   await placeOrder(g);
   await requestBill({ tenantId: g.tenantId, outletId: g.outletId, sessionId: g.sessionId });

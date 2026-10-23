@@ -128,6 +128,8 @@ export async function getReservationCalendar(staff: StaffSession, input: Calenda
       occasion: r.occasion,
       notes: r.notes,
       advanceReceivedPaise: r.advanceReceivedPaise,
+      preorder: r.preorder ?? [],
+      preorderTotalPaise: (r.preorder ?? []).reduce((sum, line) => sum + line.qty * line.unitPricePaise, 0),
       confirmedAt: r.confirmedAt?.getTime() ?? null,
       arrivedAt: r.arrivedAt?.getTime() ?? null,
       seatedAt: r.seatedAt?.getTime() ?? null,

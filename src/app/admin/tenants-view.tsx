@@ -349,11 +349,11 @@ function TenantSheet({ tenant, plans, now, onClose }: { tenant: AdminTenant | nu
                 <SelectTrigger className="w-full" aria-label="Change plan"><SelectValue>{tenant.planName}</SelectValue></SelectTrigger>
                 <SelectContent>{plans.map((p) => <SelectItem key={p.code} value={p.code}>{p.name}</SelectItem>)}</SelectContent>
               </Select>
-              {tenant.planCode !== "custom" && <p className="text-xs text-muted-foreground">Pick Custom to choose features and price for this restaurant alone.</p>}
+              <p className="text-xs text-muted-foreground">The plan is the starting package. Use the tenant package below to override individual features and limits for this restaurant.</p>
             </section>
             {tenant.planCode !== "custom" && <PriceForm key={`${tenant.id}-${tenant.customPricePaise}`} tenant={tenant} planPricePaise={plans.find((p) => p.code === tenant.planCode)?.monthlyPricePaise ?? null} pending={pending}
               onSave={(rupees) => run(() => setTenantPriceAction(tenant.id, rupees), rupees === null ? "Back to the plan's price." : "Price saved.")} />}
-            {tenant.planCode === "custom" && <CustomPackageForm key={tenant.id} tenant={tenant} pending={pending} onSave={(input) => run(() => setCustomPackageAction(tenant.id, input), "Custom package saved.")} />}
+            <CustomPackageForm key={tenant.id} tenant={tenant} pending={pending} onSave={(input) => run(() => setCustomPackageAction(tenant.id, input), "Custom package saved.")} />
             {tenant.status !== "cancelled" && <section className="space-y-3">
               <div>
                 <h3 className="text-sm font-semibold">Trial and fees</h3>
@@ -534,7 +534,7 @@ export function TenantsView({ data }: { data: AdminData }) {
       </CardContent>
     </Card>
 
-    <CreateTenantDialog key={String(adding)} open={adding} onOpenChange={setAdding} plans={data.plans.filter((p) => p.isPublic).map((p) => ({ code: p.code, name: p.name, kitchen: p.features.kitchenDisplay !== false, rooms: p.features.rooms === true, dineIn: p.features.dineIn !== false }))} />
+    <CreateTenantDialog key={String(adding)} open={adding} onOpenChange={setAdding} plans={data.plans.filter((p) => p.isPublic).map((p) => ({ code: p.code, name: p.name, features: p.features }))} />
     <TenantSheet tenant={selected} plans={data.plans} now={now} onClose={() => setSelectedId(null)} />
   </div>;
 }

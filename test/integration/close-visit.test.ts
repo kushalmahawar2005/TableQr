@@ -12,7 +12,7 @@ import { closeVisit, markReady } from "@/server/floor/table-actions";
 import { resolveStaff, signInStaff, type StaffSession } from "@/server/staff/auth";
 import { getRecentOrders } from "@/server/staff/orders-read";
 import { billIdFromToken, billToken, sharedBill } from "@/server/billing/bill-link";
-import { resetTestDb } from "./setup-db";
+import { attachVerifiedTestGuest, resetTestDb } from "./setup-db";
 
 // Clearing a table from the floor: a paid table frees in one tap; a party still seated is closed
 // out, and one that still owes money needs a manager and a written reason.
@@ -26,7 +26,7 @@ const stateOf = async (code: string) => (await env.db.select({ state: s.diningTa
 async function seatAndOrder(code: string, device: string) {
   const qr = env.demo.tableQr[code];
   const { participantId } = await startOrJoinTable({ outletCode: "SRJ01", shortCode: qr, deviceId: device, displayName: "Riya" });
-  const g = await getGuestContext("SRJ01", qr, participantId, device);
+  const g = await attachVerifiedTestGuest(appDb, await getGuestContext("SRJ01", qr, participantId, device), "Riya");
   await addCartLine(g, { itemId: env.demo.itemIds["Dal Makhani"], qty: 1 });
   await placeOrder(g);
   return g;

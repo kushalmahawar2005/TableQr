@@ -16,7 +16,7 @@ import { getTableScreen } from "@/server/guest/table-screen";
 import { cancelOrderLine } from "@/server/guest/tracker";
 import { getTrackerScreen } from "@/server/guest/tracker-screen";
 import { onPublish, type RealtimeEvent } from "@/server/realtime/publish";
-import { resetTestDb } from "./setup-db";
+import { attachVerifiedTestGuest, resetTestDb } from "./setup-db";
 
 // G7 Table & People: the screen's data, host controls, removal and the realtime hints.
 
@@ -39,7 +39,8 @@ async function failsWith(p: Promise<unknown>, code: AppError["code"], reason?: s
 
 async function join(deviceId: string, displayName?: string) {
   const { participantId } = await startOrJoinTable({ outletCode: "SRJ01", shortCode: "k7Qm", deviceId, displayName });
-  return getGuestContext("SRJ01", "k7Qm", participantId, deviceId);
+  const ctx = await getGuestContext("SRJ01", "k7Qm", participantId, deviceId);
+  return attachVerifiedTestGuest(appDb, ctx, displayName ?? "Guest");
 }
 
 const screen = (deviceId: string) => getTableScreen("SRJ01", "k7Qm", deviceId);

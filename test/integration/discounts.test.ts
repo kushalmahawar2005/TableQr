@@ -10,7 +10,7 @@ import { getGuestContext, type GuestContext } from "@/server/guest/context";
 import { placeOrder } from "@/server/guest/order";
 import { startOrJoinTable } from "@/server/guest/session";
 import { resolveStaff, signInStaff, type StaffSession } from "@/server/staff/auth";
-import { resetTestDb } from "./setup-db";
+import { attachVerifiedTestGuest, resetTestDb } from "./setup-db";
 
 // Bill discounts from the billing screen: percent or rupees, with a reason, before anyone pays.
 
@@ -27,7 +27,7 @@ beforeAll(async () => {
   waiter = (await resolveStaff((await signInStaff({ outletCode: "SRJ01", phone: "9000000005", pin: "5555" })).token))!;
   const qr = env.demo.tableQr.T1;
   const { participantId } = await startOrJoinTable({ outletCode: "SRJ01", shortCode: qr, deviceId: "disc-a", displayName: "Aarav" });
-  guest = await getGuestContext("SRJ01", qr, participantId, "disc-a");
+  guest = await attachVerifiedTestGuest(appDb, await getGuestContext("SRJ01", qr, participantId, "disc-a"), "Aarav");
   await addCartLine(guest, { itemId: env.demo.itemIds["Dal Makhani"], qty: 2 });
   await placeOrder(guest);
   await requestBill({ tenantId: guest.tenantId, outletId: guest.outletId, sessionId: guest.sessionId });

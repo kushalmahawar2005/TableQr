@@ -32,7 +32,7 @@ import {
 } from "@/server/floor/table-actions";
 import { addToWaitlist, notifyWaitlist, reorderWaitlist, seatWaitlist, skipWaitlist } from "@/server/floor/waitlist";
 import { serviceDate } from "@/domain/booking-policy";
-import { resetTestDb } from "./setup-db";
+import { attachVerifiedTestGuest, resetTestDb } from "./setup-db";
 
 let env: Awaited<ReturnType<typeof resetTestDb>>;
 let host: StaffSession;
@@ -137,7 +137,7 @@ describe("walk-in and the table lifecycle", () => {
   it("goes Paid → Needs cleaning → Available, and never resets a table out of order", async () => {
     const visit = (await getTableDetail(host, T("T4"))).visit!;
     const guest = await startOrJoinTable({ outletCode: "SRJ01", shortCode: QR("T4"), deviceId: "t4-a", displayName: "Tara" });
-    const ctx = await getGuestContext("SRJ01", QR("T4"), guest.participantId, "t4-a");
+    const ctx = await attachVerifiedTestGuest(appDb, await getGuestContext("SRJ01", QR("T4"), guest.participantId, "t4-a"), "Tara");
     await addCartLine(ctx, { itemId: env.demo.itemIds["Cola"], qty: 1 });
     await placeOrder(ctx);
     await failsWith(markNeedsCleaning(host, T("T4")), "invalid_state");
@@ -184,7 +184,7 @@ describe("move, swap and combine keep the visit intact", () => {
   it("moves a party; phones, orders and bill follow; the old table needs cleaning", async () => {
     const joined = await startOrJoinTable({ outletCode: "SRJ01", shortCode: QR("T5"), deviceId: "mv-a", displayName: "Meher" });
     guestSession = joined.sessionId;
-    const ctx = await getGuestContext("SRJ01", QR("T5"), joined.participantId, "mv-a");
+    const ctx = await attachVerifiedTestGuest(appDb, await getGuestContext("SRJ01", QR("T5"), joined.participantId, "mv-a"), "Meher");
     await addCartLine(ctx, { itemId: env.demo.itemIds["Cola"], qty: 2 });
     await placeOrder(ctx);
     await moveParty(host, { fromTableId: T("T5"), toTableId: T("T9") });

@@ -301,6 +301,12 @@ const STEPS: Step[] = [
       await addColumn(db, "order_lines", "modifier_choices", "json");
     },
   },
+  {
+    tag: "0035_reservation_preorders", when: 1792765219852, hash: "8779d72d5e11fb9ba229f3a644baf0dba1cc9c0bd2f67d8fdb2127bf3bb98082",
+    apply: async (db) => {
+      await addColumn(db, "reservations", "preorder", "json");
+    },
+  },
 ];
 
 /** drizzle/0015, the last migration before these steps */

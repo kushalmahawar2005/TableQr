@@ -10,7 +10,7 @@ import { getGuestMenu } from "@/server/guest/menu";
 import { placeOrder } from "@/server/guest/order";
 import { startOrJoinTable } from "@/server/guest/session";
 import { getTableLanding } from "@/server/guest/table";
-import { resetTestDb } from "./setup-db";
+import { attachVerifiedTestGuest, resetTestDb } from "./setup-db";
 
 let env: Awaited<ReturnType<typeof resetTestDb>>;
 
@@ -38,7 +38,8 @@ async function failsWith(p: Promise<unknown>, code: AppError["code"]) {
 async function seat(tableCode: string, deviceId: string, displayName?: string): Promise<GuestContext> {
   const qr = env.demo.tableQr[tableCode];
   const { participantId } = await startOrJoinTable({ outletCode: "SRJ01", shortCode: qr, deviceId, displayName });
-  return getGuestContext("SRJ01", qr, participantId, deviceId);
+  const ctx = await getGuestContext("SRJ01", qr, participantId, deviceId);
+  return attachVerifiedTestGuest(appDb, ctx, displayName ?? "Guest");
 }
 
 const setOverride = (itemName: string, set: Partial<typeof s.outletItemOverrides.$inferInsert>) =>
