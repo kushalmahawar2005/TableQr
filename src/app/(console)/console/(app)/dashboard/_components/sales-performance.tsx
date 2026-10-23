@@ -34,7 +34,8 @@ export function SalesPerformance({ trend }: { trend: RevenueTrend }) {
       ) : (
         <div className="relative" onMouseLeave={() => setHover(null)}>
           <ul
-            className="grid grid-cols-7 items-end gap-1.5 sm:gap-3"
+            className="grid items-end gap-1.5 sm:gap-3"
+            style={{ gridTemplateColumns: `repeat(${trend.length}, minmax(0, 1fr))` }}
             aria-label="Sales for the last 7 days"
           >
             {trend.map((day, index) => {
