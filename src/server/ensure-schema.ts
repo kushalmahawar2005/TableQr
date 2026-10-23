@@ -287,6 +287,14 @@ const STEPS: Step[] = [
       await addColumn(db, "order_lines", "personal_for_pickup", "boolean DEFAULT false NOT NULL");
     },
   },
+  {
+    tag: "0033_purple_matthew_murdock", when: 1792758608042, hash: "5ea8327e89467fb21011c57bfe2e3baa097f3230db2b89403ac00fe0e3014768",
+    apply: async (db) => {
+      await addColumn(db, "outlets", "room_services", "json");
+      await addColumn(db, "outlets", "wifi_ssid", "varchar(32)");
+      await addColumn(db, "outlets", "wifi_password", "varchar(63)");
+    },
+  },
 ];
 
 /** drizzle/0015, the last migration before these steps */

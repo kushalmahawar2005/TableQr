@@ -36,6 +36,12 @@ export const ROOM_STATUS_LABEL: Record<RoomStatus, { en: string; hi: string }> =
 /** What a guest in a room can ask for with one tap */
 export const roomRequestKinds = ["housekeeping", "towels", "water", "toiletries", "laundry", "maintenance", "wake_up", "other"] as const;
 export type RoomRequestKind = (typeof roomRequestKinds)[number];
+/** Defaults keep existing hotel QR pages unchanged until an owner customizes them. */
+export const defaultRoomRequestKinds: RoomRequestKind[] = [...roomRequestKinds];
+export function configuredRoomRequestKinds(configured: string[] | null | undefined): RoomRequestKind[] {
+  if (configured == null) return defaultRoomRequestKinds;
+  return roomRequestKinds.filter((kind) => configured.includes(kind));
+}
 
 export const ROOM_REQUEST_LABEL: Record<RoomRequestKind, { en: string; hi: string }> = {
   housekeeping: { en: "Clean my room", hi: "कमरे की सफ़ाई" },

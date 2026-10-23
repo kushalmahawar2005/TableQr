@@ -3,7 +3,7 @@ import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import * as s from "@/db/schema";
 import { openingInfo } from "@/domain/hours";
-import { ROOM_CLASS, roomRequestKinds, type RoomRequestKind } from "@/domain/rooms";
+import { configuredRoomRequestKinds, ROOM_CLASS, roomRequestKinds, type RoomRequestKind } from "@/domain/rooms";
 import { AppError } from "../errors";
 import { findOpenSession, findTableByQr } from "./table";
 
@@ -12,12 +12,14 @@ import { findOpenSession, findTableByQr } from "./table";
 
 async function roomAt(outletCode: string, shortCode: string) {
   const t = await findTableByQr(db, outletCode, shortCode);
-  if (t.table.tableClass !== ROOM_CLASS) return { t, room: null, stay: null };
+  if (t.table.tableClass !== ROOM_CLASS) return { t, room: null, stay: null, settings: null };
   const tenantId = t.outlet.tenantId;
   const [room] = await db.select().from(s.rooms).where(and(eq(s.rooms.tenantId, tenantId), eq(s.rooms.tableId, t.table.id), eq(s.rooms.isActive, true)));
   if (!room) throw new AppError("not_found", "We could not find this room. Please call reception.");
   const [stay] = await db.select().from(s.roomStays).where(and(eq(s.roomStays.tenantId, tenantId), eq(s.roomStays.openKey, room.id)));
-  return { t, room, stay: stay ?? null };
+  const [settings] = await db.select({ roomServices: s.outlets.roomServices, wifiSsid: s.outlets.wifiSsid, wifiPassword: s.outlets.wifiPassword }).from(s.outlets)
+    .where(and(eq(s.outlets.tenantId, tenantId), eq(s.outlets.id, t.outlet.id)));
+  return { t, room, stay: stay ?? null, settings: settings ?? null };
 }
 
 export type RoomPage =
@@ -27,6 +29,8 @@ export type RoomPage =
       kind: "room";
       outlet: { code: string; name: string; city: string; logoUrl: string | null; accentColor: string | null; isOpen: boolean };
       room: { number: string; roomType: string | null };
+      services: RoomRequestKind[];
+      wifi: { ssid: string; password: string } | null;
       stay: {
         firstName: string;
         foodPay: "at_checkout" | "per_order";
@@ -43,7 +47,7 @@ export async function getRoomPage(outletCode: string, shortCode: string, deviceI
     if (err instanceof AppError && (err.code === "not_found" || err.code === "qr_revoked" || err.code === "outlet_unavailable")) return { kind: "error", code: err.code };
     throw err;
   }
-  const { t, room, stay } = found;
+  const { t, room, stay, settings } = found;
   if (!room) return { kind: "table" };
   const tenantId = t.outlet.tenantId;
   let joined = false;
@@ -71,6 +75,9 @@ export async function getRoomPage(outletCode: string, shortCode: string, deviceI
       isOpen: openingInfo(t.outlet.openingHours, t.outlet.timezone, now).isOpen,
     },
     room: { number: room.number, roomType: room.roomType },
+      services: configuredRoomRequestKinds(settings?.roomServices),
+      // Wi-Fi credentials are guest-facing, but only disclose them after an active check-in.
+      wifi: stay && settings?.wifiSsid ? { ssid: settings.wifiSsid, password: settings.wifiPassword ?? "" } : null,
     stay: stay ? { firstName: stay.guestName.split(" ")[0], foodPay: stay.foodPay, joined, requests } : null,
   };
 }
@@ -78,9 +85,10 @@ export async function getRoomPage(outletCode: string, shortCode: string, deviceI
 /** A housekeeping ask from the room. The same ask while one is still open is not sent twice. */
 export async function askFromRoom(outletCode: string, shortCode: string, kind: RoomRequestKind, note: string | null, now = new Date()) {
   if (!roomRequestKinds.includes(kind)) throw new AppError("invalid_state", "Choose what you need.");
-  const { room, stay } = await roomAt(outletCode, shortCode);
+  const { room, stay, settings } = await roomAt(outletCode, shortCode);
   if (!room) throw new AppError("not_found", "We could not find this room. Please call reception.");
   if (!stay) throw new AppError("table_not_open", "This room is not checked in. Please call reception.");
+  if (!configuredRoomRequestKinds(settings?.roomServices).includes(kind)) throw new AppError("invalid_state", "This room service is not available. Please choose another option.");
   const text = String(note ?? "").trim().slice(0, 140) || null;
   if (kind === "other" && !text) throw new AppError("invalid_state", "Write what you need.");
   const open = await db

@@ -232,6 +232,13 @@
       "when": 1792755686717,
       "tag": "0032_pickup_item",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "5",
+      "when": 1792758608042,
+      "tag": "0033_purple_matthew_murdock",
+      "breakpoints": true
     }
   ]
 }

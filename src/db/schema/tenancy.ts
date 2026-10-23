@@ -11,6 +11,7 @@ import {
 } from "drizzle-orm/mysql-core";
 import { at, createdAt, id, ref, sameTenant, tenantId, tenantKey, updatedAt } from "./_columns";
 import { plans, platformAdmins, type PlanFeatures } from "./platform";
+import type { RoomRequestKind } from "../../domain/rooms";
 
 // Tenant > Brand > Outlet (PS 7.2), plus staff and their roles (PS 7.5).
 
@@ -177,6 +178,11 @@ export const outlets = mysqlTable(
     tipPresetsBp: json("tip_presets_bp").$type<number[]>(),
     /** Public review page shown to every guest after paying; null hides the link (PS 3.8) */
     reviewUrl: varchar("review_url", { length: 500 }),
+    /** Owner-selected room QR service buttons; null keeps the full default set. */
+    roomServices: json("room_services").$type<RoomRequestKind[]>(),
+    /** Guest-facing Wi-Fi details, shown only to checked-in room guests. */
+    wifiSsid: varchar("wifi_ssid", { length: 32 }),
+    wifiPassword: varchar("wifi_password", { length: 63 }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

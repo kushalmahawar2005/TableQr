@@ -12,6 +12,7 @@ import { getMenuScreen } from "@/server/guest/menu-screen";
 import { placeOrder } from "@/server/guest/order";
 import { askFromRoom, getRoomPage } from "@/server/guest/room";
 import { startOrJoinTable } from "@/server/guest/session";
+import { updateOutletSettings } from "@/server/staff/settings-write";
 import { checkIn, checkOut, finishRoomRequest, getRooms, roomFoodTab, saveRoom, setRoomStatus, stayHistory } from "@/server/staff/rooms";
 import { resetTestDb } from "./setup-db";
 
@@ -70,6 +71,8 @@ describe("hotel rooms", () => {
   it("check-in, food from the room QR, requests, payment and check-out", async () => {
     const room = (await getRooms(owner())).rooms[0];
     const code = await qrOf(room.id);
+    await updateOutletSettings(owner(), { city: "Jaipur", address: "Test hotel", gstin: "", fssai: "", serviceChargeBp: 0, tipPresetsBp: null, autoAcceptOrders: false, reviewUrl: "", openingHours: null, roomServices: ["towels"], wifiSsid: "Guest Wi-Fi", wifiPassword: "safe-test-pass" });
+    expect(await getRoomPage("SRJ01", code, null)).toMatchObject({ kind: "room", services: ["towels"], wifi: null });
     await checkIn(owner(), room.id, { guestName: "Rahul Mehta", guestPhone: "98765 43210", guests: 2, foodPay: "at_checkout" });
     await refused(checkIn(owner(), room.id, { guestName: "Someone Else" }), "conflict");
 
@@ -82,9 +85,10 @@ describe("hotel rooms", () => {
     const [session] = await env.db.select().from(s.tableSessions).where(eq(s.tableSessions.id, ctx.sessionId));
     expect(session.guestName).toBe("Rahul Mehta");
     const page = await getRoomPage("SRJ01", code, "room-guest-1");
-    expect(page).toMatchObject({ kind: "room", stay: { firstName: "Rahul", joined: true } });
+    expect(page).toMatchObject({ kind: "room", services: ["towels"], wifi: { ssid: "Guest Wi-Fi", password: "safe-test-pass" }, stay: { firstName: "Rahul", joined: true } });
 
     // Housekeeping: the same ask twice is sent once
+    await refused(askFromRoom("SRJ01", code, "water", null), "invalid_state");
     const first = await askFromRoom("SRJ01", code, "towels", null);
     expect((await askFromRoom("SRJ01", code, "towels", null)).repeated).toBe(true);
     let view = (await getRooms(owner())).rooms[0];

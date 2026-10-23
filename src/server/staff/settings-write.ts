@@ -2,6 +2,7 @@ import "server-only";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import * as s from "@/db/schema";
+import { roomRequestKinds, type RoomRequestKind } from "@/domain/rooms";
 import { AppError } from "../errors";
 import { audit } from "./audit";
 import type { StaffSession } from "./auth";
@@ -16,6 +17,7 @@ export type SettingsPatch = {
   city: string; address: string; gstin: string; fssai: string;
   serviceChargeBp: number; tipPresetsBp: number[] | null; autoAcceptOrders: boolean; reviewUrl: string;
   openingHours: Record<string, [string, string][]> | null;
+  roomServices: RoomRequestKind[]; wifiSsid: string; wifiPassword: string;
 };
 
 const bad = (message: string) => new AppError("invalid_state", message, { reason: "settings" });
@@ -40,6 +42,13 @@ export async function updateOutletSettings(staff: Staff, input: SettingsPatch, n
   }
   const reviewUrl = String(input.reviewUrl ?? "").trim();
   if (reviewUrl && (!/^https:\/\//i.test(reviewUrl) || reviewUrl.length > 500)) throw bad("Review link must start with https://");
+  if (!Array.isArray(input.roomServices) || input.roomServices.some((kind) => !roomRequestKinds.includes(kind)) || new Set(input.roomServices).size !== input.roomServices.length) throw bad("Choose valid room service options.");
+  const roomServices = [...input.roomServices];
+  const wifiSsid = String(input.wifiSsid ?? "").trim();
+  const wifiPassword = String(input.wifiPassword ?? "");
+  if (wifiSsid.length > 32) throw bad("Wi-Fi name must be 32 characters or fewer.");
+  if (wifiPassword.length > 63 || /[\r\n]/.test(wifiPassword)) throw bad("Wi-Fi password must be 63 characters or fewer.");
+  if (wifiPassword && !wifiSsid) throw bad("Add the Wi-Fi name before its password.");
   let hours: Record<string, [string, string][]> | null = null;
   if (input.openingHours) {
     hours = {};
@@ -53,12 +62,12 @@ export async function updateOutletSettings(staff: Staff, input: SettingsPatch, n
   return db.transaction(async (tx) => {
     const [before] = await tx.select().from(s.outlets).where(and(eq(s.outlets.tenantId, staff.tenantId), eq(s.outlets.id, staff.outletId))).for("update");
     if (!before) throw new AppError("not_found", "Outlet not found.");
-    const next = { city, address, gstin: gstin || null, fssai: fssai || null, serviceChargeBp: sc, tipPresetsBp: tips, autoAcceptOrders: !!input.autoAcceptOrders, reviewUrl: reviewUrl || null, openingHours: hours };
+    const next = { city, address, gstin: gstin || null, fssai: fssai || null, serviceChargeBp: sc, tipPresetsBp: tips, autoAcceptOrders: !!input.autoAcceptOrders, reviewUrl: reviewUrl || null, openingHours: hours, roomServices, wifiSsid: wifiSsid || null, wifiPassword: wifiPassword || null };
     await tx.update(s.outlets).set(next).where(and(eq(s.outlets.tenantId, staff.tenantId), eq(s.outlets.id, staff.outletId)));
     await audit(tx, staff, {
       action: "outlet.settings_changed", entity: "outlet", entityId: staff.outletId, now,
-      before: { city: before.city, address: before.address, gstin: before.gstin, fssai: before.fssai, serviceChargeBp: before.serviceChargeBp, tipPresetsBp: before.tipPresetsBp, autoAcceptOrders: before.autoAcceptOrders, reviewUrl: before.reviewUrl, openingHours: before.openingHours },
-      after: next,
+      before: { city: before.city, address: before.address, gstin: before.gstin, fssai: before.fssai, serviceChargeBp: before.serviceChargeBp, tipPresetsBp: before.tipPresetsBp, autoAcceptOrders: before.autoAcceptOrders, reviewUrl: before.reviewUrl, openingHours: before.openingHours, roomServices: before.roomServices, wifiSsid: before.wifiSsid, hasWifiPassword: !!before.wifiPassword },
+      after: { ...next, wifiPassword: "[redacted]", hasWifiPassword: !!wifiPassword },
     });
   });
 }

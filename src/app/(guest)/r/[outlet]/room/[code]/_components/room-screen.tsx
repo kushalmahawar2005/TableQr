@@ -19,7 +19,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import { brandStyle, deriveBrandTokens } from "@/domain/brand";
-import { ROOM_REQUEST_LABEL, roomRequestKinds, type RoomRequestKind } from "@/domain/rooms";
+import { ROOM_REQUEST_LABEL, type RoomRequestKind } from "@/domain/rooms";
 import type { Lang } from "@/lib/i18n";
 import type { RoomPage } from "@/server/guest/room";
 import { LanguageToggle } from "../../../t/[table]/_components/language-toggle";
@@ -64,6 +64,9 @@ const COPY = {
     yours: "Your requests",
     open: "On the way",
     done: "Done",
+    wifi: "Guest Wi-Fi",
+    network: "Network",
+    password: "Password",
   },
   hi: {
     language: "भाषा",
@@ -88,6 +91,9 @@ const COPY = {
     yours: "आपकी माँगें",
     open: "आ रहा है",
     done: "हो गया",
+    wifi: "गेस्ट Wi-Fi",
+    network: "नेटवर्क",
+    password: "पासवर्ड",
   },
 } as const;
 
@@ -149,6 +155,15 @@ function Room({ data, lang, outletCode, shortCode }: { data: Extract<RoomPage, {
         </section>
       ) : (
         <>
+          {data.wifi && (
+            <section className="mt-4 rounded-card border border-line bg-surface p-5" aria-labelledby="guest-wifi">
+              <h2 id="guest-wifi" className="font-display text-section font-bold text-ink">{c.wifi}</h2>
+              <dl className="mt-3 grid gap-2 text-body sm:grid-cols-2">
+                <div><dt className="text-caption text-muted">{c.network}</dt><dd className="break-all font-semibold text-ink">{data.wifi.ssid}</dd></div>
+                {data.wifi.password && <div><dt className="text-caption text-muted">{c.password}</dt><dd className="break-all font-mono font-semibold text-ink">{data.wifi.password}</dd></div>}
+              </dl>
+            </section>
+          )}
           <section className="mt-4 rounded-card border border-line bg-surface p-5" aria-labelledby="food">
             <div className="flex items-center gap-3">
               <span className="grid size-11 place-items-center rounded-full bg-brand-soft text-brand-strong"><HugeiconsIcon icon={Restaurant01Icon} size={22} aria-hidden /></span>
@@ -176,7 +191,7 @@ function Room({ data, lang, outletCode, shortCode }: { data: Extract<RoomPage, {
             <h2 id="need" className="font-display text-section font-bold text-ink">{c.need}</h2>
             <p className="text-caption text-muted">{c.needHelp}</p>
             <div className="mt-3 grid grid-cols-2 gap-2">
-              {roomRequestKinds.map((k) => (
+              {data.services.map((k) => (
                 <button
                   key={k}
                   type="button"

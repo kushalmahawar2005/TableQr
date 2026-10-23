@@ -2,10 +2,11 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
-import { Check, CheckCircle2, Circle, ClipboardList, Clock, Copy, CreditCard, Lock, Plus, Receipt, Store, Trash2, Upload, Wallet, X, type LucideIcon } from "lucide-react";
+import { Check, CheckCircle2, Circle, ClipboardList, Clock, Copy, CreditCard, Lock, Plus, Receipt, Store, Trash2, Upload, Wallet, Wifi, X, type LucideIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { OutletSettings } from "@/server/staff/settings-read";
+import { ROOM_REQUEST_LABEL, roomRequestKinds, type RoomRequestKind } from "@/domain/rooms";
 import { removeRestaurantLogoAction, saveSettingsAction, uploadRestaurantLogoAction } from "../actions";
 import { shrinkPhoto } from "@/lib/shrink-photo";
 
@@ -15,7 +16,7 @@ const TIP_OPTIONS = [5, 10, 15, 20];
 // Left-hand list of sections; "hours" is also the target of the setup guide's link
 const NAV = [
   ["restaurant", "Restaurant", Store], ["tax", "Tax and licences", Receipt], ["bill", "Bill and tips", Wallet],
-  ["orders", "Orders", ClipboardList], ["hours", "Opening hours", Clock], ["plan", "Plan", CreditCard],
+  ["orders", "Orders", ClipboardList], ["room-guest", "Room guest page", Wifi], ["hours", "Opening hours", Clock], ["plan", "Plan", CreditCard],
 ] as const;
 type Hours = Record<string, [string, string][]>;
 
@@ -76,6 +77,9 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
   const [tips, setTips] = useState<number[]>(o.tipPresetsBp?.length ? o.tipPresetsBp.map((b) => b / 100) : [5, 10]);
   const [auto, setAuto] = useState(o.autoAcceptOrders);
   const [review, setReview] = useState(o.reviewUrl ?? "");
+  const [roomServices, setRoomServices] = useState<RoomRequestKind[]>(o.roomServices);
+  const [wifiSsid, setWifiSsid] = useState(o.wifiSsid);
+  const [wifiPassword, setWifiPassword] = useState(o.wifiPassword);
   const [hours, setHours] = useState<Hours>({ ...emptyHours(), ...(o.openingHours ?? {}) });
   const [hoursOn, setHoursOn] = useState(!!o.openingHours);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -87,7 +91,7 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
   const [logoMessage, setLogoMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
   // What is on screen against what was last saved, so the save bar can say if anything changed
-  const snapshot = JSON.stringify({ city, address, gstin, fssai, sc, tips, auto, review, hours: hoursOn ? hours : null });
+  const snapshot = JSON.stringify({ city, address, gstin, fssai, sc, tips, auto, review, roomServices, wifiSsid, wifiPassword, hours: hoursOn ? hours : null });
   const [savedSnapshot, setSavedSnapshot] = useState(snapshot);
   const dirty = snapshot !== savedSnapshot;
 
@@ -202,7 +206,7 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
         city, address, gstin, fssai,
         serviceChargeBp: Math.round(scNum * 100),
         tipPresetsBp: tips.map((t) => Math.round(t * 100)),
-        autoAcceptOrders: auto, reviewUrl: review,
+        autoAcceptOrders: auto, reviewUrl: review, roomServices, wifiSsid, wifiPassword,
         openingHours: hoursOn ? hours : null,
       });
       setMsg(res.ok ? { ok: true, text: "Saved." } : { ok: false, text: res.message });
@@ -325,6 +329,26 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
             </Row>
             <Row label="Table mode" hint="Changed by TableQR."><Fixed>{MODE[o.sessionMode] ?? o.sessionMode}</Fixed></Row>
             <Row label="Google review link" htmlFor="review" hint="Guests see this after paying."><Input id="review" className={fieldCls} type="url" placeholder="https://g.page/r/…" value={review} onChange={(e) => setReview(e.target.value)} disabled={!canEdit} /></Row>
+          </Section>
+
+          <Section id="room-guest" icon={Wifi} title="Room guest page" desc="Choose what checked-in guests can request and share your Wi-Fi details.">
+            <div className="py-4">
+              <p className="text-sm font-semibold text-ink">Room service options</p>
+              <p className="mt-0.5 text-xs text-muted">Only selected options appear on room QR pages. “Other” lets guests write a custom request.</p>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {roomRequestKinds.map((kind) => {
+                  const enabled = roomServices.includes(kind);
+                  const label = ROOM_REQUEST_LABEL[kind].en;
+                  return (
+                    <div key={kind} className="flex min-h-12 items-center justify-between gap-3 rounded-xl border border-line px-3 text-left text-sm font-medium text-ink">
+                      {label}<Toggle on={enabled} onChange={(next) => setRoomServices((current) => next ? [...current, kind] : current.filter((item) => item !== kind))} label={label} disabled={!canEdit} />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            <Row label="Wi-Fi network name" htmlFor="wifi-ssid" hint="Shown to checked-in guests on their room QR page."><Input id="wifi-ssid" className={fieldCls} maxLength={32} autoComplete="off" placeholder="e.g. Hotel Guest Wi-Fi" value={wifiSsid} onChange={(e) => setWifiSsid(e.target.value)} disabled={!canEdit} /></Row>
+            <Row label="Wi-Fi password" htmlFor="wifi-password" hint="Visible to checked-in guests so they can connect."><Input id="wifi-password" className={fieldCls} type="password" maxLength={63} autoComplete="new-password" placeholder="Leave blank to remove" value={wifiPassword} onChange={(e) => setWifiPassword(e.target.value)} disabled={!canEdit} /></Row>
           </Section>
 
           <Section id="hours" icon={Clock} title="Opening hours" desc={hoursOn ? "Set when you are open each day." : "Not set. Turn on to add your timings."} action={<Toggle on={hoursOn} onChange={setHoursOn} label="Set opening hours" disabled={!canEdit} />}>
