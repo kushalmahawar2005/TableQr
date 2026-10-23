@@ -8,7 +8,7 @@ import { tenantFeatures } from "@/server/plan";
 import { resolveStaff, signInStaff, type StaffSession } from "@/server/staff/auth";
 import { getPricingData } from "@/server/staff/pricing";
 import { getReport } from "@/server/staff/reports-read";
-import { addMember, assignableRoles } from "@/server/staff/team";
+import { addMember, assignableRoles, listTeam } from "@/server/staff/team";
 import { hasOpenRequest, requestPlanChange } from "@/server/staff/plan-request";
 import { getTableLanding } from "@/server/guest/table";
 import { requireStaff } from "@/server/staff/auth";
@@ -67,7 +67,11 @@ describe("plan features", () => {
       expect((await getReport(owner, 30, new Date())).range).toBe(30);
       await refused(getPricingData(owner), "forbidden");
       expect(await assignableRoles(env.demo.tenantId)).toEqual(["manager", "waiter", "accountant"]);
-      expect((await addMember(owner, { name: "New Waiter", phone: "9333333332", role: "waiter", pin: "4321" })).existing).toBe(false);
+      const invited = await addMember(owner, { name: "New Waiter", phone: "9333333332", role: "waiter", pin: "4321" });
+      expect(invited.existing).toBe(false);
+      expect((await listTeam(owner)).find((person) => person.id === invited.id)).toMatchObject({ name: "New Waiter", phone: "9333333332", roles: ["waiter"], isActive: true });
+      await refused(addMember(owner, { name: "Duplicate Waiter", phone: "9333333332", role: "waiter", pin: "4321" }), "invalid_state");
+      await refused(addMember(owner, { name: " ", phone: "", role: "waiter", pin: "4321" }), "invalid_state");
     } finally {
       await setTenant({ planCode: "pro", customFeatures: null, customPricePaise: null });
     }
