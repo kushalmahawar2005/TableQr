@@ -9,6 +9,7 @@ import { AppError } from "../errors";
 import { audit } from "./audit";
 import type { StaffSession } from "./auth";
 import { guestServices, type GuestService } from "@/domain/guest-services";
+import { gatewayFor } from "../payments/gateway";
 
 // Outlet settings the owner may change. Name, code, time zone, table mode and plan stay with TableQR.
 
@@ -80,6 +81,7 @@ export async function updateOutletSettings(staff: Staff, input: SettingsPatch, n
     const next = { city, address, gstin: gstin || null, fssai: fssai || null, serviceChargeBp: sc, tipPresetsBp: tips, autoAcceptOrders: !!input.autoAcceptOrders, guestOnlinePayments: input.guestOnlinePayments ?? before.guestOnlinePayments, reviewUrl: reviewUrl || null, openingHours: hours, roomServices, wifiSsid: wifiSsid || null, wifiPassword: wifiPassword || null };
     const nextGuestServices = input.guestServices === undefined ? before.guestServices : [...input.guestServices];
     const bookingPaymentMode = input.bookingPaymentMode ?? before.bookingPaymentMode;
+    if (bookingPaymentMode === "gateway" && before.bookingPaymentMode !== "gateway" && !gatewayFor()) throw bad("Online booking payments are not connected yet. Use the restaurant QR option for advances.");
     if (bookingPaymentMode === "manual_qr" && !before.bookingPaymentQrUrl) throw bad("Upload your payment QR before enabling manual booking advances.");
     if (deliveryPolicy?.paymentMode === "manual_qr" && !before.bookingPaymentQrUrl) throw bad("Upload your restaurant payment QR before selecting manual delivery payments.");
     await tx.update(s.outlets).set({ ...next, ...(deliveryPolicy ? { deliveryPolicy } : {}), guestServices: nextGuestServices, bookingPaymentMode }).where(and(eq(s.outlets.tenantId, staff.tenantId), eq(s.outlets.id, staff.outletId)));

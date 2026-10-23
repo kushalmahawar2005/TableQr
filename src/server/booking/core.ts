@@ -23,6 +23,7 @@ import { priceLine } from "@/domain/pricing";
 import { isWithinCategoryWindow } from "../guest/menu";
 import { configuredGuestServices, type GuestService } from "@/domain/guest-services";
 import { tenantAccess } from "../access";
+import { gatewayFor } from "../payments/gateway";
 
 export const BOOKING_HOLD_MINUTES = 5;
 const LIVE = ["requested", "confirmed", "reminded", "arrived"] as const;
@@ -217,6 +218,9 @@ export async function createBookingHold(outletCode: string, input: { date: strin
     const chosen = await chooseTables(tx, scope, startAt, endAt, Number(input.partySize), input.preference ?? {}, now, true);
     if (!chosen) throw new AppError("conflict", "That time is no longer available.", { reason: "full" });
     const credit = await slotCredit(tx, scope, policy, startAt);
+    if (credit.amountPaise > 0 && scope.bookingPaymentMode !== "manual_qr" && !gatewayFor()) {
+      throw new AppError("invalid_state", "This restaurant has not connected online advance payments yet. Please contact the restaurant or choose another time.", { reason: "booking_payment_unavailable" });
+    }
     const id = uuidv7();
     const manage = input.holdToken;
     const reference = publicRef();
