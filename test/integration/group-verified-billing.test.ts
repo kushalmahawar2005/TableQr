@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db as appDb } from "@/db";
 import * as s from "@/db/schema";
 import { addItemsAtBilling } from "@/server/billing/counter-items";
@@ -17,7 +17,7 @@ import { resetTestDb } from "./setup-db";
 
 let env: Awaited<ReturnType<typeof resetTestDb>>;
 let owner: StaffSession;
-let guests: { name: string; deviceId: string; ctx: GuestContext }[];
+let guests: { name: string; phone: string; guestId: string; deviceId: string; ctx: GuestContext }[];
 
 beforeAll(async () => {
   env = await resetTestDb();
@@ -27,9 +27,10 @@ beforeAll(async () => {
 
   for (const [i, name] of ["Hitesh", "Jayendra", "Mitarth"].entries()) {
     const deviceId = `group-guest-${i}`;
+    const phone = `98765001${String(i).padStart(2, "0")}`;
     const shortCode = env.demo.tableQr.T10;
     const joined = await startOrJoinTable({ outletCode: "SRJ01", shortCode, deviceId });
-    const sent = await sendCode({ outletCode: "SRJ01", shortCode, deviceId, country: "IN", phone: `98765001${String(i).padStart(2, "0")}` });
+    const sent = await sendCode({ outletCode: "SRJ01", shortCode, deviceId, country: "IN", phone });
     if (!sent.ok || !sent.devCode) throw new Error(`Could not send test OTP: ${sent.ok ? "missing mock code" : sent.error}`);
     const verified = await verifyCode({ outletCode: "SRJ01", shortCode, deviceId, challengeId: sent.challengeId, code: sent.devCode, name, consent: false });
     if (!verified.ok) throw new Error(`Could not verify ${name}: ${verified.error}`);
@@ -38,7 +39,7 @@ beforeAll(async () => {
     const ctx = await getGuestContext("SRJ01", shortCode, joined.participantId, deviceId);
     await addCartLine(ctx, { itemId: env.demo.itemIds["Dal Makhani"], qty: 1 });
     await placeOrder(ctx);
-    guests.push({ name, deviceId, ctx });
+    guests.push({ name, phone, guestId: verified.guestId, deviceId, ctx });
   }
   await requestBill({ tenantId: guests[0].ctx.tenantId, outletId: guests[0].ctx.outletId, sessionId: guests[0].ctx.sessionId });
 });
@@ -49,8 +50,20 @@ afterAll(async () => {
 });
 
 describe("verified group guest billing", () => {
-  it("lists all verified guests and charges a staff-added parcel item only to its selected guest", async () => {
+  it("keeps three phone-verified identities on one visit, lists every name, and charges a parcel item only to its selected guest", async () => {
     const [host, selected] = guests;
+    expect(new Set(guests.map((g) => g.guestId)).size).toBe(3);
+    expect(new Set(guests.map((g) => g.phone)).size).toBe(3);
+    expect(new Set(guests.map((g) => g.ctx.sessionId)).size).toBe(1);
+    expect(new Set(guests.map((g) => g.ctx.participantId)).size).toBe(3);
+    const persisted = await env.db.select({ id: s.participants.id, guestId: s.participants.guestId, displayName: s.participants.displayName, sessionId: s.participants.sessionId })
+      .from(s.participants)
+      .where(inArray(s.participants.id, guests.map((g) => g.ctx.participantId)));
+    expect(persisted).toHaveLength(3);
+    expect(persisted.map((p) => p.guestId).sort()).toEqual(guests.map((g) => g.guestId).sort());
+    expect(persisted.map((p) => p.displayName).sort()).toEqual(guests.map((g) => g.name).sort());
+    expect(new Set(persisted.map((p) => p.sessionId)).size).toBe(1);
+
     const detail = await posBillDetail(owner, host.ctx.sessionId);
     expect(detail.people.map((p) => p.name).sort()).toEqual(["Hitesh", "Jayendra", "Mitarth"].sort());
     const table = await getTableScreen("SRJ01", env.demo.tableQr.T10, host.deviceId);
