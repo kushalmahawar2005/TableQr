@@ -93,6 +93,23 @@ describe("table responsibility and automatic coverage", () => {
     await assignWaitersToTables(manager, [table("T4"), table("T7"), table("T8"), table("T9")], "__auto", "auto-shift");
     const assigned = await env.db.select().from(s.waiterTableAssignments).where(and(eq(s.waiterTableAssignments.tenantId, first.tenantId), eq(s.waiterTableAssignments.periodKey, "auto-shift"), eq(s.waiterTableAssignments.active, true)));
     expect(new Set(assigned.map(a => a.waiterUserId)).size).toBe(2);
+    const loads = [...assigned.reduce((counts, row) => counts.set(row.waiterUserId, (counts.get(row.waiterUserId) ?? 0) + 1), new Map<string, number>()).values()].sort();
+    expect(loads).toEqual([2, 2]);
+
+    const unassignedTables = [table("T4"), table("T7")];
+    const beforeNoCoverage = await env.db.select({ tableId: s.waiterTableAssignments.tableId, waiterUserId: s.waiterTableAssignments.waiterUserId })
+      .from(s.waiterTableAssignments)
+      .where(and(eq(s.waiterTableAssignments.tenantId, first.tenantId), eq(s.waiterTableAssignments.outletId, first.outletId), eq(s.waiterTableAssignments.active, true)));
+    await setDuty(manager, first.userId, "off");
+    await setDuty(manager, second.userId, "off");
+    await expect(assignWaitersToTables(manager, unassignedTables, "__auto", "no-waiter-shift")).rejects.toThrow("No waiter is on duty");
+    const afterNoCoverage = await env.db.select({ tableId: s.waiterTableAssignments.tableId, waiterUserId: s.waiterTableAssignments.waiterUserId })
+      .from(s.waiterTableAssignments)
+      .where(and(eq(s.waiterTableAssignments.tenantId, first.tenantId), eq(s.waiterTableAssignments.outletId, first.outletId), eq(s.waiterTableAssignments.active, true)));
+    expect(afterNoCoverage).toEqual(beforeNoCoverage);
+    await setDuty(manager, first.userId, "on");
+    await setDuty(manager, second.userId, "on");
+
     await expect(addPhonelessDiner(first, guest.sessionId, "   ")).rejects.toThrow("customer");
     const diner = await addPhonelessDiner(first, guest.sessionId, "Aarav");
     expect(diner.name).toBe("Aarav");
