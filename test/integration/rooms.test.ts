@@ -8,6 +8,7 @@ import { AppError } from "@/server/errors";
 import { getOrCreateDraft } from "@/server/floor/editor";
 import { addCartLine } from "@/server/guest/cart";
 import { getGuestContext } from "@/server/guest/context";
+import { getMenuScreen } from "@/server/guest/menu-screen";
 import { placeOrder } from "@/server/guest/order";
 import { askFromRoom, getRoomPage } from "@/server/guest/room";
 import { startOrJoinTable } from "@/server/guest/session";
@@ -75,6 +76,7 @@ describe("hotel rooms", () => {
     // The guest orders from the room: no table code or OTP, named from the check-in
     const seated = await startOrJoinTable({ outletCode: "SRJ01", shortCode: code, deviceId: "room-guest-1" });
     const ctx = await getGuestContext("SRJ01", code, seated.participantId, "room-guest-1");
+    expect((await getMenuScreen("SRJ01", code, "room-guest-1")).table.isRoom).toBe(true);
     await addCartLine(ctx, { itemId: env.demo.itemIds.Cola, qty: 2 });
     await placeOrder(ctx);
     const [session] = await env.db.select().from(s.tableSessions).where(eq(s.tableSessions.id, ctx.sessionId));

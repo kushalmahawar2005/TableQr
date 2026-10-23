@@ -34,7 +34,7 @@ async function loadBase(): Promise<MenuScreenData | null> {
   const { menu, popularIds } = toMenuRows(categories);
   return {
     outlet: { code: outlet.code, name: outlet.name, logoUrl: null, accentColor: outlet.accentColor },
-    table: { code: "T12" },
+    table: { code: "T12", isRoom: false },
     renderedAt: 0,
     inProgress: 3,
     session: { key: "dev", people: 3, status: "open", orderingLocked: false, hostName: "Aarav" },

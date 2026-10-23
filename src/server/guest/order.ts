@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { uuidv7 } from "@/db/id";
 import * as s from "@/db/schema";
 import { checkFirstName, isPlaceholderName } from "@/domain/guest-name";
+import { ROOM_CLASS } from "@/domain/rooms";
 import { priceLine, quoteKey, type PriceQuote } from "@/domain/pricing";
 import { LOCK_THEN_READ } from "../db-types";
 import { AppError } from "../errors";
@@ -88,7 +89,16 @@ export function placeOrderTx(ctx: GuestContext, input: PlaceInput, now: Date, st
         return { orderId: done.id, roundNo: done.roundNo, status: done.status, subtotalPaise: 0, stations: [] as string[], itemCount: 0, soldOutItemIds: [] as string[], replayed: true };
       }
     }
-    if (!staffDraft && !me.guestId) {
+    const [activeRoomStay] = !staffDraft && !me.guestId
+      ? await tx
+          .select({ id: s.roomStays.id })
+          .from(s.rooms)
+          .innerJoin(s.roomStays, and(eq(s.roomStays.tenantId, s.rooms.tenantId), eq(s.roomStays.roomId, s.rooms.id), eq(s.roomStays.openKey, s.rooms.id), eq(s.roomStays.status, "open")))
+          .innerJoin(s.diningTables, and(eq(s.diningTables.tenantId, s.rooms.tenantId), eq(s.diningTables.id, s.rooms.tableId), eq(s.diningTables.tableClass, ROOM_CLASS)))
+          .where(and(eq(s.rooms.tenantId, ctx.tenantId), eq(s.rooms.outletId, ctx.outletId), eq(s.rooms.tableId, ctx.tableId), eq(s.rooms.isActive, true)))
+          .limit(1)
+      : [];
+    if (!staffDraft && !me.guestId && !activeRoomStay) {
       throw new AppError("verification_required", "Verify your phone number before placing this order.");
     }
     if (session.status === "bill_requested") {

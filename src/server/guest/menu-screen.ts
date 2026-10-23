@@ -3,6 +3,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { orderLines } from "@/db/schema";
 import { isPlaceholderName } from "@/domain/guest-name";
+import { ROOM_CLASS } from "@/domain/rooms";
 import { optionsKind, primaryTag, rowPrice } from "@/domain/menu-price";
 import { AppError } from "../errors";
 import { getCart } from "./cart";
@@ -97,7 +98,7 @@ export async function getMenuScreen(outletCode: string, shortCode: string, devic
   const host = open.people.find((p) => p.id === open.session.hostParticipantId);
   return {
     outlet: { code: t.outlet.code, name: t.outlet.name, logoUrl: t.logoUrl, accentColor: t.outlet.accentColor },
-    table: { code: t.table.code },
+    table: { code: t.table.code, isRoom: t.table.tableClass === ROOM_CLASS },
     renderedAt,
     inProgress: progress.count,
     session: {
