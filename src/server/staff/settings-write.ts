@@ -20,6 +20,7 @@ export type SettingsPatch = {
   openingHours: Record<string, [string, string][]> | null;
   roomServices: RoomRequestKind[]; wifiSsid: string; wifiPassword: string;
   guestServices?: GuestService[];
+  bookingPaymentMode?: "gateway" | "manual_qr";
 };
 
 const bad = (message: string) => new AppError("invalid_state", message, { reason: "settings" });
@@ -27,6 +28,7 @@ const bad = (message: string) => new AppError("invalid_state", message, { reason
 export async function updateOutletSettings(staff: Staff, input: SettingsPatch, now = new Date()) {
   if (!staff.roles.includes("owner")) throw new AppError("forbidden", "Only the owner can change settings.");
   if (input.guestOnlinePayments !== undefined && typeof input.guestOnlinePayments !== "boolean") throw bad("Choose a valid online payment preference.");
+  if (input.bookingPaymentMode !== undefined && !["gateway", "manual_qr"].includes(input.bookingPaymentMode)) throw bad("Choose a valid booking payment method.");
   const city = String(input.city ?? "").trim();
   const address = String(input.address ?? "").trim();
   if (!city || city.length > 80) throw bad("Enter the city.");
@@ -68,11 +70,13 @@ export async function updateOutletSettings(staff: Staff, input: SettingsPatch, n
     if (!before) throw new AppError("not_found", "Outlet not found.");
     const next = { city, address, gstin: gstin || null, fssai: fssai || null, serviceChargeBp: sc, tipPresetsBp: tips, autoAcceptOrders: !!input.autoAcceptOrders, guestOnlinePayments: input.guestOnlinePayments ?? before.guestOnlinePayments, reviewUrl: reviewUrl || null, openingHours: hours, roomServices, wifiSsid: wifiSsid || null, wifiPassword: wifiPassword || null };
     const nextGuestServices = input.guestServices === undefined ? before.guestServices : [...input.guestServices];
-    await tx.update(s.outlets).set({ ...next, guestServices: nextGuestServices }).where(and(eq(s.outlets.tenantId, staff.tenantId), eq(s.outlets.id, staff.outletId)));
+    const bookingPaymentMode = input.bookingPaymentMode ?? before.bookingPaymentMode;
+    if (bookingPaymentMode === "manual_qr" && !before.bookingPaymentQrUrl) throw bad("Upload your payment QR before enabling manual booking advances.");
+    await tx.update(s.outlets).set({ ...next, guestServices: nextGuestServices, bookingPaymentMode }).where(and(eq(s.outlets.tenantId, staff.tenantId), eq(s.outlets.id, staff.outletId)));
     await audit(tx, staff, {
       action: "outlet.settings_changed", entity: "outlet", entityId: staff.outletId, now,
-      before: { city: before.city, address: before.address, gstin: before.gstin, fssai: before.fssai, serviceChargeBp: before.serviceChargeBp, tipPresetsBp: before.tipPresetsBp, autoAcceptOrders: before.autoAcceptOrders, guestOnlinePayments: before.guestOnlinePayments, reviewUrl: before.reviewUrl, openingHours: before.openingHours, roomServices: before.roomServices, wifiSsid: before.wifiSsid, hasWifiPassword: !!before.wifiPassword },
-      after: { ...next, guestServices: nextGuestServices, wifiPassword: "[redacted]", hasWifiPassword: !!wifiPassword },
+      before: { city: before.city, address: before.address, gstin: before.gstin, fssai: before.fssai, serviceChargeBp: before.serviceChargeBp, tipPresetsBp: before.tipPresetsBp, autoAcceptOrders: before.autoAcceptOrders, guestOnlinePayments: before.guestOnlinePayments, guestServices: before.guestServices, bookingPaymentMode: before.bookingPaymentMode, reviewUrl: before.reviewUrl, openingHours: before.openingHours, roomServices: before.roomServices, wifiSsid: before.wifiSsid, hasWifiPassword: !!before.wifiPassword },
+      after: { ...next, guestServices: nextGuestServices, bookingPaymentMode, wifiPassword: "[redacted]", hasWifiPassword: !!wifiPassword },
     });
   });
 }
@@ -97,5 +101,16 @@ export async function updateBrandLogo(staff: Staff, logoUrl: string | null, now 
       action: "brand.logo_changed", entity: "brand", entityId: outlet.brandId, now,
       before: { logoUrl: brand.logoUrl }, after: { logoUrl },
     });
+  });
+}
+
+export async function updateBookingPaymentQr(staff: Staff, url: string, now = new Date()) {
+  if (!staff.roles.includes("owner")) throw new AppError("forbidden", "Only the owner can change the payment QR.");
+  if (url.length > 500 || (!url.startsWith("/uploads/") && !url.startsWith("https://"))) throw bad("Upload a valid payment QR image.");
+  await db.transaction(async tx => {
+    const [outlet] = await tx.select({ qr: s.outlets.bookingPaymentQrUrl }).from(s.outlets).where(and(eq(s.outlets.tenantId, staff.tenantId), eq(s.outlets.id, staff.outletId))).for("update");
+    if (!outlet) throw new AppError("not_found", "Outlet not found.");
+    await tx.update(s.outlets).set({ bookingPaymentQrUrl: url }).where(and(eq(s.outlets.tenantId, staff.tenantId), eq(s.outlets.id, staff.outletId)));
+    await audit(tx, staff, { action: "outlet.booking_payment_qr_changed", entity: "outlet", entityId: staff.outletId, before: { qr: outlet.qr }, after: { qr: url }, now });
   });
 }

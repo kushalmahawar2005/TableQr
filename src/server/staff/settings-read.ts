@@ -20,6 +20,7 @@ export type OutletSettings = {
   openingHours: Record<string, [string, string][]> | null;
   roomServices: RoomRequestKind[]; wifiSsid: string; wifiPassword: string;
   guestServices: GuestService[]; availableGuestServices: GuestService[];
+  bookingPaymentMode: "gateway" | "manual_qr"; bookingPaymentQrUrl: string | null;
   tables: number; staff: number; plan: string;
 };
 
@@ -49,5 +50,6 @@ export async function getOutletSettings(staff: Staff): Promise<OutletSettings> {
     reviewUrl: outlet.reviewUrl, openingHours: outlet.openingHours, tables: Number(tables.n), staff: Number(team.n), plan: plan?.name ?? "",
     roomServices: configuredRoomRequestKinds(outlet.roomServices), wifiSsid: outlet.wifiSsid ?? "", wifiPassword: outlet.wifiPassword ?? "",
     guestServices: configuredGuestServices(outlet.guestServices), availableGuestServices: guestServices.filter(service => features[service]),
+    bookingPaymentMode: outlet.bookingPaymentMode, bookingPaymentQrUrl: outlet.bookingPaymentQrUrl,
   };
 }

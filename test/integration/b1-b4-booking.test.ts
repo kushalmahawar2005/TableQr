@@ -7,6 +7,7 @@ import { serviceDate } from "@/domain/booking-policy";
 import { AppError } from "@/server/errors";
 import { bookingByToken, bookingPreorderMenu, cancelBookingPublic, confirmBooking, createBookingHold, createGroupRequest, getBookingAvailability, getBookingZones, saveBookingPreorder } from "@/server/booking/core";
 import { seatReservation } from "@/server/floor/reservations";
+import { startOrJoinTable } from "@/server/guest/session";
 import { resolveStaff, signInStaff } from "@/server/staff/auth";
 import { sendBookingOtp, verifyBookingOtp } from "@/server/booking/otp";
 import { estimateWait, joinPublicWaitlist, leavePublicWaitlist, publicWaitlistStatus } from "@/server/booking/waitlist";
@@ -64,6 +65,16 @@ describe("B1-B4 booking domain", () => {
     expect(lines).toMatchObject([{ itemId: item.id, qty: 1, status: "placed", personalForPickup: false }]);
     const tickets = await env.db.select().from(s.tickets).where(eq(s.tickets.orderId, order.id));
     expect(tickets.length).toBeGreaterThan(0);
+    const [person] = await env.db.select().from(s.participants).where(eq(s.participants.sessionId, seated.sessionId));
+    expect(person.guestId).toBeNull();
+    const [visit] = await env.db.select().from(s.tableSessions).where(eq(s.tableSessions.id, seated.sessionId));
+    const [qr] = await env.db.select().from(s.qrCodes).where(eq(s.qrCodes.tableId, visit.tableId));
+    const joined = await startOrJoinTable({ outletCode: "SRJ01", shortCode: qr.shortCode, deviceId: "legacy-preorder-phone", now: new Date(slot.startAt) });
+    expect(joined.participantId).toBe(person.id);
+    expect(joined.isHost).toBe(true);
+    const people = await env.db.select().from(s.participants).where(eq(s.participants.sessionId, seated.sessionId));
+    expect(people).toHaveLength(1);
+    expect(people[0].guestId).toBeNull();
   });
 
   it("accepts only tenant-scoped configured zones", async () => {

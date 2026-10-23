@@ -1,13 +1,14 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { useEffect, useState, useTransition } from "react";
 import { Check, CheckCircle2, Circle, ClipboardList, Clock, Copy, CreditCard, Lock, Plus, Receipt, Store, Trash2, Upload, Wallet, Wifi, X, type LucideIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { OutletSettings } from "@/server/staff/settings-read";
 import { ROOM_REQUEST_LABEL, roomRequestKinds, type RoomRequestKind } from "@/domain/rooms";
-import { removeRestaurantLogoAction, saveSettingsAction, uploadRestaurantLogoAction } from "../actions";
+import { removeRestaurantLogoAction, saveSettingsAction, uploadBookingPaymentQrAction, uploadRestaurantLogoAction } from "../actions";
 import { shrinkPhoto } from "@/lib/shrink-photo";
 import { GUEST_SERVICE_LABELS, type GuestService } from "@/domain/guest-services";
 
@@ -79,6 +80,9 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
   const [auto, setAuto] = useState(o.autoAcceptOrders);
   const [guestOnlinePayments, setGuestOnlinePayments] = useState(o.guestOnlinePayments);
   const [publicServices, setPublicServices] = useState<GuestService[]>(o.guestServices);
+  const [bookingPaymentMode, setBookingPaymentMode] = useState(o.bookingPaymentMode);
+  const [paymentQr, setPaymentQr] = useState(o.bookingPaymentQrUrl);
+  const [qrBusy, setQrBusy] = useState(false);
   const [review, setReview] = useState(o.reviewUrl ?? "");
   const [roomServices, setRoomServices] = useState<RoomRequestKind[]>(o.roomServices);
   const [wifiSsid, setWifiSsid] = useState(o.wifiSsid);
@@ -95,7 +99,7 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
   const [logoMessage, setLogoMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
   // What is on screen against what was last saved, so the save bar can say if anything changed
-  const snapshot = JSON.stringify({ city, address, gstin, fssai, sc, tips, auto, guestOnlinePayments, publicServices, review, roomServices, wifiSsid, wifiPassword, hours: hoursOn ? hours : null });
+  const snapshot = JSON.stringify({ city, address, gstin, fssai, sc, tips, auto, guestOnlinePayments, publicServices, bookingPaymentMode, review, roomServices, wifiSsid, wifiPassword, hours: hoursOn ? hours : null });
   const [savedSnapshot, setSavedSnapshot] = useState(snapshot);
   const dirty = snapshot !== savedSnapshot;
 
@@ -220,6 +224,7 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
         tipPresetsBp: tips.map((t) => Math.round(t * 100)),
         autoAcceptOrders: auto, guestOnlinePayments, reviewUrl: review, roomServices, wifiSsid, wifiPassword,
         guestServices: publicServices,
+        bookingPaymentMode,
         openingHours: hoursOn ? hours : null,
       });
       setMsg(res.ok ? { ok: true, text: "Saved." } : { ok: false, text: res.message });
@@ -358,6 +363,24 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
               <div className="flex sm:justify-end"><Toggle on={publicServices.includes(service)} onChange={enabled => setPublicServices(current => enabled ? [...current, service] : current.filter(value => value !== service))} label={`Show ${GUEST_SERVICE_LABELS[service].title}`} disabled={!canEdit} /></div>
             </Row>)}
             <div className="py-4 text-sm text-muted">Only services included in your package can appear. Turning off party reservations also pauses new public bookings. Existing bookings and table or room QR codes stay accessible.</div>
+            <Row label="Booking advance payments" hint="Choose how guests pay for reservation advances and preordered food."><select className={`${fieldCls} w-full border border-line bg-surface px-3`} value={bookingPaymentMode} onChange={event => setBookingPaymentMode(event.target.value as typeof bookingPaymentMode)} disabled={!canEdit}><option value="gateway">Online gateway checkout</option><option value="manual_qr" disabled={!paymentQr}>Restaurant’s UPI QR · staff verifies receipt</option></select></Row>
+            <div className="py-4">
+              <p className="text-sm font-semibold">Restaurant payment QR</p><p className="mt-1 text-xs text-muted">Upload the merchant QR issued by your bank or payment app. QR uploads save immediately; save changes to switch the booking payment method.</p>
+              {paymentQr && <Image src={paymentQr} alt="Restaurant payment QR" width={220} height={220} unoptimized className="mt-3 max-h-56 rounded-xl border border-line bg-white object-contain p-2" />}
+              <label className="mt-3 inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border border-line px-4 text-sm font-semibold"><Upload size={16} />{qrBusy ? "Saving QR…" : paymentQr ? "Change payment QR" : "Upload payment QR"}<input type="file" className="sr-only" accept="image/png,image/jpeg,image/webp" disabled={!canEdit || qrBusy} onChange={async event => {
+                const file = event.currentTarget.files?.[0]; event.currentTarget.value = "";
+                if (!file) return;
+                if (file.size > 2 * 1024 * 1024) { setMsg({ ok: false, text: "Choose a clear payment QR image up to 2 MB." }); return; }
+                setQrBusy(true);
+                try {
+                  const base64 = await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(",")[1]); reader.onerror = reject; reader.readAsDataURL(file); });
+                  const result = await uploadBookingPaymentQrAction(file.name, file.type, base64);
+                  if (!result.ok || !result.url) { setMsg({ ok: false, text: result.ok ? "Could not save the QR." : result.message }); return; }
+                  setPaymentQr(result.url); setMsg({ ok: true, text: "Payment QR saved. Choose the booking payment method and save changes." });
+                } catch { setMsg({ ok: false, text: "Could not upload the payment QR. Try again." }); }
+                finally { setQrBusy(false); }
+              }} /></label>
+            </div>
             <a className="inline-flex min-h-11 items-center py-3 font-semibold text-brand-strong underline underline-offset-4" href={`/r/${encodeURIComponent(o.code)}`} target="_blank" rel="noreferrer">Preview restaurant link ↗</a>
           </Section>
 

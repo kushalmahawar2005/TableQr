@@ -84,6 +84,25 @@ export async function storeMenuImage(input: MenuImageUpload) {
   return { key, url: `${bucket.publicBase}/${key}` };
 }
 
+/** Bank-issued payment QRs retain sharp edges; never run them through the lossy menu-photo budget. */
+export async function storePaymentQr(input: MenuImageUpload) {
+  if (!/^image\/(jpeg|png|webp)$/.test(input.contentType) || input.bytes.byteLength > 5 * 1024 * 1024) throw new AppError("invalid_state", "Choose a JPG, PNG or WebP payment QR up to 5 MB.");
+  const meta = await sharp(input.bytes, { limitInputPixels: 25_000_000 }).metadata().catch(() => null);
+  if (!meta?.width || !meta.height || Math.min(meta.width, meta.height) < 200) throw new AppError("invalid_state", "Use a clear payment QR image at least 200 px wide.");
+  const bytes = await sharp(input.bytes, { limitInputPixels: 25_000_000 }).rotate().resize({ width: 2000, height: 2000, fit: "inside", withoutEnlargement: true }).webp({ lossless: true }).toBuffer();
+  const key = `payment-qr/${input.tenantId}/${input.brandId}/${randomUUID()}.webp`;
+  if (process.env.MENU_STORAGE_DRIVER === "local") {
+    const file = path.join(process.cwd(), "public", "uploads", key);
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(file, bytes);
+    return { url: `/uploads/${key}` };
+  }
+  const bucket = photoBucket();
+  if (!bucket) throw new AppError("invalid_state", "Image storage is not configured.");
+  await put(bucket, key, bytes);
+  return { url: `${bucket.publicBase}/${key}` };
+}
+
 export async function removeLocalMenuImage(url: string | null | undefined) {
   if (!url?.startsWith("/uploads/")) return;
   for (const u of [url, smallKeyOf(url)]) {

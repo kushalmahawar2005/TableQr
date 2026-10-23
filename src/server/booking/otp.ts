@@ -87,7 +87,7 @@ export async function verifyBookingOtp(outletCode: string, token: string, device
     await tx.insert(s.guests).values({ tenantId: scope.tenantId, phone: ch.phone, name: cleanName, consentMarketing: marketingConsent, consentPersonalisation: false, consentVersion: "booking-v1", consentAt: marketingConsent ? now : null, lastSeenAt: now }).onDuplicateKeyUpdate({ set: { name: cleanName, consentMarketing: marketingConsent, consentVersion: "booking-v1", consentAt: marketingConsent ? now : null, lastSeenAt: now } });
     const [guest] = await tx.select({ id: s.guests.id }).from(s.guests).where(and(eq(s.guests.tenantId, scope.tenantId), eq(s.guests.phone, ch.phone)));
     await tx.update(s.otpChallenges).set({ verifiedAt: now, guestId: guest.id }).where(and(eq(s.otpChallenges.tenantId, scope.tenantId), eq(s.otpChallenges.id, ch.id)));
-    await tx.update(s.reservations).set({ guestId: guest.id, name: cleanName, phone: ch.phone, updatedAt: now }).where(and(eq(s.reservations.tenantId, scope.tenantId), eq(s.reservations.id, row.id)));
+    await tx.update(s.reservations).set({ guestId: guest.id, name: cleanName, phone: ch.phone, bookingDeviceId: deviceId, updatedAt: now }).where(and(eq(s.reservations.tenantId, scope.tenantId), eq(s.reservations.id, row.id)));
     return { ok: true as const, guestId: guest.id, phone: ch.phone };
   }, LOCK_THEN_READ);
   if (!result.ok) throw result.error;

@@ -53,6 +53,7 @@ const booking = (id: string, over: Partial<Res> & { date?: string; hh?: number; 
     preorderTotalPaise: 0,
     ...over,
     advanceReceivedPaise: over.advanceReceivedPaise ?? 0,
+    manualAdvance: null,
   };
 };
 

@@ -10,6 +10,16 @@ export async function queueBookingNotification(input: { tenantId: string; outlet
   try { const [row] = await db.insert(s.bookingNotifications).values({ tenantId: input.tenantId, outletId: input.outletId, reservationId: input.reservationId ?? null, waitlistEntryId: input.waitlistEntryId ?? null, type: input.type, recipient: input.recipient, channel: input.channel, idempotencyKey: input.idempotencyKey, scheduledAt: input.scheduledAt ?? new Date() }).$returningId(); return row.id; } catch { const [row] = await db.select({ id: s.bookingNotifications.id }).from(s.bookingNotifications).where(and(eq(s.bookingNotifications.tenantId, input.tenantId), eq(s.bookingNotifications.idempotencyKey, input.idempotencyKey))); return row?.id ?? null; }
 }
 
+export async function queueReservationConfirmation(scope: { tenantId: string; outletId: string }, row: { id: string; phone: string | null; startAt: Date }, now = new Date()) {
+  if (!row.phone) return;
+  const notifications = [
+    { type: "booking_confirmation" as const, key: "booking-confirmed", at: now },
+    { type: "booking_reminder_24h" as const, key: "booking-reminder-24h", at: new Date(row.startAt.getTime() - 24 * 3600_000) },
+    { type: "booking_reminder_2h" as const, key: "booking-reminder-2h", at: new Date(row.startAt.getTime() - 2 * 3600_000) },
+  ];
+  for (const notification of notifications) await queueBookingNotification({ ...scope, reservationId: row.id, type: notification.type, recipient: row.phone, channel: "sms", idempotencyKey: `${notification.key}:${row.id}`, scheduledAt: notification.at });
+}
+
 export async function processBookingNotifications(now = new Date()) {
   // isolation-exempt: the authenticated service task intentionally drains due rows across tenants.
   const rows = await db.transaction(async (tx) => tx.select().from(s.bookingNotifications).where(and(inArray(s.bookingNotifications.status, ["pending", "failed"]), lte(s.bookingNotifications.scheduledAt, now))).orderBy(s.bookingNotifications.scheduledAt).limit(100).for("update"), LOCK_THEN_READ);

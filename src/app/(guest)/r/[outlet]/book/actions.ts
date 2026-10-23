@@ -6,8 +6,15 @@ import { AppError } from "@/server/errors";
 import { arriveBookingPublic, bookingByToken, bookingPreorderMenu, cancelBookingPublic, createBookingHold, createGroupRequest, getBookingAvailability, confirmBooking, lateBookingPublic, rescheduleBookingPublic, saveBookingPreorder } from "@/server/booking/core";
 import { sendBookingOtp, verifyBookingOtp } from "@/server/booking/otp";
 import { startReservationCredit } from "@/server/booking/credit";
+import { claimManualAdvance } from "@/server/booking/manual-advance";
+import { uuidv7 } from "@/db/id";
 
-const device = async () => (await cookies()).get(DEVICE_COOKIE)?.value ?? "booking-device";
+const device = async () => {
+  const jar = await cookies();
+  let id = jar.get(DEVICE_COOKIE)?.value;
+  if (!id) { id = uuidv7(); jar.set(DEVICE_COOKIE, id, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: 365 * 24 * 3600 }); }
+  return id;
+};
 const fail = (e: unknown) => ({ ok: false as const, code: e instanceof AppError ? e.code : "failed", message: e instanceof AppError ? e.message : "That did not go through. Try again." });
 
 export async function availabilityAction(outletCode: string, input: { date: string; partySize: number; seatingPreference?: string | null; tableClass?: string | null; zoneId?: string | null }) {
@@ -19,7 +26,11 @@ export async function holdAction(outletCode: string, input: { date: string; star
 }
 
 export async function bookingSummaryAction(outletCode: string, token: string) {
-  try { const { row } = await bookingByToken(outletCode, token); return { ok: true as const, data: { reference: row.publicReference, name: row.name, phone: row.phone, partySize: row.partySize, startAt: row.startAt.getTime(), endAt: row.expectedEndAt.getTime(), status: row.status, holdExpiresAt: row.holdExpiresAt?.getTime() ?? null, seatingPreference: row.seatingPreference, creditRequiredPaise: row.creditRequiredPaise, creditPaidPaise: row.creditPaidPaise, preorder: row.preorder ?? [] } }; } catch (e) { return fail(e); }
+  try { const { row } = await bookingByToken(outletCode, token); return { ok: true as const, data: { reference: row.publicReference, name: row.name, phone: row.phone, partySize: row.partySize, startAt: row.startAt.getTime(), endAt: row.expectedEndAt.getTime(), status: row.status, holdExpiresAt: row.holdExpiresAt?.getTime() ?? null, seatingPreference: row.seatingPreference, creditRequiredPaise: row.creditRequiredPaise, creditPaidPaise: row.creditPaidPaise + row.advanceReceivedPaise, preorder: row.preorder ?? [], verified: !!row.guestId, paymentMode: row.advancePaymentMode, paymentQrUrl: row.advancePaymentQrUrl, manualReference: row.manualAdvanceReference, manualClaimedAt: row.manualAdvanceClaimedAt?.getTime() ?? null, manualConfirmedAt: row.manualAdvanceConfirmedAt?.getTime() ?? null } }; } catch (e) { return fail(e); }
+}
+
+export async function claimBookingAdvanceAction(outletCode: string, token: string, reference: string) {
+  try { return { ok: true as const, data: await claimManualAdvance(outletCode, token, reference) }; } catch (error) { return fail(error); }
 }
 
 export async function bookingPreorderMenuAction(outletCode: string) {

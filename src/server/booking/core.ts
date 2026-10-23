@@ -15,7 +15,7 @@ import { loadPolicy } from "../floor/policy";
 import { syncEvents, syncTableHolds } from "../floor/sync";
 import { publish } from "../realtime/publish";
 import { topics } from "../realtime/token";
-import { queueBookingNotification } from "./notifications";
+import { queueReservationConfirmation } from "./notifications";
 import { audit } from "../staff/audit";
 import type { StaffSession } from "../staff/auth";
 import { loadItems } from "../guest/menu";
@@ -42,7 +42,7 @@ export type BookingSlot = {
   creditReason: string | null;
 };
 
-type OutletScope = { tenantId: string; brandId: string; outletId: string; outletCode: string; timezone: string; openingHours: WeeklyHours | null; name: string; address: string; city: string; guestServices?: GuestService[] | null };
+type OutletScope = { tenantId: string; brandId: string; outletId: string; outletCode: string; timezone: string; openingHours: WeeklyHours | null; name: string; address: string; city: string; guestServices?: GuestService[] | null; bookingPaymentMode?: "gateway" | "manual_qr"; bookingPaymentQrUrl?: string | null };
 
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const publicRef = () => `TQ-${randomBytes(5).toString("hex").toUpperCase()}`;
@@ -50,7 +50,7 @@ const liveStatuses = [...LIVE];
 
 async function outletScope(run: Runner, outletCode: string): Promise<OutletScope> {
   // isolation-exempt: the tenant is resolved from the public outlet code before scoped queries.
-  const [o] = await run.select({ tenantId: s.outlets.tenantId, brandId: s.outlets.brandId, outletId: s.outlets.id, outletCode: s.outlets.code, timezone: s.outlets.timezone, openingHours: s.outlets.openingHours, name: s.outlets.name, address: s.outlets.address, city: s.outlets.city, guestServices: s.outlets.guestServices })
+  const [o] = await run.select({ tenantId: s.outlets.tenantId, brandId: s.outlets.brandId, outletId: s.outlets.id, outletCode: s.outlets.code, timezone: s.outlets.timezone, openingHours: s.outlets.openingHours, name: s.outlets.name, address: s.outlets.address, city: s.outlets.city, guestServices: s.outlets.guestServices, bookingPaymentMode: s.outlets.bookingPaymentMode, bookingPaymentQrUrl: s.outlets.bookingPaymentQrUrl })
     .from(s.outlets).where(eq(s.outlets.code, String(outletCode).trim().toUpperCase()));
   if (!o) throw new AppError("not_found", "We could not find this restaurant.");
   return o;
@@ -203,6 +203,7 @@ export async function getBookingAvailability(outletCode: string, input: { date: 
 export async function createBookingHold(outletCode: string, input: { date: string; startAt: number; partySize: number; preference?: BookingPreference; requestId: string; holdToken: string }, now = new Date()) {
   const scope = await outletScope(db, outletCode);
   await requireOnlineBookings(scope);
+  if (scope.bookingPaymentMode === "manual_qr" && !scope.bookingPaymentQrUrl) throw new AppError("invalid_state", "The restaurant has not added its booking payment QR yet. Please contact staff.");
   await validateZone(db, scope, input.preference?.zoneId);
   const policy = policyWithFallback(await loadPolicy(db, scope));
   const startAt = new Date(Number(input.startAt));
@@ -219,7 +220,7 @@ export async function createBookingHold(outletCode: string, input: { date: strin
     const id = uuidv7();
     const manage = input.holdToken;
     const reference = publicRef();
-    await tx.insert(s.reservations).values({ id, tenantId: scope.tenantId, outletId: scope.outletId, name: "Pending guest", publicReference: reference, manageTokenHash: hash(manage), manageTokenExpiresAt: new Date(now.getTime() + 90 * 86_400_000), bookingRequestId: input.requestId, partySize: Number(input.partySize), startAt, expectedEndAt: endAt, status: "requested", source: "online", seatingPreference: input.preference?.seatingPreference ?? null, requestedZoneId: input.preference?.zoneId ?? null, requestedTableClass: input.preference?.tableClass ?? null, holdExpiresAt, holdOwnerHash: tokenHash, creditRequiredPaise: credit.amountPaise, creditPaidPaise: 0, creditAppliedPaise: 0, creditStatus: credit.amountPaise ? "required" : "none", createdAt: now, updatedAt: now });
+    await tx.insert(s.reservations).values({ id, tenantId: scope.tenantId, outletId: scope.outletId, name: "Pending guest", publicReference: reference, manageTokenHash: hash(manage), manageTokenExpiresAt: new Date(now.getTime() + 90 * 86_400_000), bookingRequestId: input.requestId, partySize: Number(input.partySize), startAt, expectedEndAt: endAt, status: "requested", source: "online", seatingPreference: input.preference?.seatingPreference ?? null, requestedZoneId: input.preference?.zoneId ?? null, requestedTableClass: input.preference?.tableClass ?? null, holdExpiresAt, holdOwnerHash: tokenHash, advancePaymentMode: scope.bookingPaymentMode ?? "gateway", advancePaymentQrUrl: scope.bookingPaymentQrUrl ?? null, creditRequiredPaise: credit.amountPaise, creditPaidPaise: 0, creditAppliedPaise: 0, creditStatus: credit.amountPaise ? "required" : "none", createdAt: now, updatedAt: now });
     await tx.insert(s.reservationTables).values(chosen.map((t) => ({ id: uuidv7(), tenantId: scope.tenantId, reservationId: id, tableId: t.id })));
     await tx.insert(s.reservationHistory).values({ tenantId: scope.tenantId, reservationId: id, kind: "hold_created", after: { startAt, endAt, tableIds: chosen.map((t) => t.id) }, createdAt: now });
     return { ...(await tx.select().from(s.reservations).where(and(eq(s.reservations.tenantId, scope.tenantId), eq(s.reservations.id, id))))[0], manageToken: manage } as typeof s.reservations.$inferSelect & { manageToken: string };
@@ -259,7 +260,7 @@ export async function saveBookingPreorder(outletCode: string, token: string, lin
     if (!row) throw new AppError("not_found", "This booking link is not valid.");
     if (row.status !== "requested" || !row.holdExpiresAt || row.holdExpiresAt <= now) throw new AppError("invalid_state", "Your table hold has expired. Start a new booking to change its preorder.");
     const [started] = await tx.select({ status: s.reservationCredits.status }).from(s.reservationCredits).where(and(eq(s.reservationCredits.tenantId, scope.tenantId), eq(s.reservationCredits.reservationId, row.id), inArray(s.reservationCredits.status, ["pending", "paid"]))).limit(1);
-    if (started) throw new AppError("invalid_state", "The advance payment has already started, so the preorder is locked.");
+    if (started || row.manualAdvanceClaimedAt) throw new AppError("invalid_state", "The advance payment has already started, so the preorder is locked.");
     const items = await loadItems(tx, scope, now, [...new Set(lines.map((line) => String(line.itemId))) ]);
     const byId = new Map(items.map((loaded) => [loaded.item.id, loaded]));
     const snapshot: NonNullable<typeof row.preorder> = [];
@@ -296,7 +297,7 @@ export async function confirmBooking(outletCode: string, token: string, input: {
     if (row.status === "confirmed") return row.id;
     if (row.status !== "requested") throw new AppError("invalid_state", "This booking is no longer awaiting confirmation.");
     if (row.status === "requested" && (!row.holdExpiresAt || row.holdExpiresAt <= now)) throw new AppError("conflict", "Your booking hold expired. Please choose another time.", { reason: "hold_expired" });
-    if (row.creditRequiredPaise > row.creditPaidPaise) throw new AppError("payment_required", "Booking credit payment is required before confirmation.");
+    if (row.creditRequiredPaise > row.creditPaidPaise + row.advanceReceivedPaise) throw new AppError("payment_required", "The advance must be received before this booking can be confirmed.");
     if (!row.guestId || !row.phone || (input.guestId && input.guestId !== row.guestId)) throw new AppError("verification_required", "Verify your mobile number before confirming this booking.");
     const [verifiedGuest] = await tx.select({ id: s.guests.id }).from(s.guests).where(and(eq(s.guests.tenantId, scope.tenantId), eq(s.guests.id, row.guestId), eq(s.guests.phone, row.phone)));
     if (!verifiedGuest) throw new AppError("verification_required", "Verify your mobile number before confirming this booking.");
@@ -307,11 +308,7 @@ export async function confirmBooking(outletCode: string, token: string, input: {
   }, LOCK_THEN_READ);
   await publish(scope, [{ topic: topics.floor, type: "booking.updated", data: { reservationId: result } }]);
   const confirmed = (await bookingByToken(outletCode, token)).row;
-  if (confirmed.phone) {
-    await queueBookingNotification({ tenantId: scope.tenantId, outletId: scope.outletId, reservationId: confirmed.id, type: "booking_confirmation", recipient: confirmed.phone, channel: "sms", idempotencyKey: `booking-confirmed:${confirmed.id}`, scheduledAt: now });
-    await queueBookingNotification({ tenantId: scope.tenantId, outletId: scope.outletId, reservationId: confirmed.id, type: "booking_reminder_24h", recipient: confirmed.phone, channel: "sms", idempotencyKey: `booking-reminder-24h:${confirmed.id}`, scheduledAt: new Date(confirmed.startAt.getTime() - 24 * 3600_000) });
-    await queueBookingNotification({ tenantId: scope.tenantId, outletId: scope.outletId, reservationId: confirmed.id, type: "booking_reminder_2h", recipient: confirmed.phone, channel: "sms", idempotencyKey: `booking-reminder-2h:${confirmed.id}`, scheduledAt: new Date(confirmed.startAt.getTime() - 2 * 3600_000) });
-  }
+  await queueReservationConfirmation(scope, confirmed, now);
   return { row: confirmed, scope };
 }
 

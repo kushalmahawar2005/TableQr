@@ -319,6 +319,19 @@ const STEPS: Step[] = [
       await addColumn(db, "outlets", "guest_services", "json");
     },
   },
+  {
+    tag: "0038_true_morg", when: 1792771676818, hash: "7d3da9aac2941e308e5484f38b836ac8ba2e3505664e90aecab2719f69d606c0",
+    apply: async (db) => {
+      await addColumn(db, "outlets", "booking_payment_mode", "enum('gateway','manual_qr') DEFAULT 'gateway' NOT NULL");
+      await addColumn(db, "outlets", "booking_payment_qr_url", "varchar(500)");
+      await addColumn(db, "reservations", "manual_advance_reference", "varchar(40)");
+      await addColumn(db, "reservations", "manual_advance_claimed_at", "datetime(3)");
+      await addColumn(db, "reservations", "manual_advance_confirmed_at", "datetime(3)");
+      await addColumn(db, "reservations", "advance_payment_mode", "enum('gateway','manual_qr') DEFAULT 'gateway' NOT NULL");
+      await addColumn(db, "reservations", "advance_payment_qr_url", "varchar(500)");
+      await addColumn(db, "reservations", "booking_device_id", "varchar(64)");
+    },
+  },
 ];
 
 /** drizzle/0015, the last migration before these steps */

@@ -222,6 +222,9 @@ export async function seatReservation(staff: FloorActor, input: { reservationId:
     let preorderStations: string[] = [];
     let preorderStatus: "accepted" | "placed" = "placed";
     if (r.preorder?.length) {
+      const preorderParticipantId = uuidv7();
+      await tx.insert(s.participants).values({ id: preorderParticipantId, tenantId: scope.tenantId, sessionId, displayName: r.name.slice(0, 40), deviceId: r.bookingDeviceId, guestId: r.bookingDeviceId ? r.guestId : null, addedByUserId: staff.userId, joinedAt: now });
+      if (r.bookingDeviceId) await tx.update(s.tableSessions).set({ hostParticipantId: preorderParticipantId }).where(and(eq(s.tableSessions.tenantId, scope.tenantId), eq(s.tableSessions.id, sessionId)));
       const itemIds = [...new Set(r.preorder.map((line) => line.itemId))];
       const overrides = await tx.select().from(s.outletItemOverrides).where(and(eq(s.outletItemOverrides.tenantId, scope.tenantId), eq(s.outletItemOverrides.outletId, scope.outletId), inArray(s.outletItemOverrides.itemId, itemIds))).orderBy(s.outletItemOverrides.itemId).for("update");
       const overrideByItem = new Map(overrides.map((override) => [override.itemId, override]));
@@ -238,7 +241,7 @@ export async function seatReservation(staff: FloorActor, input: { reservationId:
       preorderStatus = accepted ? "accepted" : "placed";
       preorderOrderId = uuidv7();
       await tx.insert(s.orders).values({ id: preorderOrderId, tenantId: scope.tenantId, outletId: scope.outletId, sessionId, roundNo, placedByUserId: staff.userId, clientRequestId: `reservation-preorder:${r.id}`, status: accepted ? "accepted" : "placed", note: `Preorder · ${r.name}`.slice(0, 140), placedAt: now, acceptedAt: accepted ? now : null });
-      await tx.insert(s.orderLines).values(r.preorder.map((line) => ({ tenantId: scope.tenantId, orderId: preorderOrderId!, sessionId, participantId: null, itemId: line.itemId, nameEn: line.nameEn, nameHi: line.nameHi, modifiers: line.modifiers, modifierChoices: line.modifierChoices, unitPricePaise: line.unitPricePaise, qty: line.qty, taxRateBp: line.taxRateBp, station: line.station, prepMinutes: line.prepMinutes, allergensSnapshot: line.allergens, isJainSnapshot: line.isJain, spiceLevelSnapshot: line.spiceLevel, sharedWith: null, personalForPickup: false, status: accepted ? "accepted" as const : "placed" as const, createdAt: now })));
+      await tx.insert(s.orderLines).values(r.preorder.map((line) => ({ tenantId: scope.tenantId, orderId: preorderOrderId!, sessionId, participantId: preorderParticipantId, itemId: line.itemId, nameEn: line.nameEn, nameHi: line.nameHi, modifiers: line.modifiers, modifierChoices: line.modifierChoices, unitPricePaise: line.unitPricePaise, qty: line.qty, taxRateBp: line.taxRateBp, station: line.station, prepMinutes: line.prepMinutes, allergensSnapshot: line.allergens, isJainSnapshot: line.isJain, spiceLevelSnapshot: line.spiceLevel, sharedWith: null, personalForPickup: false, status: accepted ? "accepted" as const : "placed" as const, createdAt: now })));
       preorderStations = [...new Set(r.preorder.map((line) => line.station))];
       await tx.insert(s.tickets).values(preorderStations.map((station) => ({ tenantId: scope.tenantId, outletId: scope.outletId, orderId: preorderOrderId!, station, createdAt: now })));
       const qtyByItem = new Map<string, number>();

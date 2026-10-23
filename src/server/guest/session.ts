@@ -111,6 +111,14 @@ async function seat(input: SeatInput): Promise<Seated | { refused: JoinCodeRefus
       if (check) return { refused: check };
     }
 
+    // Legacy bookings without a bound phone still have a bill participant for their preorder.
+    // The first scanner adopts that unverified row; OTP is still required before placing an order.
+    const preorderGuest = open?.session.source === "reservation" && !open.session.hostParticipantId && open.people.length === 1 ? open.people[0] : null;
+    if (preorderGuest && !preorderGuest.deviceId && !preorderGuest.guestId) {
+      await tx.update(s.participants).set({ deviceId: input.deviceId, guestId: verified?.guestId ?? null, displayName: verified?.name ?? preorderGuest.displayName }).where(and(eq(s.participants.tenantId, tenantId), eq(s.participants.id, preorderGuest.id)));
+      await tx.update(s.tableSessions).set({ hostParticipantId: preorderGuest.id }).where(and(eq(s.tableSessions.tenantId, tenantId), eq(s.tableSessions.id, open!.session.id)));
+      return { sessionId: open!.session.id, participantId: preorderGuest.id, isHost: true, isNew: false, changed: true };
+    }
     let sessionId = open?.session.id;
     const isNew = !sessionId;
     if (!sessionId) {

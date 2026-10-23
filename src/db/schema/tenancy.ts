@@ -173,6 +173,8 @@ export const outlets = mysqlTable(
     guestOnlinePayments: boolean("guest_online_payments").notNull().default(true),
     /** Choices shown on the public restaurant entry link; null follows the tenant's package. */
     guestServices: json("guest_services").$type<GuestService[]>(),
+    bookingPaymentMode: mysqlEnum("booking_payment_mode", ["gateway", "manual_qr"]).notNull().default("gateway"),
+    bookingPaymentQrUrl: varchar("booking_payment_qr_url", { length: 500 }),
     /** Open mode: first order of a new session above this needs staff confirmation */
     newSessionCapPaise: int("new_session_cap_paise").notNull().default(300000),
     soldOutDisplay: mysqlEnum("sold_out_display", ["hide", "grey"]).notNull().default("grey"),

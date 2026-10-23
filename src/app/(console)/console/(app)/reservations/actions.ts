@@ -7,6 +7,7 @@ import type { StaffSession } from "@/server/staff/auth";
 import { staffFor } from "@/server/staff/request";
 import { createCalendarReservation, editReservationDetails, getReservationCalendar, updateGroupRequestStatus, type CalendarInput, type ReservationDetailsPatch } from "@/server/staff/reservations";
 import { consoleSectionRoles } from "@/lib/staff-permissions";
+import { confirmManualAdvance } from "@/server/booking/manual-advance";
 
 // Reservation Calendar server actions. Staff, role and outlet always come from the httpOnly cookie;
 // the client sends only ids and values, and every service checks the role again.
@@ -37,6 +38,10 @@ export async function editDetailsAction(id: string, patch: ReservationDetailsPat
 
 export async function reservationCreateAction(input: Parameters<typeof createCalendarReservation>[1]) {
   return run((s) => createCalendarReservation(s, input));
+}
+
+export async function reservationConfirmAdvanceAction(id: string, reference: string) {
+  return run(s => confirmManualAdvance(s, id, reference));
 }
 
 export async function groupRequestStatusAction(id: string, status: "contacted" | "cancelled") {

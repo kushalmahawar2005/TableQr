@@ -8,6 +8,7 @@ import { bookingByToken } from "./core";
 
 export async function startReservationCredit(outletCode: string, token: string, requestId: string, callbackUrl: string) {
   const { row, scope } = await bookingByToken(outletCode, token);
+  if (row.advancePaymentMode !== "gateway") throw new AppError("invalid_state", "Pay using the restaurant’s payment QR and submit your transaction reference.");
   if (row.creditRequiredPaise <= row.creditPaidPaise) return { paid: true as const };
   const gateway = gatewayFor(); if (!gateway) throw new AppError("invalid_state", "Online booking credit is not available. Please contact the restaurant.");
   const [existing] = await db.select().from(s.reservationCredits).where(and(eq(s.reservationCredits.tenantId, scope.tenantId), eq(s.reservationCredits.reservationId, row.id), eq(s.reservationCredits.clientRequestId, requestId)));

@@ -97,6 +97,13 @@ export const reservations = mysqlTable(
     creditAppliedPaise: int("credit_applied_paise").notNull().default(0),
     /** Advance recorded as received by restaurant staff; separate from online booking credit. */
     advanceReceivedPaise: int("advance_received_paise").notNull().default(0),
+    manualAdvanceReference: varchar("manual_advance_reference", { length: 40 }),
+    manualAdvanceClaimedAt: at("manual_advance_claimed_at"),
+    manualAdvanceConfirmedAt: at("manual_advance_confirmed_at"),
+    /** Payment instructions are frozen at the hold so later setting edits cannot change checkout. */
+    advancePaymentMode: mysqlEnum("advance_payment_mode", ["gateway", "manual_qr"]).notNull().default("gateway"),
+    advancePaymentQrUrl: varchar("advance_payment_qr_url", { length: 500 }),
+    bookingDeviceId: varchar("booking_device_id", { length: 64 }),
     creditStatus: mysqlEnum("credit_status", ["none", "required", "pending", "paid", "applied", "refunded", "forfeited", "failed"]).notNull().default("none"),
     /** Guest-selected dishes captured at booking; converted into a kitchen order when seated. */
     preorder: json("preorder").$type<{ itemId: string; nameEn: string; nameHi: string | null; qty: number; unitPricePaise: number; taxRateBp: number; station: string; prepMinutes: number; allergens: string[] | null; isJain: boolean; spiceLevel: number | null; modifierChoices: { groupId: string; modifierId: string }[]; modifiers: { nameEn: string; nameHi: string | null; priceDeltaPaise: number }[] }[]>(),

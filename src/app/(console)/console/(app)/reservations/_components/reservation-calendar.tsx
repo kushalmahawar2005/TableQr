@@ -10,6 +10,7 @@ import {
   reservationArriveAction,
   reservationCancelAction,
   reservationCreateAction,
+  reservationConfirmAdvanceAction,
   reservationNoShowAction,
   reservationReassignAction,
   reservationRescheduleAction,
@@ -376,6 +377,7 @@ function ReservationCard({ r, selected, onSelect }: { r: CalendarReservation; se
       {r.occasion && <p className="mt-1 text-caption text-muted">{r.occasion}</p>}
       {r.preorder.length > 0 && <p className="mt-1 text-caption font-semibold text-brand-strong">Preorder · {r.preorder.reduce((sum, line) => sum + line.qty, 0)} items · ₹{(r.preorderTotalPaise / 100).toLocaleString("en-IN")}</p>}
       {r.advanceReceivedPaise > 0 && <p className="mt-1 text-caption font-semibold text-[var(--state-available-text)]">Advance received · ₹{(r.advanceReceivedPaise / 100).toLocaleString("en-IN")}</p>}
+      {r.manualAdvance && !r.manualAdvance.confirmedAt && <p className="mt-1 text-caption font-semibold text-warning">UPI advance · receipt needs verification</p>}
       {r.lateMinutes > 0 && <p className="mt-1 text-caption font-semibold text-warning">{r.lateMinutes} min late</p>}
       {r.credit && <p className="mt-1 text-caption font-semibold text-warning">Credit: ₹{(r.credit.amountPaise / 100).toLocaleString("en-IN")} · {r.credit.status}</p>}
     </button>
@@ -447,6 +449,15 @@ function Drawer({ reservation: r, data, preview, onDone, onClose }: { reservatio
         )}
       </dl>
       {r.notes && <p className="text-muted">{r.notes}</p>}
+      {r.manualAdvance?.confirmedAt && ["requested", "cancelled", "no_show"].includes(r.status) && <p className="rounded-xl border border-line bg-brand-soft p-3 text-sm font-semibold">Advance receipt is recorded, but the booking is not confirmed. Contact the guest to arrange a new booking or a refund.</p>}
+      {r.manualAdvance && !r.manualAdvance.confirmedAt && <section className="rounded-xl border border-line bg-brand-soft p-4 text-sm">
+        <h3 className="font-semibold">Verify UPI advance receipt</h3><p className="mt-2">Guest reports paying ₹{(r.manualAdvance.requiredPaise / 100).toLocaleString("en-IN")}. Reference: <strong className="break-all">{r.manualAdvance.reference}</strong></p>
+        <p className="mt-2">Check the transaction in your bank or payment app before confirming. If the table hold has expired, receipt will be recorded and you must arrange a new booking or refund with the guest.</p>
+        {data.mayEdit && <button type="button" disabled={working} className={`${plainButton} mt-3 w-full bg-surface`} onClick={() => {
+          if (!window.confirm(`I have checked my bank/payment app and received ₹${(r.manualAdvance!.requiredPaise / 100).toLocaleString("en-IN")} for reference ${r.manualAdvance!.reference}. Record receipt?`)) return;
+          void act(() => reservationConfirmAdvanceAction(r.id, r.manualAdvance!.reference!));
+        }}>I have verified receipt</button>}
+      </section>}
 
       {error && (
         <p role="alert" className="rounded-input border border-danger p-3 text-danger">
