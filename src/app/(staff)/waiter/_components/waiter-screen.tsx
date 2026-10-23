@@ -10,7 +10,6 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { copy, money, requestNames, requestUrgency } from "../_copy";
 import * as actions from "../actions";
 import { signOutAction } from "@/app/(console)/console/login/actions";
-import { enableStaffPushNotifications } from "@/lib/staff-push-client";
 
 type Tab = "tasks" | "tables" | "order" | "me";
 type Draft = { itemId: string; qty: number; modifierIds: string[]; note: string; name: string; paise: number };
@@ -53,7 +52,7 @@ export function WaiterScreen({
   const [search, setSearch] = useState(""), [dark, setDark] = useState(theme === "dark");
   // Shift status, set by the manager on the dashboard: only a waiter on duty is rung for new tasks
   const dutyRef = useRef(initial.identity.duty);
-  const [alerts, setAlerts] = useState(true), [awake, setAwake] = useState(false), [notifState, setNotifState] = useState<string>("default"), [pushReady, setPushReady] = useState(false);
+  const [alerts, setAlerts] = useState(true), [awake, setAwake] = useState(false);
   const [acked, setAcked] = useState<Set<string>>(new Set());
   const alertsRef = useRef(true), pingRef = useRef<(text: string, quiet?: boolean) => void>(() => {}), audioRef = useRef<AudioContext | null>(null), seenReady = useRef(new Set(initial.ready.map((g) => g.id)));
   const seen = useRef(new Set(initial.requests.map((r) => r.id))), mutation = useRef(false), orderKey = useRef<string | null>(null), settleKey = useRef<string | null>(null);
@@ -68,12 +67,6 @@ export function WaiterScreen({
       queueMicrotask(() => { setAlerts(a); alertsRef.current = a; setAwake(w); });
     } catch { /* storage blocked: keep defaults */ }
     try { const raw = JSON.parse(localStorage.getItem("tq_waiter_acked") ?? "[]"); if (Array.isArray(raw)) queueMicrotask(() => setAcked(new Set(raw.map(String)))); } catch { /* ignore */ }
-    if (typeof Notification !== "undefined") queueMicrotask(() => setNotifState(Notification.permission));
-    if ("serviceWorker" in navigator) {
-      void navigator.serviceWorker.getRegistration("/").then((registration) => registration?.pushManager.getSubscription()).then((subscription) => {
-        if (subscription) setPushReady(true);
-      }).catch(() => {});
-    }
     // Phones suspend sound when the screen locks or the app goes to the background, so wake it on every tap and on return
     const unlock = () => { try { audioRef.current ??= new AudioContext(); if (audioRef.current.state !== "running") void audioRef.current.resume(); } catch { /* no audio */ } };
     const back = () => { if (document.visibilityState === "visible" && audioRef.current) unlock(); };
@@ -510,9 +503,6 @@ export function WaiterScreen({
                 <button type="button" role="switch" aria-checked={awake} className={`${btn} justify-between`} onClick={() => { const v = !awake; setAwake(v); try { localStorage.setItem("tq_waiter_awake", v ? "on" : "off"); } catch { /* ignore */ } }}>
                   <span className="flex items-center gap-2"><MonitorSmartphone className="size-5" aria-hidden="true" />{L("Keep screen on", "स्क्रीन चालू रखें")}</span><b className={awake ? "text-[var(--state-available-text)]" : "text-muted"}>{awake ? L("On", "चालू") : L("Off", "बंद")}</b>
                 </button>
-                {!pushReady && notifState !== "denied" && notifState !== "unsupported" && typeof Notification !== "undefined" && (
-                  <button type="button" className={btn} onClick={() => void enableStaffPushNotifications().then((r) => { setNotifState(r.permission); setPushReady(r.ok); setMessage(r.ok ? L("Background push alerts are on for this device.", "इस डिवाइस पर बैकग्राउंड पुश अलर्ट चालू हैं।") : r.error); })}>{notifState === "granted" ? L("Set up background alerts", "बैकग्राउंड अलर्ट सेट करें") : L("Allow notifications", "नोटिफिकेशन की अनुमति दें")}</button>
-                )}
                 <button type="button" className={btn} onClick={() => pingRef.current(L("Test alert: new request", "टेस्ट अलर्ट: नया अनुरोध"))}>{L("Test alert", "अलर्ट टेस्ट करें")}</button>
               </div>
               <p className="mt-2 text-xs text-muted">{L("iPhone does not vibrate in a browser; the beep and notification still work. Alerts stop if the phone is locked and the page is closed.", "iPhone ब्राउज़र में वाइब्रेट नहीं करता; बीप और नोटिफिकेशन चलते हैं। फ़ोन लॉक हो और पेज बंद हो तो अलर्ट नहीं आएँगे।")}</p>

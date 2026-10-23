@@ -28,7 +28,7 @@ export default async function RoomQrSheetPage(props: { searchParams: Promise<Rec
 
   return (
     <main className="min-h-dvh bg-neutral-100 text-neutral-900">
-      <style>{`@page{size:${size.toUpperCase()};margin:8mm}@media print{.no-print{display:none!important}body{background:#fff}.poster{break-after:page;break-inside:avoid;border:0!important;box-shadow:none!important;margin:0!important;min-height:0!important}.poster:last-child{break-after:auto}}`}</style>
+      <style>{`@page{size:${size.toUpperCase()};margin:0}@media print{.no-print{display:none!important}body{background:#fff}.poster{break-after:page;break-inside:avoid;border:0!important;box-shadow:none!important;margin:0!important;padding:8mm!important;min-height:0!important}.poster:last-child{break-after:auto}}`}</style>
       <PrintBar count={rooms.length} size={size} outlet={staff.outlet.name} single={false} back={{ href: "/console/rooms", label: "← Back to rooms" }} noun={["room", "rooms"]} />
       {rooms.length === 0 ? (
         <p className="no-print mx-auto max-w-md p-10 text-center text-neutral-600">No rooms yet. Add your rooms first, then come back to print.</p>

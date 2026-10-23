@@ -341,7 +341,7 @@ export function VerifyForm({
             )}
             {st.challenge.devCode && !preview && !codeOff && (
               <p className="mt-2 inline-block rounded-md border border-dashed border-line px-2 py-0.5 text-label text-muted">
-                Dev only · code <span className="tabular">{st.challenge.devCode}</span>
+                Demo OTP · code <span className="tabular">{st.challenge.devCode}</span>
               </p>
             )}
           </div>

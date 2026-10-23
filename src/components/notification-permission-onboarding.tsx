@@ -71,8 +71,8 @@ export function NotificationPermissionOnboarding({ lang = "en" }: { lang?: Lang 
   if (!visible) return null;
 
   return (
-    <aside role="region" aria-label={hi ? "नोटिफिकेशन सेटअप" : "Notification setup"} className="mx-auto flex w-full max-w-screen-2xl items-start gap-3 px-4 pt-3 sm:px-6 print:hidden">
-      <div className="flex w-full items-start gap-3 rounded-2xl border border-line bg-surface p-4 shadow-sm sm:items-center sm:px-5">
+    <aside role="region" aria-label={hi ? "नोटिफिकेशन सेटअप" : "Notification setup"} className="mx-auto w-full max-w-screen-2xl px-4 pt-3 sm:px-6 print:hidden">
+      <div className="grid w-full grid-cols-[2.5rem_minmax(0,1fr)] items-start gap-x-3 gap-y-3 rounded-2xl border border-line bg-surface p-4 shadow-sm sm:flex sm:items-center sm:gap-3 sm:px-5">
         <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-brand-soft text-brand-strong">
           <BellRing className="size-5" aria-hidden="true" />
         </span>
@@ -81,7 +81,7 @@ export function NotificationPermissionOnboarding({ lang = "en" }: { lang?: Lang 
           <p className="mt-0.5 text-sm text-muted">{hi ? "नए ऑर्डर और टेबल अनुरोधों के अलर्ट ऐप बंद होने पर भी पाएं।" : "Get alerts for new orders and table requests, even when the app is closed."}</p>
           {error && <p role="alert" className="mt-1 text-sm font-medium text-danger">{error}</p>}
         </div>
-        <div className="flex shrink-0 items-center gap-2 self-center">
+        <div className="col-start-2 flex min-w-0 items-center justify-end gap-2 sm:ml-auto sm:shrink-0">
           <button type="button" disabled={busy} onClick={() => void enable()} className="inline-flex min-h-10 items-center justify-center rounded-xl bg-brand px-3.5 text-sm font-semibold text-white transition-colors hover:bg-brand-strong disabled:opacity-60">
             {busy ? (hi ? "एक पल…" : "One moment…") : needsPermission ? (hi ? "चालू करें" : "Enable notifications") : (hi ? "सेटअप पूरा करें" : "Finish setup")}
           </button>

@@ -12,10 +12,10 @@ export function posterHtml(p: { outlet: string; table: string; svg: string; join
   const qr = QR_SIZES.find((s) => s.id === p.size)!.qrMm;
   const scale = p.size === "a4" ? 1.5 : p.size === "a5" ? 1.15 : 1;
   return `<!doctype html><html><head><meta charset="utf-8"><title>Table ${esc(p.table)} QR</title><style>
-@page{size:${p.size.toUpperCase()};margin:8mm}
+@page{size:${p.size.toUpperCase()};margin:0}
 *{box-sizing:border-box}
 body{margin:0;font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#1f2937;text-align:center}
-.card{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:${4 * scale}mm;border:0.4mm dashed #b8b2a7;border-radius:4mm;padding:${6 * scale}mm;break-inside:avoid}
+.card{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:${4 * scale}mm;margin:8mm;border:0.4mm dashed #b8b2a7;border-radius:4mm;padding:${6 * scale}mm;break-inside:avoid}
 h1{margin:0;font-size:${7 * scale}mm}
 .sub{margin:0;font-size:${4.2 * scale}mm;color:#4b5563}
 .qr{width:${qr}mm;height:${qr}mm}.qr svg{width:100%;height:100%;display:block}

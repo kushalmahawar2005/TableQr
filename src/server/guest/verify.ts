@@ -8,7 +8,7 @@ import { checkFirstName, placeholderName } from "@/domain/guest-name";
 import { CONSENT_VERSION, isCompleteCode, normaliseCode, OTP } from "@/domain/otp";
 import { countryByIso, isValidIndianMobile, normaliseIndianMobile, toE164 } from "@/domain/phone";
 import { LOCK_THEN_READ, type Runner } from "../db-types";
-import { smsSender } from "../sms/sender";
+import { smsMockEnabled, smsSender } from "../sms/sender";
 import { assertCanSeat, findOpenSession, findTableByQr } from "./table";
 
 // G2: guests confirm their mobile with a 4-digit SMS code before placing an order. Codes are per
@@ -189,7 +189,7 @@ export async function sendCode(input: {
       .where(and(eq(s.otpChallenges.tenantId, tenantId), eq(s.otpChallenges.id, view.challengeId)));
     return { ok: false, error: "sms_failed" };
   }
-  return sender.name === "mock" && process.env.NODE_ENV !== "production" ? { ...view, devCode: code } : view;
+  return sender.name === "mock" && (process.env.NODE_ENV !== "production" || smsMockEnabled()) ? { ...view, devCode: code } : view;
 }
 
 export type VerifyOutcome =

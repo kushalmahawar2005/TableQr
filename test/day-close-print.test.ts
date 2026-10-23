@@ -13,12 +13,13 @@ describe("day close print", () => {
       topItems: [{ name: "Tomato <Soup>", qty: 4, paise: 40000 }], openTables: [{ table: "T1", totalPaise: 0 }],
     } as DayClose;
     const html = dayCloseHtml(r, "BMW");
-    expect(html).toContain("@page{size:80mm auto");
+    expect(html).toContain("@page{size:80mm 130mm;margin:0}");
     expect(html).toContain("DAY CLOSE");
     expect(html).toContain("UPI (1)");
     expect(html).toContain("₹315.00");
     expect(html).toContain("Tomato &lt;Soup&gt; x4");
     expect(html).toContain("Still open: T1");
+    expect(html).not.toMatch(/Cash counted|Signature/);
     expect(html).not.toMatch(/sidebar|<nav|Dashboard/);
   });
 });

@@ -9,7 +9,7 @@ import { OTP, normaliseCode } from "@/domain/otp";
 import { isValidIndianMobile, normaliseIndianMobile, toE164 } from "@/domain/phone";
 import { LOCK_THEN_READ } from "../db-types";
 import { AppError } from "../errors";
-import { smsSender } from "../sms/sender";
+import { smsMockEnabled, smsSender } from "../sms/sender";
 import { bookingByToken } from "./core";
 
 const secret = () => process.env.OTP_SECRET || (process.env.NODE_ENV === "production" ? "" : "tableqr-local-otp-secret");
@@ -32,7 +32,7 @@ export async function sendBookingOtp(outletCode: string, token: string, deviceId
   await db.insert(s.otpChallenges).values({ id, tenantId: scope.tenantId, outletId: scope.outletId, tableId: table.tableId, deviceId, phone, codeHash: hashCode(id, code), expiresAt: later(now, OTP.validSeconds), resendAt: later(now, OTP.resendSeconds), createdAt: now });
   const sent = await smsSender().sendOtp({ phone, code, outletName: scope.name });
   if (!sent.ok) { await db.update(s.otpChallenges).set({ deadAt: now }).where(and(eq(s.otpChallenges.tenantId, scope.tenantId), eq(s.otpChallenges.id, id))); throw new AppError("sms_failed", "We could not send a code."); }
-  return { challengeId: id, phone, expiresIn: OTP.validSeconds, devCode: smsSender().name === "mock" && process.env.NODE_ENV !== "production" ? code : undefined };
+  return { challengeId: id, phone, expiresIn: OTP.validSeconds, devCode: smsSender().name === "mock" && (process.env.NODE_ENV !== "production" || smsMockEnabled()) ? code : undefined };
 }
 
 export async function verifyBookingOtp(outletCode: string, token: string, deviceId: string, challengeId: string, codeInput: string, name: string, marketingConsent = false, now = new Date()) {

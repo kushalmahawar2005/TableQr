@@ -43,7 +43,7 @@ export default async function ReceiptPage(props: { params: Promise<{ outlet: str
   };
   const row = "flex items-start justify-between gap-3 py-1";
   return (
-    <main lang={lang} className="min-h-dvh py-6 text-ink">
+    <main lang={lang} className="receipt-print-page min-h-dvh py-6 text-ink">
       <Link href={`/r/${encodeURIComponent(outlet)}/t/${encodeURIComponent(table)}/paid`} className="inline-flex min-h-11 items-center text-body font-semibold text-brand-strong underline underline-offset-4 print:hidden">
         {w.back}
       </Link>

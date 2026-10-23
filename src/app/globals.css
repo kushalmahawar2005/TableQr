@@ -491,7 +491,9 @@ body {
 .theme-dark .dashboard-theme [class*="focus-visible:outline-forest"]:focus-visible { outline-color: #86c9a8; }
 /* Paper is white: printing from the dark console uses the light palette, so text stays black and sharp */
 @media print {
-  @page { size: A4 portrait; margin: 8mm; }
+  /* Browser print dialogs can ignore CSS page margins in "Minimum" mode.
+     Keep the page itself edge-to-edge and give each paper document its own gutter. */
+  @page { size: A4 portrait; margin: 0; }
   .theme-dark, html.console-ui {
     color-scheme: light;
     --ink: #1f2937; --paper: #ffffff; --surface: #ffffff; --line: #ddd6ca; --muted: #4b5260;
@@ -515,9 +517,14 @@ body {
   .recharts-responsive-container, .recharts-wrapper { width: 100% !important; max-width: 100%; height: auto !important; }
   .recharts-surface { width: 100% !important; height: auto !important; }
   body:has(#reports-print) { background: #fff !important; }
-  #reports-print { box-sizing: border-box; width: 100%; max-width: none; margin: 0 !important; padding: 0 !important; color: #111 !important; font-family: Arial, Helvetica, sans-serif; font-size: 9pt; line-height: 1.28; }
-  /* @page already supplies the paper gutter; don't add a second set of side margins. */
-  #gst-report-print, #items-report-print { box-sizing: border-box; width: 100%; max-width: none; margin: 0 !important; padding: 0 !important; }
+  #reports-print, #gst-report-print, #items-report-print {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: none;
+    margin: 0 !important;
+    padding: 8mm !important;
+  }
+  #reports-print { color: #111 !important; font-family: Arial, Helvetica, sans-serif; font-size: 9pt; line-height: 1.28; }
   /* Keep the GST note with the invoice table on short reports instead of orphaning it onto a nearly empty page. */
   #gst-report-print { font-size: 9pt; line-height: 1.25; }
   #gst-report-print section, #gst-report-print > div { margin-top: 6pt !important; }
@@ -551,6 +558,7 @@ body {
   #reports-print .report-paper-table td:not(:first-child) { text-align: right; }
   #reports-print .report-paper-table th, #reports-print .report-paper-table td { padding-top: 2.5pt; padding-bottom: 2.5pt; }
   #reports-print > :last-child { margin-bottom: 0 !important; }
+  .receipt-print-page { box-sizing: border-box; width: 100%; padding: 8mm !important; }
   body:has(#reports-screen), body:has(#gst-report-print), body:has(#items-report-print) { min-height: 0 !important; }
 }
 
