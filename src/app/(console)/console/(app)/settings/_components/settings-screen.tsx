@@ -389,7 +389,7 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
           </Section>
 
           <Section id="delivery" icon={Store} title="Delivery setup" desc="Service areas, delivery charges and payment preferences for this outlet.">
-            {o.deliveryAvailable ? <DeliverySettings value={deliveryPolicy} onChange={setDeliveryPolicy} disabled={!canEdit} hasGateway={o.paymentGateway.configured && o.paymentGateway.available} /> : <p className="py-4 text-sm text-muted">Delivery is not included in this restaurant’s package. TableQR can enable it from the tenant’s feature settings.</p>}
+            {o.deliveryAvailable ? <DeliverySettings value={deliveryPolicy} onChange={setDeliveryPolicy} disabled={!canEdit} hasGateway={o.paymentGateway.configured && o.paymentGateway.available} hasPaymentQr={!!paymentQr} /> : <p className="py-4 text-sm text-muted">Delivery is not included in this restaurant’s package. TableQR can enable it from the tenant’s feature settings.</p>}
           </Section>
 
           <Section id="room-guest" icon={Wifi} title="Room guest page" desc="Choose what checked-in guests can request and share your Wi-Fi details.">

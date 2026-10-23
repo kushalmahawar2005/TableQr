@@ -1,6 +1,6 @@
 import "server-only";
 import { createHash, randomBytes } from "node:crypto";
-import { and, count, eq, gte, inArray } from "drizzle-orm";
+import { and, count, eq, gte, inArray, ne } from "drizzle-orm";
 import { db } from "@/db";
 import { uuidv7 } from "@/db/id";
 import * as s from "@/db/schema";
@@ -10,11 +10,20 @@ import { AppError } from "../errors";
 import { placeOrderInTransaction } from "../guest/order";
 import { quoteKey } from "@/domain/pricing";
 import { syncBill } from "../billing/bill";
-import { announceBill, settleExternalGatewayInTransaction } from "../billing/payments";
+import { announceBill, settleExternalGatewayInTransaction, settleManualQrInTransaction } from "../billing/payments";
 import { publish } from "../realtime/publish";
 import { topics } from "../realtime/token";
 import { TAKEAWAY_CLASS } from "../floor/takeaway-class";
 import { deliveryOutlet, cleanDeliveryCart, priceDeliveryCart } from "./catalog";
+import { audit } from "../staff/audit";
+import { requireStaffRole } from "../staff/waiter";
+import type { StaffSession } from "../staff/auth";
+
+export function cleanManualPaymentReference(value: unknown) {
+  const reference = String(value ?? "").trim().toUpperCase();
+  if (!/^[A-Z0-9-]{6,40}$/.test(reference)) throw new AppError("invalid_state", "Enter the UPI transaction reference (6–40 letters or numbers).");
+  return reference;
+}
 
 export const deliveryTokenHash = (token: string) => createHash("sha256").update(token).digest("hex");
 export const deliveryScope = (outlet: { tenantId: string; id: string }) => ({ tenantId: outlet.tenantId, outletId: outlet.id });
@@ -36,7 +45,7 @@ export async function createDeliveryCheckout(code: string, deviceId: string, inp
     await tx.select({ id: s.tenants.id }).from(s.tenants).where(eq(s.tenants.id, outlet.tenantId)).for("update");
     const [recent] = await tx.select({ n: count() }).from(s.deliveryCheckouts).where(and(eq(s.deliveryCheckouts.tenantId, outlet.tenantId), eq(s.deliveryCheckouts.deviceId, deviceId), gte(s.deliveryCheckouts.createdAt, new Date(now.getTime() - 3600_000))));
     if (Number(recent.n) >= 10) throw new AppError("rate_limited", "Too many checkout attempts. Please try again later.");
-    await tx.insert(s.deliveryCheckouts).values({ id, tenantId: outlet.tenantId, outletId: outlet.id, deviceId, tokenHash: deliveryTokenHash(token), lines, address, paymentMode: outlet.policy.paymentMode, totalPaise: quote.totalPaise, deliveryFeePaise: quote.deliveryFeePaise, expiresAt: new Date(now.getTime() + 30 * 60_000), createdAt: now });
+    await tx.insert(s.deliveryCheckouts).values({ id, tenantId: outlet.tenantId, outletId: outlet.id, deviceId, tokenHash: deliveryTokenHash(token), lines, address, paymentMode: outlet.policy.paymentMode, manualPaymentQrUrl: outlet.policy.paymentMode === "manual_qr" ? outlet.bookingPaymentQrUrl : null, totalPaise: quote.totalPaise, deliveryFeePaise: quote.deliveryFeePaise, expiresAt: new Date(now.getTime() + 30 * 60_000), createdAt: now });
   }, LOCK_THEN_READ);
   return { token, quote };
 }
@@ -47,13 +56,37 @@ export async function deliveryCheckout(code: string, token: string, deviceId: st
   if (!token || token.length > 100 || !deviceId) throw new AppError("not_found", "Delivery checkout not found.");
   const [row] = await db.select().from(s.deliveryCheckouts).where(and(eq(s.deliveryCheckouts.tenantId, outlet.tenantId), eq(s.deliveryCheckouts.outletId, outlet.id), eq(s.deliveryCheckouts.tokenHash, deliveryTokenHash(token)), eq(s.deliveryCheckouts.deviceId, deviceId))).limit(1);
   if (!row) throw new AppError("not_found", "Delivery checkout not found.");
-  if (row.status === "draft" && row.expiresAt <= now) throw new AppError("expired", "Your checkout expired. Please review your cart again.");
+  if (row.status === "draft" && row.expiresAt <= now && !(row.paymentMode === "manual_qr" && row.paymentStatus === "pending" && row.manualPaymentReference)) throw new AppError("expired", "Your checkout expired. Please review your cart again.");
   return { outlet, row };
 }
 
 export async function placeDeliveryOrder(code: string, token: string, deviceId: string, expectedTotalPaise: number, now = new Date()) {
   const { outlet: found, row } = await deliveryCheckout(code, token, deviceId, now);
   return placeKnownDeliveryOrder(code, found, row, deviceId, expectedTotalPaise, now);
+}
+
+/** A guest can submit a reference, but only an authorized staff confirmation records payment
+ * and creates the kitchen order. Submission is idempotent for the same checkout/reference. */
+export async function claimManualQrDeliveryPayment(code: string, token: string, deviceId: string, expectedTotalPaise: number, rawReference: unknown, now = new Date()) {
+  const reference = cleanManualPaymentReference(rawReference);
+  const { outlet, row } = await deliveryCheckout(code, token, deviceId, now);
+  if (row.status !== "draft" || row.paymentMode !== "manual_qr" || !row.manualPaymentQrUrl) throw new AppError("invalid_state", "This delivery checkout does not use restaurant QR payment.");
+  if (!row.guestId || !row.verifiedAt || !row.name || !row.phone) throw new AppError("verification_required", "Verify your mobile number before submitting a payment reference.");
+  if (row.paymentStatus === "pending" && row.manualPaymentReference === reference) return { submitted: true as const };
+  if (row.paymentStatus !== "none" || row.manualPaymentReference) throw new AppError("conflict", "A payment reference is already submitted. Contact the restaurant if you need help.");
+  if (row.expiresAt <= now) throw new AppError("expired", "Your checkout expired. Please review your cart again.");
+  const quote = await priceDeliveryCart(db, outlet, row.lines, row.address.pincode, now);
+  if (!Number.isSafeInteger(expectedTotalPaise) || quote.totalPaise !== expectedTotalPaise || quote.totalPaise !== row.totalPaise) throw new AppError("price_changed", "Prices or delivery charges changed. Start a new checkout and review the total.");
+  await db.transaction(async tx => {
+    const [checkout] = await tx.select().from(s.deliveryCheckouts).where(and(eq(s.deliveryCheckouts.tenantId, outlet.tenantId), eq(s.deliveryCheckouts.outletId, outlet.id), eq(s.deliveryCheckouts.id, row.id))).for("update");
+    if (checkout.paymentStatus === "pending" && checkout.manualPaymentReference === reference) return;
+    if (checkout.status !== "draft" || checkout.expiresAt <= now || checkout.paymentMode !== "manual_qr" || checkout.paymentStatus !== "none" || checkout.manualPaymentReference) throw new AppError("conflict", "This checkout has changed. Refresh and try again.");
+    await tx.select({ id: s.tenants.id }).from(s.tenants).where(eq(s.tenants.id, outlet.tenantId)).for("update");
+    const [used] = await tx.select({ id: s.deliveryCheckouts.id }).from(s.deliveryCheckouts).where(and(eq(s.deliveryCheckouts.tenantId, outlet.tenantId), ne(s.deliveryCheckouts.id, row.id), eq(s.deliveryCheckouts.manualPaymentReference, reference))).limit(1);
+    if (used) throw new AppError("conflict", "That UPI reference was already submitted. Check the reference and try again.");
+    await tx.update(s.deliveryCheckouts).set({ manualPaymentReference: reference, manualPaymentClaimedAt: now, paymentStatus: "pending", expiresAt: new Date(now.getTime() + 24 * 60 * 60_000) }).where(and(eq(s.deliveryCheckouts.tenantId, outlet.tenantId), eq(s.deliveryCheckouts.id, row.id)));
+  }, LOCK_THEN_READ);
+  return { submitted: true as const };
 }
 
 /** Server-only continuation used after the restaurant's gateway confirms a delivery payment. */
@@ -67,18 +100,19 @@ export async function placePaidDeliveryOrder(checkoutId: string, now = new Date(
   return placeKnownDeliveryOrder(outlet.code, found, row, row.deviceId, row.totalPaise, now);
 }
 
-async function placeKnownDeliveryOrder(code: string, found: Awaited<ReturnType<typeof deliveryOutlet>>, row: typeof s.deliveryCheckouts.$inferSelect, deviceId: string, expectedTotalPaise: number, now: Date) {
+async function placeKnownDeliveryOrder(code: string, found: Awaited<ReturnType<typeof deliveryOutlet>>, row: typeof s.deliveryCheckouts.$inferSelect, deviceId: string, expectedTotalPaise: number, now: Date, manualVerification?: { reference: string; staff: StaffSession }) {
   // A lost response can be retried even after delivery has been paused.
   if (row.sessionId) return { sessionId: row.sessionId, replayed: true };
-  const outlet = await deliveryOutlet(code, true, now);
+  const outlet = await deliveryOutlet(code, !manualVerification, now);
   if (outlet.id !== row.outletId || outlet.tenantId !== row.tenantId || row.deviceId !== deviceId) throw new AppError("not_found", "Delivery checkout not found.");
   const placed = await db.transaction(async tx => {
     const [checkout] = await tx.select().from(s.deliveryCheckouts).where(and(eq(s.deliveryCheckouts.tenantId, outlet.tenantId), eq(s.deliveryCheckouts.id, row.id))).for("update");
     if (checkout.sessionId) return { sessionId: checkout.sessionId, replayed: true as const };
-    if (checkout.expiresAt <= now || checkout.status !== "draft") throw new AppError("expired", "Your checkout expired.");
+    const claimedManualPayment = checkout.paymentMode === "manual_qr" && checkout.paymentStatus === "pending" && !!checkout.manualPaymentReference && !!checkout.manualPaymentClaimedAt;
+    if ((checkout.expiresAt <= now && !(manualVerification && claimedManualPayment)) || checkout.status !== "draft") throw new AppError("expired", "Your checkout expired.");
     if (!checkout.guestId || !checkout.verifiedAt || !checkFirstName(checkout.name ?? "").ok) throw new AppError("verification_required", "Verify your phone before placing this delivery order.");
     if (checkout.paymentMode === "gateway" && (checkout.paymentStatus !== "paid" || !checkout.gatewayPaymentId)) throw new AppError("invalid_state", "Complete the restaurant’s secure online payment before placing this delivery order.", { reason: "payment_required" });
-    if (checkout.paymentMode === "manual_qr") throw new AppError("invalid_state", "Restaurant QR prepayment is not available for delivery yet.");
+    if (checkout.paymentMode === "manual_qr" && (!manualVerification || !claimedManualPayment || checkout.manualPaymentReference !== manualVerification.reference || !checkout.manualPaymentQrUrl)) throw new AppError("invalid_state", "The restaurant must verify the submitted QR payment before placing this order.");
     if (checkout.paymentMode === "cod" && checkout.paymentStatus !== "none") throw new AppError("invalid_state", "This delivery checkout has an unexpected payment state.");
     const itemIds = [...new Set(checkout.lines.map(line => line.itemId))];
     await tx.select({ id: s.outletItemOverrides.id }).from(s.outletItemOverrides).where(and(eq(s.outletItemOverrides.tenantId, outlet.tenantId), eq(s.outletItemOverrides.outletId, outlet.id), inArray(s.outletItemOverrides.itemId, itemIds))).orderBy(s.outletItemOverrides.id).for("update");
@@ -99,8 +133,11 @@ async function placeKnownDeliveryOrder(code: string, found: Awaited<ReturnType<t
     await tx.update(s.tableSessions).set({ status: "bill_requested", orderingLocked: true }).where(and(eq(s.tableSessions.tenantId, outlet.tenantId), eq(s.tableSessions.id, sessionId)));
     const billPayment = checkout.paymentMode === "gateway"
       ? await settleExternalGatewayInTransaction(tx, { paymentId: checkout.id, tenantId: outlet.tenantId, outletId: outlet.id, sessionId, participantId, provider: checkout.paymentProvider ?? "", gatewayRef: checkout.gatewayRef ?? "", gatewayPaymentId: checkout.gatewayPaymentId ?? "", amountPaise: checkout.totalPaise }, now)
-      : null;
-    await tx.update(s.deliveryCheckouts).set({ status: "placed", sessionId, deliveryFeePaise: quote.deliveryFeePaise, totalPaise: quote.totalPaise, placedAt: now }).where(and(eq(s.deliveryCheckouts.tenantId, outlet.tenantId), eq(s.deliveryCheckouts.id, row.id)));
+      : manualVerification
+        ? await settleManualQrInTransaction(tx, { paymentId: checkout.id, tenantId: outlet.tenantId, outletId: outlet.id, sessionId, participantId, reference: manualVerification.reference, amountPaise: checkout.totalPaise, takenByUserId: manualVerification.staff.userId }, now)
+        : null;
+    await tx.update(s.deliveryCheckouts).set({ status: "placed", sessionId, deliveryFeePaise: quote.deliveryFeePaise, totalPaise: quote.totalPaise, placedAt: now, ...(manualVerification ? { paymentStatus: "paid" as const, manualPaymentConfirmedAt: now } : {}) }).where(and(eq(s.deliveryCheckouts.tenantId, outlet.tenantId), eq(s.deliveryCheckouts.id, row.id)));
+    if (manualVerification) await audit(tx, manualVerification.staff, { action: "delivery.manual_payment_confirmed", entity: "delivery", entityId: checkout.id, before: { paymentStatus: checkout.paymentStatus, reference: checkout.manualPaymentReference }, after: { paymentStatus: "paid", amountPaise: checkout.totalPaise }, now });
     return { sessionId, order, billPayment, replayed: false as const };
   }, LOCK_THEN_READ);
   if (!placed.replayed) {
@@ -110,9 +147,23 @@ async function placeKnownDeliveryOrder(code: string, found: Awaited<ReturnType<t
   return { sessionId: placed.sessionId, replayed: placed.replayed };
 }
 
+/** Owner/manager/cashier endpoint used by the staff queue after checking the payment in their own
+ * UPI/bank app. The payment ledger and kitchen ticket are created together and retries are safe. */
+export async function confirmManualQrDeliveryPayment(staff: StaffSession, checkoutId: string, now = new Date()) {
+  await requireStaffRole(staff, ["owner", "manager", "cashier"]);
+  const [row] = await db.select().from(s.deliveryCheckouts).where(and(eq(s.deliveryCheckouts.tenantId, staff.tenantId), eq(s.deliveryCheckouts.outletId, staff.outletId), eq(s.deliveryCheckouts.id, String(checkoutId)))).limit(1);
+  if (!row) throw new AppError("not_found", "Delivery payment claim not found.");
+  if (row.sessionId && row.paymentStatus === "paid") return { sessionId: row.sessionId, replayed: true };
+  if (row.status !== "draft" || row.paymentMode !== "manual_qr" || row.paymentStatus !== "pending" || !row.manualPaymentReference || !row.manualPaymentClaimedAt || !row.guestId || !row.verifiedAt) throw new AppError("invalid_state", "This delivery payment is not awaiting verification.");
+  const [outletRow] = await db.select({ code: s.outlets.code }).from(s.outlets).where(and(eq(s.outlets.tenantId, staff.tenantId), eq(s.outlets.id, staff.outletId)));
+  if (!outletRow) throw new AppError("not_found", "Restaurant not found.");
+  const outlet = await deliveryOutlet(outletRow.code, false, now);
+  return placeKnownDeliveryOrder(outlet.code, outlet, row, row.deviceId, row.totalPaise, now, { reference: row.manualPaymentReference, staff });
+}
+
 export async function deliveryStatus(code: string, token: string, deviceId: string, now = new Date()) {
   const { outlet, row } = await deliveryCheckout(code, token, deviceId, now);
   const orders = row.sessionId ? await db.select({ status: s.orders.status }).from(s.orders).where(and(eq(s.orders.tenantId, outlet.tenantId), eq(s.orders.sessionId, row.sessionId))) : [];
   const [bill] = row.sessionId ? await db.select({ totalPaise: s.bills.totalPaise, status: s.bills.status }).from(s.bills).where(and(eq(s.bills.tenantId, outlet.tenantId), eq(s.bills.sessionId, row.sessionId))) : [];
-  return { id: row.id, status: row.status, name: row.name, address: row.address, totalPaise: bill?.totalPaise ?? row.totalPaise, deliveryFeePaise: row.deliveryFeePaise, paid: bill?.status === "paid" || row.paymentStatus === "paid", paymentMode: row.paymentMode, paymentStatus: row.paymentStatus, paymentFailureReason: row.paymentFailureReason, refundStatus: row.refundStatus, kitchenStatus: orders[0]?.status ?? null };
+  return { id: row.id, status: row.status, name: row.name, address: row.address, totalPaise: bill?.totalPaise ?? row.totalPaise, deliveryFeePaise: row.deliveryFeePaise, paid: bill?.status === "paid" || row.paymentStatus === "paid", paymentMode: row.paymentMode, paymentStatus: row.paymentStatus, paymentFailureReason: row.paymentFailureReason, refundStatus: row.refundStatus, manualPaymentQrUrl: row.manualPaymentQrUrl, manualPaymentReference: row.manualPaymentReference, manualPaymentClaimedAt: row.manualPaymentClaimedAt, kitchenStatus: orders[0]?.status ?? null };
 }

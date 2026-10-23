@@ -71,11 +71,15 @@ describe("schema update at startup", () => {
     const limits = await rows<{ n: number; lim: number }>(sql`SELECT t.table_limit AS lim, (SELECT COUNT(*) FROM dining_tables d WHERE d.tenant_id = t.id AND d.is_active = 1) AS n FROM tenants t`);
     for (const l of limits) expect(Number(l.lim)).toBe(Math.max(1, Number(l.n)));
     const recorded = await rows<{ n: number }>(sql`SELECT COUNT(*) AS n FROM __drizzle_migrations WHERE created_at > 1791043208000`);
-    expect(Number(recorded[0].n)).toBe(28);
+    expect(Number(recorded[0].n)).toBe(29);
     const deliveryColumns = await rows<{ c: string }>(sql`SELECT COLUMN_NAME AS c FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'delivery_checkouts' AND COLUMN_NAME IN ('payment_mode', 'payment_provider', 'gateway_ref', 'gateway_payment_id', 'payment_status', 'payment_failure_reason', 'refund_gateway_ref', 'refund_status') ORDER BY COLUMN_NAME`);
     expect(deliveryColumns.map((r) => r.c)).toEqual(["gateway_payment_id", "gateway_ref", "payment_failure_reason", "payment_mode", "payment_provider", "payment_status", "refund_gateway_ref", "refund_status"]);
     const deliveryIndexes = await rows<{ i: string }>(sql`SELECT INDEX_NAME AS i FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'delivery_checkouts' AND INDEX_NAME IN ('delivery_gateway_ref_uq', 'delivery_refund_gateway_ref_uq', 'delivery_payment_status_idx') GROUP BY INDEX_NAME ORDER BY INDEX_NAME`);
     expect(deliveryIndexes.map((r) => r.i)).toEqual(["delivery_gateway_ref_uq", "delivery_payment_status_idx", "delivery_refund_gateway_ref_uq"]);
+    const manualDeliveryColumns = await rows<{ c: string }>(sql`SELECT COLUMN_NAME AS c FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'delivery_checkouts' AND COLUMN_NAME IN ('manual_payment_qr_url', 'manual_payment_reference', 'manual_payment_claimed_at', 'manual_payment_confirmed_at') ORDER BY COLUMN_NAME`);
+    expect(manualDeliveryColumns.map((r) => r.c)).toEqual(["manual_payment_claimed_at", "manual_payment_confirmed_at", "manual_payment_qr_url", "manual_payment_reference"]);
+    const manualDeliveryIndexes = await rows<{ i: string }>(sql`SELECT INDEX_NAME AS i FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'delivery_checkouts' AND INDEX_NAME IN ('delivery_manual_reference_uq', 'delivery_manual_pending_idx') GROUP BY INDEX_NAME ORDER BY INDEX_NAME`);
+    expect(manualDeliveryIndexes.map((r) => r.i)).toEqual(["delivery_manual_pending_idx", "delivery_manual_reference_uq"]);
     const feeColumns = await rows<{ c: string }>(sql`SELECT COLUMN_NAME AS c FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'fee_payments' AND COLUMN_NAME IN ('client_request_id', 'gateway_ref', 'gateway_payment_id', 'failure_reason', 'checked_at') ORDER BY COLUMN_NAME`);
     expect(feeColumns.map((r) => r.c)).toEqual(["checked_at", "client_request_id", "failure_reason", "gateway_payment_id", "gateway_ref"]);
     expect(String((await rows<{ t: string }>(sql`SELECT COLUMN_TYPE AS t FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'fee_payments' AND COLUMN_NAME = 'method'`))[0].t)).toContain("'cashfree'");
@@ -96,7 +100,7 @@ describe("schema update at startup", () => {
     // Second start: nothing changes, nothing is recorded twice
     await env.db.execute(sql`UPDATE tenants SET table_limit = 99`);
     await ensureSchema(appDb.$client);
-    expect(Number((await rows<{ n: number }>(sql`SELECT COUNT(*) AS n FROM __drizzle_migrations WHERE created_at > 1791043208000`))[0].n)).toBe(28);
+    expect(Number((await rows<{ n: number }>(sql`SELECT COUNT(*) AS n FROM __drizzle_migrations WHERE created_at > 1791043208000`))[0].n)).toBe(29);
     expect((await rows<{ lim: number }>(sql`SELECT DISTINCT table_limit AS lim FROM tenants`)).map((r) => Number(r.lim))).toEqual([99]);
   });
 });

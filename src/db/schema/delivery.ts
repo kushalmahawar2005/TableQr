@@ -14,12 +14,14 @@ export const deliveryCheckouts = mysqlTable("delivery_checkouts", {
   sessionId: ref("session_id"), status: mysqlEnum("status", ["draft", "placed", "dispatched", "delivered", "cancelled"]).notNull().default("draft"),
   paymentMode: mysqlEnum("payment_mode", ["cod", "gateway", "manual_qr"]).notNull().default("cod"),
   paymentProvider: varchar("payment_provider", { length: 30 }), gatewayRef: varchar("gateway_ref", { length: 100 }), gatewayPaymentId: varchar("gateway_payment_id", { length: 100 }),
+  manualPaymentQrUrl: varchar("manual_payment_qr_url", { length: 500 }), manualPaymentReference: varchar("manual_payment_reference", { length: 40 }),
+  manualPaymentClaimedAt: at("manual_payment_claimed_at"), manualPaymentConfirmedAt: at("manual_payment_confirmed_at"),
   paymentStatus: mysqlEnum("payment_status", ["none", "pending", "paid", "failed", "refund_pending", "refunded", "refund_failed"]).notNull().default("none"),
   paymentFailureReason: varchar("payment_failure_reason", { length: 200 }), refundGatewayRef: varchar("refund_gateway_ref", { length: 100 }),
   refundStatus: mysqlEnum("refund_status", ["none", "pending", "success", "failed"]).notNull().default("none"),
   deliveryFeePaise: int("delivery_fee_paise").notNull().default(0), totalPaise: int("total_paise").notNull().default(0),
   expiresAt: at("expires_at").notNull(), createdAt: createdAt(), placedAt: at("placed_at"),
-}, t => [tenantKey("delivery_checkouts", t), uniqueIndex("delivery_token_uq").on(t.tokenHash), uniqueIndex("delivery_gateway_ref_uq").on(t.paymentProvider, t.gatewayRef), uniqueIndex("delivery_refund_gateway_ref_uq").on(t.paymentProvider, t.refundGatewayRef), index("delivery_device_idx").on(t.tenantId, t.deviceId, t.createdAt), index("delivery_outlet_idx").on(t.outletId, t.status, t.createdAt), index("delivery_payment_status_idx").on(t.tenantId, t.paymentStatus, t.createdAt), sameTenant("fk_delivery_outlet", t, t.outletId, outlets), sameTenant("fk_delivery_guest", t, t.guestId, guests), sameTenant("fk_delivery_session", t, t.sessionId, tableSessions)]);
+}, t => [tenantKey("delivery_checkouts", t), uniqueIndex("delivery_token_uq").on(t.tokenHash), uniqueIndex("delivery_gateway_ref_uq").on(t.paymentProvider, t.gatewayRef), uniqueIndex("delivery_refund_gateway_ref_uq").on(t.paymentProvider, t.refundGatewayRef), uniqueIndex("delivery_manual_reference_uq").on(t.tenantId, t.manualPaymentReference), index("delivery_device_idx").on(t.tenantId, t.deviceId, t.createdAt), index("delivery_outlet_idx").on(t.outletId, t.status, t.createdAt), index("delivery_payment_status_idx").on(t.tenantId, t.paymentStatus, t.createdAt), index("delivery_manual_pending_idx").on(t.tenantId, t.outletId, t.paymentMode, t.paymentStatus, t.manualPaymentClaimedAt), sameTenant("fk_delivery_outlet", t, t.outletId, outlets), sameTenant("fk_delivery_guest", t, t.guestId, guests), sameTenant("fk_delivery_session", t, t.sessionId, tableSessions)]);
 
 export const deliveryOtpChallenges = mysqlTable("delivery_otp_challenges", {
   id: id(), tenantId: tenantId(), outletId: ref("outlet_id").notNull(), checkoutId: ref("checkout_id").notNull(),

@@ -309,6 +309,13 @@
       "when": 1792782078349,
       "tag": "0043_sour_toad_men",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "5",
+      "when": 1792784458574,
+      "tag": "0044_swift_scalphunter",
+      "breakpoints": true
     }
   ]
 }

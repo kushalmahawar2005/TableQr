@@ -60,7 +60,7 @@ export function RefundPanel({ payments, needsApproval, disabled, hi, onChanged }
       {payments.length === 0 && <p className="mt-2 text-sm text-muted">No payments yet.</p>}
       {payments.map((p) => (
         <section key={p.id} aria-label={`Payment ${p.method} ${money(p.amountPaise)}`} className="mt-3 border-t border-line pt-3 text-sm">
-          <p className="flex flex-wrap justify-between gap-2"><span className="font-semibold">{p.method} · {p.channel === "counter" ? "counter" : "online"}</span><span className="tabular-nums">{money(p.amountPaise + p.tipPaise)} · {p.status}</span></p>
+          <p className="flex flex-wrap justify-between gap-2"><span className="font-semibold">{p.method} · {p.channel === "counter" ? "counter" : p.channel === "manual_qr" ? "restaurant QR · staff verified" : "online"}</span><span className="tabular-nums">{money(p.amountPaise + p.tipPaise)} · {p.status}</span></p>
           {p.status === "success" && (
             <dl className="mt-1 grid grid-cols-3 gap-2 text-xs text-muted">
               <div><dt>Refunded</dt><dd className="tabular-nums text-ink">{money(p.refund.refundedPaise)}</dd></div>

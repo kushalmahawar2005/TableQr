@@ -23,7 +23,7 @@ export async function deliveryOutlet(code: string, ordering = true, now = new Da
   if (ordering) {
     if (!readFeatures(row.custom ?? row.features).delivery) throw new AppError("forbidden", "Delivery is not available for this restaurant.");
     if (!policy.acceptingOrders) throw new AppError("outlet_unavailable", "Delivery is paused. Please contact the restaurant.");
-    if (policy.paymentMode === "manual_qr") throw new AppError("outlet_unavailable", "Restaurant QR prepayment is not available for delivery yet. Please choose another service or contact staff.");
+    if (policy.paymentMode === "manual_qr" && !row.outlet.bookingPaymentQrUrl) throw new AppError("outlet_unavailable", "This restaurant has not added its payment QR yet. Please contact staff.");
     if (policy.paymentMode === "gateway" && !outletGatewayFromConfig(row.outlet.paymentGatewayConfig)) throw new AppError("outlet_unavailable", "Online delivery payment is not available right now. Please contact the restaurant.");
     if (!isOpenAt(row.outlet.openingHours, row.outlet.timezone, now)) throw new AppError("outlet_unavailable", "This restaurant is closed right now.");
   }
@@ -33,7 +33,7 @@ export async function deliveryOutlet(code: string, ordering = true, now = new Da
 export async function deliveryMenu(code: string, now = new Date()) {
   const outlet = await deliveryOutlet(code, true, now);
   const items = await loadItems(db, { tenantId: outlet.tenantId, outletId: outlet.id, brandId: outlet.brandId }, now);
-  return { outlet: { code: outlet.code, name: outlet.name, logoUrl: outlet.logoUrl, policy: outlet.policy }, items: items.filter(item => isWithinCategoryWindow(item.categoryWindow, outlet.timezone, now)).map(item => ({ id: item.item.id, name: item.item.nameEn, nameHi: item.item.nameHi, description: item.item.descriptionEn, pricing: item.pricing })) };
+  return { outlet: { code: outlet.code, name: outlet.name, logoUrl: outlet.logoUrl, paymentQrUrl: outlet.policy.paymentMode === "manual_qr" ? outlet.bookingPaymentQrUrl : null, policy: outlet.policy }, items: items.filter(item => isWithinCategoryWindow(item.categoryWindow, outlet.timezone, now)).map(item => ({ id: item.item.id, name: item.item.nameEn, nameHi: item.item.nameHi, description: item.item.descriptionEn, pricing: item.pricing })) };
 }
 
 export function cleanDeliveryCart(raw: s.DeliveryCartLine[]): s.DeliveryCartLine[] {

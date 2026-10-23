@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { headers } from "next/headers";
 import { uuidv7 } from "@/db/id";
 import type { DeliveryAddress, DeliveryCartLine } from "@/db/schema/delivery";
-import { createDeliveryCheckout, deliveryStatus, placeDeliveryOrder } from "@/server/delivery/checkout";
+import { claimManualQrDeliveryPayment, createDeliveryCheckout, deliveryStatus, placeDeliveryOrder } from "@/server/delivery/checkout";
 import { priceDeliveryCart, deliveryOutlet } from "@/server/delivery/catalog";
 import { sendDeliveryOtp, verifyDeliveryOtp } from "@/server/delivery/otp";
 import { db } from "@/db";
@@ -44,6 +44,9 @@ export async function verifyDeliveryAction(outlet: string, challengeId: string, 
 }
 export async function placeDeliveryAction(outlet: string, totalPaise: number) {
   return result(async () => { const who = await identity(outlet); return placeDeliveryOrder(outlet, who.token, who.deviceId, totalPaise); });
+}
+export async function claimManualQrDeliveryAction(outlet: string, totalPaise: number, reference: string) {
+  return result(async () => { const who = await identity(outlet); return claimManualQrDeliveryPayment(outlet, who.token, who.deviceId, totalPaise, reference); });
 }
 export async function startDeliveryPaymentAction(outlet: string) {
   return result(async () => {

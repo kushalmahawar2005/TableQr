@@ -17,6 +17,18 @@ export async function deliveryQueue(staff: StaffSession) {
     .where(and(eq(s.deliveryCheckouts.tenantId, staff.tenantId), eq(s.deliveryCheckouts.outletId, staff.outletId), inArray(s.deliveryCheckouts.status, ["placed", "dispatched", "delivered"])))
     .orderBy(desc(s.deliveryCheckouts.placedAt)).limit(100);
 }
+
+export async function pendingManualDeliveryPayments(staff: StaffSession) {
+  await requireStaffRole(staff, deliveryStaffRoles);
+  return db.select({
+    id: s.deliveryCheckouts.id, name: s.deliveryCheckouts.name, phone: s.deliveryCheckouts.phone,
+    address: s.deliveryCheckouts.address, totalPaise: s.deliveryCheckouts.totalPaise,
+    reference: s.deliveryCheckouts.manualPaymentReference, claimedAt: s.deliveryCheckouts.manualPaymentClaimedAt,
+  }).from(s.deliveryCheckouts)
+    .where(and(eq(s.deliveryCheckouts.tenantId, staff.tenantId), eq(s.deliveryCheckouts.outletId, staff.outletId), eq(s.deliveryCheckouts.status, "draft"), eq(s.deliveryCheckouts.paymentMode, "manual_qr"), eq(s.deliveryCheckouts.paymentStatus, "pending")))
+    .orderBy(desc(s.deliveryCheckouts.manualPaymentClaimedAt)).limit(100);
+}
+
 export async function advanceDelivery(staff: StaffSession, id: string, next: "dispatched" | "delivered", now = new Date()) {
   await requireStaffRole(staff, deliveryStaffRoles);
   if (!["dispatched", "delivered"].includes(next)) throw new AppError("invalid_state", "Choose a valid delivery status.");

@@ -36,4 +36,12 @@ describe("outlet delivery settings", () => {
     await expect(updateOutletSettings(owner(), patch({ ...policy, paymentMode: "manual_qr" }))).rejects.toMatchObject({ code: "invalid_state" });
     expect((await getOutletSettings(owner())).deliveryPolicy).toEqual(policy);
   });
+  it("enables manual QR only after the restaurant saves its own payment QR", async () => {
+    await env.db.update(s.outlets).set({ bookingPaymentQrUrl: "https://assets.tableqr.test/restaurant-qr.png" }).where(eq(s.outlets.id, owner().outletId));
+    const manual = { ...policy, paymentMode: "manual_qr" as const };
+    await updateOutletSettings(owner(), patch(manual));
+    expect((await getOutletSettings(owner())).deliveryPolicy.paymentMode).toBe("manual_qr");
+    await env.db.update(s.outlets).set({ bookingPaymentQrUrl: null }).where(eq(s.outlets.id, owner().outletId));
+    await expect(updateOutletSettings(owner(), patch(manual))).rejects.toMatchObject({ code: "invalid_state" });
+  });
 });

@@ -4,11 +4,11 @@ import { db as appDb } from "@/db";
 import * as s from "@/db/schema";
 import { DEFAULT_DELIVERY_POLICY } from "@/domain/delivery";
 import { settleAtCounter } from "@/server/billing/payments";
-import { createDeliveryCheckout, deliveryCheckout, deliveryStatus, placeDeliveryOrder } from "@/server/delivery/checkout";
+import { claimManualQrDeliveryPayment, confirmManualQrDeliveryPayment, createDeliveryCheckout, deliveryCheckout, deliveryStatus, placeDeliveryOrder } from "@/server/delivery/checkout";
 import { reconcileDeliveryPayment, startDeliveryPayment } from "@/server/delivery/payment";
 import { sendDeliveryOtp, verifyDeliveryOtp } from "@/server/delivery/otp";
 import { mockGateway } from "@/server/payments/gateway";
-import { advanceDelivery, deliveryQueue } from "@/server/delivery/staff";
+import { advanceDelivery, deliveryQueue, pendingManualDeliveryPayments } from "@/server/delivery/staff";
 import { getFloor } from "@/server/floor/read";
 import { resolveStaff, signInStaff, type StaffSession } from "@/server/staff/auth";
 import { resetTestDb } from "./setup-db";
@@ -98,5 +98,43 @@ describe("verified delivery checkout", () => {
     expect(bill.totalPaise).toBe(created.quote.totalPaise);
     expect(payment).toMatchObject({ status: "success", channel: "mock", gatewayRef, amountPaise: created.quote.totalPaise });
     expect((await deliveryStatus("SRJ01", created.token, gatewayDevice)).paid).toBe(true);
+  });
+
+  it("holds restaurant QR delivery until staff verifies the UPI reference, then records payment and releases one kitchen order", async () => {
+    const qrDevice = "delivery-manual-qr-device";
+    await env.db.update(s.outlets).set({ bookingPaymentQrUrl: "https://assets.tableqr.test/restaurant-qr.png", deliveryPolicy: { ...DEFAULT_DELIVERY_POLICY, acceptingOrders: true, pincodes: ["302001"], deliveryFeePaise: 3000, paymentMode: "manual_qr" } }).where(eq(s.outlets.id, env.demo.outletId));
+    const created = await createDeliveryCheckout("SRJ01", qrDevice, { lines: [{ itemId: env.demo.itemIds["Dal Makhani"], qty: 1, modifierIds: [] }], address });
+    const scoped = await deliveryCheckout("SRJ01", created.token, qrDevice);
+    expect(scoped.row.manualPaymentQrUrl).toBe("https://assets.tableqr.test/restaurant-qr.png");
+    const otp = await sendDeliveryOtp("SRJ01", created.token, qrDevice, "9876543212");
+    await verifyDeliveryOtp("SRJ01", created.token, qrDevice, otp.challengeId, otp.devCode!, "Kiran");
+    await expect(placeDeliveryOrder("SRJ01", created.token, qrDevice, created.quote.totalPaise)).rejects.toMatchObject({ code: "invalid_state" });
+    await expect(claimManualQrDeliveryPayment("SRJ01", created.token, qrDevice, created.quote.totalPaise, "bad")).rejects.toMatchObject({ code: "invalid_state" });
+    await claimManualQrDeliveryPayment("SRJ01", created.token, qrDevice, created.quote.totalPaise, "upi202610240001");
+    const pending = await deliveryCheckout("SRJ01", created.token, qrDevice);
+    expect(pending.row.sessionId).toBeNull();
+    expect(pending.row.paymentStatus).toBe("pending");
+    expect((await pendingManualDeliveryPayments(owner)).map(row => row.id)).toContain(pending.row.id);
+
+    const duplicateDevice = "delivery-manual-duplicate-device";
+    const duplicate = await createDeliveryCheckout("SRJ01", duplicateDevice, { lines: [{ itemId: env.demo.itemIds["Dal Makhani"], qty: 1, modifierIds: [] }], address });
+    const duplicateOtp = await sendDeliveryOtp("SRJ01", duplicate.token, duplicateDevice, "9876543213");
+    await verifyDeliveryOtp("SRJ01", duplicate.token, duplicateDevice, duplicateOtp.challengeId, duplicateOtp.devCode!, "Kiran");
+    await expect(claimManualQrDeliveryPayment("SRJ01", duplicate.token, duplicateDevice, duplicate.quote.totalPaise, "UPI202610240001")).rejects.toMatchObject({ code: "conflict" });
+
+    const confirmed = await confirmManualQrDeliveryPayment(owner, pending.row.id);
+    expect(confirmed.sessionId).toBeTruthy();
+    expect(await confirmManualQrDeliveryPayment(owner, pending.row.id)).toMatchObject({ sessionId: confirmed.sessionId, replayed: true });
+    const completed = await deliveryCheckout("SRJ01", created.token, qrDevice);
+    expect(completed.row.paymentStatus).toBe("paid");
+    expect(completed.row.manualPaymentConfirmedAt).toBeTruthy();
+    const [bill] = await env.db.select().from(s.bills).where(eq(s.bills.sessionId, confirmed.sessionId));
+    const [payment] = await env.db.select().from(s.payments).where(eq(s.payments.id, pending.row.id));
+    expect(bill.status).toBe("paid");
+    expect(payment).toMatchObject({ status: "success", method: "upi", channel: "manual_qr", gatewayRef: "UPI202610240001", amountPaise: created.quote.totalPaise, takenByUserId: owner.userId });
+    expect((await env.db.select().from(s.orders).where(eq(s.orders.sessionId, confirmed.sessionId))).length).toBe(1);
+    expect((await deliveryQueue(owner)).find(row => row.id === pending.row.id)?.paid).toBe("paid");
+    expect((await deliveryStatus("SRJ01", created.token, qrDevice)).paid).toBe(true);
+    await expect(claimManualQrDeliveryPayment("SRJ01", created.token, qrDevice, created.quote.totalPaise, "UPI202610240001")).rejects.toMatchObject({ code: "invalid_state" });
   });
 });

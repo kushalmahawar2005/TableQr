@@ -40,7 +40,6 @@ export async function updateOutletSettings(staff: Staff, input: SettingsPatch, n
     try { deliveryPolicy = validateDeliveryPolicy(input.deliveryPolicy); }
     catch (error) { throw bad(error instanceof Error ? error.message : "Choose valid delivery settings."); }
     if (deliveryPolicy.paymentMode === "gateway" && !outletGatewayFromConfig((await db.select({ paymentGatewayConfig: s.outlets.paymentGatewayConfig }).from(s.outlets).where(and(eq(s.outlets.tenantId, staff.tenantId), eq(s.outlets.id, staff.outletId))))[0]?.paymentGatewayConfig)) throw bad("Connect this restaurant’s own live Cashfree account before enabling online delivery prepayment.");
-    if (deliveryPolicy.paymentMode === "manual_qr") throw bad("Manual QR verification for delivery is not ready yet. Choose pay on delivery or online Cashfree.");
   }
   const city = String(input.city ?? "").trim();
   const address = String(input.address ?? "").trim();

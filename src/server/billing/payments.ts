@@ -388,6 +388,40 @@ export async function settleExternalGatewayInTransaction(tx: Tx, input: {
   return { paymentId: input.paymentId, scope: confirmed.scope!, closedTableIds: confirmed.closedTableIds };
 }
 
+/** Records a restaurant-verified UPI QR payment in the normal bill ledger. The QR claim by itself
+ * never calls this; the staff-confirmation path invokes it in the same transaction that creates
+ * the delivery order, so the kitchen ticket and paid bill cannot get out of sync. */
+export async function settleManualQrInTransaction(tx: Tx, input: {
+  paymentId: string; tenantId: string; outletId: string; sessionId: string; participantId: string;
+  reference: string; amountPaise: number; takenByUserId: string;
+}, now: Date) {
+  const [bill] = await tx.select().from(s.bills).where(and(eq(s.bills.tenantId, input.tenantId), eq(s.bills.outletId, input.outletId), eq(s.bills.sessionId, input.sessionId))).for("update");
+  if (!bill) throw new AppError("not_found", "Delivery bill not found.");
+  const shares = await tx.select().from(s.billShares).where(and(eq(s.billShares.tenantId, input.tenantId), eq(s.billShares.billId, bill.id))).for("update");
+  const allocations = shares.map(share => ({ shareId: share.id, amountPaise: Math.max(0, share.amountPaise - share.paidPaise) })).filter(allocation => allocation.amountPaise > 0);
+  const duePaise = allocations.reduce((total, allocation) => total + allocation.amountPaise, 0);
+  if (duePaise !== input.amountPaise) throw new AppError("invalid_state", "The confirmed QR payment does not match the delivery bill.");
+  const [existing] = await tx.select().from(s.payments).where(and(eq(s.payments.tenantId, input.tenantId), eq(s.payments.channel, "manual_qr"), eq(s.payments.gatewayRef, input.reference))).limit(1);
+  if (existing) {
+    if (existing.id === input.paymentId && existing.amountPaise === input.amountPaise && existing.status === "success") {
+      return { paymentId: existing.id, scope: await scopeOfBill(tx, input.tenantId, input.outletId, bill.id), closedTableIds: undefined as string[] | undefined };
+    }
+    throw new AppError("conflict", "This UPI reference was already recorded. Check your bank before confirming it.");
+  }
+  const paymentId = input.paymentId;
+  await tx.insert(s.payments).values({
+    id: paymentId, tenantId: input.tenantId, outletId: input.outletId, billId: bill.id,
+    allocations, payerParticipantId: input.participantId, method: "upi", channel: "manual_qr",
+    gatewayRef: input.reference, amountPaise: input.amountPaise, tipPaise: 0, status: "initiated",
+    failureReason: null, clientRequestId: `delivery-${paymentId}`, gatewayPaymentId: null,
+    checkedAt: now, takenByUserId: input.takenByUserId, createdAt: now, updatedAt: now,
+  });
+  const [payment] = await tx.select().from(s.payments).where(and(eq(s.payments.tenantId, input.tenantId), eq(s.payments.id, paymentId))).for("update");
+  if (!payment) throw new AppError("invalid_state", "The verified QR payment could not be attached to its bill.");
+  const applied = await applyPayment(tx, payment, now);
+  return { paymentId, scope: applied.scope, closedTableIds: applied.closedTableIds };
+}
+
 async function scopeOfBill(tx: Tx, tenantId: string, outletId: string, billId: string): Promise<BillScope> {
   const [{ sessionId }] = await tx.select({ sessionId: s.bills.sessionId }).from(s.bills).where(and(eq(s.bills.tenantId, tenantId), eq(s.bills.id, billId)));
   return { tenantId, outletId, sessionId };

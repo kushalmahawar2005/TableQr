@@ -386,6 +386,17 @@ const STEPS: Step[] = [
       await addIndex(db, "delivery_checkouts", "delivery_payment_status_idx", "`tenant_id`,`payment_status`,`created_at`");
     },
   },
+  {
+    tag: "0044_swift_scalphunter", when: 1792784458574, hash: "1bde9432e3ee6fe47b864bb0ff07a01cc5e1f746f96dddc3edfef3c577ea4cf9",
+    apply: async (db) => {
+      await addColumn(db, "delivery_checkouts", "manual_payment_qr_url", "varchar(500)");
+      await addColumn(db, "delivery_checkouts", "manual_payment_reference", "varchar(40)");
+      await addColumn(db, "delivery_checkouts", "manual_payment_claimed_at", "datetime(3)");
+      await addColumn(db, "delivery_checkouts", "manual_payment_confirmed_at", "datetime(3)");
+      await addUniqueIndex(db, "delivery_checkouts", "delivery_manual_reference_uq", "`tenant_id`,`manual_payment_reference`");
+      await addIndex(db, "delivery_checkouts", "delivery_manual_pending_idx", "`tenant_id`,`outlet_id`,`payment_mode`,`payment_status`,`manual_payment_claimed_at`");
+    },
+  },
 ];
 
 /** drizzle/0015, the last migration before these steps */
