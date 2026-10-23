@@ -9,15 +9,15 @@ const METHOD: Record<string, string> = { cash: "Cash", card: "Card", upi: "UPI",
 
 export function dayCloseHtml(r: DayClose, outlet: string) {
   const optionalRows = Number(!!r.refunds.paise) + Number(!!r.bills.discountPaise) + Number(!!r.bills.serviceChargePaise) + Number(!!r.bills.roundOffPaise) + Number(!!r.bills.tipsPaise) + Number(!!r.removed.qty);
-  const paperHeight = Math.max(140, 106 + (r.methods.length + optionalRows + r.topItems.length + r.openTables.length) * 5);
+  const paperHeight = Math.max(130, 102 + (r.methods.length + optionalRows + r.topItems.length + r.openTables.length) * 5);
   const row = (a: string, v: string, cls = "") => `<div class="r ${cls}"><span>${esc(a)}</span><span>${esc(v)}</span></div>`;
   const date = new Date(`${r.date}T12:00:00Z`).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
   const printed = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" }).format(Date.now());
   return `<!doctype html><html><head><meta charset="utf-8"><title>Day close · ${esc(r.date)}</title><style>
-@page{size:80mm ${paperHeight}mm;margin:4mm}
+@page{size:80mm ${paperHeight}mm;margin:0}
 *{box-sizing:border-box}
 html{color-scheme:light;background:#fff}
-body{margin:0 auto;max-width:80mm;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;color:#000;line-height:1.4}
+body{margin:0;width:80mm;padding:4mm;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;color:#000;line-height:1.4}
 h1{font-size:16px;text-align:center;margin:0 0 2px}
 h2{font-size:12px;margin:0 0 4px;text-transform:uppercase;letter-spacing:.04em}
 .c{text-align:center}.m{font-size:11px}
@@ -52,10 +52,6 @@ ${row("Items sold", String(r.itemsSold))}
 ${r.removed.qty ? row(`Cancelled/voided (${r.removed.qty})`, rs(r.removed.paise)) : ""}
 ${r.topItems.length ? `<hr><h2>Most ordered</h2>${r.topItems.map((t, i) => row(`${i + 1}. ${t.name} x${t.qty}`, rs(t.paise))).join("")}` : ""}
 ${r.openTables.length ? `<hr><div class="w">Still open: ${esc(r.openTables.map((t) => t.table).join(", "))}</div>` : ""}
-<hr>
-<div class="c m">Cash counted: ______________</div>
-<div class="c m" style="margin-top:10px">Signature: ______________</div>
-<hr>
 <div class="c m">TableQR</div>
 </body></html>`;
 }

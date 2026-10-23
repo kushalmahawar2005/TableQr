@@ -27,9 +27,9 @@ export function kotHtml(cards: KdsCard[]) {
   const longestTicket = Math.max(1, ...cards.map((card) => card.lines.length + (card.orderNote ? 2 : 0)));
   const paperHeight = Math.max(64, 34 + longestTicket * 9);
   return `<!doctype html><html><head><meta charset="utf-8"><title>KOT</title><style>
-@page{size:80mm ${paperHeight}mm;margin:3mm}
+@page{size:80mm ${paperHeight}mm;margin:0}
 *{box-sizing:border-box}html{background:#fff;color-scheme:light}
-body{margin:0 auto;max-width:80mm;font-family:ui-monospace,Menlo,Consolas,monospace;color:#000}
+body{margin:0;width:80mm;padding:4mm;font-family:ui-monospace,Menlo,Consolas,monospace;color:#000}
 h1{font-size:22px;margin:0;text-align:center}.m{font-size:12px;text-align:center}
 hr{border:0;border-top:1px dashed #000;margin:6px 0}
 .l{font-size:16px;margin:4px 0}.x{font-size:12px;margin-left:22px}.n{font-size:13px;font-weight:700}

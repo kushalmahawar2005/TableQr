@@ -202,8 +202,8 @@ function printOrderSlip(order: OrderRow, outlet: string) {
   // previews the same narrow receipt that an 80 mm thermal printer will receive.
   const noteHeight = order.note ? Math.ceil(order.note.length / 42) * 4 : 0;
   const paperHeight = Math.max(88, 72 + order.items.length * 8 + noteHeight);
-  const pageRule = `@page{size:80mm ${paperHeight}mm;margin:3mm}`;
-  const bodyRule = "body{width:74mm;margin:0 auto;padding:2mm 1mm;font-size:12px;line-height:1.4}";
+  const pageRule = `@page{size:80mm ${paperHeight}mm;margin:0}`;
+  const bodyRule = "body{width:80mm;margin:0;padding:4mm;font-size:12px;line-height:1.4}";
   popup.document.write(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escape(kind)} ${escape(order.table)} · Order</title><style>
     ${pageRule}
     *{box-sizing:border-box}html,body{margin:0;background:#fff;color:#111;font-family:Arial,Helvetica,sans-serif}

@@ -491,7 +491,7 @@ body {
 .theme-dark .dashboard-theme [class*="focus-visible:outline-forest"]:focus-visible { outline-color: #86c9a8; }
 /* Paper is white: printing from the dark console uses the light palette, so text stays black and sharp */
 @media print {
-  @page { size: A4 portrait; margin: 12mm; }
+  @page { size: A4 portrait; margin: 8mm; }
   .theme-dark, html.console-ui {
     color-scheme: light;
     --ink: #1f2937; --paper: #ffffff; --surface: #ffffff; --line: #ddd6ca; --muted: #4b5260;
@@ -518,6 +518,13 @@ body {
   #reports-print { box-sizing: border-box; width: 100%; max-width: none; margin: 0 !important; padding: 0 !important; color: #111 !important; font-family: Arial, Helvetica, sans-serif; font-size: 9pt; line-height: 1.28; }
   /* @page already supplies the paper gutter; don't add a second set of side margins. */
   #gst-report-print, #items-report-print { box-sizing: border-box; width: 100%; max-width: none; margin: 0 !important; padding: 0 !important; }
+  /* Keep the GST note with the invoice table on short reports instead of orphaning it onto a nearly empty page. */
+  #gst-report-print { font-size: 9pt; line-height: 1.25; }
+  #gst-report-print section, #gst-report-print > div { margin-top: 6pt !important; }
+  #gst-report-print .p-5 { padding: 8pt !important; }
+  #gst-report-print h2 { padding-top: 0 !important; }
+  #gst-report-print th, #gst-report-print td { padding-top: 2pt !important; padding-bottom: 2pt !important; }
+  #gst-report-print > p:last-child { margin-top: 5pt !important; font-size: 7.5pt !important; line-height: 1.15 !important; }
   #reports-screen { min-height: 0 !important; }
   #reports-print .grid { gap: 8pt !important; }
   #reports-print > section, #reports-print > div, #reports-print section { margin-top: 8pt !important; }
