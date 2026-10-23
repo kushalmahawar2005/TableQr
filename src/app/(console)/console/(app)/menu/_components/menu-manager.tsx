@@ -89,7 +89,7 @@ function EditorForm({item,data,canEditPrice,onSaved,onPanel,seed}:{item:Data["it
   if(categoryId.startsWith("lib:")){const c=await actions.libraryEnsureCategoryAction(categoryId.slice(4));if(!c.ok){setBusy(false);await onSaved(c.error||"Failed");return}categoryId=c.data}
   const r=await actions.saveItemAction({id:newItem?undefined:draft.id,categoryId,nameEn:String(q.get("nameEn")),nameHi:String(q.get("nameHi")||""),pricePaise:Math.round(Number(q.get("price"))*100),isVeg:veg,isJain:jain,spiceLevel:spice===""?null:Number(spice),allergens,searchTerms:String(q.get("aliases")||""),prepMinutes:Number(prep),station:String(q.get("station")),imageUrl:photo});
   setBusy(false);await onSaved(r.ok?(newItem?"Dish added.":"Dish saved."):r.error||"Failed")}}>
-  <p className={hint}>{data.outlets.length>1?`Changes show up at all ${data.outlets.length} outlets.`:"Changes show up on your menu right away."}</p>
+  <p className={hint}>{data.outlets.length>1?`Dish details and base prices are shared by all ${data.outlets.length} outlets. Availability and portions are set for this outlet; custom prices are in Pricing.`:"Dish details show up on your menu right away. Availability and portions are set for this outlet."}</p>
 
   <Block title="Photo" note="A good photo helps guests choose. Square photos look best.">
    {/* Drop a photo anywhere on this box, or paste one copied from elsewhere */}
