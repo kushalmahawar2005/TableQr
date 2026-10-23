@@ -2,8 +2,9 @@
 // on restaurant data must filter by tenant_id in code. This test reads every server file and fails
 // the build if a query on a tenant-owned table does not mention tenantId.
 //
-// A query that legitimately cannot filter by tenant (the one that resolves the tenant from a public
-// QR code) is marked with an "isolation-exempt: <reason>" comment on the line before it.
+// A query that legitimately cannot filter by tenant (for example, resolving the tenant from a
+// public QR code or globally unique custom domain) is marked with an "isolation-exempt: <reason>"
+// comment immediately before the query.
 import { getTableColumns, getTableName } from "drizzle-orm";
 import { MySqlTable } from "drizzle-orm/mysql-core";
 import { readdirSync, readFileSync } from "node:fs";

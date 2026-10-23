@@ -28,6 +28,7 @@ export async function saveCustomDomain(staff: Staff, input: unknown, now = new D
   if (!staff.roles.includes("owner")) throw new AppError("forbidden", "Only the owner can manage the restaurant domain.");
   const domain = input ? normalizeDomain(input) : null;
   if (domain) {
+    // isolation-exempt: custom domains are globally unique, so ownership must be checked across tenants.
     const [claimed] = await db.select({ id: s.outlets.id }).from(s.outlets)
       .where(and(eq(s.outlets.customDomain, domain), ne(s.outlets.id, staff.outletId))).limit(1);
     if (claimed) throw invalid("That domain is already connected to another outlet.");

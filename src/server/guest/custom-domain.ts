@@ -19,6 +19,7 @@ export async function outletCodeForCustomDomain(host: string | null): Promise<st
   const labels = domain.split(".");
   if (!domain || labels.length < 2 || labels.some((label) => !label || label.length > 63 || !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label))) return null;
 
+  // isolation-exempt: resolve a globally unique public hostname before the tenant is known; return only its outlet code.
   const [outlet] = await db.select({ code: s.outlets.code })
     .from(s.outlets)
     .where(and(eq(s.outlets.customDomain, domain), isNotNull(s.outlets.customDomainVerifiedAt), eq(s.outlets.customDomainLive, true)))

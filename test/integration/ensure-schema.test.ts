@@ -39,6 +39,7 @@ describe("schema update at startup", () => {
     await env.db.execute(sql`ALTER TABLE order_lines DROP COLUMN personal_for_pickup`);
     await env.db.execute(sql`ALTER TABLE users DROP COLUMN guide`);
     await env.db.execute(sql`ALTER TABLE outlets DROP COLUMN guest_online_payments`);
+    await env.db.execute(sql`ALTER TABLE outlets DROP COLUMN custom_domain_live`);
     await env.db.execute(sql`ALTER TABLE outlets DROP COLUMN guest_services`);
     await env.db.execute(sql`ALTER TABLE outlets DROP COLUMN delivery_policy`);
     await env.db.execute(sql`ALTER TABLE outlets DROP COLUMN booking_payment_mode, DROP COLUMN booking_payment_qr_url`);
@@ -71,7 +72,7 @@ describe("schema update at startup", () => {
     const limits = await rows<{ n: number; lim: number }>(sql`SELECT t.table_limit AS lim, (SELECT COUNT(*) FROM dining_tables d WHERE d.tenant_id = t.id AND d.is_active = 1) AS n FROM tenants t`);
     for (const l of limits) expect(Number(l.lim)).toBe(Math.max(1, Number(l.n)));
     const recorded = await rows<{ n: number }>(sql`SELECT COUNT(*) AS n FROM __drizzle_migrations WHERE created_at > 1791043208000`);
-    expect(Number(recorded[0].n)).toBe(30);
+    expect(Number(recorded[0].n)).toBe(31);
     const deliveryColumns = await rows<{ c: string }>(sql`SELECT COLUMN_NAME AS c FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'delivery_checkouts' AND COLUMN_NAME IN ('payment_mode', 'payment_provider', 'gateway_ref', 'gateway_payment_id', 'payment_status', 'payment_failure_reason', 'refund_gateway_ref', 'refund_status') ORDER BY COLUMN_NAME`);
     expect(deliveryColumns.map((r) => r.c)).toEqual(["gateway_payment_id", "gateway_ref", "payment_failure_reason", "payment_mode", "payment_provider", "payment_status", "refund_gateway_ref", "refund_status"]);
     const deliveryIndexes = await rows<{ i: string }>(sql`SELECT INDEX_NAME AS i FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'delivery_checkouts' AND INDEX_NAME IN ('delivery_gateway_ref_uq', 'delivery_refund_gateway_ref_uq', 'delivery_payment_status_idx') GROUP BY INDEX_NAME ORDER BY INDEX_NAME`);
@@ -97,12 +98,14 @@ describe("schema update at startup", () => {
     expect((await rows<{ n: number }>(sql`SELECT COUNT(*) AS n FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'reservations' AND COLUMN_NAME = 'preorder'`))[0].n).toBe(1);
     expect((await rows<{ n: number }>(sql`SELECT COUNT(*) AS n FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'outlets' AND COLUMN_NAME = 'guest_online_payments'`))[0].n).toBe(1);
     expect((await rows<{ n: number }>(sql`SELECT COUNT(*) AS n FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'outlets' AND COLUMN_NAME = 'guest_services'`))[0].n).toBe(1);
+    expect((await rows<{ n: number }>(sql`SELECT COUNT(*) AS n FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'outlets' AND COLUMN_NAME = 'custom_domain_live'`))[0].n).toBe(1);
+    expect(String((await rows<{ d: string }>(sql`SELECT COLUMN_DEFAULT AS d FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'outlets' AND COLUMN_NAME = 'custom_domain_live'`))[0].d)).toMatch(/^(0|false)$/);
     expect((await rows<{ n: number }>(sql`SELECT COUNT(*) AS n FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'reservations' AND COLUMN_NAME IN ('manual_advance_reference', 'manual_advance_claimed_at', 'manual_advance_confirmed_at', 'advance_payment_mode', 'advance_payment_qr_url', 'booking_device_id')`))[0].n).toBe(6);
     expect((await rows<{ n: number }>(sql`SELECT COUNT(*) AS n FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'staff_push_subscriptions'`))[0].n).toBe(1);
     // Second start: nothing changes, nothing is recorded twice
     await env.db.execute(sql`UPDATE tenants SET table_limit = 99`);
     await ensureSchema(appDb.$client);
-    expect(Number((await rows<{ n: number }>(sql`SELECT COUNT(*) AS n FROM __drizzle_migrations WHERE created_at > 1791043208000`))[0].n)).toBe(30);
+    expect(Number((await rows<{ n: number }>(sql`SELECT COUNT(*) AS n FROM __drizzle_migrations WHERE created_at > 1791043208000`))[0].n)).toBe(31);
     expect((await rows<{ lim: number }>(sql`SELECT DISTINCT table_limit AS lim FROM tenants`)).map((r) => Number(r.lim))).toEqual([99]);
   });
 });
