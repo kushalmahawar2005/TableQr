@@ -94,6 +94,8 @@ export const orderLines = mysqlTable(
     isJainSnapshot: boolean("is_jain_snapshot"),
     spiceLevelSnapshot: tinyint("spice_level_snapshot"),
     sharedWith: json("shared_with").$type<string[]>(),
+    /** Packed for this diner to take away; remains theirs even under an equal split */
+    personalForPickup: boolean("personal_for_pickup").notNull().default(false),
     status: mysqlEnum("status", [...orderStatuses, "voided"]).notNull().default("placed"),
     voidReason: varchar("void_reason", { length: 200 }),
     voidedByUserId: ref("voided_by_user_id"),

@@ -54,6 +54,7 @@ const cartLine = (id: string, nameEn: string, unit: number, qty: number, options
   options,
   note: null,
   shared: false,
+  personalForPickup: false,
   unitPricePaise: unit,
   linePaise: unit * qty,
   reason: null,

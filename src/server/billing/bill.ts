@@ -46,6 +46,7 @@ export async function loadBillInputs(run: Runner, scope: BillScope) {
         taxRateBp: s.orderLines.taxRateBp,
         sharedWith: s.orderLines.sharedWith,
         atCounter: s.orders.atCounter,
+        personalForPickup: s.orderLines.personalForPickup,
       })
       .from(s.orderLines)
       .innerJoin(s.orders, and(eq(s.orders.tenantId, s.orderLines.tenantId), eq(s.orders.id, s.orderLines.orderId)))
@@ -120,7 +121,7 @@ export function computeDraft(inputs: BillInputs, opts: { mode?: SplitMode; custo
       amountPaise: Math.max(0, l.unitPricePaise * l.qty - (itemDiscount.get(l.id) ?? 0)),
       taxRateBp: l.taxRateBp,
       sharedWith: sharers.length > 1 ? sharers : null,
-      personal: l.atCounter,
+      personal: l.atCounter || l.personalForPickup,
     };
   });
 

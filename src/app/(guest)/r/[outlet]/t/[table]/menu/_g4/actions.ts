@@ -15,7 +15,7 @@ export type AddResult =
 export async function addItemAction(
   outletCode: string,
   shortCode: string,
-  input: { itemId: string; qty: number; modifierIds: string[]; note: string },
+  input: { itemId: string; qty: number; modifierIds: string[]; note: string; personalForPickup?: boolean },
 ): Promise<AddResult> {
   try {
     const deviceId = (await cookies()).get(DEVICE_COOKIE)?.value ?? null;
@@ -25,6 +25,7 @@ export async function addItemAction(
       qty: Number(input.qty),
       modifierIds: Array.isArray(input.modifierIds) ? input.modifierIds.map(String) : [],
       note: String(input.note ?? ""),
+      personalForPickup: input.personalForPickup === true,
     });
     return { ok: true };
   } catch (err) {

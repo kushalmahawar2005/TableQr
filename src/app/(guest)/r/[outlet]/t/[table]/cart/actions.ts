@@ -60,6 +60,7 @@ export async function restoreLineAction(outletCode: string, shortCode: string, s
       modifierIds: Array.isArray(snap.modifierIds) ? snap.modifierIds.map(String) : [],
       note: snap.note ? String(snap.note) : undefined,
       sharedWith: Array.isArray(snap.sharedWith) ? snap.sharedWith.map(String) : undefined,
+      personalForPickup: snap.personalForPickup === true,
     });
     return { ok: true };
   } catch (err) {

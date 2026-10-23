@@ -3,7 +3,7 @@ import type { Pool, RowDataPacket } from "mysql2/promise";
 
 // Brings the live database up to what this release needs, once, when the server starts.
 // Hostinger builds and starts the app straight from Git and never runs `db:migrate`, so these
-// steps mirror drizzle/0016-0031. Every step checks first, so running it again (another server
+// steps mirror drizzle/0016-0032. Every step checks first, so running it again (another server
 // instance, a restart) changes nothing. Works on MySQL and MariaDB.
 
 type Step = { tag: string; when: number; hash: string; apply: (db: Pool) => Promise<void> };
@@ -278,6 +278,13 @@ const STEPS: Step[] = [
         }
       }
       if (added) await db.query("UPDATE `table_sessions` v INNER JOIN `waiter_table_assignments` a ON a.`tenant_id` = v.`tenant_id` AND a.`outlet_id` = v.`outlet_id` AND a.`table_id` = v.`table_id` SET v.`waiter_user_id` = a.`waiter_user_id` WHERE v.`status` <> 'closed' AND v.`waiter_user_id` IS NULL AND a.`active` = 1 AND a.`expires_at` > UTC_TIMESTAMP(3)");
+    },
+  },
+  {
+    tag: "0032_pickup_item", when: 1792755686717, hash: "4197e467eb2cb4fe214125f80c133d7e3f44d25b09098a79d2df014dd3f8d03d",
+    apply: async (db) => {
+      await addColumn(db, "cart_lines", "personal_for_pickup", "boolean DEFAULT false NOT NULL");
+      await addColumn(db, "order_lines", "personal_for_pickup", "boolean DEFAULT false NOT NULL");
     },
   },
 ];

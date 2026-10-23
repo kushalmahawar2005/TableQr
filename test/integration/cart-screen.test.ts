@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db as appDb } from "@/db";
 import * as s from "@/db/schema";
+import { uuidv7 } from "@/db/id";
 import { AppError } from "@/server/errors";
 import { addCartLine, addConfiguredLine, getCart, removeCartLine, setCartLineQty, setPlainItemQty } from "@/server/guest/cart";
 import { getCartScreen } from "@/server/guest/cart-screen";
@@ -37,6 +38,9 @@ async function failsWith(p: Promise<unknown>, code: AppError["code"]) {
 async function seat(table: string, deviceId: string, displayName?: string): Promise<GuestContext> {
   const qr = env.demo.tableQr[table];
   const { participantId } = await startOrJoinTable({ outletCode: "SRJ01", shortCode: qr, deviceId, displayName });
+  const guestId = uuidv7();
+  await env.db.insert(s.guests).values({ id: guestId, tenantId: env.demo.tenantId, phone: `+91990001${String(guestId.slice(-4)).padStart(4, "0")}`, name: displayName ?? "Mock guest" });
+  await env.db.update(s.participants).set({ guestId }).where(eq(s.participants.id, participantId));
   return getGuestContext("SRJ01", qr, participantId, deviceId);
 }
 const item = (name: string) => env.demo.itemIds[name];
@@ -165,7 +169,7 @@ describe("Place order exactly once (G5)", () => {
   it("asks an Open-mode guest for a first name and saves it with the order", async () => {
     const g = await seat("T7", "n-guest");
     await setPlainItemQty(g, item("Cola"), 1);
-    await failsWith(placeOrder(g, {}), "name_required");
+    await failsWith(placeOrder(g, { name: "" }), "name_required");
     await failsWith(placeOrder(g, { name: "Aarav 😀" }), "invalid_name");
     await placeOrder(g, { name: "  हरि " });
     const [p] = await env.db.select().from(s.participants).where(eq(s.participants.id, g.participantId));

@@ -59,7 +59,7 @@ export async function assertCartEditable(ctx: GuestContext) {
 }
 
 /** A plain line: the dish as it comes, no options, no note, not shared. G3's Add and stepper edit only these. */
-const isPlainLine = (l: typeof s.cartLines.$inferSelect) => !l.modifiers?.length && !l.note && !l.sharedWith?.length;
+const isPlainLine = (l: typeof s.cartLines.$inferSelect) => !l.modifiers?.length && !l.note && !l.sharedWith?.length && !l.personalForPickup;
 
 /**
  * Sets how many of a dish this guest has as a plain line (G3 stepper). Absolute, so repeated or
@@ -147,11 +147,12 @@ export async function setPlainItemQty(ctx: GuestContext, itemId: string, qty: nu
  */
 export async function addConfiguredLine(
   ctx: GuestContext,
-  input: { itemId: string; qty: number; modifierIds?: string[]; note?: string },
+  input: { itemId: string; qty: number; modifierIds?: string[]; note?: string; personalForPickup?: boolean },
   now = new Date(),
 ) {
   const modifierIds = [...new Set(input.modifierIds ?? [])];
   const note = cleanNote(input.note);
+  const personalForPickup = input.personalForPickup === true;
   if (!Number.isInteger(input.qty) || input.qty < 1 || input.qty > MAX_QTY) {
     throw new AppError("invalid_line", `Choose a quantity between 1 and ${MAX_QTY}.`);
   }
@@ -185,7 +186,7 @@ export async function addConfiguredLine(
 
   const tooMany = () => new AppError("invalid_line", `You can have up to ${MAX_QTY} of this dish.`, { reason: "max_qty" });
 
-  if (modifierIds.length === 0 && !note) {
+  if (modifierIds.length === 0 && !note && !personalForPickup) {
     const current = mine.filter(isPlainLine).reduce((n, l) => n + l.qty, 0);
     if (current + input.qty > MAX_QTY) throw tooMany();
     await setPlainItemQty(ctx, input.itemId, current + input.qty, now);
@@ -194,7 +195,7 @@ export async function addConfiguredLine(
 
   const key = lineKey(input.itemId, modifierIds, note);
   const same = mine.find(
-    (l) => !l.sharedWith?.length && lineKey(l.itemId, (l.modifiers ?? []).map((m) => m.modifierId), l.note) === key,
+    (l) => !l.sharedWith?.length && !!l.personalForPickup === personalForPickup && lineKey(l.itemId, (l.modifiers ?? []).map((m) => m.modifierId), l.note) === key,
   );
   if (same) {
     if (same.qty + input.qty > MAX_QTY) throw tooMany();
@@ -212,6 +213,7 @@ export async function addConfiguredLine(
       qty: input.qty,
       modifiers: priced.line.modifiers.map((m) => ({ groupId: m.groupId, modifierId: m.modifierId })),
       note: note || null,
+      personalForPickup,
     });
   }
   void publish(ctx, [cartUpdated(ctx)]);
@@ -220,7 +222,7 @@ export async function addConfiguredLine(
 
 export async function addCartLine(
   ctx: GuestContext,
-  input: { itemId: string; qty: number; modifierIds?: string[]; note?: string; sharedWith?: string[] },
+  input: { itemId: string; qty: number; modifierIds?: string[]; note?: string; sharedWith?: string[]; personalForPickup?: boolean },
   now = new Date(),
 ) {
   await assertCartEditable(ctx);
@@ -258,6 +260,7 @@ export async function addCartLine(
     modifiers: priced.line.modifiers.map((m) => ({ groupId: m.groupId, modifierId: m.modifierId })),
     note: input.note?.trim().slice(0, 140) || null,
     sharedWith,
+    personalForPickup: input.personalForPickup === true,
   });
   void publish(ctx, [cartUpdated(ctx)]);
   return { id, unitPricePaise: priced.line.unitPricePaise, linePaise: priced.line.linePaise };
@@ -332,6 +335,7 @@ export async function getCart(ctx: GuestContext, now = new Date()) {
       qty: line.qty,
       note: line.note,
       sharedWith: line.sharedWith ?? [],
+      personalForPickup: line.personalForPickup,
       ownerId: line.participantId,
       ownerName,
       isMine: line.participantId === ctx.participantId,
@@ -378,6 +382,7 @@ export async function removeCartLine(ctx: GuestContext, lineId: string) {
     modifierIds: (line.modifiers ?? []).map((m) => m.modifierId),
     note: line.note ?? undefined,
     sharedWith: line.sharedWith ?? undefined,
+    personalForPickup: line.personalForPickup,
   };
 }
 

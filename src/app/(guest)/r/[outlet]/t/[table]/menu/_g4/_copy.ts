@@ -30,6 +30,8 @@ const en = {
   noteLabel: "Add a note (optional)",
   notePlaceholder: "For example, less oil",
   noteCount: (n: number) => `${n}/140`,
+  packForPickup: "Pack this to take away",
+  packForPickupHelp: "The kitchen will pack it for handover. This item stays on your bill share.",
   quickNotes: "Quick notes",
   chip: { "Less spicy": "Less spicy", "No onion": "No onion", Jain: "Jain" } as Record<QuickNote, string>,
 
@@ -89,6 +91,8 @@ const hi: G4Copy = {
   noteLabel: "नोट जोड़ें (वैकल्पिक)",
   notePlaceholder: "जैसे, कम तेल",
   noteCount: (n) => `${n}/140`,
+  packForPickup: "पार्सल पैक करें",
+  packForPickupHelp: "किचन इसे पैक करके देगा। इसका पैसा आपके बिल हिस्से में ही रहेगा।",
   quickNotes: "झटपट नोट",
   chip: { "Less spicy": "कम तीखा", "No onion": "प्याज़ नहीं", Jain: "जैन" },
 

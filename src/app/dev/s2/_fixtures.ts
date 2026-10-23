@@ -20,6 +20,7 @@ const line = (nameEn: string, station: string, over: Partial<Line> = {}): Line =
   nameHi: null,
   modifiers: [],
   note: null,
+  personalForPickup: false,
   allergens: [],
   jain: false,
   spice: null,

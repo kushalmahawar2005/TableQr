@@ -25,6 +25,7 @@ export async function getCartScreen(outletCode: string, shortCode: string, devic
     options: l.modifiers,
     note: l.note,
     shared: l.sharedWith.length > 0,
+    personalForPickup: l.personalForPickup,
     unitPricePaise: l.unitPricePaise,
     linePaise: l.linePaise,
     reason: l.reason,
@@ -41,7 +42,7 @@ export async function getCartScreen(outletCode: string, shortCode: string, devic
         name: isPlaceholderName(p.displayName) ? null : p.displayName,
         count: lines.reduce((n, l) => n + l.qty, 0),
         // Read-only, and no prices: this is not a bill
-        lines: lines.map((l) => ({ id: l.id, nameEn: l.nameEn, nameHi: l.nameHi, isVeg: l.isVeg, qty: l.qty, options: l.options, note: l.note, shared: l.shared, reason: l.reason })),
+        lines: lines.map((l) => ({ id: l.id, nameEn: l.nameEn, nameHi: l.nameHi, isVeg: l.isVeg, qty: l.qty, options: l.options, note: l.note, shared: l.shared, personalForPickup: l.personalForPickup, reason: l.reason })),
       };
     })
     .filter((g) => g.lines.length > 0);

@@ -18,6 +18,7 @@ const en = {
   othersEmpty: "No one else has anything in their cart yet.",
 
   shared: "Shared",
+  packForPickup: "Pack for take away · charged to you",
   decrease: (name: string) => `Decrease ${name} quantity`,
   increase: (name: string) => `Increase ${name} quantity`,
   removeLabel: (name: string) => `Remove ${name}`,
@@ -88,6 +89,7 @@ const hi: G5Copy = {
   othersEmpty: "अभी किसी और के कार्ट में कुछ नहीं है।",
 
   shared: "साझा",
+  packForPickup: "पार्सल · आपके बिल में",
   decrease: (name) => `${name} की मात्रा कम करें`,
   increase: (name) => `${name} की मात्रा बढ़ाएँ`,
   removeLabel: (name) => `${name} हटाएँ`,

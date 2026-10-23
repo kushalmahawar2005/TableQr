@@ -99,6 +99,7 @@ export async function getKitchenDisplay(ctx: StaffContext, opts: { station?: str
         nameHi: line.nameHi,
         modifiers: (line.modifiers ?? []).map((m) => ({ en: m.nameEn, hi: m.nameHi })),
         note: line.note,
+        personalForPickup: line.personalForPickup,
         /** null = unknown (older order or not stated); [] = declared none */
         allergens: line.allergensSnapshot ?? null,
         jain: line.isJainSnapshot ?? null,
@@ -140,6 +141,7 @@ export type KitchenCard = {
     nameHi: string | null;
     modifiers: { en: string; hi: string | null }[];
     note: string | null;
+    personalForPickup: boolean;
     allergens: string[] | null;
     jain: boolean | null;
     spice: number | null;

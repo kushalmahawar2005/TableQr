@@ -152,6 +152,7 @@ export function TicketCard({ card, lang, c, showStation, canAct, busy, busyLines
                   {line.note && <span className="mt-1 block rounded-md bg-kds-amber/20 px-2 py-0.5 text-[19px] font-semibold italic leading-7 text-kds-text">“{line.note}”</span>}
                   <Warnings line={line} c={c} />
                   {line.otherStation && <span className="mt-1 inline-block rounded-md border border-kds-muted px-2 text-[16px] font-semibold leading-6 text-kds-muted">{c.otherStation(line.station)}</span>}
+                  {line.personalForPickup && <span className="mt-1 inline-block rounded-md border border-kds-amber px-2 text-[16px] font-semibold leading-6 text-kds-amber">{c.packForPickup}</span>}
                 </span>
                 <span className="flex min-w-[44px] flex-col items-center pt-0.5">
                   {working ? (

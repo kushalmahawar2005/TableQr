@@ -215,6 +215,8 @@ export const cartLines = mysqlTable(
     note: varchar("note", { length: 140 }),
     /** Participant ids sharing this line; null means not shared */
     sharedWith: json("shared_with").$type<string[]>(),
+    /** Keep this line with its owner when the table uses an equal bill split */
+    personalForPickup: boolean("personal_for_pickup").notNull().default(false),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

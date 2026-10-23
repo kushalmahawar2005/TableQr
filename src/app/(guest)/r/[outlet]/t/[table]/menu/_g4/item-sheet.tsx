@@ -88,6 +88,7 @@ export function ItemSheet({
   const [selected, setSelected] = useState<Set<string>>(() => new Set(preview?.selected ?? []));
   const [qty, setQty] = useState(preview?.qty ?? 1);
   const [note, setNote] = useState(preview?.note ?? "");
+  const [personalForPickup, setPersonalForPickup] = useState(false);
   const [ack, setAck] = useState(preview?.ack ?? false);
   const [attempted, setAttempted] = useState(preview?.attempted ?? false);
   const [busy, setBusy] = useState(preview?.busy ?? false);
@@ -164,7 +165,7 @@ export function ItemSheet({
     setError(null);
     let res: Awaited<ReturnType<typeof addItemAction>>;
     try {
-      res = await addItemAction(data.outlet.code, shortCode, { itemId: item.id, qty, modifierIds: [...effective], note });
+      res = await addItemAction(data.outlet.code, shortCode, { itemId: item.id, qty, modifierIds: [...effective], note, personalForPickup });
     } catch {
       res = { ok: false, error: "failed" };
     }
@@ -310,6 +311,14 @@ export function ItemSheet({
           </div>
 
           <NoteField note={note} setNote={setNote} c={c} />
+
+          <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-cta border border-line bg-paper/60 p-3.5">
+            <input type="checkbox" checked={personalForPickup} onChange={(e) => setPersonalForPickup(e.target.checked)} className="mt-0.5 size-5 shrink-0 accent-[var(--brand-main)]" />
+            <span className="min-w-0">
+              <span className="block text-body font-semibold text-ink">{c.packForPickup}</span>
+              <span className="mt-0.5 block text-caption text-muted">{c.packForPickupHelp}</span>
+            </span>
+          </label>
         </>
       )}
     </>

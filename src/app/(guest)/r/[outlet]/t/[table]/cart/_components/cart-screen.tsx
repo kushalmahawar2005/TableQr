@@ -395,6 +395,7 @@ function details(line: { options: { nameEn: string; nameHi: string | null }[]; n
       {line.options.length > 0 && <p className="mt-0.5 text-caption text-ink/75">{line.options.map((o) => pick(lang, o.nameEn, o.nameHi)).join(" · ")}</p>}
       {line.note && <p className="mt-0.5 text-caption text-muted italic">“{line.note}”</p>}
       {line.shared && <span className="mt-1 inline-block rounded-full bg-paper px-2 text-label font-semibold text-muted ring-1 ring-line">{c.shared}</span>}
+      {"personalForPickup" in line && line.personalForPickup && <span className="mt-1 inline-block rounded-full bg-[var(--state-held-soft)] px-2 py-0.5 text-label font-semibold text-[var(--state-held-text)] ring-1 ring-line">{c.packForPickup}</span>}
     </>
   );
 }

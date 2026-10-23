@@ -35,6 +35,7 @@ export default async function G5Preview(props: PageProps<"/dev/g5">) {
       options: [],
       note: null,
       shared: false,
+      personalForPickup: false,
       unitPricePaise: unit,
       linePaise: unit * qty,
       reason: null,
@@ -72,11 +73,11 @@ export default async function G5Preview(props: PageProps<"/dev/g5">) {
       name: "Aarav",
       count: 3,
       lines: [
-        { id: "o1", nameEn: "Butter Chicken", nameHi: "बटर चिकन", isVeg: false, qty: 1, options: [{ nameEn: "Tandoori roti", nameHi: "तंदूरी रोटी" }], note: null, shared: false, reason: null },
-        { id: "o2", nameEn: "Garlic Naan", nameHi: "गार्लिक नान", isVeg: true, qty: 2, options: [], note: null, shared: false, reason: null },
+        { id: "o1", nameEn: "Butter Chicken", nameHi: "बटर चिकन", isVeg: false, qty: 1, options: [{ nameEn: "Tandoori roti", nameHi: "तंदूरी रोटी" }], note: null, shared: false, personalForPickup: false, reason: null },
+        { id: "o2", nameEn: "Garlic Naan", nameHi: "गार्लिक नान", isVeg: true, qty: 2, options: [], note: null, shared: false, personalForPickup: false, reason: null },
       ],
     },
-    { id: "p-x", name: null, count: 1, lines: [{ id: "o3", nameEn: "Masala Fries", nameHi: "मसाला फ्राइज़", isVeg: true, qty: 1, options: [], note: "No onion", shared: false, reason: null }] },
+    { id: "p-x", name: null, count: 1, lines: [{ id: "o3", nameEn: "Masala Fries", nameHi: "मसाला फ्राइज़", isVeg: true, qty: 1, options: [], note: "No onion", shared: false, personalForPickup: false, reason: null }] },
   ];
   const normal = [paneer, bc, dal];
 

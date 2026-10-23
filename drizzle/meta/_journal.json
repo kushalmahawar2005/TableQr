@@ -225,6 +225,13 @@
       "when": 1792746387567,
       "tag": "0031_visit_waiter",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "5",
+      "when": 1792755686717,
+      "tag": "0032_pickup_item",
+      "breakpoints": true
     }
   ]
 }
