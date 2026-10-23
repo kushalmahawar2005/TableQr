@@ -12,6 +12,7 @@ import { getGuestContext, type GuestContext } from "@/server/guest/context";
 import { createServiceRequest, escalateServiceRequests } from "@/server/guest/service-requests";
 import { moveParty } from "@/server/floor/table-actions";
 import { getFloor } from "@/server/floor/read";
+import { waiterBoard, waiterDetail } from "@/server/staff/waiter-read";
 import { resetTestDb } from "./setup-db";
 
 let env: Awaited<ReturnType<typeof resetTestDb>>;
@@ -48,8 +49,21 @@ describe("table responsibility and automatic coverage", () => {
     expect((await getWaiterTasks(second)).requests.some(r => r.sessionId === guest.sessionId)).toBe(false);
     expect((await getWaiterTasks(manager)).requests.some(r => r.sessionId === guest.sessionId)).toBe(true);
     expect((await getFloor(manager)).tables.find(t => t.id === table("T1"))?.assignedWaiter?.id).toBe(first.userId);
+
+    const firstBoard = await waiterBoard(first);
+    expect(firstBoard.tables.some(t => t.id === table("T1"))).toBe(true);
+    expect((await waiterDetail(first, guest.sessionId)).people.map(p => p.name)).toContain("Kushal");
+
+    await assignWaitersToTables(manager, [table("T1")], second.userId, "shift");
+    expect((await visit()).waiterUserId).toBe(second.userId);
+    expect((await getFloor(manager)).tables.find(t => t.id === table("T1"))?.assignedWaiter?.id).toBe(second.userId);
+    expect((await waiterBoard(first)).tables.some(t => t.id === table("T1"))).toBe(false);
+    expect((await waiterBoard(second)).tables.some(t => t.id === table("T1"))).toBe(true);
+    expect((await getWaiterTasks(first)).requests.some(r => r.sessionId === guest.sessionId)).toBe(false);
+    expect((await getWaiterTasks(second)).requests.some(r => r.sessionId === guest.sessionId)).toBe(true);
   });
   it("keeps the customer's waiter and uses the new table label after a move", async () => {
+    await assignWaitersToTables(manager, [table("T1")], first.userId, "shift");
     await assignWaitersToTables(manager, [table("T2")], second.userId, "shift");
     await moveParty(manager, { fromTableId: table("T1"), toTableId: table("T2") });
     expect((await visit()).waiterUserId).toBe(first.userId);
