@@ -211,6 +211,13 @@
       "when": 1792696666093,
       "tag": "0029_reservation_advance",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "5",
+      "when": 1792738560008,
+      "tag": "0030_fantastic_karma",
+      "breakpoints": true
     }
   ]
 }

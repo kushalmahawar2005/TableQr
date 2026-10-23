@@ -68,8 +68,13 @@ async function seat(input: SeatInput): Promise<Seated | { refused: JoinCodeRefus
     const stay = t.table.tableClass === ROOM_CLASS ? await roomStayAt(tx, tenantId, t.table.id) : null;
     if (t.table.tableClass === ROOM_CLASS && !stay) throw new AppError("table_not_open", "This room is not checked in. Please call reception.");
 
+    // Guests can browse the menu before sharing their number. OTP is enforced atomically when an
+    // order is placed; recent verification still restores the guest identity on this device/table.
+    const verified = !stay ? await findRecentVerification(tx, tenantId, t.table.id, input.deviceId, now) : null;
+
     const existing = open?.people.find((p) => p.deviceId === input.deviceId);
     if (existing && open!.session.status === "open") {
+      if (verified) await tx.update(s.participants).set({ guestId: verified.guestId, displayName: verified.name }).where(and(eq(s.participants.tenantId, tenantId), eq(s.participants.id, existing.id)));
       return {
         sessionId: open!.session.id,
         participantId: existing.id,
@@ -83,6 +88,7 @@ async function seat(input: SeatInput): Promise<Seated | { refused: JoinCodeRefus
       const moved = await findMovedSession(tx, tenantId, t.table.id, input.deviceId);
       const mine = moved?.people.find((p) => p.deviceId === input.deviceId);
       if (moved && mine && moved.session.status === "open") {
+        if (verified) await tx.update(s.participants).set({ guestId: verified.guestId, displayName: verified.name }).where(and(eq(s.participants.tenantId, tenantId), eq(s.participants.id, mine.id)));
         return { sessionId: moved.session.id, participantId: mine.id, isHost: moved.session.hostParticipantId === mine.id, isNew: false, changed: false };
       }
     }
@@ -102,15 +108,6 @@ async function seat(input: SeatInput): Promise<Seated | { refused: JoinCodeRefus
       }
       const check = await checkJoinCode(tx, { tenantId, tableId: t.table.id, deviceId: input.deviceId }, input.joinCode, table.joinCode, now);
       if (check) return { refused: check };
-    }
-
-    // Verified mode: this phone confirmed its number at this table within the last 12 hours (G2)
-    const verified =
-      t.outlet.sessionMode === "verified" && !stay ? await findRecentVerification(tx, tenantId, t.table.id, input.deviceId, now) : null;
-    if (t.outlet.sessionMode === "verified" && !stay && !verified) {
-      throw new AppError("verification_required", "Please verify your number to order at this table.", {
-        mode: t.outlet.sessionMode,
-      });
     }
 
     let sessionId = open?.session.id;

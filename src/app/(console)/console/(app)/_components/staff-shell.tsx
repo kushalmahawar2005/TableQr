@@ -40,6 +40,7 @@ import {
   type ReactNode,
 } from "react";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { NotificationPermissionOnboarding } from "@/components/notification-permission-onboarding";
 import type { Lang } from "@/lib/i18n";
 import { signOutAction } from "../../login/actions";
 import { startTour } from "./guide/copy";
@@ -404,6 +405,7 @@ export function StaffShell({
             />
           </div>
         </header>
+        {!preview && <NotificationPermissionOnboarding lang={lang} />}
         {children}
       </div>
       <nav

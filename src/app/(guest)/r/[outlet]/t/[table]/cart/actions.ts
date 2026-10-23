@@ -70,7 +70,7 @@ export async function restoreLineAction(outletCode: string, shortCode: string, s
 
 export type PlaceResult =
   | { ok: true; roundNo: number }
-  | { ok: false; error: Err | "items" | "cap" | "name_required" | "invalid_name" | "empty" | "prices" };
+  | { ok: false; error: Err | "items" | "cap" | "name_required" | "invalid_name" | "empty" | "prices" | "verification_required" };
 
 /** The reviewed prices from the phone, reduced to plain numbers; used only to compare */
 function cleanQuote(raw: unknown): Record<string, number> {
@@ -96,6 +96,8 @@ export async function placeOrderAction(
   } catch (err) {
     if (err instanceof AppError) {
       switch (err.code) {
+        case "verification_required":
+          return { ok: false, error: "verification_required" };
         case "items_unavailable":
           return { ok: false, error: "items" };
         case "needs_staff_confirmation":

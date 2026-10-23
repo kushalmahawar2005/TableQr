@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { chime } from "@/lib/bell-sound";
 import type { ConsoleNotice } from "@/server/staff/notifications";
 import { noticesAction } from "./notification-actions";
+import { enableStaffPushNotifications } from "@/lib/staff-push-client";
 
 const POLL_MS = 8_000;
 const SOUND_KEY = "tq_console_sound";
@@ -30,6 +31,7 @@ export function NotificationBell({ preview = false, className = "", placement = 
   const [toasts, setToasts] = useState<ConsoleNotice[]>([]);
   const [open, setOpen] = useState(false);
   const [sound, setSound] = useState(true);
+  const [pushReady, setPushReady] = useState(false);
   const [clock, setClock] = useState(() => Date.now());
   const since = useRef<number | null>(null);
   const seen = useRef(new Set<string>());
@@ -133,10 +135,8 @@ export function NotificationBell({ preview = false, className = "", placement = 
     }
     if (next && audio.current) chime(audio.current);
   };
-  const askDesktop = () => {
-    if (typeof Notification !== "undefined" && Notification.permission === "default") void Notification.requestPermission();
-  };
-  const canAskDesktop = typeof window !== "undefined" && typeof Notification !== "undefined" && Notification.permission === "default";
+  const askDesktop = () => { void enableStaffPushNotifications().then((result) => { if (result.ok) setPushReady(true); }); };
+  const canAskDesktop = typeof window !== "undefined" && typeof Notification !== "undefined" && Notification.permission !== "denied" && !pushReady;
 
   return (
     <div className={`relative ${className}`}>
@@ -169,7 +169,7 @@ export function NotificationBell({ preview = false, className = "", placement = 
           </div>
           {canAskDesktop && (
             <button type="button" onClick={askDesktop} className="w-full border-b border-line px-4 py-2.5 text-left text-caption font-semibold text-brand hover:bg-ink/5">
-              Also alert me when this tab is in the background
+              Enable background alerts for new orders and requests
             </button>
           )}
           {items.length === 0 ? (

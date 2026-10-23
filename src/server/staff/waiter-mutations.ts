@@ -15,6 +15,7 @@ import { verifyStaffPin, type StaffSession } from "./auth";
 import { audit } from "./audit";
 import { lockOrder, syncTickets, syncOrderStatus } from "../kitchen/order-state";
 import type { StaffRole } from "@/lib/staff-permissions";
+import { sendOutletPush } from "./web-push";
 
 export type Approval = { phone: string; pin: string };
 export async function managerApproval(staff: StaffSession, approval?: Approval, allowedRoles: readonly StaffRole[] = ["waiter", "manager", "owner"]) {
@@ -47,6 +48,7 @@ export async function staffPlaceOrder(staff: StaffSession, input: {sessionId:str
   const [outlet] = await db.select().from(s.outlets).where(and(eq(s.outlets.tenantId,staff.tenantId),eq(s.outlets.id,staff.outletId)));
   const result=await placeOrderTx({...staff,sessionId:input.sessionId,tableId:input.tableId,participantId:input.participantId,brandId:outlet.brandId,timezone:outlet.timezone},{requestId:input.clientRequestId},now,{userId:staff.userId,lines:input.lines});
   if (!result.replayed) await publish(staff,[{topic:topics.kitchen,type:"ticket.created",data:{orderId:result.orderId}},{topic:topics.session(input.sessionId),type:"order.status",data:{orderId:result.orderId}},{topic:topics.floor,type:"visit.updated"},...result.soldOutItemIds.map(itemId=>({topic:topics.menu,type:"item.availability",data:{itemId,available:false}}))]);
+  if (!result.replayed) await sendOutletPush(staff, { title: "New table order", body: "A staff member sent a new order to the kitchen.", url: "/console", tag: `order-${result.orderId}` });
   return result;
 }
 export async function waiterRequestBill(staff:StaffSession,sessionId:string,now=new Date()) {

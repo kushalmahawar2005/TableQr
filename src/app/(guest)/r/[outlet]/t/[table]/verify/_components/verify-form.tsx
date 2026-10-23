@@ -76,6 +76,7 @@ export function VerifyForm({
   outletName,
   lang,
   preview,
+  returnToCart = false,
 }: {
   outletCode: string;
   shortCode: string;
@@ -83,6 +84,7 @@ export function VerifyForm({
   lang: Lang;
   /** Dev review board: start in this state, never call the server, keep the clock still */
   preview?: FormSnapshot;
+  returnToCart?: boolean;
 }) {
   const c = g2Copy[lang];
   const router = useRouter();
@@ -198,7 +200,7 @@ export function VerifyForm({
       return;
     }
     // Straight to the menu: no success screen. The button stays busy while the menu loads.
-    if (r.ok) return router.replace(r.to);
+    if (r.ok) return router.replace(returnToCart ? `${tablePath}/cart` : r.to);
     switch (r.error) {
       case "wrong":
         setSt((s) => ({ ...s, busy: null, problem: "wrong", shake: s.shake + 1 }));
@@ -234,7 +236,7 @@ export function VerifyForm({
     cta = { label: st.problem === "sms_failed" ? c.tryAgain : c.sendCode, disabled: !(name.ok && supported && phoneValid), run: send, arrow: true };
   else if (st.problem === "sms_failed") cta = { label: c.tryAgain, run: send, arrow: true };
   else if (expired) cta = { label: c.sendNew, run: send, arrow: true };
-  else cta = { label: c.verify, disabled: !(isCompleteCode(st.code) && name.ok), run: verify, arrow: true };
+  else cta = { label: returnToCart ? c.verifyOrder : c.verify, disabled: !(isCompleteCode(st.code) && name.ok), run: verify, arrow: true };
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();

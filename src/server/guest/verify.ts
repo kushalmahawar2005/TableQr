@@ -8,12 +8,11 @@ import { checkFirstName, placeholderName } from "@/domain/guest-name";
 import { CONSENT_VERSION, isCompleteCode, normaliseCode, OTP } from "@/domain/otp";
 import { countryByIso, isValidIndianMobile, normaliseIndianMobile, toE164 } from "@/domain/phone";
 import { LOCK_THEN_READ, type Runner } from "../db-types";
-import { AppError } from "../errors";
 import { smsSender } from "../sms/sender";
 import { assertCanSeat, findOpenSession, findTableByQr } from "./table";
 
-// Verified mode (G2, PS 3.6): a guest confirms their mobile with a 4-digit SMS code before
-// joining a table. Codes are per phone (device) and table, stored only as a keyed hash.
+// G2: guests confirm their mobile with a 4-digit SMS code before placing an order. Codes are per
+// phone (device) and table, stored only as a keyed hash. The menu remains browsable before OTP.
 
 const SECOND = 1000;
 const later = (now: Date, seconds: number) => new Date(now.getTime() + seconds * SECOND);
@@ -72,7 +71,6 @@ export async function sendCode(input: {
   const phone = toE164(country.dial, digits);
 
   const t = await findTableByQr(db, input.outletCode, input.shortCode);
-  if (t.outlet.sessionMode !== "verified") throw new AppError("invalid_state", "This table does not need a code.");
   const tenantId = t.outlet.tenantId;
   const tableId = t.table.id;
   assertCanSeat(t, t.table.state, await findOpenSession(db, tenantId, tableId), now);

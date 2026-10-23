@@ -10,6 +10,9 @@ const en = {
   table: (code: string) => `${placeEn(code)}`,
 
   heading: "Confirm your number",
+  orderHeading: "Verify to place your order",
+  orderContext: (code: string) => `Ordering for ${placeEn(code)}`,
+  orderTrust: "Enter your name and mobile number. We’ll send a 4-digit code before your order is placed.",
   starting: "You're starting this table",
   joining: (n: number) => (n === 1 ? "Joining 1 person" : `Joining ${n} people`),
   trust: "We send a 4-digit code so only people at this table can order.",
@@ -33,6 +36,7 @@ const en = {
   resendIn: (t: string) => `Resend code in ${t}`,
   resend: "Resend code",
   verify: "Verify and continue",
+  verifyOrder: "Verify and return to order",
   verifying: "Verifying…",
 
   wrong: "That code didn't match. Check and try again.",
@@ -70,6 +74,9 @@ const hi: G2Copy = {
   table: (code) => `${placeHi(code)}`,
 
   heading: "अपना नंबर कन्फ़र्म करें",
+  orderHeading: "ऑर्डर करने के लिए नंबर कन्फ़र्म करें",
+  orderContext: (code) => `${placeHi(code)} के लिए ऑर्डर`,
+  orderTrust: "अपना नाम और मोबाइल नंबर डालें। ऑर्डर देने से पहले हम 4 अंकों का कोड भेजेंगे।",
   starting: "आप यह टेबल शुरू कर रहे हैं",
   joining: (n) => (n === 1 ? "1 व्यक्ति के साथ जुड़ रहे हैं" : `${n} लोगों के साथ जुड़ रहे हैं`),
   trust: "हम 4 अंकों का कोड भेजते हैं, ताकि सिर्फ़ इसी टेबल पर बैठे लोग ऑर्डर कर सकें।",
@@ -93,6 +100,7 @@ const hi: G2Copy = {
   resendIn: (t) => `${t} में दोबारा भेजें`,
   resend: "कोड दोबारा भेजें",
   verify: "कन्फ़र्म करें और आगे बढ़ें",
+  verifyOrder: "कन्फ़र्म करें और ऑर्डर पर लौटें",
   verifying: "कन्फ़र्म कर रहे हैं…",
 
   wrong: "यह कोड मेल नहीं खाया। जाँचकर फिर से डालें।",

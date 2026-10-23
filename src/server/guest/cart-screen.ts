@@ -57,6 +57,7 @@ export async function getCartScreen(outletCode: string, shortCode: string, devic
       status: open.session.status,
       orderingLocked: open.session.orderingLocked,
       hostName: host && !isPlaceholderName(host.displayName) ? host.displayName : null,
+      verified: !!me.guestId,
       /** Open mode asks for a first name at the first order */
       needsName: open.session.mode === "open" && isPlaceholderName(me.displayName),
     },

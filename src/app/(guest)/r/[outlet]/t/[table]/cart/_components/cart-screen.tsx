@@ -16,7 +16,6 @@ import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { brandStyle, deriveBrandTokens } from "@/domain/brand";
-import { checkFirstName, MAX_NAME_LENGTH } from "@/domain/guest-name";
 import { formatRupees } from "@/domain/menu-price";
 import { MAX_QTY } from "@/domain/pricing";
 import type { Lang } from "@/lib/i18n";
@@ -69,8 +68,6 @@ export function CartScreen({
   const menuPath = `${tablePath}/menu`;
 
   const [tab, setTab] = useState<"mine" | "table">(preview?.tab ?? "mine");
-  const [name, setName] = useState(preview?.name ?? "");
-  const [nameTouched, setNameTouched] = useState(!!preview?.name);
   // One note for the kitchen on this whole round, printed on its ticket
   const [orderNote, setOrderNote] = useState("");
   const [placing, setPlacing] = useState(!!preview?.placing);
@@ -110,8 +107,6 @@ export function CartScreen({
   const lines = data.mine.filter((l) => !isRemoved(l.id)).map((l) => ({ ...l, qty: qtyOf(l.id, l.qty) }));
   const subtotal = lines.reduce((sum, l) => sum + (l.reason || l.unitPricePaise === null ? 0 : l.unitPricePaise * l.qty), 0);
   const blocked = lines.some((l) => l.reason);
-  const nameCheck = checkFirstName(name);
-  const nameError = session.needsName && nameTouched && !nameCheck.ok && name.trim() ? c.nameError : undefined;
 
   const back = () => {
     if (preview) return;
@@ -157,9 +152,8 @@ export function CartScreen({
 
   async function onPlace() {
     if (preview || placing) return;
-    if (session.needsName && !nameCheck.ok) {
-      setNameTouched(true);
-      document.getElementById("g5-name")?.focus();
+    if (!session.verified) {
+      router.push(`${tablePath}/verify?next=cart`);
       return;
     }
     setPlacing(true);
@@ -167,7 +161,7 @@ export function CartScreen({
     const id = requestId();
     let res: Awaited<ReturnType<typeof placeOrderAction>>;
     try {
-      res = await placeOrderAction(data.outlet.code, shortCode, { requestId: id, name: session.needsName ? name : undefined, note: orderNote.trim() || undefined, quote: data.quote });
+      res = await placeOrderAction(data.outlet.code, shortCode, { requestId: id, note: orderNote.trim() || undefined, quote: data.quote });
     } catch {
       // The order may or may not have reached the kitchen; the same id makes a retry safe
       res = { ok: false, error: "failed" };
@@ -196,12 +190,11 @@ export function CartScreen({
       case "cap":
         setNotice("cap");
         break;
-      case "name_required":
-      case "invalid_name":
-        setNameTouched(true);
-        break;
       case "gone":
         router.replace(tablePath);
+        return;
+      case "verification_required":
+        router.push(`${tablePath}/verify?next=cart`);
         return;
       case "blocked":
       case "empty":
@@ -219,7 +212,6 @@ export function CartScreen({
   else if (billRequested) cta = { label: c.ctaBill, enabled: false };
   else if (!online) cta = { label: c.ctaOffline, enabled: false };
   else if (blocked) cta = { label: c.removeUnavailable, enabled: false };
-  else if (session.needsName && !nameCheck.ok) cta = { label: c.addName, enabled: true };
   else cta = { label: c.place(table.code), enabled: true };
   const ctaReady = cta.label === c.place(table.code) || placing;
 
@@ -321,25 +313,6 @@ export function CartScreen({
                       onChange={(e) => setOrderNote(e.target.value)}
                     />
                   </div>
-
-                  {session.needsName && (
-                    <div className="mt-5">
-                      <TextField
-                        id="g5-name"
-                        label={c.nameLabel}
-                        help={c.nameHelp}
-                        error={nameError}
-                        value={name}
-                        maxLength={MAX_NAME_LENGTH}
-                        autoComplete="given-name"
-                        autoCapitalize="words"
-                        enterKeyHint="send"
-                        disabled={locked}
-                        onChange={(e) => setName(e.target.value)}
-                        onBlur={() => setNameTouched(true)}
-                      />
-                    </div>
-                  )}
 
                   {notice && (
                     <div role="alert" className="mt-4 flex items-start gap-3 rounded-cta bg-[var(--state-seated-soft)] px-4 py-3 ring-1 ring-danger/10 ring-inset">

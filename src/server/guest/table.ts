@@ -166,7 +166,7 @@ export async function findTableById(run: Runner, tenantId: string, outletCode: s
 
 async function livePeople(run: Runner, tenantId: string, sessionId: string) {
   return run
-    .select({ id: s.participants.id, displayName: s.participants.displayName, deviceId: s.participants.deviceId })
+    .select({ id: s.participants.id, displayName: s.participants.displayName, deviceId: s.participants.deviceId, guestId: s.participants.guestId })
     .from(s.participants)
     .where(
       and(

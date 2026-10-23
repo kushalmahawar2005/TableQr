@@ -25,6 +25,7 @@ export function VerifyScreen({
   lang,
   preview,
   sheetOpen,
+  returnToCart = false,
 }: {
   data: VerifyScreenData;
   shortCode: string;
@@ -32,6 +33,7 @@ export function VerifyScreen({
   /** Dev review board only */
   preview?: FormSnapshot;
   sheetOpen?: boolean;
+  returnToCart?: boolean;
 }) {
   const c = g2Copy[lang];
   const { outlet } = data;
@@ -42,7 +44,7 @@ export function VerifyScreen({
   return (
     <div lang={lang} style={style} className={`relative flex flex-1 flex-col ${isPreview ? "min-h-full" : "min-h-dvh"}`}>
       <header className="flex items-center gap-2.5 pt-3 pb-1">
-        <BackLink href={tablePath} label={c.back} preview={isPreview} />
+        <BackLink href={returnToCart ? `${tablePath}/cart` : tablePath} label={c.back} preview={isPreview} />
         <OutletLogo name={outlet.name} logoUrl={outlet.logoUrl} size={40} />
         <div className="min-w-0 flex-1">
           <p className="font-display text-section font-bold break-words text-ink">{outlet.name}</p>
@@ -52,7 +54,7 @@ export function VerifyScreen({
       </header>
 
       <main className="flex flex-1 flex-col pt-7">
-        <h1 className="font-display text-title font-bold text-ink">{c.heading}</h1>
+        <h1 className="font-display text-title font-bold text-ink">{returnToCart ? c.orderHeading : c.heading}</h1>
         <p className="mt-2.5 flex items-center gap-1.5 text-body font-medium text-ink">
           <HugeiconsIcon
             icon={data.context.kind === "join" ? UserGroupIcon : UserAdd01Icon}
@@ -60,15 +62,15 @@ export function VerifyScreen({
             className="shrink-0 text-muted"
             aria-hidden
           />
-          {data.context.kind === "join" ? c.joining(data.context.count) : c.starting}
+          {returnToCart ? c.orderContext(data.tableCode) : data.context.kind === "join" ? c.joining(data.context.count) : c.starting}
         </p>
-        <p className="mt-1.5 text-body text-muted">{c.trust}</p>
-        <div className="mt-2.5">
+        <p className="mt-1.5 text-body text-muted">{returnToCart ? c.orderTrust : c.trust}</p>
+        {!returnToCart && <div className="mt-2.5">
           <WhyAsk lang={lang} preview={isPreview} />
-        </div>
+        </div>}
 
         <div className="mt-6 flex flex-1 flex-col border-t border-line/70 pt-6">
-          <VerifyForm outletCode={outlet.code} shortCode={shortCode} outletName={outlet.name} lang={lang} preview={preview} />
+          <VerifyForm outletCode={outlet.code} shortCode={shortCode} outletName={outlet.name} lang={lang} preview={preview} returnToCart={returnToCart} />
         </div>
       </main>
 

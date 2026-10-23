@@ -10,6 +10,7 @@ import { AppError } from "../errors";
 import { publish } from "../realtime/publish";
 import { topics } from "../realtime/token";
 import { visitChanged } from "../floor/assignments";
+import { sendOutletPush } from "../staff/web-push";
 import type { GuestContext } from "./context";
 import { isWithinCategoryWindow, loadItems } from "./menu";
 
@@ -41,6 +42,7 @@ export async function placeOrder(ctx: GuestContext, input: PlaceInput = {}, now 
     // Portion counters that reached zero take the dish off every phone's menu
     ...placed.soldOutItemIds.map((itemId) => ({ topic: topics.menu, type: "item.availability", data: { itemId, available: false } })),
   ]);
+  await sendOutletPush(ctx, { title: "New table order", body: "A guest placed an order. Open TableQR to view it.", url: "/console", tag: `order-${placed.orderId}` });
   return placed;
 }
 
@@ -69,7 +71,7 @@ export function placeOrderTx(ctx: GuestContext, input: PlaceInput, now: Date, st
     }
 
     const [me] = await tx
-      .select({ displayName: s.participants.displayName })
+      .select({ displayName: s.participants.displayName, guestId: s.participants.guestId })
       .from(s.participants)
       .where(and(eq(s.participants.tenantId, ctx.tenantId), eq(s.participants.sessionId, ctx.sessionId), eq(s.participants.id, ctx.participantId), isNull(s.participants.removedAt), isNull(s.participants.paidOutAt)))
       .for("update");
@@ -86,6 +88,9 @@ export function placeOrderTx(ctx: GuestContext, input: PlaceInput, now: Date, st
         return { orderId: done.id, roundNo: done.roundNo, status: done.status, subtotalPaise: 0, stations: [] as string[], itemCount: 0, soldOutItemIds: [] as string[], replayed: true };
       }
     }
+    if (!staffDraft && !me.guestId) {
+      throw new AppError("verification_required", "Verify your phone number before placing this order.");
+    }
     if (session.status === "bill_requested") {
       throw new AppError("table_settling", "The bill has been requested, so new orders are paused. Ask staff to reopen the bill.");
     }
@@ -99,9 +104,9 @@ export function placeOrderTx(ctx: GuestContext, input: PlaceInput, now: Date, st
       throw new AppError("ordering_locked", `Ordering paused by ${host?.name ?? "the host"}.`);
     }
 
-    // Open mode takes the first name at the first order (G1 decision N3); saved with the order
+    // OTP verification already saved the guest's name on the participant before order placement.
     if (!staffDraft && session.mode === "open" && isPlaceholderName(me.displayName)) {
-      const name = checkFirstName(input.name ?? "");
+      const name = checkFirstName(input.name ?? me.displayName);
       if (!name.ok) {
         throw new AppError(name.reason === "empty" ? "name_required" : "invalid_name", "Add your first name to order.");
       }

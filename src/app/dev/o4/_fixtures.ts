@@ -66,7 +66,7 @@ function cart(): CartScreenData {
     renderedAt: 0,
     outlet: { code: "SRJ01", name: "Saffron Room", logoUrl: null, accentColor: "#C9482B" },
     table: { code: "T12" },
-    session: { key: "dev", people: 2, status: "open", orderingLocked: false, hostName: "Aarav", needsName: false },
+    session: { key: "dev", people: 2, status: "open", orderingLocked: false, hostName: "Aarav", verified: true, needsName: false },
     mine,
     myCount: 2,
     subtotalPaise: mine.reduce((n, l) => n + (l.linePaise ?? 0), 0),

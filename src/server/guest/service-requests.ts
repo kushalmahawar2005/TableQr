@@ -10,6 +10,7 @@ import { announceBill, requestBillInTransaction } from "../billing/payments";
 import { publish } from "../realtime/publish";
 import { topics } from "../realtime/token";
 import { visitChanged } from "../floor/assignments";
+import { sendOutletPush } from "../staff/web-push";
 import type { StaffContext } from "../staff/context";
 import type { GuestContext } from "./context";
 
@@ -88,6 +89,7 @@ export async function createServiceRequest(ctx: GuestContext, kind: StoredServic
       visitChanged(ctx.sessionId, "service_request"),
     ]);
     if (kind === "request_bill") announceBill(ctx, { tableIds: result.tableIds, state: "bill_requested" });
+    await sendOutletPush(ctx, { title: "New table request", body: `A guest requested ${kind.replaceAll("_", " ")}. Open TableQR to respond.`, url: "/console", tag: `request-${result.id}` });
   }
   return { id: result.id, createdAt: result.createdAt, replayed: result.replayed, cooldownUntil: result.createdAt + SERVICE_COOLDOWN_MS };
 }
