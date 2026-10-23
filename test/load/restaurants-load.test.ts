@@ -12,6 +12,7 @@ import * as s from "@/db/schema";
 import { serviceDate } from "@/domain/booking-policy";
 import { requestBill, settleAtCounter } from "@/server/billing/payments";
 import { confirmBooking, createBookingHold, getBookingAvailability } from "@/server/booking/core";
+import { sendBookingOtp, verifyBookingOtp } from "@/server/booking/otp";
 import { addCartLine } from "@/server/guest/cart";
 import { getGuestContext, type GuestContext } from "@/server/guest/context";
 import { getMenuScreen } from "@/server/guest/menu-screen";
@@ -105,7 +106,13 @@ async function bookings(r: Restaurant, run: string) {
       if (!slot) return;
       const token = `${run}-${r.code}-b${b}`;
       const hold = await timed("booking: hold table", () => createBookingHold(r.code, { date, startAt: slot.startAt, partySize: 2, requestId: token, holdToken: token }));
-      if (hold) await timed("booking: confirm", () => confirmBooking(r.code, token, { name: `Guest ${b}`, phone: `97${String(b).padStart(8, "0")}` }));
+      if (hold) await timed("booking: confirm", async () => {
+        const phone = `97${String(b).padStart(8, "0")}`;
+        const device = `${r.code}-booking-${b}`;
+        const sent = await sendBookingOtp(r.code, token, device, phone);
+        await verifyBookingOtp(r.code, token, device, sent.challengeId, sent.devCode!, `Guest ${b}`);
+        return confirmBooking(r.code, token, { name: `Guest ${b}`, phone });
+      });
     }),
   );
 }

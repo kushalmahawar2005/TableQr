@@ -313,6 +313,12 @@ const STEPS: Step[] = [
       await addColumn(db, "outlets", "guest_online_payments", "boolean DEFAULT true NOT NULL");
     },
   },
+  {
+    tag: "0037_cuddly_absorbing_man", when: 1792770402777, hash: "5929121a8ef1d68bea2db0d4c5c4a3b3561f001bf0235ea4bf3220529582494a",
+    apply: async (db) => {
+      await addColumn(db, "outlets", "guest_services", "json");
+    },
+  },
 ];
 
 /** drizzle/0015, the last migration before these steps */

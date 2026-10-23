@@ -5,6 +5,7 @@ import * as s from "@/db/schema";
 import { readFeatures } from "@/lib/plan-features";
 import { tenantAccess } from "@/server/access";
 import { AppError } from "@/server/errors";
+import { configuredGuestServices } from "@/domain/guest-services";
 
 /** Public restaurant entry point. Resolve the tenant from the public outlet code, then scope all
  * other reads to that tenant so an untrusted URL cannot reveal another restaurant's details. */
@@ -19,6 +20,7 @@ export async function getRestaurantHome(outletCode: string) {
     code: s.outlets.code,
     logoUrl: s.brands.logoUrl,
     accentColor: s.outlets.accentColor,
+    guestServices: s.outlets.guestServices,
   }).from(s.outlets)
     .innerJoin(s.tenants, eq(s.tenants.id, s.outlets.tenantId))
     .innerJoin(s.plans, eq(s.plans.code, s.tenants.planCode))
@@ -30,8 +32,9 @@ export async function getRestaurantHome(outletCode: string) {
     throw new AppError("outlet_unavailable", "This restaurant is not available right now.");
   }
   const features = readFeatures(row.customFeatures ?? row.planFeatures);
+  const selected = configuredGuestServices(row.guestServices);
   return {
     outlet: { code: row.code, name: row.name, city: row.city, logoUrl: row.logoUrl, accentColor: row.accentColor },
-    services: { dineIn: features.dineIn, reservations: features.reservations, rooms: features.rooms },
+    services: { dineIn: features.dineIn && selected.includes("dineIn"), reservations: features.reservations && selected.includes("reservations"), rooms: features.rooms && selected.includes("rooms") },
   };
 }

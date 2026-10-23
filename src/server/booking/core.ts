@@ -21,6 +21,8 @@ import type { StaffSession } from "../staff/auth";
 import { loadItems } from "../guest/menu";
 import { priceLine } from "@/domain/pricing";
 import { isWithinCategoryWindow } from "../guest/menu";
+import { configuredGuestServices, type GuestService } from "@/domain/guest-services";
+import { tenantAccess } from "../access";
 
 export const BOOKING_HOLD_MINUTES = 5;
 const LIVE = ["requested", "confirmed", "reminded", "arrived"] as const;
@@ -40,7 +42,7 @@ export type BookingSlot = {
   creditReason: string | null;
 };
 
-type OutletScope = { tenantId: string; brandId: string; outletId: string; outletCode: string; timezone: string; openingHours: WeeklyHours | null; name: string; address: string; city: string };
+type OutletScope = { tenantId: string; brandId: string; outletId: string; outletCode: string; timezone: string; openingHours: WeeklyHours | null; name: string; address: string; city: string; guestServices?: GuestService[] | null };
 
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const publicRef = () => `TQ-${randomBytes(5).toString("hex").toUpperCase()}`;
@@ -48,15 +50,20 @@ const liveStatuses = [...LIVE];
 
 async function outletScope(run: Runner, outletCode: string): Promise<OutletScope> {
   // isolation-exempt: the tenant is resolved from the public outlet code before scoped queries.
-  const [o] = await run.select({ tenantId: s.outlets.tenantId, brandId: s.outlets.brandId, outletId: s.outlets.id, outletCode: s.outlets.code, timezone: s.outlets.timezone, openingHours: s.outlets.openingHours, name: s.outlets.name, address: s.outlets.address, city: s.outlets.city })
+  const [o] = await run.select({ tenantId: s.outlets.tenantId, brandId: s.outlets.brandId, outletId: s.outlets.id, outletCode: s.outlets.code, timezone: s.outlets.timezone, openingHours: s.outlets.openingHours, name: s.outlets.name, address: s.outlets.address, city: s.outlets.city, guestServices: s.outlets.guestServices })
     .from(s.outlets).where(eq(s.outlets.code, String(outletCode).trim().toUpperCase()));
   if (!o) throw new AppError("not_found", "We could not find this restaurant.");
   return o;
 }
 
+async function requireOnlineBookings(scope: OutletScope) {
+  await requireFeature(scope.tenantId, "reservations");
+  if (!configuredGuestServices(scope.guestServices).includes("reservations") || (await tenantAccess(scope.tenantId)).state === "blocked") throw new AppError("forbidden", "Online booking is not available here. Please contact the restaurant.");
+}
+
 export async function getBookingZones(outletCode: string) {
   const scope = await outletScope(db, outletCode);
-  await requireFeature(scope.tenantId, "reservations");
+  await requireOnlineBookings(scope);
   return db.select({ id: s.zones.id, name: s.zones.name }).from(s.zones).where(and(eq(s.zones.tenantId, scope.tenantId), eq(s.zones.outletId, scope.outletId), eq(s.zones.isActive, true))).orderBy(asc(s.zones.sortOrder), asc(s.zones.name));
 }
 
@@ -166,7 +173,7 @@ function creditFor(policy: BookingPolicy, claims: { startAt: Date }[], startAt: 
 
 export async function getBookingAvailability(outletCode: string, input: { date: string; partySize: number; preference?: BookingPreference }, now = new Date()) {
   const scope = await outletScope(db, outletCode);
-  await requireFeature(scope.tenantId, "reservations");
+  await requireOnlineBookings(scope);
   await validateZone(db, scope, input.preference?.zoneId);
   const policy = policyWithFallback(await loadPolicy(db, scope));
   const date = String(input.date);
@@ -195,7 +202,7 @@ export async function getBookingAvailability(outletCode: string, input: { date: 
 
 export async function createBookingHold(outletCode: string, input: { date: string; startAt: number; partySize: number; preference?: BookingPreference; requestId: string; holdToken: string }, now = new Date()) {
   const scope = await outletScope(db, outletCode);
-  await requireFeature(scope.tenantId, "reservations");
+  await requireOnlineBookings(scope);
   await validateZone(db, scope, input.preference?.zoneId);
   const policy = policyWithFallback(await loadPolicy(db, scope));
   const startAt = new Date(Number(input.startAt));
@@ -221,10 +228,10 @@ export async function createBookingHold(outletCode: string, input: { date: strin
   return { reservationId: result.id, publicReference: result.publicReference, manageToken: (result as { manageToken?: string }).manageToken ?? input.holdToken, holdExpiresAt: result.holdExpiresAt?.getTime() ?? holdExpiresAt.getTime(), creditRequiredPaise: result.creditRequiredPaise };
 }
 
-export async function bookingByToken(outletCode: string, token: string) {
+export async function bookingByToken(outletCode: string, token: string, now = new Date()) {
   const scope = await outletScope(db, outletCode);
   const [row] = await db.select().from(s.reservations).where(and(eq(s.reservations.tenantId, scope.tenantId), eq(s.reservations.outletId, scope.outletId), eq(s.reservations.manageTokenHash, hash(token))));
-  if (!row) throw new AppError("not_found", "This booking link is not valid.");
+  if (!row || !row.manageTokenExpiresAt || row.manageTokenExpiresAt <= now) throw new AppError("not_found", "This booking link is not valid or has expired.");
   return { row, scope };
 }
 
@@ -285,12 +292,16 @@ export async function confirmBooking(outletCode: string, token: string, input: {
   const result = await db.transaction(async (tx) => {
     const [row] = await tx.select().from(s.reservations).where(and(eq(s.reservations.tenantId, scope.tenantId), eq(s.reservations.outletId, scope.outletId), eq(s.reservations.manageTokenHash, hash(token)))).for("update");
     if (!row) throw new AppError("not_found", "This booking link is not valid.");
-    if (row.status === "cancelled" || row.status === "no_show") throw new AppError("invalid_state", "This booking is no longer active.");
+    if (!row.manageTokenExpiresAt || row.manageTokenExpiresAt <= now) throw new AppError("not_found", "This booking link has expired.");
     if (row.status === "confirmed") return row.id;
+    if (row.status !== "requested") throw new AppError("invalid_state", "This booking is no longer awaiting confirmation.");
     if (row.status === "requested" && (!row.holdExpiresAt || row.holdExpiresAt <= now)) throw new AppError("conflict", "Your booking hold expired. Please choose another time.", { reason: "hold_expired" });
     if (row.creditRequiredPaise > row.creditPaidPaise) throw new AppError("payment_required", "Booking credit payment is required before confirmation.");
-    const guestId = input.guestId ?? null;
-    await tx.update(s.reservations).set({ name: input.name.trim().slice(0, 80), phone: input.phone, guestId, status: "confirmed", confirmedAt: now, holdExpiresAt: null, holdReleasedAt: null, updatedAt: now }).where(and(eq(s.reservations.tenantId, scope.tenantId), eq(s.reservations.id, row.id)));
+    if (!row.guestId || !row.phone || (input.guestId && input.guestId !== row.guestId)) throw new AppError("verification_required", "Verify your mobile number before confirming this booking.");
+    const [verifiedGuest] = await tx.select({ id: s.guests.id }).from(s.guests).where(and(eq(s.guests.tenantId, scope.tenantId), eq(s.guests.id, row.guestId), eq(s.guests.phone, row.phone)));
+    if (!verifiedGuest) throw new AppError("verification_required", "Verify your mobile number before confirming this booking.");
+    const guestId = verifiedGuest.id;
+    await tx.update(s.reservations).set({ status: "confirmed", confirmedAt: now, holdExpiresAt: null, holdReleasedAt: null, updatedAt: now }).where(and(eq(s.reservations.tenantId, scope.tenantId), eq(s.reservations.id, row.id)));
     await tx.insert(s.reservationHistory).values({ tenantId: scope.tenantId, reservationId: row.id, kind: "confirmed", before: { status: row.status }, after: { status: "confirmed", guestId }, createdAt: now });
     return row.id;
   }, LOCK_THEN_READ);
@@ -414,7 +425,7 @@ export async function arriveBookingPublic(outletCode: string, token: string, now
 
 export async function createGroupRequest(outletCode: string, input: { requestId: string; name: string; phone: string; partySize: number; desiredDate: string; desiredStartAt: number; notes?: string | null }) {
   const scope = await outletScope(db, outletCode); const partySize = Number(input.partySize);
-  await requireFeature(scope.tenantId, "reservations");
+  await requireOnlineBookings(scope);
   if (partySize <= 12 || partySize > 100 || !input.name.trim() || !input.phone.trim()) throw new AppError("invalid_state", "Group requests are for parties above 12 guests.");
   const existing = await db.select({ id: s.groupRequests.id, publicReference: s.groupRequests.publicReference }).from(s.groupRequests).where(and(eq(s.groupRequests.tenantId, scope.tenantId), eq(s.groupRequests.requestId, input.requestId))).limit(1);
   if (existing[0]) return existing[0];

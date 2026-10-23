@@ -38,8 +38,9 @@ async function hold(label: string, offset: number, credit = false) {
   return createBookingHold("SRJ01", { date, startAt: at, partySize: 2, requestId: `lock-${label}`, holdToken: `token-${label}` }, now);
 }
 
+let creditGuest = 0;
 async function payCredit(h: Awaited<ReturnType<typeof hold>>) {
-  const sent = await sendBookingOtp("SRJ01", h.manageToken, `device-${h.reservationId}`, "9876543218", now);
+  const sent = await sendBookingOtp("SRJ01", h.manageToken, `device-${h.reservationId}`, `98765432${String(creditGuest++).padStart(2, "0")}`, now);
   const verified = await verifyBookingOtp("SRJ01", h.manageToken, `device-${h.reservationId}`, sent.challengeId, sent.devCode!, "Credit Guest", false, now);
   const checkout = await startReservationCredit("SRJ01", h.manageToken, `payment-${h.reservationId}`, "http://localhost:3000/api/booking-credit/return?provider=mock&p=PLACEHOLDER");
   mockGateway.settle(checkout.gatewayRef!, "success");
@@ -80,6 +81,9 @@ describe("B1-B4 final credit and security evidence", () => {
 
   it("keeps duplicate confirmation/cancellation and waitlist tampering safe", async () => {
     await env.db.update(s.bookingPolicies).set({ peakCreditPaise: 0 }).where(and(eq(s.bookingPolicies.tenantId, env.demo.tenantId), eq(s.bookingPolicies.outletId, env.demo.outletId)));
-    const h = await hold("idempotent", 22); await confirmBooking("SRJ01", h.manageToken, { name: "Idempotent", phone: "9876543218" }, now); await confirmBooking("SRJ01", h.manageToken, { name: "Idempotent", phone: "9876543218" }, now); await cancelBookingPublic("SRJ01", h.manageToken, "guest_cancelled", new Date(now.getTime() - 3 * 3600_000)); await cancelBookingPublic("SRJ01", h.manageToken, "guest_cancelled", now); const joined = await joinPublicWaitlist("SRJ01", { name: "Tamper", phone: "9876543219", partySize: 2 }); await fails(publicWaitlistStatus("SRJ01", `${joined.token}bad`)); const s1 = await publicWaitlistStatus("SRJ01", joined.token); expect(s1.position).toBe(1); expect(s1.estimateMinutes).toBeGreaterThan(0);
+    const h = await hold("idempotent", 22);
+    const sent = await sendBookingOtp("SRJ01", h.manageToken, "idempotent-device", "9876543218", now);
+    await verifyBookingOtp("SRJ01", h.manageToken, "idempotent-device", sent.challengeId, sent.devCode!, "Idempotent", false, now);
+    await confirmBooking("SRJ01", h.manageToken, { name: "Idempotent", phone: "9876543218" }, now); await confirmBooking("SRJ01", h.manageToken, { name: "Idempotent", phone: "9876543218" }, now); await cancelBookingPublic("SRJ01", h.manageToken, "guest_cancelled", new Date(now.getTime() - 3 * 3600_000)); await cancelBookingPublic("SRJ01", h.manageToken, "guest_cancelled", now); const joined = await joinPublicWaitlist("SRJ01", { name: "Tamper", phone: "9876543219", partySize: 2 }); await fails(publicWaitlistStatus("SRJ01", `${joined.token}bad`)); const s1 = await publicWaitlistStatus("SRJ01", joined.token); expect(s1.position).toBe(1); expect(s1.estimateMinutes).toBeGreaterThan(0);
   });
 });

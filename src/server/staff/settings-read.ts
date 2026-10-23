@@ -6,6 +6,8 @@ import { configuredRoomRequestKinds, type RoomRequestKind } from "@/domain/rooms
 import { canSee } from "@/lib/staff-permissions";
 import { AppError } from "../errors";
 import type { StaffSession } from "./auth";
+import { configuredGuestServices, guestServices, type GuestService } from "@/domain/guest-services";
+import { tenantFeatures } from "../plan";
 
 // Outlet profile (read-only): the signed-in outlet's details and its setup counts, scoped to the
 // tenant and outlet.
@@ -17,6 +19,7 @@ export type OutletSettings = {
   sessionMode: string; autoAcceptOrders: boolean; guestOnlinePayments: boolean; serviceChargeBp: number; tipPresetsBp: number[] | null; reviewUrl: string | null;
   openingHours: Record<string, [string, string][]> | null;
   roomServices: RoomRequestKind[]; wifiSsid: string; wifiPassword: string;
+  guestServices: GuestService[]; availableGuestServices: GuestService[];
   tables: number; staff: number; plan: string;
 };
 
@@ -33,16 +36,18 @@ export async function getOutletSettings(staff: Staff): Promise<OutletSettings> {
   if (!canSee(staff.roles, "settings")) throw new AppError("forbidden", "Your role cannot view settings.");
   const [outlet] = await db.select().from(s.outlets).where(and(eq(s.outlets.tenantId, staff.tenantId), eq(s.outlets.id, staff.outletId)));
   if (!outlet) throw new AppError("not_found", "Outlet not found.");
-  const [[tables], [team], [plan], [brand]] = await Promise.all([
+  const [[tables], [team], [plan], [brand], features] = await Promise.all([
     db.select({ n: count() }).from(s.diningTables).where(and(eq(s.diningTables.tenantId, staff.tenantId), eq(s.diningTables.outletId, staff.outletId))),
     db.select({ n: count() }).from(s.staffRoles).where(and(eq(s.staffRoles.tenantId, staff.tenantId))),
     db.select({ name: s.plans.name }).from(s.tenants).innerJoin(s.plans, eq(s.tenants.planCode, s.plans.code)).where(eq(s.tenants.id, staff.tenantId)),
     db.select({ logoUrl: s.brands.logoUrl }).from(s.brands).where(and(eq(s.brands.tenantId, staff.tenantId), eq(s.brands.id, outlet.brandId))),
+    tenantFeatures(staff.tenantId),
   ]);
   return {
     name: outlet.name, code: outlet.code, city: outlet.city, address: outlet.address, gstin: outlet.gstin, fssai: outlet.fssai, timezone: outlet.timezone, logoUrl: brand?.logoUrl ?? null,
     sessionMode: outlet.sessionMode, autoAcceptOrders: outlet.autoAcceptOrders, guestOnlinePayments: outlet.guestOnlinePayments, serviceChargeBp: outlet.serviceChargeBp, tipPresetsBp: outlet.tipPresetsBp,
     reviewUrl: outlet.reviewUrl, openingHours: outlet.openingHours, tables: Number(tables.n), staff: Number(team.n), plan: plan?.name ?? "",
     roomServices: configuredRoomRequestKinds(outlet.roomServices), wifiSsid: outlet.wifiSsid ?? "", wifiPassword: outlet.wifiPassword ?? "",
+    guestServices: configuredGuestServices(outlet.guestServices), availableGuestServices: guestServices.filter(service => features[service]),
   };
 }

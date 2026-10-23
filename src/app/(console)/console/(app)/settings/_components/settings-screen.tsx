@@ -9,6 +9,7 @@ import type { OutletSettings } from "@/server/staff/settings-read";
 import { ROOM_REQUEST_LABEL, roomRequestKinds, type RoomRequestKind } from "@/domain/rooms";
 import { removeRestaurantLogoAction, saveSettingsAction, uploadRestaurantLogoAction } from "../actions";
 import { shrinkPhoto } from "@/lib/shrink-photo";
+import { GUEST_SERVICE_LABELS, type GuestService } from "@/domain/guest-services";
 
 const DAYS = [["mon", "Monday"], ["tue", "Tuesday"], ["wed", "Wednesday"], ["thu", "Thursday"], ["fri", "Friday"], ["sat", "Saturday"], ["sun", "Sunday"]] as const;
 const MODE: Record<string, string> = { open: "Open: anyone who scans can order", verified: "Verified: guests confirm their phone number first", host_confirmed: "Host confirms: staff approve each table" };
@@ -16,7 +17,7 @@ const TIP_OPTIONS = [5, 10, 15, 20];
 // Left-hand list of sections; "hours" is also the target of the setup guide's link
 const NAV = [
   ["restaurant", "Restaurant", Store], ["tax", "Tax and licences", Receipt], ["bill", "Bill and tips", Wallet],
-  ["orders", "Orders", ClipboardList], ["room-guest", "Room guest page", Wifi], ["hours", "Opening hours", Clock], ["plan", "Plan", CreditCard],
+  ["orders", "Orders", ClipboardList], ["guest-link", "Guest entry link", Store], ["room-guest", "Room guest page", Wifi], ["hours", "Opening hours", Clock], ["plan", "Plan", CreditCard],
 ] as const;
 type Hours = Record<string, [string, string][]>;
 
@@ -77,6 +78,7 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
   const [tips, setTips] = useState<number[]>(o.tipPresetsBp?.length ? o.tipPresetsBp.map((b) => b / 100) : [5, 10]);
   const [auto, setAuto] = useState(o.autoAcceptOrders);
   const [guestOnlinePayments, setGuestOnlinePayments] = useState(o.guestOnlinePayments);
+  const [publicServices, setPublicServices] = useState<GuestService[]>(o.guestServices);
   const [review, setReview] = useState(o.reviewUrl ?? "");
   const [roomServices, setRoomServices] = useState<RoomRequestKind[]>(o.roomServices);
   const [wifiSsid, setWifiSsid] = useState(o.wifiSsid);
@@ -93,7 +95,7 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
   const [logoMessage, setLogoMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
   // What is on screen against what was last saved, so the save bar can say if anything changed
-  const snapshot = JSON.stringify({ city, address, gstin, fssai, sc, tips, auto, guestOnlinePayments, review, roomServices, wifiSsid, wifiPassword, hours: hoursOn ? hours : null });
+  const snapshot = JSON.stringify({ city, address, gstin, fssai, sc, tips, auto, guestOnlinePayments, publicServices, review, roomServices, wifiSsid, wifiPassword, hours: hoursOn ? hours : null });
   const [savedSnapshot, setSavedSnapshot] = useState(snapshot);
   const dirty = snapshot !== savedSnapshot;
 
@@ -217,6 +219,7 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
         serviceChargeBp: Math.round(scNum * 100),
         tipPresetsBp: tips.map((t) => Math.round(t * 100)),
         autoAcceptOrders: auto, guestOnlinePayments, reviewUrl: review, roomServices, wifiSsid, wifiPassword,
+        guestServices: publicServices,
         openingHours: hoursOn ? hours : null,
       });
       setMsg(res.ok ? { ok: true, text: "Saved." } : { ok: false, text: res.message });
@@ -348,6 +351,14 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
             </Row>
             <Row label="Table mode" hint="Changed by TableQR."><Fixed>{MODE[o.sessionMode] ?? o.sessionMode}</Fixed></Row>
             <Row label="Google review link" htmlFor="review" hint="Guests see this after paying."><Input id="review" className={fieldCls} type="url" placeholder="https://g.page/r/…" value={review} onChange={(e) => setReview(e.target.value)} disabled={!canEdit} /></Row>
+          </Section>
+
+          <Section id="guest-link" icon={Store} title="Public restaurant link" desc="Choose the services shown after guests select their language.">
+            {o.availableGuestServices.map(service => <Row key={service} label={GUEST_SERVICE_LABELS[service].title} hint={GUEST_SERVICE_LABELS[service].hint}>
+              <div className="flex sm:justify-end"><Toggle on={publicServices.includes(service)} onChange={enabled => setPublicServices(current => enabled ? [...current, service] : current.filter(value => value !== service))} label={`Show ${GUEST_SERVICE_LABELS[service].title}`} disabled={!canEdit} /></div>
+            </Row>)}
+            <div className="py-4 text-sm text-muted">Only services included in your package can appear. Turning off party reservations also pauses new public bookings. Existing bookings and table or room QR codes stay accessible.</div>
+            <a className="inline-flex min-h-11 items-center py-3 font-semibold text-brand-strong underline underline-offset-4" href={`/r/${encodeURIComponent(o.code)}`} target="_blank" rel="noreferrer">Preview restaurant link ↗</a>
           </Section>
 
           <Section id="room-guest" icon={Wifi} title="Room guest page" desc="Choose what checked-in guests can request and share your Wi-Fi details.">

@@ -6,6 +6,7 @@ import { roomRequestKinds, type RoomRequestKind } from "@/domain/rooms";
 import { AppError } from "../errors";
 import { audit } from "./audit";
 import type { StaffSession } from "./auth";
+import { guestServices, type GuestService } from "@/domain/guest-services";
 
 // Outlet settings the owner may change. Name, code, time zone, table mode and plan stay with TableQR.
 
@@ -18,12 +19,14 @@ export type SettingsPatch = {
   serviceChargeBp: number; tipPresetsBp: number[] | null; autoAcceptOrders: boolean; guestOnlinePayments?: boolean; reviewUrl: string;
   openingHours: Record<string, [string, string][]> | null;
   roomServices: RoomRequestKind[]; wifiSsid: string; wifiPassword: string;
+  guestServices?: GuestService[];
 };
 
 const bad = (message: string) => new AppError("invalid_state", message, { reason: "settings" });
 
 export async function updateOutletSettings(staff: Staff, input: SettingsPatch, now = new Date()) {
   if (!staff.roles.includes("owner")) throw new AppError("forbidden", "Only the owner can change settings.");
+  if (input.guestOnlinePayments !== undefined && typeof input.guestOnlinePayments !== "boolean") throw bad("Choose a valid online payment preference.");
   const city = String(input.city ?? "").trim();
   const address = String(input.address ?? "").trim();
   if (!city || city.length > 80) throw bad("Enter the city.");
@@ -43,6 +46,7 @@ export async function updateOutletSettings(staff: Staff, input: SettingsPatch, n
   const reviewUrl = String(input.reviewUrl ?? "").trim();
   if (reviewUrl && (!/^https:\/\//i.test(reviewUrl) || reviewUrl.length > 500)) throw bad("Review link must start with https://");
   if (!Array.isArray(input.roomServices) || input.roomServices.some((kind) => !roomRequestKinds.includes(kind)) || new Set(input.roomServices).size !== input.roomServices.length) throw bad("Choose valid room service options.");
+  if (input.guestServices !== undefined && (!Array.isArray(input.guestServices) || input.guestServices.some(service => !guestServices.includes(service)) || new Set(input.guestServices).size !== input.guestServices.length)) throw bad("Choose valid guest services.");
   const roomServices = [...input.roomServices];
   const wifiSsid = String(input.wifiSsid ?? "").trim();
   const wifiPassword = String(input.wifiPassword ?? "");
@@ -63,11 +67,12 @@ export async function updateOutletSettings(staff: Staff, input: SettingsPatch, n
     const [before] = await tx.select().from(s.outlets).where(and(eq(s.outlets.tenantId, staff.tenantId), eq(s.outlets.id, staff.outletId))).for("update");
     if (!before) throw new AppError("not_found", "Outlet not found.");
     const next = { city, address, gstin: gstin || null, fssai: fssai || null, serviceChargeBp: sc, tipPresetsBp: tips, autoAcceptOrders: !!input.autoAcceptOrders, guestOnlinePayments: input.guestOnlinePayments ?? before.guestOnlinePayments, reviewUrl: reviewUrl || null, openingHours: hours, roomServices, wifiSsid: wifiSsid || null, wifiPassword: wifiPassword || null };
-    await tx.update(s.outlets).set(next).where(and(eq(s.outlets.tenantId, staff.tenantId), eq(s.outlets.id, staff.outletId)));
+    const nextGuestServices = input.guestServices === undefined ? before.guestServices : [...input.guestServices];
+    await tx.update(s.outlets).set({ ...next, guestServices: nextGuestServices }).where(and(eq(s.outlets.tenantId, staff.tenantId), eq(s.outlets.id, staff.outletId)));
     await audit(tx, staff, {
       action: "outlet.settings_changed", entity: "outlet", entityId: staff.outletId, now,
       before: { city: before.city, address: before.address, gstin: before.gstin, fssai: before.fssai, serviceChargeBp: before.serviceChargeBp, tipPresetsBp: before.tipPresetsBp, autoAcceptOrders: before.autoAcceptOrders, guestOnlinePayments: before.guestOnlinePayments, reviewUrl: before.reviewUrl, openingHours: before.openingHours, roomServices: before.roomServices, wifiSsid: before.wifiSsid, hasWifiPassword: !!before.wifiPassword },
-      after: { ...next, wifiPassword: "[redacted]", hasWifiPassword: !!wifiPassword },
+      after: { ...next, guestServices: nextGuestServices, wifiPassword: "[redacted]", hasWifiPassword: !!wifiPassword },
     });
   });
 }

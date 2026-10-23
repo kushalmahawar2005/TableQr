@@ -1,0 +1,1 @@
+ALTER TABLE `outlets` ADD `guest_services` json;

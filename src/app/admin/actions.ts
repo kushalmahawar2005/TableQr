@@ -99,6 +99,8 @@ export async function createTenantAction(_prev: TenantState, form: FormData): Pr
     const tableCount = Math.min(100, Math.max(1, Number(text(form, "tableCount") || 4)));
     const roomCount = Math.min(200, Math.max(0, Math.floor(Number(text(form, "roomCount") || 0))));
     const trialDays = Math.min(90, Math.max(1, Math.floor(Number(text(form, "trialDays") || 14))));
+    const guestPayments = text(form, "guestPayments") || "online";
+    if (!["online", "counter"].includes(guestPayments)) return { error: "Choose online checkout or restaurant-collected payments.", success: null };
     // Kitchen screen chosen at onboarding: stored only when it differs from the plan
     const kitchenChoice = form.get("kitchenDisplay") === null ? null : text(form, "kitchenDisplay") === "on";
     if (!tenantName || !contactName || !contactPhone || !planCode || !outletName || !city || !address || !ownerPhone || !ownerName || !isPin(ownerPin)) {
@@ -122,7 +124,7 @@ export async function createTenantAction(_prev: TenantState, form: FormData): Pr
       const tableLimit = planTables !== null && tableCount > planTables ? tableCount : null;
       await tx.insert(s.tenants).values({ id: tenantId, name: tenantName, planCode, contactName, contactPhone, contactEmail: contactEmail || null, createdByAdminId: admin.id, kitchenDisplay, tableLimit, customFeatures: selectedFeatures, trialEndsAt: new Date(Date.now() + trialDays * 86_400_000) });
       await tx.insert(s.brands).values({ id: brandId, tenantId, name: brandName });
-      await tx.insert(s.outlets).values({ id: outletId, tenantId, brandId, code: outletCode, name: outletName, city, address });
+      await tx.insert(s.outlets).values({ id: outletId, tenantId, brandId, code: outletCode, name: outletName, city, address, guestOnlinePayments: guestPayments === "online" });
       await tx.insert(s.users).values({ id: userId, tenantId, phone: ownerPhone, name: ownerName, pinHash: await hashPin(ownerPin) });
       await tx.insert(s.staffRoles).values({ id: uuidv7(), tenantId, userId, outletId, role: "owner" });
       await addStarterFloor(tx, tenantId, outletId, zoneId, planFeatures.dineIn ? tableCount : 0);

@@ -12,6 +12,7 @@ import {
 import { at, createdAt, id, ref, sameTenant, tenantId, tenantKey, updatedAt } from "./_columns";
 import { plans, platformAdmins, type PlanFeatures } from "./platform";
 import type { RoomRequestKind } from "../../domain/rooms";
+import type { GuestService } from "../../domain/guest-services";
 
 // Tenant > Brand > Outlet (PS 7.2), plus staff and their roles (PS 7.5).
 
@@ -170,6 +171,8 @@ export const outlets = mysqlTable(
     autoAcceptOrders: boolean("auto_accept_orders").notNull().default(false),
     /** Owner can disable guest gateway checkout and collect every bill at the counter instead. */
     guestOnlinePayments: boolean("guest_online_payments").notNull().default(true),
+    /** Choices shown on the public restaurant entry link; null follows the tenant's package. */
+    guestServices: json("guest_services").$type<GuestService[]>(),
     /** Open mode: first order of a new session above this needs staff confirmation */
     newSessionCapPaise: int("new_session_cap_paise").notNull().default(300000),
     soldOutDisplay: mysqlEnum("sold_out_display", ["hide", "grey"]).notNull().default("grey"),

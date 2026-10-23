@@ -95,6 +95,7 @@ export function CreateTenantDialog({ open, onOpenChange, plans }: { open: boolea
   const kitchenOn = kitchen ?? features.kitchenDisplay;
   const chosen = plans.find((p) => p.code === planCode);
   const [roomCount, setRoomCount] = useState("10");
+  const [guestPayments, setGuestPayments] = useState("online");
   const [review, setReview] = useState<Record<string, string>>({});
   const form = useRef<HTMLFormElement>(null);
   const last = sections.length; // the plan and review step comes after the field sections
@@ -212,6 +213,14 @@ export function CreateTenantDialog({ open, onOpenChange, plans }: { open: boolea
             <input type="hidden" name="kitchenDisplay" value={kitchenOn ? "on" : "off"} />
             <span><span className="block font-medium">Kitchen screen</span><span className="block text-xs text-muted-foreground">Gives the Kitchen staff role and the wall kitchen screen. Comes with the plan when ticked by default; you can change it for this restaurant.</span></span>
           </label>
+          <fieldset className="space-y-2 rounded-xl border p-3">
+            <legend className="px-1 text-sm font-semibold">How guests pay their bill</legend>
+            <p className="text-xs text-muted-foreground">The owner can change this later in Settings. Online checkout also requires a configured payment gateway.</p>
+            {[
+              { value: "online", title: "Online checkout and counter", hint: "Guests can pay online or ask staff to collect payment." },
+              { value: "counter", title: "Restaurant collects payment", hint: "Staff collect cash, card or the restaurant’s own UPI payment and record it as received." },
+            ].map(option => <label key={option.value} className="flex cursor-pointer items-start gap-3 rounded-lg border p-3 text-sm has-[:checked]:border-primary has-[:checked]:bg-primary/5"><input type="radio" name="guestPayments" value={option.value} checked={guestPayments === option.value} onChange={() => setGuestPayments(option.value)} className="mt-0.5 size-4 accent-[var(--primary)]" /><span><span className="block font-medium">{option.title}</span><span className="block text-xs text-muted-foreground">{option.hint}</span></span></label>)}
+          </fieldset>
           <dl className="divide-y rounded-xl border text-sm">
             {([["Brand", review.brandName], ["Contact", [review.contactName, review.contactPhone].filter(Boolean).join(" · ")], ["Outlet", [review.outletName, review.city].filter(Boolean).join(", ")], ["Outlet code", review.outletCode || "Made when created"], ["Tables", (customize ? features.dineIn : chosen?.features.dineIn) ? review.tableCount : "None"], ...((customize ? features.rooms : chosen?.features.rooms) ? [["Rooms", roomCount]] as const : []), ["Owner", [review.ownerName, review.ownerPhone].filter(Boolean).join(" · ")], ["Kitchen screen", kitchenOn ? "Yes" : "No"], ...(customize ? [["Package", "Custom tenant feature set"]] as const : [])] as const).map(([k, v]) => <div key={k} className="flex items-center justify-between gap-4 px-4 py-2.5"><dt className="text-muted-foreground">{k}</dt><dd className="min-w-0 break-words text-right font-medium">{v}</dd></div>)}
           </dl>
