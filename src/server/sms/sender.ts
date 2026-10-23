@@ -7,6 +7,57 @@ export interface SmsSender {
   sendOtp(input: { phone: string; code: string; outletName: string }): Promise<{ ok: boolean }>;
 }
 
+type Fast2SmsConfig = {
+  apiKey: string;
+  templateId: string;
+  otpExpiryMinutes: number;
+};
+
+function fast2SmsConfig(): Fast2SmsConfig | null {
+  const apiKey = process.env.FAST2SMS_API_KEY?.trim() ?? "";
+  const templateId = process.env.FAST2SMS_OTP_TEMPLATE_ID?.trim() ?? "";
+  const expiry = Number(process.env.FAST2SMS_OTP_EXPIRY_MINUTES || 5);
+  if (!apiKey || !/^\d{4,20}$/.test(templateId) || !Number.isInteger(expiry) || expiry < 1 || expiry > 10080) return null;
+  return { apiKey, templateId, otpExpiryMinutes: expiry };
+}
+
+/** Fast2SMS Smart OTP keeps the app's own hashed OTP verification and rate limits. */
+export class Fast2SmsSender implements SmsSender {
+  readonly name = "fast2sms";
+
+  constructor(private readonly config: Fast2SmsConfig, private readonly request: typeof fetch = fetch) {}
+
+  async sendOtp(input: { phone: string; code: string; outletName: string }) {
+    const mobile = input.phone.replace(/^\+91/, "");
+    if (!/^\d{10}$/.test(mobile) || !/^\d{4,10}$/.test(input.code)) return { ok: false };
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 7_000);
+    try {
+      const response = await this.request("https://www.fast2sms.com/dev/otp/send", {
+        method: "POST",
+        headers: { Authorization: this.config.apiKey, "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({
+          mobile,
+          otp_id: this.config.templateId,
+          otp: input.code,
+          otp_length: input.code.length,
+          otp_expiry: this.config.otpExpiryMinutes,
+        }),
+        signal: controller.signal,
+        cache: "no-store",
+      });
+      if (!response.ok) return { ok: false };
+      const result: unknown = await response.json().catch(() => null);
+      return { ok: !!result && typeof result === "object" && "return" in result && result.return === true };
+    } catch {
+      return { ok: false };
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+}
+
 /** Development and test sender: remembers the last code per number and logs it on the server */
 class MockSms implements SmsSender {
   readonly name = "mock";
@@ -40,5 +91,19 @@ export function smsMockEnabled() {
 }
 
 export function smsSender(): SmsSender {
-  return process.env.NODE_ENV === "production" ? new NotConfigured() : mockSms;
+  const provider = process.env.SMS_PROVIDER?.trim().toLowerCase();
+  if (provider === "fast2sms") {
+    const config = fast2SmsConfig();
+    return config ? new Fast2SmsSender(config) : new NotConfigured();
+  }
+  // Never silently fall back to demo OTP in production, including on a provider outage.
+  if (process.env.NODE_ENV === "production") return new NotConfigured();
+  return provider === "none" ? new NotConfigured() : mockSms;
+}
+
+export function smsProviderReadiness() {
+  const provider = process.env.SMS_PROVIDER?.trim().toLowerCase() || "";
+  if (provider === "fast2sms") return { provider, configured: !!fast2SmsConfig() };
+  if (provider === "none") return { provider, configured: false };
+  return { provider: provider || "unset", configured: process.env.NODE_ENV !== "production" };
 }
