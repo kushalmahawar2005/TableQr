@@ -17,5 +17,5 @@ export default async function SettingsPage() {
   }
   const o = await getOutletSettings(staff);
   const canEdit = staff.roles.includes("owner");
-  return <><SettingsScreen o={o} canEdit={canEdit} /><div className="mx-auto w-full px-4 pb-8 sm:px-6"><RestaurantPaymentSettings initial={o.paymentGateway} canEdit={canEdit} /><CustomDomainSettings domain={o.customDomain} token={canEdit ? o.customDomainToken : null} verifiedAt={o.customDomainVerifiedAt} live={o.customDomainLive} canEdit={canEdit} /></div></>;
+  return <><SettingsScreen o={o} canEdit={canEdit} /><div className="mx-auto w-full px-4 pb-40 sm:px-6 sm:pb-28"><RestaurantPaymentSettings initial={o.paymentGateway} canEdit={canEdit} /><CustomDomainSettings domain={o.customDomain} token={canEdit ? o.customDomainToken : null} verifiedAt={o.customDomainVerifiedAt} live={o.customDomainLive} canEdit={canEdit} /></div></>;
 }
