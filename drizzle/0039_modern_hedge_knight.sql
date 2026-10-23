@@ -1,0 +1,1 @@
+ALTER TABLE `outlets` ADD `delivery_policy` json;

@@ -36,6 +36,7 @@ describe("schema update at startup", () => {
     await env.db.execute(sql`ALTER TABLE users DROP COLUMN guide`);
     await env.db.execute(sql`ALTER TABLE outlets DROP COLUMN guest_online_payments`);
     await env.db.execute(sql`ALTER TABLE outlets DROP COLUMN guest_services`);
+    await env.db.execute(sql`ALTER TABLE outlets DROP COLUMN delivery_policy`);
     await env.db.execute(sql`ALTER TABLE outlets DROP COLUMN booking_payment_mode, DROP COLUMN booking_payment_qr_url`);
     await env.db.execute(sql`ALTER TABLE reservations DROP COLUMN manual_advance_reference, DROP COLUMN manual_advance_claimed_at, DROP COLUMN manual_advance_confirmed_at, DROP COLUMN advance_payment_mode, DROP COLUMN advance_payment_qr_url, DROP COLUMN booking_device_id`);
     await env.db.execute(sql`ALTER TABLE staff_roles MODIFY COLUMN role enum('owner','manager','cashier','host','waiter','kitchen','accountant') NOT NULL`);
@@ -66,7 +67,7 @@ describe("schema update at startup", () => {
     const limits = await rows<{ n: number; lim: number }>(sql`SELECT t.table_limit AS lim, (SELECT COUNT(*) FROM dining_tables d WHERE d.tenant_id = t.id AND d.is_active = 1) AS n FROM tenants t`);
     for (const l of limits) expect(Number(l.lim)).toBe(Math.max(1, Number(l.n)));
     const recorded = await rows<{ n: number }>(sql`SELECT COUNT(*) AS n FROM __drizzle_migrations WHERE created_at > 1791043208000`);
-    expect(Number(recorded[0].n)).toBe(23);
+    expect(Number(recorded[0].n)).toBe(24);
     const feeColumns = await rows<{ c: string }>(sql`SELECT COLUMN_NAME AS c FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'fee_payments' AND COLUMN_NAME IN ('client_request_id', 'gateway_ref', 'gateway_payment_id', 'failure_reason', 'checked_at') ORDER BY COLUMN_NAME`);
     expect(feeColumns.map((r) => r.c)).toEqual(["checked_at", "client_request_id", "failure_reason", "gateway_payment_id", "gateway_ref"]);
     expect(String((await rows<{ t: string }>(sql`SELECT COLUMN_TYPE AS t FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'fee_payments' AND COLUMN_NAME = 'method'`))[0].t)).toContain("'cashfree'");
@@ -87,7 +88,7 @@ describe("schema update at startup", () => {
     // Second start: nothing changes, nothing is recorded twice
     await env.db.execute(sql`UPDATE tenants SET table_limit = 99`);
     await ensureSchema(appDb.$client);
-    expect(Number((await rows<{ n: number }>(sql`SELECT COUNT(*) AS n FROM __drizzle_migrations WHERE created_at > 1791043208000`))[0].n)).toBe(23);
+    expect(Number((await rows<{ n: number }>(sql`SELECT COUNT(*) AS n FROM __drizzle_migrations WHERE created_at > 1791043208000`))[0].n)).toBe(24);
     expect((await rows<{ lim: number }>(sql`SELECT DISTINCT table_limit AS lim FROM tenants`)).map((r) => Number(r.lim))).toEqual([99]);
   });
 });

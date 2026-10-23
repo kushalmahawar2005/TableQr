@@ -1,4 +1,6 @@
 import "server-only";
+import { validateDeliveryPolicy, type DeliveryPolicy } from "@/domain/delivery";
+import { requireFeature } from "../plan";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import * as s from "@/db/schema";
@@ -15,6 +17,7 @@ const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 export type SettingsPatch = {
+  deliveryPolicy?: DeliveryPolicy;
   city: string; address: string; gstin: string; fssai: string;
   serviceChargeBp: number; tipPresetsBp: number[] | null; autoAcceptOrders: boolean; guestOnlinePayments?: boolean; reviewUrl: string;
   openingHours: Record<string, [string, string][]> | null;
@@ -29,6 +32,12 @@ export async function updateOutletSettings(staff: Staff, input: SettingsPatch, n
   if (!staff.roles.includes("owner")) throw new AppError("forbidden", "Only the owner can change settings.");
   if (input.guestOnlinePayments !== undefined && typeof input.guestOnlinePayments !== "boolean") throw bad("Choose a valid online payment preference.");
   if (input.bookingPaymentMode !== undefined && !["gateway", "manual_qr"].includes(input.bookingPaymentMode)) throw bad("Choose a valid booking payment method.");
+  let deliveryPolicy: DeliveryPolicy | undefined;
+  if (input.deliveryPolicy !== undefined) {
+    await requireFeature(staff.tenantId, "delivery");
+    try { deliveryPolicy = validateDeliveryPolicy(input.deliveryPolicy); }
+    catch (error) { throw bad(error instanceof Error ? error.message : "Choose valid delivery settings."); }
+  }
   const city = String(input.city ?? "").trim();
   const address = String(input.address ?? "").trim();
   if (!city || city.length > 80) throw bad("Enter the city.");
@@ -72,11 +81,12 @@ export async function updateOutletSettings(staff: Staff, input: SettingsPatch, n
     const nextGuestServices = input.guestServices === undefined ? before.guestServices : [...input.guestServices];
     const bookingPaymentMode = input.bookingPaymentMode ?? before.bookingPaymentMode;
     if (bookingPaymentMode === "manual_qr" && !before.bookingPaymentQrUrl) throw bad("Upload your payment QR before enabling manual booking advances.");
-    await tx.update(s.outlets).set({ ...next, guestServices: nextGuestServices, bookingPaymentMode }).where(and(eq(s.outlets.tenantId, staff.tenantId), eq(s.outlets.id, staff.outletId)));
+    if (deliveryPolicy?.paymentMode === "manual_qr" && !before.bookingPaymentQrUrl) throw bad("Upload your restaurant payment QR before selecting manual delivery payments.");
+    await tx.update(s.outlets).set({ ...next, ...(deliveryPolicy ? { deliveryPolicy } : {}), guestServices: nextGuestServices, bookingPaymentMode }).where(and(eq(s.outlets.tenantId, staff.tenantId), eq(s.outlets.id, staff.outletId)));
     await audit(tx, staff, {
       action: "outlet.settings_changed", entity: "outlet", entityId: staff.outletId, now,
-      before: { city: before.city, address: before.address, gstin: before.gstin, fssai: before.fssai, serviceChargeBp: before.serviceChargeBp, tipPresetsBp: before.tipPresetsBp, autoAcceptOrders: before.autoAcceptOrders, guestOnlinePayments: before.guestOnlinePayments, guestServices: before.guestServices, bookingPaymentMode: before.bookingPaymentMode, reviewUrl: before.reviewUrl, openingHours: before.openingHours, roomServices: before.roomServices, wifiSsid: before.wifiSsid, hasWifiPassword: !!before.wifiPassword },
-      after: { ...next, guestServices: nextGuestServices, bookingPaymentMode, wifiPassword: "[redacted]", hasWifiPassword: !!wifiPassword },
+      before: { deliveryPolicy: before.deliveryPolicy, city: before.city, address: before.address, gstin: before.gstin, fssai: before.fssai, serviceChargeBp: before.serviceChargeBp, tipPresetsBp: before.tipPresetsBp, autoAcceptOrders: before.autoAcceptOrders, guestOnlinePayments: before.guestOnlinePayments, guestServices: before.guestServices, bookingPaymentMode: before.bookingPaymentMode, reviewUrl: before.reviewUrl, openingHours: before.openingHours, roomServices: before.roomServices, wifiSsid: before.wifiSsid, hasWifiPassword: !!before.wifiPassword },
+      after: { ...next, deliveryPolicy: deliveryPolicy ?? before.deliveryPolicy, guestServices: nextGuestServices, bookingPaymentMode, wifiPassword: "[redacted]", hasWifiPassword: !!wifiPassword },
     });
   });
 }

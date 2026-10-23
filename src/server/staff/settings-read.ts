@@ -1,4 +1,5 @@
 import "server-only";
+import { readDeliveryPolicy, type DeliveryPolicy } from "@/domain/delivery";
 import { and, count, eq } from "drizzle-orm";
 import { db } from "@/db";
 import * as s from "@/db/schema";
@@ -15,6 +16,7 @@ import { tenantFeatures } from "../plan";
 type Staff = Pick<StaffSession, "tenantId" | "outletId" | "roles">;
 
 export type OutletSettings = {
+  deliveryPolicy: DeliveryPolicy; deliveryAvailable: boolean;
   name: string; code: string; city: string; address: string; gstin: string | null; fssai: string | null; timezone: string; logoUrl: string | null;
   sessionMode: string; autoAcceptOrders: boolean; guestOnlinePayments: boolean; serviceChargeBp: number; tipPresetsBp: number[] | null; reviewUrl: string | null;
   openingHours: Record<string, [string, string][]> | null;
@@ -45,6 +47,7 @@ export async function getOutletSettings(staff: Staff): Promise<OutletSettings> {
     tenantFeatures(staff.tenantId),
   ]);
   return {
+    deliveryPolicy: readDeliveryPolicy(outlet.deliveryPolicy), deliveryAvailable: features.delivery,
     name: outlet.name, code: outlet.code, city: outlet.city, address: outlet.address, gstin: outlet.gstin, fssai: outlet.fssai, timezone: outlet.timezone, logoUrl: brand?.logoUrl ?? null,
     sessionMode: outlet.sessionMode, autoAcceptOrders: outlet.autoAcceptOrders, guestOnlinePayments: outlet.guestOnlinePayments, serviceChargeBp: outlet.serviceChargeBp, tipPresetsBp: outlet.tipPresetsBp,
     reviewUrl: outlet.reviewUrl, openingHours: outlet.openingHours, tables: Number(tables.n), staff: Number(team.n), plan: plan?.name ?? "",

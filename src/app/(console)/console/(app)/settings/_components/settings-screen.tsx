@@ -10,6 +10,7 @@ import type { OutletSettings } from "@/server/staff/settings-read";
 import { ROOM_REQUEST_LABEL, roomRequestKinds, type RoomRequestKind } from "@/domain/rooms";
 import { removeRestaurantLogoAction, saveSettingsAction, uploadBookingPaymentQrAction, uploadRestaurantLogoAction } from "../actions";
 import { shrinkPhoto } from "@/lib/shrink-photo";
+import { DeliverySettings } from "./delivery-settings";
 import { GUEST_SERVICE_LABELS, type GuestService } from "@/domain/guest-services";
 
 const DAYS = [["mon", "Monday"], ["tue", "Tuesday"], ["wed", "Wednesday"], ["thu", "Thursday"], ["fri", "Friday"], ["sat", "Saturday"], ["sun", "Sunday"]] as const;
@@ -18,7 +19,7 @@ const TIP_OPTIONS = [5, 10, 15, 20];
 // Left-hand list of sections; "hours" is also the target of the setup guide's link
 const NAV = [
   ["restaurant", "Restaurant", Store], ["tax", "Tax and licences", Receipt], ["bill", "Bill and tips", Wallet],
-  ["orders", "Orders", ClipboardList], ["guest-link", "Guest entry link", Store], ["room-guest", "Room guest page", Wifi], ["hours", "Opening hours", Clock], ["plan", "Plan", CreditCard],
+  ["orders", "Orders", ClipboardList], ["guest-link", "Guest entry link", Store], ["delivery", "Delivery setup", Store], ["room-guest", "Room guest page", Wifi], ["hours", "Opening hours", Clock], ["plan", "Plan", CreditCard],
 ] as const;
 type Hours = Record<string, [string, string][]>;
 
@@ -77,6 +78,7 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
   const [fssai, setFssai] = useState(o.fssai ?? "");
   const [sc, setSc] = useState(o.serviceChargeBp ? String(o.serviceChargeBp / 100) : "");
   const [tips, setTips] = useState<number[]>(o.tipPresetsBp?.length ? o.tipPresetsBp.map((b) => b / 100) : [5, 10]);
+  const [deliveryPolicy, setDeliveryPolicy] = useState(o.deliveryPolicy);
   const [auto, setAuto] = useState(o.autoAcceptOrders);
   const [guestOnlinePayments, setGuestOnlinePayments] = useState(o.guestOnlinePayments);
   const [publicServices, setPublicServices] = useState<GuestService[]>(o.guestServices);
@@ -99,7 +101,7 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
   const [logoMessage, setLogoMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
   // What is on screen against what was last saved, so the save bar can say if anything changed
-  const snapshot = JSON.stringify({ city, address, gstin, fssai, sc, tips, auto, guestOnlinePayments, publicServices, bookingPaymentMode, review, roomServices, wifiSsid, wifiPassword, hours: hoursOn ? hours : null });
+  const snapshot = JSON.stringify({ city, address, gstin, fssai, sc, tips, auto, guestOnlinePayments, publicServices, bookingPaymentMode, deliveryPolicy, review, roomServices, wifiSsid, wifiPassword, hours: hoursOn ? hours : null });
   const [savedSnapshot, setSavedSnapshot] = useState(snapshot);
   const dirty = snapshot !== savedSnapshot;
 
@@ -225,6 +227,7 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
         autoAcceptOrders: auto, guestOnlinePayments, reviewUrl: review, roomServices, wifiSsid, wifiPassword,
         guestServices: publicServices,
         bookingPaymentMode,
+        ...(o.deliveryAvailable ? { deliveryPolicy } : {}),
         openingHours: hoursOn ? hours : null,
       });
       setMsg(res.ok ? { ok: true, text: "Saved." } : { ok: false, text: res.message });
@@ -382,6 +385,10 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
               }} /></label>
             </div>
             <a className="inline-flex min-h-11 items-center py-3 font-semibold text-brand-strong underline underline-offset-4" href={`/r/${encodeURIComponent(o.code)}`} target="_blank" rel="noreferrer">Preview restaurant link ↗</a>
+          </Section>
+
+          <Section id="delivery" icon={Store} title="Delivery setup" desc="Service areas, delivery charges and payment preferences for this outlet.">
+            {o.deliveryAvailable ? <DeliverySettings value={deliveryPolicy} onChange={setDeliveryPolicy} disabled={!canEdit} hasPaymentQr={!!paymentQr} /> : <p className="py-4 text-sm text-muted">Delivery is not included in this restaurant’s package. TableQR can enable it from the tenant’s feature settings.</p>}
           </Section>
 
           <Section id="room-guest" icon={Wifi} title="Room guest page" desc="Choose what checked-in guests can request and share your Wi-Fi details.">

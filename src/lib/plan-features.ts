@@ -14,6 +14,7 @@ export const FEATURE_KEYS = [
   "fullReports",
   "multiOutlet",
   "inventory",
+  "delivery",
 ] as const;
 export type FeatureKey = (typeof FEATURE_KEYS)[number];
 
@@ -29,6 +30,7 @@ export const FEATURE_LABELS: Record<FeatureKey, { label: string; hint: string }>
   pricingRules: { label: "Pricing rules", hint: "Outlet prices and bulk price changes" },
   fullReports: { label: "Full reports", hint: "Sales, items and staff reports (Day close is always included)" },
   multiOutlet: { label: "Multiple outlets", hint: "More than one outlet under this restaurant" },
+  delivery: { label: "Delivery orders", hint: "Home delivery with outlet service areas, charges and payment preferences" },
   inventory: { label: "Inventory & recipes", hint: "Stock that goes down as dishes sell, with low-stock alerts" },
 };
 
@@ -54,8 +56,8 @@ export function readFeatures(raw: unknown): Features {
   const out = { maxTables: limit(r.maxTables), maxStaff: limit(r.maxStaff), maxRooms: limit(r.maxRooms), poweredBy: on(r.poweredBy, false) } as Features;
   // Older plan rows said "full" bookings for reservations plus waitlist
   const reservationsFallback = r.bookings === undefined ? true : r.bookings === "full";
-  // Inventory and rooms came later than the rest: a row without them never had them
-  for (const k of FEATURE_KEYS) out[k] = on(r[k], k === "reservations" ? reservationsFallback : k !== "inventory" && k !== "rooms");
+  // Inventory, rooms and delivery came later: missing flags must not grant them.
+  for (const k of FEATURE_KEYS) out[k] = on(r[k], k === "reservations" ? reservationsFallback : k !== "inventory" && k !== "rooms" && k !== "delivery");
   return out;
 }
 

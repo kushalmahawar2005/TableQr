@@ -332,6 +332,12 @@ const STEPS: Step[] = [
       await addColumn(db, "reservations", "booking_device_id", "varchar(64)");
     },
   },
+  {
+    tag: "0039_modern_hedge_knight", when: 1792774386962, hash: "6c3926b3ec4559e4a0ab5ea3dff96a9354f879809d0192ccf2ba503596a18e9a",
+    apply: async (db) => {
+      await addColumn(db, "outlets", "delivery_policy", "json");
+    },
+  },
 ];
 
 /** drizzle/0015, the last migration before these steps */
