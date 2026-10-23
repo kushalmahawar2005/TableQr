@@ -16,9 +16,8 @@ import { requireStaffRole } from "../staff/waiter";
 import { lockSession, syncBill } from "./bill";
 import { reopenBill } from "./payments";
 
-// Items added at the counter while the guest is paying: a chocolate, a bottle of water, mouth
-// freshener. The bill opens, takes the items and is asked for again in one step; the items are
-// handed over at the counter, so they are marked served and never wait on a kitchen screen.
+// Items added at the counter while the guest is paying: ordinary counter goods are handed over
+// directly; lines marked for pickup remain open on the kitchen ticket so they can be packed.
 // Once anyone has paid part of the bill, add them as a takeaway instead.
 
 export async function addItemsAtBilling(staff: StaffSession, input: { sessionId: string; tableId: string; participantId: string; clientRequestId: string; lines: StaffDraftLine[] }, now = new Date()) {
@@ -56,7 +55,7 @@ export async function addItemsAtBilling(staff: StaffSession, input: { sessionId:
     await tx
       .update(s.orderLines)
       .set({ status: "served", servedAt: now })
-      .where(and(eq(s.orderLines.tenantId, staff.tenantId), eq(s.orderLines.orderId, placed.orderId), inArray(s.orderLines.status, ["placed", "accepted", "preparing", "ready"])));
+      .where(and(eq(s.orderLines.tenantId, staff.tenantId), eq(s.orderLines.orderId, placed.orderId), eq(s.orderLines.personalForPickup, false), inArray(s.orderLines.status, ["placed", "accepted", "preparing", "ready"])));
     await syncTickets(tx, staff.tenantId, placed.orderId, now);
     await syncOrderStatus(tx, staff.tenantId, placed.orderId, now);
     await audit(tx, staff, { action: "billing.counter_items", entity: "order", entityId: placed.orderId, after: { sessionId: input.sessionId, lines: input.lines.length }, now });

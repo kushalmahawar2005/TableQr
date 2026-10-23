@@ -4,6 +4,7 @@ import { db as appDb } from "@/db";
 import * as s from "@/db/schema";
 import { addItemsAtBilling } from "@/server/billing/counter-items";
 import { requestBill, setSplitMode } from "@/server/billing/payments";
+import { getKitchenDisplay } from "@/server/kitchen/display";
 import { addCartLine, addConfiguredLine } from "@/server/guest/cart";
 import { getGuestContext, type GuestContext } from "@/server/guest/context";
 import { placeOrder } from "@/server/guest/order";
@@ -29,7 +30,7 @@ afterAll(async () => {
   await appDb.$client.end();
 });
 
-async function table(code: "T6" | "T7" | "T8", pickupFor?: "host" | "other") {
+async function table(code: "T6" | "T7" | "T8" | "T9", pickupFor?: "host" | "other") {
   const qr = env.demo.tableQr[code];
   const a = await startOrJoinTable({ outletCode: "SRJ01", shortCode: qr, deviceId: `${code}-a`, displayName: "Hitesh" });
   const host = await getGuestContext("SRJ01", qr, a.participantId, `${code}-a`);
@@ -86,5 +87,21 @@ describe("counter items for one person", () => {
     const pickupLines = await env.db.select().from(s.orderLines).where(and(eq(s.orderLines.sessionId, other.sessionId), eq(s.orderLines.personalForPickup, true)));
     expect(pickupLines).toHaveLength(1);
     expect(pickupLines[0].participantId).toBe(other.participantId);
+  });
+
+  it("keeps parcel items on the kitchen ticket when added after the bill was requested", async () => {
+    const { host, other, tableId } = await table("T9");
+    const placed = await addItemsAtBilling(owner, {
+      sessionId: host.sessionId,
+      tableId,
+      participantId: other.participantId,
+      clientRequestId: `parcel-${Date.now()}`,
+      lines: [{ itemId: env.demo.itemIds["Dal Makhani"], qty: 1, modifierIds: [], personalForPickup: true }],
+    });
+    const [line] = await env.db.select().from(s.orderLines).where(and(eq(s.orderLines.orderId, placed.orderId), eq(s.orderLines.personalForPickup, true)));
+    expect(line).toMatchObject({ participantId: other.participantId, note: null });
+    expect(["placed", "accepted"]).toContain(line.status);
+    const kds = await getKitchenDisplay({ tenantId: owner.tenantId, outletId: owner.outletId, userId: owner.userId });
+    expect(kds.cards.flatMap((card) => card.lines).some((ticketLine) => ticketLine.id === line.id && ticketLine.personalForPickup)).toBe(true);
   });
 });

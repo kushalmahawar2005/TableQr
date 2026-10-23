@@ -46,7 +46,7 @@ export async function placeOrder(ctx: GuestContext, input: PlaceInput = {}, now 
   return placed;
 }
 
-export type StaffDraftLine = { itemId: string; qty: number; modifierIds: string[]; note?: string };
+export type StaffDraftLine = { itemId: string; qty: number; modifierIds: string[]; note?: string; personalForPickup?: boolean };
 
 type StaffOrder = { userId: string; lines: StaffDraftLine[] };
 
@@ -116,7 +116,11 @@ export function placeOrderTx(ctx: GuestContext, input: PlaceInput, now: Date, st
         .where(and(eq(s.participants.tenantId, ctx.tenantId), eq(s.participants.id, ctx.participantId)));
     }
 
-    const cart = staffDraft ? staffDraft.lines.map((line, i) => ({ id: String(i), itemId: line.itemId, qty: line.qty, modifiers: line.modifierIds.map(modifierId => ({ modifierId })), note: line.note?.trim().slice(0, 140) || null, sharedWith: null, personalForPickup: false })) : await tx
+    const cart = staffDraft ? staffDraft.lines.map((line, i) => {
+      const legacyParcelNote = /^parcel$/i.test(line.note?.trim() ?? "");
+      const personalForPickup = line.personalForPickup === true || legacyParcelNote;
+      return { id: String(i), itemId: line.itemId, qty: line.qty, modifiers: line.modifierIds.map((modifierId) => ({ modifierId })), note: legacyParcelNote ? null : line.note?.trim().slice(0, 140) || null, sharedWith: null, personalForPickup };
+    }) : await tx
       .select()
       .from(s.cartLines)
       .where(
@@ -245,7 +249,7 @@ export function placeOrderTx(ctx: GuestContext, input: PlaceInput, now: Date, st
         spiceLevelSnapshot: item.item.spiceLevel ?? null,
         note: line.note,
         sharedWith: line.sharedWith,
-        personalForPickup: !!line.personalForPickup,
+        personalForPickup: line.personalForPickup === true,
         status: outlet.autoAccept ? ("accepted" as const) : ("placed" as const),
         createdAt: now,
       })),

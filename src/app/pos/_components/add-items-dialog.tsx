@@ -70,7 +70,7 @@ export function AddItemsDialog({ detail, open, hi, onClose, onPlaced }: { detail
         participantId = d.data.id;
       }
       // Billing adds through its own action, which also handles a bill that was already asked for
-      const r = await pos.addItemsAction({ sessionId: detail.sessionId, tableId: detail.tableId, participantId, clientRequestId: crypto.randomUUID(), lines: cart.map((l) => ({ itemId: l.item.id, qty: l.qty, modifierIds: l.mods, note: l.parcel ? "PARCEL" : undefined })) });
+      const r = await pos.addItemsAction({ sessionId: detail.sessionId, tableId: detail.tableId, participantId, clientRequestId: crypto.randomUUID(), lines: cart.map((l) => ({ itemId: l.item.id, qty: l.qty, modifierIds: l.mods, personalForPickup: l.parcel })) });
       if (!r.ok) return setError(r.error);
       reset();
       await onPlaced();
@@ -84,7 +84,7 @@ export function AddItemsDialog({ detail, open, hi, onClose, onPlaced }: { detail
       <DialogContent className="no-scrollbar max-h-[92dvh] gap-3 overflow-y-auto p-5 sm:max-w-xl">
         <DialogHeader>
           <DialogTitle className="font-display text-title font-bold">{L("Add items", "आइटम जोड़ें")} · {detail.takeaway ? L("Takeaway", "पार्सल") : (isRoomCode(detail.tableCode) ? "" : L("Table", "टेबल"))} {detail.tableCode}</DialogTitle>
-          <DialogDescription>{detail.status === "bill_requested" ? L("Handed over at the counter (a chocolate, water, mouth freshener): added to the bill, not sent to the kitchen.", "काउंटर पर दिए जाने वाले आइटम (चॉकलेट, पानी, सौंफ): बिल में जुड़ेंगे, किचन को नहीं जाएँगे।") : L("These go to the kitchen and are added to the bill. Mark an item as parcel to have it packed.", "ये किचन को जाएँगे और बिल में जुड़ेंगे। पैक कराने के लिए पार्सल चुनें।")}</DialogDescription>
+          <DialogDescription>{detail.status === "bill_requested" ? L("Unmarked items are handed over at the counter. Parcel items are sent to the kitchen to be packed and added to this bill.", "बिना पार्सल वाले आइटम काउंटर पर दिए जाएँगे। पार्सल आइटम पैक होने के लिए किचन में जाएँगे और इसी बिल में जुड़ेंगे।") : L("These go to the kitchen and are added to the bill. Mark an item as parcel to have it packed.", "ये किचन को जाएँगे और बिल में जुड़ेंगे। पैक कराने के लिए पार्सल चुनें।")}</DialogDescription>
         </DialogHeader>
 
         <div>

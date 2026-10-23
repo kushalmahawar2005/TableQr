@@ -45,7 +45,7 @@ export async function addPhonelessDiner(staff: StaffSession, sessionId: string, 
 }
 export async function staffPlaceOrder(staff: StaffSession, input: {sessionId:string; tableId:string; participantId:string; clientRequestId:string; lines:StaffDraftLine[]},now=new Date()) {
   await requireStaffRole(staff);
-  if (!/^[a-zA-Z0-9_-]{8,64}$/.test(input.clientRequestId) || !Array.isArray(input.lines) || !input.lines.length || input.lines.length>100 || input.lines.some(l=>typeof l.itemId !== "string" || !Number.isInteger(l.qty) || !Array.isArray(l.modifierIds) || l.modifierIds.some(m=>typeof m !== "string"))) throw new AppError("invalid_state","Invalid draft order.");
+  if (!/^[a-zA-Z0-9_-]{8,64}$/.test(input.clientRequestId) || !Array.isArray(input.lines) || !input.lines.length || input.lines.length>100 || input.lines.some(l=>typeof l.itemId !== "string" || !Number.isInteger(l.qty) || !Array.isArray(l.modifierIds) || l.modifierIds.some(m=>typeof m !== "string") || (l.personalForPickup !== undefined && typeof l.personalForPickup !== "boolean"))) throw new AppError("invalid_state","Invalid draft order.");
   const [person] = await db.select({ name: s.participants.displayName }).from(s.participants).where(and(eq(s.participants.tenantId, staff.tenantId), eq(s.participants.sessionId, input.sessionId), eq(s.participants.id, input.participantId)));
   if (!person || isPlaceholderName(person.name) || !checkFirstName(person.name).ok) throw new AppError("invalid_state", "Enter the customer’s name before placing this order.");
   const [outlet] = await db.select().from(s.outlets).where(and(eq(s.outlets.tenantId,staff.tenantId),eq(s.outlets.id,staff.outletId)));

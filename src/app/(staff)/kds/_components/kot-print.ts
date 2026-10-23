@@ -10,7 +10,7 @@ function slip(card: KdsCard) {
   const takeaway = card.tableCodes.some((t) => /^TA-\d+$/.test(t));
   const lines = card.lines
     .map((l) => {
-      const extra = [...l.modifiers.map((m) => m.en), l.note ?? ""].filter(Boolean);
+      const extra = [...l.modifiers.map((m) => m.en), l.personalForPickup ? "PARCEL · PACK FOR TAKEAWAY" : "", l.note ?? ""].filter(Boolean);
       return `<div class="l"><b>${l.qty} ×</b> ${esc(l.nameEn)}${extra.length ? `<div class="x">${esc(extra.join(", "))}</div>` : ""}</div>`;
     })
     .join("");
