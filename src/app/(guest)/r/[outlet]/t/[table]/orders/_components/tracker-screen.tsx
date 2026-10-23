@@ -26,6 +26,7 @@ import type { Lang } from "@/lib/i18n";
 import type { TrackerScreenData } from "@/server/guest/tracker-screen";
 import type { ServiceKind } from "@/server/guest/service-requests";
 import { DiningNav } from "../../_components/dining-nav";
+import { RoomDashboardLink } from "../../_components/room-dashboard-link";
 import { LanguageToggle } from "../../_components/language-toggle";
 import { OutletLogo } from "../../_components/outlet-logo";
 import { cancelLineAction, repeatOrderRoundAction, serviceRequestAction } from "../actions";
@@ -207,6 +208,7 @@ export function TrackerScreen({
         </div>
         <LanguageToggle lang={lang} label={c.language} preview={!!preview} />
       </header>
+      <RoomDashboardLink outletCode={data.outlet.code} shortCode={shortCode} tableCode={data.table.code} lang={lang} preview={!!preview} />
 
       <main className="pb-8">
         {/* Active Orders Bar */}

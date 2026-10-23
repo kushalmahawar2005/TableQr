@@ -22,6 +22,7 @@ import type { Lang } from "@/lib/i18n";
 import type { RemovedLine } from "@/server/guest/cart";
 import type { CartLineView, CartScreenData, OtherLineView } from "@/server/guest/cart-screen";
 import { LanguageToggle } from "../../_components/language-toggle";
+import { RoomDashboardLink } from "../../_components/room-dashboard-link";
 import { OutletLogo } from "../../_components/outlet-logo";
 import { SlowNotice } from "../../_components/slow-notice";
 import { pick, VegMark } from "../../menu/_components/menu-row";
@@ -236,6 +237,7 @@ export function CartScreen({
         </div>
         <LanguageToggle lang={lang} label={c.language} preview={!!preview} />
       </header>
+      <RoomDashboardLink outletCode={data.outlet.code} shortCode={shortCode} tableCode={data.table.code} lang={lang} preview={!!preview} />
 
       <main className="flex flex-1 flex-col pt-5">
         <h1 className="font-display text-title font-bold text-ink">{c.title}</h1>

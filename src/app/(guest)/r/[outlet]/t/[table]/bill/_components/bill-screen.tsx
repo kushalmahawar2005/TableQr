@@ -29,6 +29,7 @@ import type { Lang } from "@/lib/i18n";
 import { openCheckout } from "@/lib/payments/checkout";
 import type { BillScreenData } from "@/server/guest/bill-screen";
 import { DiningNav } from "../../_components/dining-nav";
+import { RoomDashboardLink } from "../../_components/room-dashboard-link";
 import { LanguageToggle } from "../../_components/language-toggle";
 import { OutletLogo } from "../../_components/outlet-logo";
 import { focusRing, Sheet } from "../../_components/sheet";
@@ -303,6 +304,7 @@ export function BillScreen({
         </div>
         <LanguageToggle lang={lang} label={c.language} preview={!!preview} />
       </header>
+      <RoomDashboardLink outletCode={data.outlet.code} shortCode={shortCode} tableCode={data.table.code} lang={lang} preview={!!preview} />
 
       <main className="pb-6">
         {!online && <Banner icon={WifiOff01Icon} tone="offline" title={c.offline} body={c.offlineBody} />}

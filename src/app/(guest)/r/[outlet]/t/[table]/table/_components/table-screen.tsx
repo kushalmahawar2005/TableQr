@@ -35,6 +35,7 @@ import type { Lang } from "@/lib/i18n";
 import type { ServiceKind } from "@/server/guest/service-requests";
 import type { TableScreenData } from "@/server/guest/table-screen";
 import { DiningNav } from "../../_components/dining-nav";
+import { RoomDashboardLink } from "../../_components/room-dashboard-link";
 import { LanguageToggle } from "../../_components/language-toggle";
 import { OutletLogo } from "../../_components/outlet-logo";
 import { serviceRequestAction } from "../../orders/actions";
@@ -241,6 +242,7 @@ export function TableScreen({
         </div>
         <LanguageToggle lang={lang} label={c.language} preview={!!preview} />
       </header>
+      <RoomDashboardLink outletCode={data.outlet.code} shortCode={shortCode} tableCode={data.table.code} lang={lang} preview={!!preview} />
 
       <main className="pb-6">
         <h1 className="mt-5 font-display text-title font-bold text-ink">{c.title}</h1>

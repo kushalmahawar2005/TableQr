@@ -6,6 +6,7 @@ import { brandStyle, deriveBrandTokens } from "@/domain/brand";
 import type { Lang } from "@/lib/i18n";
 import type { MenuScreenData } from "@/server/guest/menu-screen";
 import { LanguageToggle } from "../../_components/language-toggle";
+import { RoomDashboardLink } from "../../_components/room-dashboard-link";
 import { g3Copy } from "../_copy";
 import { MenuClient, type MenuPreview } from "./menu-client";
 
@@ -28,19 +29,9 @@ export function MenuScreen({
 }) {
   const c = g3Copy[lang];
   const style = brandStyle(deriveBrandTokens(data.outlet.accentColor)) as CSSProperties;
-  const roomDashboard = `/r/${encodeURIComponent(data.outlet.code)}/room/${encodeURIComponent(shortCode)}`;
   return (
     <div lang={lang} style={style} className={`relative flex flex-1 flex-col ${preview ? "min-h-full" : "min-h-dvh"}`}>
-      {data.table.isRoom && !preview && (
-        <Link
-          href={roomDashboard}
-          prefetch={false}
-          className="mt-3 inline-flex min-h-11 w-fit items-center gap-2 rounded-xl border border-line bg-surface px-3.5 text-body font-semibold text-brand-strong hover:bg-brand-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
-        >
-          <span aria-hidden>←</span>
-          {lang === "hi" ? "रूम डैशबोर्ड पर वापस" : "Back to room dashboard"}
-        </Link>
-      )}
+      <RoomDashboardLink outletCode={data.outlet.code} shortCode={shortCode} tableCode={data.table.code} lang={lang} preview={!!preview} />
       <header className="flex items-center gap-3 pt-5">
         <div className="min-w-0 flex-1">
           <p className="font-display text-title font-bold break-words text-brand-strong">{data.outlet.name}</p>
