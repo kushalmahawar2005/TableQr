@@ -192,11 +192,16 @@ export const outlets = mysqlTable(
     /** Guest-facing Wi-Fi details, shown only to checked-in room guests. */
     wifiSsid: varchar("wifi_ssid", { length: 32 }),
     wifiPassword: varchar("wifi_password", { length: 63 }),
+    /** Optional tenant-owned guest domain; only routed after DNS ownership is verified. */
+    customDomain: varchar("custom_domain", { length: 253 }),
+    customDomainToken: varchar("custom_domain_token", { length: 64 }),
+    customDomainVerifiedAt: at("custom_domain_verified_at"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (t) => [
     uniqueIndex("outlets_code_uq").on(t.code),
+    uniqueIndex("outlets_custom_domain_uq").on(t.customDomain),
     tenantKey("outlets", t),
     sameTenant("fk_outlets_brand", t, t.brandId, brands),
   ],

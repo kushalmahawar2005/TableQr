@@ -347,6 +347,15 @@ const STEPS: Step[] = [
       for (const statement of DELIVERY_TABLE_SQL) await db.query(statement);
     },
   },
+  {
+    tag: "0041_great_grey_gargoyle", when: 1792778072922, hash: "538ae56080148559b8748e9ab8964a00981eaaece078b86ca0a2109151d40c9b",
+    apply: async (db) => {
+      await addColumn(db, "outlets", "custom_domain", "varchar(253)");
+      await addColumn(db, "outlets", "custom_domain_token", "varchar(64)");
+      await addColumn(db, "outlets", "custom_domain_verified_at", "datetime(3)");
+      await addUniqueIndex(db, "outlets", "outlets_custom_domain_uq", "`custom_domain`");
+    },
+  },
 ];
 
 /** drizzle/0015, the last migration before these steps */

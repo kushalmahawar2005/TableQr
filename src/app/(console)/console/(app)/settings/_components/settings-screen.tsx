@@ -143,7 +143,8 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
 
   function copyGuestLink() {
     try {
-      void navigator.clipboard.writeText(`${window.location.origin}/r/${encodeURIComponent(o.code)}`);
+      const origin = o.customDomain && o.customDomainVerifiedAt ? `https://${o.customDomain}` : window.location.origin;
+      void navigator.clipboard.writeText(`${origin}/r/${encodeURIComponent(o.code)}`);
       setGuestLinkCopied(true);
       setTimeout(() => setGuestLinkCopied(false), 1800);
     } catch { setGuestLinkCopied(false); }

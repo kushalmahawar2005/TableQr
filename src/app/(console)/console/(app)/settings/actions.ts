@@ -7,6 +7,7 @@ import { storeMenuImage, storePaymentQr } from "@/server/menu-storage";
 import { consoleSectionRoles } from "@/lib/staff-permissions";
 import { updateBookingPaymentQr, updateBrandLogo, updateOutletSettings, type SettingsPatch } from "@/server/staff/settings-write";
 import { staffFor } from "@/server/staff/request";
+import { saveCustomDomain, verifyCustomDomain } from "@/server/staff/custom-domain";
 
 export type SettingsResult = { ok: true } | { ok: false; message: string };
 
@@ -18,6 +19,28 @@ export async function saveSettingsAction(input: SettingsPatch): Promise<Settings
     if (err instanceof AppError) return { ok: false, message: err.message };
     console.error("[settings] save failed", err);
     return { ok: false, message: "That didn't go through. Try again." };
+  }
+}
+
+export async function saveCustomDomainAction(domain: string): Promise<SettingsResult & { domain?: string | null; token?: string | null; verified?: boolean }> {
+  try {
+    const result = await saveCustomDomain(await staffFor(consoleSectionRoles.settings), domain);
+    return { ok: true, ...result };
+  } catch (err) {
+    if (err instanceof AppError) return { ok: false, message: err.message };
+    console.error("[settings] custom domain save failed", err);
+    return { ok: false, message: "Could not save the domain. Try again." };
+  }
+}
+
+export async function verifyCustomDomainAction(): Promise<{ ok: boolean; message: string }> {
+  try {
+    const result = await verifyCustomDomain(await staffFor(consoleSectionRoles.settings));
+    return { ...result };
+  } catch (err) {
+    if (err instanceof AppError) return { ok: false, message: err.message };
+    console.error("[settings] custom domain verify failed", err);
+    return { ok: false, message: "Could not verify the domain. Try again." };
   }
 }
 

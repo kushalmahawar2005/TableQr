@@ -288,6 +288,13 @@
       "when": 1792776130784,
       "tag": "0040_milky_morlun",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "5",
+      "when": 1792778072922,
+      "tag": "0041_great_grey_gargoyle",
+      "breakpoints": true
     }
   ]
 }
