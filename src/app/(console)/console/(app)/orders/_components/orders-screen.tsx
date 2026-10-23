@@ -36,12 +36,9 @@ export function OrdersScreen({ orders, outlet }: { orders: OrderRow[]; outlet: s
   const [query, setQuery] = useState("");
   const [now, setNow] = useState(() => Date.now());
   const [error, setError] = useState<string | null>(null);
-  const [printOrderId, setPrintOrderId] = useState<string | null>(null);
 
-  function printOrder(id: string) {
-    window.addEventListener("afterprint", () => setPrintOrderId(null), { once: true });
-    setPrintOrderId(id);
-    requestAnimationFrame(() => window.print());
+  function printOrder(order: OrderRow) {
+    printOrderSlip(order, outlet);
   }
 
   function serve(o: OrderRow) {
@@ -140,7 +137,7 @@ export function OrdersScreen({ orders, outlet }: { orders: OrderRow[]; outlet: s
             const stepIndex = STEPS.findIndex((s) => s.key === o.status);
             const took = o.servedAt ? Math.max(0, Math.round((new Date(o.servedAt).getTime() - new Date(o.placedAt).getTime()) / 60_000)) : null;
             return (
-              <li key={o.id} data-print-order={printOrderId === o.id ? "selected" : undefined} className={`overflow-hidden rounded-card border bg-surface shadow-[0_1px_2px_rgb(31_41_55/0.04)] ${isSlow ? "border-danger/50" : "border-line"}`}>
+              <li key={o.id} className={`overflow-hidden rounded-card border bg-surface shadow-[0_1px_2px_rgb(31_41_55/0.04)] ${isSlow ? "border-danger/50" : "border-line"}`}>
                 <div className={`h-1 ${o.status === "ready" ? "bg-[var(--state-available)]" : isSlow ? "bg-danger" : o.status === "preparing" ? "bg-[var(--state-held)]" : "bg-ink/10"}`} aria-hidden="true" />
                 <div className="p-4 sm:p-5">
                 <div className="flex items-start justify-between gap-3">
@@ -176,7 +173,7 @@ export function OrdersScreen({ orders, outlet }: { orders: OrderRow[]; outlet: s
                       Mark served
                     </button>
                   )}
-                  <button type="button" onClick={() => printOrder(o.id)} aria-label={`Print ${o.takeaway ? "takeaway" : "table"} ${o.table} order`} className="print-hidden inline-flex min-h-11 items-center gap-2 rounded-input border border-line bg-surface px-3 text-body font-semibold text-ink hover:border-ink/40 focus-visible:outline-2 focus-visible:outline-ink">
+                  <button type="button" onClick={() => printOrder(o)} aria-label={`Print ${o.takeaway ? "takeaway" : "table"} ${o.table} order`} className="inline-flex min-h-11 items-center gap-2 rounded-input border border-line bg-surface px-3 text-body font-semibold text-ink hover:border-ink/40 focus-visible:outline-2 focus-visible:outline-ink">
                     <Printer className="size-4" aria-hidden="true" />Print
                   </button>
                   <VisitRecord sessionId={o.sessionId} className="print-hidden rounded-input px-2 py-1 text-body font-semibold text-ink underline underline-offset-4 hover:bg-ink/5 focus-visible:outline-2 focus-visible:outline-ink">View table record</VisitRecord>
@@ -188,14 +185,33 @@ export function OrdersScreen({ orders, outlet }: { orders: OrderRow[]; outlet: s
         </ul>
         </div>
       )}
-      <style>{`@media print {
-        @page { margin: 12mm; }
-        body * { visibility: hidden !important; }
-        [data-print-order="selected"], [data-print-order="selected"] * { visibility: visible !important; }
-        [data-print-order="selected"] { position: absolute !important; inset: 0 auto auto 0 !important; width: 100% !important; margin: 0 !important; border: 1px solid #d1d5db !important; border-radius: 8px !important; background: #fff !important; color: #111827 !important; box-shadow: none !important; }
-        [data-print-order="selected"] * { color: #111827 !important; border-color: #d1d5db !important; }
-        .print-hidden { display: none !important; }
-      }`}</style>
     </main>
   );
+}
+
+function printOrderSlip(order: OrderRow, outlet: string) {
+  const popup = window.open("", "_blank", "popup,width=420,height=720");
+  if (!popup) return;
+
+  const escape = (value: string) => value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]!);
+  const placed = new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" }).format(new Date(order.placedAt));
+  const kind = order.takeaway ? "Takeaway" : "Table";
+  const items = order.items.map((item) => `<li><span class="qty">${item.qty} ×</span><span>${escape(item.name)}</span></li>`).join("");
+  const status = LABEL[order.status];
+
+  popup.document.open();
+  popup.document.write(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escape(kind)} ${escape(order.table)} · Order</title><style>
+    @page{size:80mm auto;margin:3mm}
+    *{box-sizing:border-box}html,body{margin:0;background:#fff;color:#111;font-family:Arial,Helvetica,sans-serif}
+    body{width:74mm;margin:0 auto;padding:2mm 1mm;font-size:12px;line-height:1.4}
+    header{text-align:center;border-bottom:1px dashed #555;padding-bottom:10px;margin-bottom:10px}
+    .brand{font-size:15px;font-weight:700;letter-spacing:.02em}.kind{margin:8px 0 2px;font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase}
+    h1{margin:0;font-size:23px;line-height:1.15}.meta{margin-top:5px;font-size:13px;font-weight:700}.date{margin-top:3px;color:#444}
+    .status{display:inline-block;margin-top:8px;padding:3px 8px;border:1px solid #777;border-radius:20px;font-size:10px;text-transform:uppercase;letter-spacing:.06em}
+    ul{list-style:none;margin:0;padding:0}li{display:flex;gap:8px;padding:7px 0;border-bottom:1px dotted #aaa;font-size:14px;font-weight:600}.qty{min-width:30px;font-weight:700}
+    .note{margin-top:10px;padding:7px;border:1px solid #aaa;font-size:12px}.total{display:flex;justify-content:space-between;margin-top:10px;padding-top:9px;border-top:1px solid #111;font-size:16px;font-weight:700}
+    footer{margin-top:12px;padding-top:8px;border-top:1px dashed #777;text-align:center;font-size:10px;color:#444}
+    @media screen{body{margin:18px auto;padding:14px;border:1px solid #ddd;box-shadow:0 2px 12px #0002}}
+  </style></head><body><header><div class="brand">${escape(outlet)}</div><div class="kind">Order slip</div><h1>${escape(kind)} ${escape(order.table)}</h1><div class="meta">Round ${order.roundNo}</div><div class="date">${escape(placed)}</div><span class="status">${escape(status)}</span></header><ul>${items || "<li>No active items</li>"}</ul>${order.note ? `<p class="note"><b>Kitchen note:</b> ${escape(order.note)}</p>` : ""}<div class="total"><span>Order total</span><span>${escape(money(order.totalPaise))}</span></div><footer>Order summary · Not a tax invoice</footer><script>window.addEventListener('load',()=>{window.focus();setTimeout(()=>window.print(),150)});window.addEventListener('afterprint',()=>window.close());</script></body></html>`);
+  popup.document.close();
 }
