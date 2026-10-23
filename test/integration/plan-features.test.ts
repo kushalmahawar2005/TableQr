@@ -8,7 +8,8 @@ import { tenantFeatures } from "@/server/plan";
 import { resolveStaff, signInStaff, type StaffSession } from "@/server/staff/auth";
 import { getPricingData } from "@/server/staff/pricing";
 import { getReport } from "@/server/staff/reports-read";
-import { addMember, assignableRoles, listTeam } from "@/server/staff/team";
+import { assignableRoles } from "@/server/staff/team";
+import { createStaffInvitation } from "@/server/staff/invitations";
 import { hasOpenRequest, requestPlanChange } from "@/server/staff/plan-request";
 import { getTableLanding } from "@/server/guest/table";
 import { requireStaff } from "@/server/staff/auth";
@@ -48,7 +49,7 @@ describe("plan features", () => {
       await refused(getBookingZones(env.demo.outletCode), "forbidden");
       expect(await assignableRoles(env.demo.tenantId)).toEqual(["manager", "accountant"]);
       // The demo already has more than 3 staff besides the owner
-      await refused(addMember(owner, { name: "New Manager", phone: "9333333331", role: "manager", pin: "4321" }), "invalid_state");
+      await refused(createStaffInvitation(owner, { phone: "9333333331", role: "manager" }), "invalid_state");
     } finally {
       await setTenant({ planCode: "pro" });
     }
@@ -67,11 +68,10 @@ describe("plan features", () => {
       expect((await getReport(owner, 30, new Date())).range).toBe(30);
       await refused(getPricingData(owner), "forbidden");
       expect(await assignableRoles(env.demo.tenantId)).toEqual(["manager", "waiter", "accountant"]);
-      const invited = await addMember(owner, { name: "New Waiter", phone: "9333333332", role: "waiter", pin: "4321" });
-      expect(invited.existing).toBe(false);
-      expect((await listTeam(owner)).find((person) => person.id === invited.id)).toMatchObject({ name: "New Waiter", phone: "9333333332", roles: ["waiter"], isActive: true });
-      await refused(addMember(owner, { name: "Duplicate Waiter", phone: "9333333332", role: "waiter", pin: "4321" }), "invalid_state");
-      await refused(addMember(owner, { name: " ", phone: "", role: "waiter", pin: "4321" }), "invalid_state");
+      const invitation = await createStaffInvitation(owner, { phone: "9333333332", role: "waiter" });
+      expect(invitation.token).toMatch(/^[0-9a-f-]{36}\.[A-Za-z0-9_-]{43}$/i);
+      await refused(createStaffInvitation(owner, { phone: "9333333332", role: "waiter" }), "invalid_state");
+      await refused(createStaffInvitation(owner, { phone: "", role: "waiter" }), "invalid_state");
     } finally {
       await setTenant({ planCode: "pro", customFeatures: null, customPricePaise: null });
     }

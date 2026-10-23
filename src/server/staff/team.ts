@@ -42,7 +42,6 @@ async function assertRoomForStaff(tx: Pick<typeof db, "selectDistinct">, staff: 
 
 export type TeamMember = { id: string; name: string; phone: string; isActive: boolean; roles: StaffRole[]; isMe: boolean; locked: boolean };
 
-const normalPhone = (phone: string) => phone.replace(/\D/g, "").replace(/^91(?=\d{10}$)/, "").slice(-15);
 const bad = (message: string) => new AppError("invalid_state", message, { reason: "team" });
 const ownerOnly = (staff: Staff) => { if (!staff.roles.includes("owner")) throw new AppError("forbidden", "Only the owner can change the team."); };
 
@@ -75,34 +74,6 @@ async function target(tx: Pick<typeof db, "select">, staff: Staff, userId: strin
 
 const revokeSessions = (tx: Pick<typeof db, "update">, staff: Staff, userId: string, now: Date) =>
   tx.update(s.staffSessions).set({ revokedAt: now }).where(and(eq(s.staffSessions.tenantId, staff.tenantId), eq(s.staffSessions.userId, userId), isNull(s.staffSessions.revokedAt)));
-
-export async function addMember(staff: Staff, input: { name: string; phone: string; role: string; pin: string }, now = new Date()) {
-  ownerOnly(staff);
-  const name = String(input.name ?? "").trim();
-  const phone = normalPhone(String(input.phone ?? ""));
-  const role = input.role as TeamRole;
-  if (name.length < 2 || name.length > 80) throw bad("Enter the person's name.");
-  if (phone.length !== 10) throw bad("Enter a 10-digit mobile number.");
-  if (!(await assignableRoles(staff.tenantId)).includes(role)) throw bad("Pick a role.");
-  return db.transaction(async (tx) => {
-    const [existing] = await tx.select().from(s.users).where(and(eq(s.users.tenantId, staff.tenantId), eq(s.users.phone, phone)));
-    await assertRoomForStaff(tx, staff, existing?.isActive ? existing.id : null);
-    let userId = existing?.id;
-    if (existing) {
-      const [has] = await tx.select({ id: s.staffRoles.id }).from(s.staffRoles).where(and(eq(s.staffRoles.tenantId, staff.tenantId), eq(s.staffRoles.userId, existing.id), or(isNull(s.staffRoles.outletId), eq(s.staffRoles.outletId, staff.outletId))));
-      if (has) throw bad("This number is already on the team.");
-      // An existing PIN is kept; the person signs in with the PIN they already have
-      if (!existing.isActive) await tx.update(s.users).set({ isActive: true }).where(and(eq(s.users.tenantId, staff.tenantId), eq(s.users.id, existing.id)));
-    } else {
-      if (!isPin(input.pin)) throw bad("The PIN must be 4 digits.");
-      userId = uuidv7();
-      await tx.insert(s.users).values({ id: userId, tenantId: staff.tenantId, phone, name, pinHash: await hashPin(input.pin) });
-    }
-    await tx.insert(s.staffRoles).values({ id: uuidv7(), tenantId: staff.tenantId, userId: userId!, outletId: staff.outletId, role });
-    await audit(tx, staff, { action: "team.member_added", entity: "user", entityId: userId!, after: { name, phone, role }, now });
-    return { id: userId!, existing: !!existing };
-  });
-}
 
 export async function changeRole(staff: Staff, userId: string, role: string, now = new Date()) {
   ownerOnly(staff);

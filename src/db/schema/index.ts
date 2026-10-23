@@ -14,5 +14,6 @@ export * from "./waiter";
 export * from "./inventory";
 export * from "./rooms";
 export * from "./staff-push";
+export * from "./staff-invitations";
 
 export * from "./delivery";

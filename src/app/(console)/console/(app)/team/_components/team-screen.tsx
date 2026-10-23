@@ -2,15 +2,16 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Copy, KeyRound, Phone, Plus, Power, Search, Settings2, UserRound } from "lucide-react";
+import { Check, Copy, KeyRound, Phone, Plus, Power, Search, Settings2, UserRound, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import type { TeamMember } from "@/server/staff/team";
+import type { PendingStaffInvitation } from "@/server/staff/invitations";
 import type { DutyRow } from "@/server/staff/duty";
 import { WhoIsWorking } from "./who-is-working";
-import { addMemberAction, changeRoleAction, resetPinAction, setActiveAction } from "../actions";
+import { changeRoleAction, createInvitationAction, resetPinAction, revokeInvitationAction, setActiveAction } from "../actions";
 
 const ALL_ROLES = [
   { id: "manager", label: "Manager", does: "Runs the outlet: floor, menu, billing, reports, approvals", opens: "Dashboard", path: "/console/dashboard" },
@@ -54,9 +55,7 @@ function StatusBadge({ member, duty }: { member: TeamMember; duty?: DutyRow }) {
 function copy(text: string) {
   try { void navigator.clipboard.writeText(text); } catch { /* clipboard may be blocked; the details stay on screen */ }
 }
-const randomPin = () => String(Math.floor(1000 + Math.random() * 9000));
-
-export function TeamScreen({ initial, canEdit, outletCode, outletName, roles: allowed, duty = [], canChangeDuty = false }: { initial: TeamMember[]; canEdit: boolean; outletCode: string; outletName: string; duty?: DutyRow[]; canChangeDuty?: boolean; roles: readonly string[] }) {
+export function TeamScreen({ initial, invitations: initialInvitations = [], canEdit, outletCode, outletName, roles: allowed, duty = [], canChangeDuty = false }: { initial: TeamMember[]; invitations?: PendingStaffInvitation[]; canEdit: boolean; outletCode: string; outletName: string; duty?: DutyRow[]; canChangeDuty?: boolean; roles: readonly string[] }) {
   const router = useRouter();
   // Only the roles this restaurant's plan allows (Kitchen comes with the kitchen screen)
   const ROLES = ALL_ROLES.filter((r) => allowed.includes(r.id));
@@ -64,10 +63,11 @@ export function TeamScreen({ initial, canEdit, outletCode, outletName, roles: al
   const [adding, setAdding] = useState(false);
   const [manage, setManage] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
-  const [created, setCreated] = useState<{ name: string; phone: string; pin: string; role: string; existing: boolean } | null>(null);
+  const [invitations, setInvitations] = useState(initialInvitations);
+  const [created, setCreated] = useState<{ phone: string; role: string; inviteUrl: string; expiresAt: number } | null>(null);
   const [q, setQ] = useState("");
 
-  const [name, setName] = useState(""); const [phone, setPhone] = useState(""); const [role, setRole] = useState<string>("waiter"); const [pin, setPin] = useState("");
+  const [phone, setPhone] = useState(""); const [role, setRole] = useState<string>("waiter");
   const [err, setErr] = useState<string | null>(null);
   const [newPin, setNewPin] = useState("");
 
@@ -75,17 +75,18 @@ export function TeamScreen({ initial, canEdit, outletCode, outletName, roles: al
   const shown = initial.filter((m) => !q.trim() || `${m.name} ${m.phone}`.toLowerCase().includes(q.trim().toLowerCase()));
   const active = initial.filter((m) => m.isActive).length;
   const dutyById = new Map(duty.map((d) => [d.id, d]));
-  const openManage = (id: string) => { setManage(id); setErr(null); setNewPin(randomPin()); };
+  const openManage = (id: string) => { setManage(id); setErr(null); setNewPin(""); };
 
-  const openAdd = () => { setName(""); setPhone(""); setRole("waiter"); setPin(randomPin()); setErr(null); setCreated(null); setAdding(true); };
+  const openAdd = () => { setPhone(""); setRole(ROLES[0]?.id ?? "manager"); setErr(null); setCreated(null); setAdding(true); };
   const done = (text: string) => { setNotice({ ok: true, text }); router.refresh(); };
 
   function add() {
     setErr(null);
     start(async () => {
-      const res = await addMemberAction({ name, phone, role, pin });
+      const res = await createInvitationAction({ phone, role });
       if (!res.ok) return setErr(res.message);
-      setCreated({ name: name.trim(), phone: phone.replace(/\D/g, "").slice(-10), pin, role, existing: res.data.existing });
+      setCreated({ phone: res.data.phone, role: res.data.role, inviteUrl: res.data.inviteUrl, expiresAt: res.data.expiresAt });
+      setInvitations((rows) => [ { id: res.data.id, phone: res.data.phone, role: res.data.role, expiresAt: res.data.expiresAt, createdAt: Date.now() }, ...rows ]);
       router.refresh();
     });
   }
@@ -99,7 +100,7 @@ export function TeamScreen({ initial, canEdit, outletCode, outletName, roles: al
     });
   }
 
-  const loginText = (c: NonNullable<typeof created>) => `${outletName} (TableQR)\nSign in at /console/login\nOutlet code: ${outletCode}\nPhone: ${c.phone}\n${c.existing ? "PIN: your existing PIN" : `PIN: ${c.pin}`}`;
+  const loginText = (c: NonNullable<typeof created>) => `${outletName} (TableQR)\nComplete staff setup: ${c.inviteUrl}\nInvited phone: ${c.phone}\nRole: ${LABEL[c.role] ?? c.role}\nThis link expires in 7 days.`;
   const roleInfo = ROLES.find((r) => r.id === role);
 
   return (
@@ -179,6 +180,8 @@ export function TeamScreen({ initial, canEdit, outletCode, outletName, roles: al
 
       <WhoIsWorking rows={duty} canChange={canChangeDuty} onSelect={canEdit ? openManage : undefined} />
 
+      {canEdit && invitations.length > 0 && <section className="mt-4 rounded-2xl border border-line bg-surface p-4"><h2 className="font-display text-section font-bold text-ink">Pending invitations <span className="ml-1 text-sm text-muted">{invitations.length}</span></h2><p className="mt-1 text-sm text-muted">Staff access starts after they verify their invited phone number.</p><div className="mt-3 divide-y divide-line">{invitations.map((invite) => <div key={invite.id} className="flex flex-wrap items-center justify-between gap-3 py-3"><div><p className="font-semibold text-ink">{invite.phone} · {LABEL[invite.role] ?? invite.role}</p><p className="text-xs text-muted">Expires {new Date(invite.expiresAt).toLocaleDateString()}</p></div><button type="button" disabled={pending} onClick={() => start(async () => { const res = await revokeInvitationAction(invite.id); if (!res.ok) return setNotice({ ok: false, text: res.message }); setInvitations((rows) => rows.filter((row) => row.id !== invite.id)); setNotice({ ok: true, text: "Invitation revoked." }); router.refresh(); })} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-line px-3 text-sm font-semibold hover:border-danger/50 hover:text-danger"><X className="size-4" aria-hidden="true" />Revoke</button></div>)}</div></section>}
+
       <section className="mt-4 rounded-2xl border border-line bg-surface p-4">
         <p className="text-sm font-semibold">How your team signs in</p>
         <p className="mt-1 text-sm text-muted">Open <b className="text-ink">/console/login</b>, type the outlet code <b className="font-mono text-ink">{outletCode}</b>, their phone number and 4-digit PIN. Each role lands on its own screen automatically.</p>
@@ -189,38 +192,33 @@ export function TeamScreen({ initial, canEdit, outletCode, outletName, roles: al
 
       <Sheet open={adding} onOpenChange={(o) => !o && setAdding(false)}>
         <SheetContent className="w-full overflow-y-auto bg-background data-[side=right]:sm:max-w-md">
-          <SheetHeader><SheetTitle className="font-display text-title font-bold">{created ? "Person added" : "Add a person"}</SheetTitle><SheetDescription>{created ? "Share these sign-in details with them." : "They sign in with their phone number and a 4-digit PIN."}</SheetDescription></SheetHeader>
+          <SheetHeader><SheetTitle className="font-display text-title font-bold">{created ? "Invitation ready" : "Invite a person"}</SheetTitle><SheetDescription>{created ? "They must verify this phone before their staff access starts." : "Choose a role and send an invitation to their phone. They will add their name and create a PIN after OTP verification."}</SheetDescription></SheetHeader>
           <div className="space-y-5 px-4 pb-8">
             {created ? (
               <>
                 <div className="rounded-2xl border border-line bg-surface p-4 text-sm">
-                  <p className="font-display text-section font-bold">{created.name} · {LABEL[created.role]}</p>
+                  <p className="font-display text-section font-bold">{created.phone} · {LABEL[created.role]}</p>
                   <dl className="mt-3 space-y-1.5">
-                    <div className="flex justify-between"><dt className="text-muted">Sign in at</dt><dd className="font-semibold">/console/login</dd></div>
                     <div className="flex justify-between"><dt className="text-muted">Outlet code</dt><dd className="font-mono font-semibold">{outletCode}</dd></div>
                     <div className="flex justify-between"><dt className="text-muted">Phone</dt><dd className="font-mono font-semibold">{created.phone}</dd></div>
-                    <div className="flex justify-between"><dt className="text-muted">PIN</dt><dd className="font-mono font-semibold">{created.existing ? "Their existing PIN" : created.pin}</dd></div>
+                    <div className="mt-2 break-all rounded-lg bg-ink/5 p-2 font-mono text-xs">{created.inviteUrl}</div>
+                    <p className="mt-2 text-xs text-muted">Link expires {new Date(created.expiresAt).toLocaleString()}.</p>
                   </dl>
                 </div>
                 <div className="flex gap-2">
-                  <button type="button" onClick={() => copy(loginText(created))} className="inline-flex h-12 flex-1 items-center justify-center gap-2 rounded-xl border border-line text-sm font-semibold hover:border-ink/40"><Copy className="size-4" aria-hidden="true" />Copy details</button>
+                  <button type="button" onClick={() => copy(loginText(created))} className="inline-flex h-12 flex-1 items-center justify-center gap-2 rounded-xl border border-line text-sm font-semibold hover:border-ink/40"><Copy className="size-4" aria-hidden="true" />Copy invite</button>
                   <button type="button" onClick={() => setAdding(false)} className="inline-flex h-12 flex-1 items-center justify-center rounded-xl border border-brand bg-brand text-sm font-semibold text-white hover:bg-brand-strong">Done</button>
                 </div>
               </>
             ) : (
               <>
-                <div className="space-y-1.5"><Label htmlFor="t-name">Name</Label><Input id="t-name" className={field} placeholder="e.g. Rahul" value={name} onChange={(e) => setName(e.target.value)} /></div>
                 <div className="space-y-1.5"><Label htmlFor="t-phone">Mobile number</Label><Input id="t-phone" className={`${field} font-mono`} inputMode="numeric" maxLength={14} placeholder="10 digits" value={phone} onChange={(e) => setPhone(e.target.value.replace(/[^\d+ ]/g, ""))} /></div>
                 <div className="space-y-2"><Label>Role</Label>
                   <div className="grid grid-cols-2 gap-2">{ROLES.map((r) => <button key={r.id} type="button" aria-pressed={role === r.id} onClick={() => setRole(r.id)} className={`min-h-11 rounded-xl border px-3 text-sm font-semibold ${role === r.id ? "border-ink bg-ink text-paper" : "border-line hover:border-ink/40"}`}>{r.label}</button>)}</div>
                   {roleInfo && <p className="text-xs text-muted">{roleInfo.does}. Opens the {roleInfo.opens}.</p>}
                 </div>
-                <div className="space-y-1.5"><Label htmlFor="t-pin">4-digit PIN</Label>
-                  <div className="flex gap-2"><Input id="t-pin" className={`${field} font-mono tracking-[0.4em]`} inputMode="numeric" maxLength={4} value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} /><button type="button" onClick={() => setPin(randomPin())} className="min-h-11 shrink-0 rounded-xl border border-line px-3 text-sm font-semibold hover:border-ink/40">New PIN</button></div>
-                  <p className="text-xs text-muted">If this number already works with you, their old PIN stays.</p>
-                </div>
                 {err && <p role="alert" className="text-sm font-semibold text-danger">{err}</p>}
-                <button type="button" disabled={pending || name.trim().length < 2 || phone.replace(/\D/g, "").length < 10 || pin.length !== 4} onClick={add} className="inline-flex h-12 w-full items-center justify-center rounded-xl border border-brand bg-brand text-base font-semibold text-white hover:bg-brand-strong disabled:opacity-50">{pending ? "Adding…" : "Add person"}</button>
+                <button type="button" disabled={pending || phone.replace(/\D/g, "").length < 10} onClick={add} className="inline-flex h-12 w-full items-center justify-center rounded-xl border border-brand bg-brand text-base font-semibold text-white hover:bg-brand-strong disabled:opacity-50">{pending ? "Creating…" : "Create invitation"}</button>
               </>
             )}
           </div>

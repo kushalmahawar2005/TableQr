@@ -25,7 +25,7 @@ import { getPricingData, setOutletPrice } from "@/server/staff/pricing";
 import { getReport } from "@/server/staff/reports-read";
 import { attachVerifiedTestGuest } from "./setup-db";
 import { getOutletSettings } from "@/server/staff/settings-read";
-import { addMember, changeRole, listTeam, resetPin, setMemberActive } from "@/server/staff/team";
+import { changeRole, listTeam, resetPin, setMemberActive } from "@/server/staff/team";
 import { waiterBoard, waiterDetail } from "@/server/staff/waiter-read";
 import { checkIn, checkOut, getRooms, roomFoodTab, saveRoom } from "@/server/staff/rooms";
 import { askFromRoom, getRoomPage } from "@/server/guest/room";
@@ -80,6 +80,14 @@ async function createRestaurant(db: Db, key: string, name: string, outletCode: s
   return { tenantId, outletId, tableQr };
 }
 
+async function seedWaiter(db: Db, tenantId: string, outletId: string, name: string, phone: string, pin: string) {
+  const { hashPin } = await import("@/server/staff/pin");
+  const id = uuidv7();
+  await db.insert(s.users).values({ id, tenantId, phone, name, pinHash: await hashPin(pin), isActive: true });
+  await db.insert(s.staffRoles).values({ id: uuidv7(), tenantId, userId: id, outletId, role: "waiter" });
+  return { id };
+}
+
 const signIn = async (outletCode: string, phone: string, pin: string) => (await resolveStaff((await signInStaff({ outletCode, phone, pin })).token))!;
 
 async function failsWith(p: Promise<unknown>, codes: AppError["code"][]) {
@@ -122,7 +130,7 @@ beforeAll(async () => {
     const owner = await signIn(x.code, x.phone, x.pin);
     const categoryId = await saveMenuCategory(owner, { nameEn: `${x.name} Mains` });
     const itemId = await saveMenuItem(owner, { categoryId: categoryId!, nameEn: x.item, pricePaise: 20000, isVeg: true, prepMinutes: 10, station: "Kitchen" });
-    const member = await addMember(owner, { name: x.member, phone: x.memberPhone, role: "waiter", pin: "4444" });
+    const member = await seedWaiter(db, made.tenantId, made.outletId, x.member, x.memberPhone, "4444");
 
     // A guest scans this restaurant's table, orders and the bill is paid at the counter
     const deviceId = `iso-guest-${x.key}`;
@@ -274,8 +282,7 @@ describe("staff cannot change another restaurant's data", () => {
   });
 
   it("adding a team member with another restaurant's phone makes a separate person", async () => {
-    const added = await addMember(R.A.owner, { name: "Shared Phone", phone: "9100000033", role: "waiter", pin: "5555" });
-    expect(added.existing).toBe(false);
+    const added = await seedWaiter(appDb, R.A.tenantId, R.A.outletId, "Shared Phone", "9100000033", "5555");
     expect(added.id).not.toBe(R.C.memberId);
     // Each restaurant's sign-in keeps its own PIN for that phone
     expect(await signIn(R.A.outletCode, "9100000033", "5555")).toMatchObject({ tenantId: R.A.tenantId });
