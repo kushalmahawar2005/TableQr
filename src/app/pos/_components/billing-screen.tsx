@@ -166,9 +166,12 @@ export function BillingScreen({ initial, realtimeUrl, embedded = false, openSess
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" aria-hidden="true" />
               <input aria-label={L("Search tables", "टेबल खोजें")} className="h-11 w-full rounded-input border border-line bg-surface pl-9 pr-3 text-body outline-none focus:border-ink focus-visible:ring-2 focus-visible:ring-ink/20" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={L("Search by table", "टेबल से खोजें")} />
             </div>
-            <div role="tablist" className="mt-3 flex gap-2">
+            <div role="tablist" className="mt-3 grid grid-cols-3 gap-2">
               {([["due", L("Needs payment", "भुगतान बाकी"), due.length], ["takeaway", L("Takeaways", "पार्सल"), takeaways.length], ["paid", L("Recently paid", "हाल में भुगतान"), paid.length]] as const).map(([k, label, n]) => (
-                <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)} className={`min-h-11 flex-1 rounded-full border px-3 text-body font-semibold ${tab === k ? "border-ink bg-ink text-white" : "border-line bg-surface text-muted hover:text-ink"}`}>{label} <span className="tabular opacity-70">{n}</span></button>
+                <button key={k} type="button" role="tab" aria-label={`${label}: ${n}`} title={label} aria-selected={tab === k} onClick={() => setTab(k)} className={`min-h-11 min-w-0 whitespace-nowrap rounded-full border px-1.5 text-xs font-semibold sm:px-3 sm:text-body lg:px-2 lg:text-sm ${tab === k ? "border-ink bg-ink text-white" : "border-line bg-surface text-muted hover:text-ink"}`}>
+                  <span className="sm:hidden lg:inline">{k === "due" ? L("Due", "बाकी") : k === "takeaway" ? L("Takeaway", "पार्सल") : L("Paid", "भुगतान")}</span>
+                  <span className="hidden sm:inline lg:hidden">{label}</span>{" "}<span className="tabular opacity-70">{n}</span>
+                </button>
               ))}
             </div>
 
