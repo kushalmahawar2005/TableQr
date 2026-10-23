@@ -31,6 +31,7 @@ export const bills = mysqlTable(
     subtotalPaise: int("subtotal_paise").notNull().default(0),
     discountPaise: int("discount_paise").notNull().default(0),
     taxPaise: int("tax_paise").notNull().default(0),
+    deliveryFeePaise: int("delivery_fee_paise").notNull().default(0),
     serviceChargePaise: int("service_charge_paise").notNull().default(0),
     tipPaise: int("tip_paise").notNull().default(0),
     /** Reservation credit shown as a separate bill adjustment. */

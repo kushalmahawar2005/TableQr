@@ -1,6 +1,6 @@
 import "server-only";
 import { randomInt } from "node:crypto";
-import { and, asc, eq, notInArray } from "drizzle-orm";
+import { and, asc, eq, like, notInArray } from "drizzle-orm";
 import { uuidv7 } from "@/db/id";
 import { db } from "@/db";
 import * as s from "@/db/schema";
@@ -30,7 +30,7 @@ export async function startTakeaway(staff: StaffSession, input: { name?: string 
     const counters = await tx
       .select()
       .from(s.diningTables)
-      .where(and(eq(s.diningTables.tenantId, scope.tenantId), eq(s.diningTables.outletId, scope.outletId), eq(s.diningTables.tableClass, TAKEAWAY_CLASS)))
+      .where(and(eq(s.diningTables.tenantId, scope.tenantId), eq(s.diningTables.outletId, scope.outletId), eq(s.diningTables.tableClass, TAKEAWAY_CLASS), like(s.diningTables.code, "TA-%")))
       .orderBy(asc(s.diningTables.code))
       .for("update");
     let table: (typeof counters)[number] | undefined;

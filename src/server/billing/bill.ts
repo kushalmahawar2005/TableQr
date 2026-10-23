@@ -134,8 +134,9 @@ export function computeDraft(inputs: BillInputs, opts: { mode?: SplitMode; custo
     const custom = { ids: [] as string[], targetPaise: 0, valid: false };
     return { mode, totals: emptyTotals(), shares: [] as DraftShare[], hostId, splitLines, serviceChargeBp, serviceChargeWaived: waived, customAmounts, custom };
   }
+  const deliveryFee = session.deliveryFeePaise ?? 0;
   const { totals, shares, custom } = splitBill({
-    people: people.map((p) => ({ id: p.id, removed: !!p.removedAt, frozenAmountPaise: frozenAmount.get(p.id) ?? null })),
+    people: people.map((p) => ({ id: p.id, removed: !!p.removedAt, frozenAmountPaise: frozenAmount.has(p.id) ? Math.max(0, frozenAmount.get(p.id)! - (p.id === hostId ? deliveryFee : 0)) : null })),
     hostId,
     lines: splitLines,
     billDiscountPaise,
@@ -143,6 +144,13 @@ export function computeDraft(inputs: BillInputs, opts: { mode?: SplitMode; custo
     mode,
     customAmounts: mode === "custom" ? customAmounts : null,
   });
+  const deliveryFeePaise = session.deliveryFeePaise ?? 0;
+  if (deliveryFeePaise > 0) {
+    const hostShare = shares.find(share => share.participantId === hostId);
+    if (hostShare) hostShare.amountPaise += deliveryFeePaise;
+    totals.exactPaise += deliveryFeePaise;
+    totals.totalPaise += deliveryFeePaise;
+  }
   // A removed person with nothing ordered and nothing paid has no place on the bill
   const paidBy = new Map(inputs.shares.map((sh) => [sh.participantId, sh.paidPaise]));
   const removed = new Set(people.filter((p) => p.removedAt).map((p) => p.id));
@@ -199,6 +207,7 @@ export async function syncBill(
     subtotalPaise: t.subtotalPaise,
     discountPaise: t.discountPaise,
     taxPaise: t.taxPaise,
+    deliveryFeePaise: inputs.session.deliveryFeePaise ?? 0,
     serviceChargePaise: t.serviceChargePaise,
     roundOffPaise: t.roundOffPaise,
     totalPaise: t.totalPaise,

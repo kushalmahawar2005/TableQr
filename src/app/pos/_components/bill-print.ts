@@ -11,7 +11,7 @@ export function billHtml(d: PosBillDetail, outlet: string, kind: "bill" | "recei
   const paid = d.payments.filter((p) => p.status === "success");
   const paidTotal = paid.reduce((n, p) => n + p.amountPaise + p.tipPaise, 0);
   const b = d.bill;
-  const summaryRows = b ? 2 + Number(!!b.discountPaise) + Number(!!b.serviceChargePaise) + Number(!!b.roundOffPaise) : 0;
+  const summaryRows = b ? 2 + Number(!!b.deliveryFeePaise) + Number(!!b.discountPaise) + Number(!!b.serviceChargePaise) + Number(!!b.roundOffPaise) : 0;
   const paperHeight = Math.max(92, 62 + lines.length * 8 + summaryRows * 5 + (kind === "receipt" ? paid.length * 6 + 8 : 0));
   const row = (a: string, v: string, bold = false) => `<div class="r${bold ? " b" : ""}"><span>${a}</span><span>${v}</span></div>`;
   return `<!doctype html><html><head><meta charset="utf-8"><title>${kind === "bill" ? "Bill" : "Receipt"} · Table ${esc(d.tableCode)}</title><style>
@@ -31,7 +31,7 @@ hr{border:0;border-top:1px dashed #000;margin:8px 0}
 <hr>
 ${lines.map((l) => `<div class="it"><span class="q">${l.qty}×</span><span class="n">${esc(l.name)}${l.note && /parcel|pack/i.test(l.note) ? " (PARCEL)" : ""}</span><span class="p">${rs(l.qty * l.unitPricePaise)}</span></div>`).join("")}
 <hr>
-${b ? row("Items", rs(b.subtotalPaise)) + (b.discountPaise ? row("Discount", "− " + rs(b.discountPaise)) : "") + row("Tax", rs(b.taxPaise)) + (b.serviceChargePaise ? row("Service charge", rs(b.serviceChargePaise)) : "") + (b.roundOffPaise ? row("Round off", rs(b.roundOffPaise)) : "") + row("TOTAL", rs(b.totalPaise), true) : ""}
+${b ? row("Items", rs(b.subtotalPaise)) + (b.discountPaise ? row("Discount", "− " + rs(b.discountPaise)) : "") + (b.deliveryFeePaise ? row("Delivery charge", rs(b.deliveryFeePaise)) : "") + row("Tax", rs(b.taxPaise)) + (b.serviceChargePaise ? row("Service charge", rs(b.serviceChargePaise)) : "") + (b.roundOffPaise ? row("Round off", rs(b.roundOffPaise)) : "") + row("TOTAL", rs(b.totalPaise), true) : ""}
 ${kind === "receipt" && paid.length ? `<hr>${paid.map((p) => row(`Paid by ${METHOD[p.method] ?? p.method}`, rs(p.amountPaise + p.tipPaise))).join("")}${row("Total paid", rs(paidTotal), true)}` : ""}
 <hr>
 <div class="c m">Thank you for dining with us!</div>

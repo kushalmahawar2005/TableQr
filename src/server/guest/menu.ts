@@ -86,7 +86,7 @@ export async function loadItems(
 
   const overrideByItem = new Map(overrides.map((o) => [o.itemId, o]));
   const windowByCategory = new Map(windows.map((w) => [w.id, w.from && w.to ? { from: w.from, to: w.to } : null]));
-  return items.map((item) => {
+  return items.filter((item) => windowByCategory.has(item.categoryId)).map((item) => {
     const override = overrideByItem.get(item.id);
     const itemGroups = groups
       .filter((g) => g.itemId === item.id)

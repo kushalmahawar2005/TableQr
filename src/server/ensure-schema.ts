@@ -1,4 +1,5 @@
 import "server-only";
+import { DELIVERY_TABLE_SQL } from "./delivery/schema-sql";
 import type { Pool, RowDataPacket } from "mysql2/promise";
 
 // Brings the live database up to what this release needs, once, when the server starts.
@@ -336,6 +337,14 @@ const STEPS: Step[] = [
     tag: "0039_modern_hedge_knight", when: 1792774386962, hash: "6c3926b3ec4559e4a0ab5ea3dff96a9354f879809d0192ccf2ba503596a18e9a",
     apply: async (db) => {
       await addColumn(db, "outlets", "delivery_policy", "json");
+    },
+  },
+  {
+    tag: "0040_milky_morlun", when: 1792776130784, hash: "67cdfba14370d5eb68257dd90a4a7ff34cd095474a3f35638f05d20fc57e3367",
+    apply: async (db) => {
+      await addColumn(db, "table_sessions", "delivery_fee_paise", "int DEFAULT 0 NOT NULL");
+      await addColumn(db, "bills", "delivery_fee_paise", "int DEFAULT 0 NOT NULL");
+      for (const statement of DELIVERY_TABLE_SQL) await db.query(statement);
     },
   },
 ];

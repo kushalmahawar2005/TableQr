@@ -29,7 +29,7 @@ describe("public restaurant service choices", () => {
     const held = await createBookingHold("SRJ01", { date, startAt: slot.startAt, partySize: 2, requestId: "public-choice-hold", holdToken: "public-choice-token" });
     const otherBefore = await getRestaurantHome("CNJ01");
     await updateOutletSettings(owner(), patch({ guestServices: ["dineIn"], guestOnlinePayments: false }));
-    expect((await getRestaurantHome("SRJ01")).services).toEqual({ dineIn: true, reservations: false, rooms: false });
+    expect((await getRestaurantHome("SRJ01")).services).toEqual({ delivery: false, dineIn: true, reservations: false, rooms: false });
     expect((await getOutletSettings(owner())).guestOnlinePayments).toBe(false);
     await expect(getBookingAvailability("SRJ01", { date, partySize: 2 })).rejects.toMatchObject({ code: "forbidden" });
     await expect(getBookingZones("SRJ01")).rejects.toMatchObject({ code: "forbidden" });
@@ -41,7 +41,7 @@ describe("public restaurant service choices", () => {
 
   it("allows an empty selection, validates choices and requires owner access", async () => {
     await updateOutletSettings(owner(), patch({ guestServices: [] }));
-    expect((await getRestaurantHome("SRJ01")).services).toEqual({ dineIn: false, reservations: false, rooms: false });
+    expect((await getRestaurantHome("SRJ01")).services).toEqual({ delivery: false, dineIn: false, reservations: false, rooms: false });
     await expect(updateOutletSettings({ ...owner(), roles: ["manager"] }, patch({ guestServices: ["reservations"] }))).rejects.toMatchObject({ code: "forbidden" });
     await expect(updateOutletSettings(owner(), patch({ guestServices: ["unknown"] as never }))).rejects.toMatchObject({ code: "invalid_state" });
     await expect(updateOutletSettings(owner(), patch({ guestOnlinePayments: "false" as never }))).rejects.toMatchObject({ code: "invalid_state" });

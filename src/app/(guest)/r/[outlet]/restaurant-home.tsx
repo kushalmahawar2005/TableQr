@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { CalendarDays, Hotel, QrCode, Utensils } from "lucide-react";
+import { CalendarDays, Truck, Hotel, QrCode, Utensils } from "lucide-react";
 import type { getRestaurantHome } from "@/server/guest/restaurant-home";
 import { OutletLogo } from "./t/[table]/_components/outlet-logo";
 
@@ -29,9 +29,10 @@ export function RestaurantHome({ data }: { data: HomeData }) {
       {step === "service" && <><div className="mt-7 flex items-center justify-between gap-2"><button type="button" onClick={() => setStep("language")} className="min-h-10 text-sm font-semibold text-muted">← {hindi ? "वापस" : "Back"}</button><h2 className="text-right text-lg font-bold">{copy.choose}</h2></div><div className="mt-3 grid gap-3">
         {services.dineIn && <div className={`${card} cursor-default`}><span className="grid size-11 shrink-0 place-items-center rounded-xl bg-brand-soft text-brand-strong"><Utensils size={21} /></span><span><span className="block font-semibold">{copy.dine}</span><span className="mt-0.5 block text-sm text-muted">{copy.dineHint}</span></span></div>}
         {services.reservations && <Link href={`/r/${encodeURIComponent(outlet.code)}/book`} className={card}><span className="grid size-11 shrink-0 place-items-center rounded-xl bg-brand-soft text-brand-strong"><CalendarDays size={21} /></span><span><span className="block font-semibold">{copy.booking}</span><span className="mt-0.5 block text-sm text-muted">{copy.bookingHint}</span></span></Link>}
+        {services.delivery && <Link href={`/r/${encodeURIComponent(outlet.code)}/delivery?lang=${hindi ? "hi" : "en"}`} className={card}><span className="grid size-11 shrink-0 place-items-center rounded-xl bg-brand-soft text-brand-strong"><Truck size={21} /></span><span><span className="block font-semibold">{hindi ? "घर पर डिलीवरी" : "Home delivery"}</span><span className="mt-0.5 block text-sm text-muted">{hindi ? "मेन्यू चुनें और घर पर डिलीवरी मँगाएँ।" : "Choose your food and enter your delivery address."}</span></span></Link>}
         {services.rooms && <div className={`${card} cursor-default`}><span className="grid size-11 shrink-0 place-items-center rounded-xl bg-brand-soft text-brand-strong"><Hotel size={21} /></span><span><span className="block font-semibold">{copy.rooms}</span><span className="mt-0.5 block text-sm text-muted">{copy.roomsHint}</span></span></div>}
       </div>
-      {!services.dineIn && !services.reservations && !services.rooms && <p className="mt-6 text-sm text-muted">Please contact the restaurant for assistance.</p>}</>}
+      {!services.delivery && !services.dineIn && !services.reservations && !services.rooms && <p className="mt-6 text-sm text-muted">Please contact the restaurant for assistance.</p>}</>}
     </section>
     <p className="mt-5 flex items-center justify-center gap-1 text-xs text-muted"><QrCode size={14} aria-hidden />TableQR</p>
   </main>;

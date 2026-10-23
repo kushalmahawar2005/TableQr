@@ -55,6 +55,7 @@ export default async function SharedBillPage(props: { params: Promise<{ token: s
         <dl className="mt-3 border-t border-line pt-2 text-body">
           <div className={row}><dt className="text-muted">Subtotal</dt><dd className="tabular">{rupees(snap.subtotalPaise)}</dd></div>
           {snap.discountPaise > 0 && <div className={row}><dt className="text-muted">Discount</dt><dd className="tabular">−{rupees(snap.discountPaise)}</dd></div>}
+          {!!snap.deliveryFeePaise && <div className={row}><dt className="text-muted">Delivery charge</dt><dd className="tabular">{rupees(snap.deliveryFeePaise)}</dd></div>}
           {snap.serviceChargePaise > 0 && <div className={row}><dt className="text-muted">Service charge</dt><dd className="tabular">{rupees(snap.serviceChargePaise)}</dd></div>}
           {Object.entries(snap.taxBreakup ?? {}).map(([bp, paise]) => (
             <div key={bp} className={row}><dt className="text-muted">{bp ? `GST ${Number(bp) / 100}%` : "GST"}</dt><dd className="tabular">{rupees(paise)}</dd></div>

@@ -36,6 +36,7 @@ type Snapshot = {
   subtotalPaise: number;
   discountPaise: number;
   serviceChargePaise: number;
+  deliveryFeePaise?: number;
   taxBreakup: Record<string, number> | null;
   roundOffPaise: number;
   totalPaise: number;
@@ -73,6 +74,7 @@ export async function sharedBill(token: string) {
       subtotalPaise: bill.subtotalPaise,
       discountPaise: bill.discountPaise,
       serviceChargePaise: bill.serviceChargePaise,
+      deliveryFeePaise: bill.deliveryFeePaise,
       taxBreakup: bill.taxBreakup ?? (bill.taxPaise ? { "": bill.taxPaise } : null),
       roundOffPaise: bill.roundOffPaise,
       totalPaise: bill.totalPaise,

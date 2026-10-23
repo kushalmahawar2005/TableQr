@@ -12,9 +12,9 @@ export function DeliverySettings({ value, onChange, disabled, hasPaymentQr }: {
   const [codes, setCodes] = useState(value.pincodes.join(", "));
   const update = (patch: Partial<DeliveryPolicy>) => onChange({ ...value, ...patch });
   return <div className="space-y-5 py-5">
-    <p className="rounded-xl bg-brand-soft p-3 text-sm text-ink">Prepare delivery settings here. Public delivery checkout will become available after the ordering and payment flow is connected.</p>
+    <p className="rounded-xl bg-brand-soft p-3 text-sm text-ink">Pay-on-delivery checkout is available from your public restaurant link when enabled. Online gateway and QR prepayment are being connected and will remain unavailable to guests until ready.</p>
     <label className="flex min-h-11 items-center justify-between gap-4 text-sm font-semibold">
-      Accept delivery orders when checkout launches
+      Accept delivery orders
       <input type="checkbox" checked={value.acceptingOrders} disabled={disabled} onChange={event => update({ acceptingOrders: event.target.checked })} className="size-5 accent-[var(--brand)]" />
     </label>
     <div className="space-y-2"><Label htmlFor="delivery-pincodes">Delivery pincodes</Label>
@@ -24,7 +24,7 @@ export function DeliverySettings({ value, onChange, disabled, hasPaymentQr }: {
     <div className="grid gap-4 sm:grid-cols-2">
       {([
         ["minimumOrderPaise", "Minimum food order (₹)"],
-        ["deliveryFeePaise", "Delivery charge (₹)"],
+        ["deliveryFeePaise", "Final delivery charge (₹)"],
         ["freeDeliveryAbovePaise", "Free delivery from (₹)"],
       ] as const).map(([key, label]) => <div className="space-y-2" key={key}><Label htmlFor={`delivery-${key}`}>{label}</Label>
         <Input id={`delivery-${key}`} type="number" min="0" max="100000" step="0.01" value={value[key] === null ? "" : value[key] / 100} disabled={disabled} onChange={event => update({ [key]: event.target.value === "" && key === "freeDeliveryAbovePaise" ? null : Math.round(Number(event.target.value) * 100) })} />

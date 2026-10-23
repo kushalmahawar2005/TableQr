@@ -6,7 +6,7 @@ import * as s from "@/db/schema";
 import { checkFirstName, isPlaceholderName } from "@/domain/guest-name";
 import { ROOM_CLASS } from "@/domain/rooms";
 import { priceLine, quoteKey, type PriceQuote } from "@/domain/pricing";
-import { LOCK_THEN_READ } from "../db-types";
+import { LOCK_THEN_READ, type Tx } from "../db-types";
 import { AppError } from "../errors";
 import { publish } from "../realtime/publish";
 import { topics } from "../realtime/token";
@@ -53,7 +53,10 @@ type StaffOrder = { userId: string; lines: StaffDraftLine[] };
 
 /** Internal shared transaction; staff caller authenticates before providing staffDraft. */
 export function placeOrderTx(ctx: GuestContext, input: PlaceInput, now: Date, staffDraft?: StaffOrder) {
-  return db.transaction(async (tx) => {
+  return db.transaction(tx => placeOrderInTransaction(tx, ctx, input, now, staffDraft), LOCK_THEN_READ);
+}
+
+export async function placeOrderInTransaction(tx: Tx, ctx: GuestContext, input: PlaceInput, now: Date, staffDraft?: StaffOrder) {
     // Lock the session so two phones at the table cannot take the same round number
     const [session] = await tx
       .select()
@@ -301,5 +304,5 @@ export function placeOrderTx(ctx: GuestContext, input: PlaceInput, now: Date, st
     }).map(([itemId]) => itemId);
 
     return { orderId, roundNo, status: outlet.autoAccept ? "accepted" as const : "placed" as const, subtotalPaise, stations, itemCount: lines.reduce((n, p) => n + p.line.qty, 0), soldOutItemIds, replayed: false };
-  }, LOCK_THEN_READ);
+
 }

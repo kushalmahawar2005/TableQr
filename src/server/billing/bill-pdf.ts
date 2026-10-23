@@ -89,6 +89,7 @@ export async function billPdf(b: SharedBill): Promise<Uint8Array> {
   const s = b.snap;
   row("Subtotal", rs(s.subtotalPaise));
   if (s.discountPaise > 0) row("Discount", rs(-s.discountPaise));
+  if (s.deliveryFeePaise) row("Delivery charge", rs(s.deliveryFeePaise));
   if (s.serviceChargePaise > 0) row("Service charge", rs(s.serviceChargePaise));
   for (const [bp, paise] of Object.entries(s.taxBreakup ?? {})) row(bp ? `GST ${Number(bp) / 100}%` : "GST", rs(paise));
   if (s.roundOffPaise) row("Round off", rs(s.roundOffPaise));

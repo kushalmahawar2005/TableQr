@@ -52,6 +52,7 @@ export const tableSessions = mysqlTable(
     /** Party size given by staff when seating; guests who scan are counted as participants */
     partySize: int("party_size"),
     /** Name given by staff for a walk-in, booking or waitlist party */
+    deliveryFeePaise: int("delivery_fee_paise").notNull().default(0),
     guestName: varchar("guest_name", { length: 80 }),
     /** When the table is expected back, from the dining-duration policy plus any extensions */
     expectedEndAt: at("expected_end_at"),

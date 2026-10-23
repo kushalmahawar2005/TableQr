@@ -1,4 +1,5 @@
 import "server-only";
+import { readDeliveryPolicy } from "@/domain/delivery";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import * as s from "@/db/schema";
@@ -21,6 +22,7 @@ export async function getRestaurantHome(outletCode: string) {
     logoUrl: s.brands.logoUrl,
     accentColor: s.outlets.accentColor,
     guestServices: s.outlets.guestServices,
+    deliveryPolicy: s.outlets.deliveryPolicy,
   }).from(s.outlets)
     .innerJoin(s.tenants, eq(s.tenants.id, s.outlets.tenantId))
     .innerJoin(s.plans, eq(s.plans.code, s.tenants.planCode))
@@ -35,6 +37,6 @@ export async function getRestaurantHome(outletCode: string) {
   const selected = configuredGuestServices(row.guestServices);
   return {
     outlet: { code: row.code, name: row.name, city: row.city, logoUrl: row.logoUrl, accentColor: row.accentColor },
-    services: { dineIn: features.dineIn && selected.includes("dineIn"), reservations: features.reservations && selected.includes("reservations"), rooms: features.rooms && selected.includes("rooms") },
+    services: { delivery: features.delivery && readDeliveryPolicy(row.deliveryPolicy).acceptingOrders && readDeliveryPolicy(row.deliveryPolicy).paymentMode === "cod", dineIn: features.dineIn && selected.includes("dineIn"), reservations: features.reservations && selected.includes("reservations"), rooms: features.rooms && selected.includes("rooms") },
   };
 }

@@ -654,6 +654,7 @@ async function closeBill(tx: Tx, bill: typeof s.bills.$inferSelect, now: Date): 
       subtotalPaise: bill.subtotalPaise,
       discountPaise: bill.discountPaise,
       serviceChargePaise: bill.serviceChargePaise,
+      deliveryFeePaise: bill.deliveryFeePaise,
       taxBreakup: bill.taxBreakup,
       taxPaise: bill.taxPaise,
       roundOffPaise: bill.roundOffPaise,
