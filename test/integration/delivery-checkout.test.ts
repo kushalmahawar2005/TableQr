@@ -8,7 +8,7 @@ import { claimManualQrDeliveryPayment, confirmManualQrDeliveryPayment, createDel
 import { reconcileDeliveryPayment, startDeliveryPayment } from "@/server/delivery/payment";
 import { sendDeliveryOtp, verifyDeliveryOtp } from "@/server/delivery/otp";
 import { mockGateway } from "@/server/payments/gateway";
-import { advanceDelivery, deliveryQueue, pendingManualDeliveryPayments } from "@/server/delivery/staff";
+import { advanceDelivery, assignDeliveryCourier, deliveryQueue, pendingManualDeliveryPayments } from "@/server/delivery/staff";
 import { getFloor } from "@/server/floor/read";
 import { resolveStaff, signInStaff, type StaffSession } from "@/server/staff/auth";
 import { resetTestDb } from "./setup-db";
@@ -64,6 +64,10 @@ describe("verified delivery checkout", () => {
     expect((await env.db.select().from(s.orders).where(eq(s.orders.sessionId, a.sessionId))).length).toBe(1);
     expect((await deliveryStatus("SRJ01", token, device)).status).toBe("placed");
     expect((await deliveryQueue(owner)).find(row => row.id === checkoutId)?.phone).toBe("+919876543210");
+    await expect(assignDeliveryCourier(owner, checkoutId, { name: "Ravi Kumar", phone: "bad" })).rejects.toMatchObject({ code: "invalid_state" });
+    await assignDeliveryCourier(owner, checkoutId, { name: "Ravi Kumar", phone: "9876543213" });
+    expect((await deliveryQueue(owner)).find(row => row.id === checkoutId)).toMatchObject({ courierName: "Ravi Kumar", courierPhone: "+919876543213" });
+    expect(await deliveryStatus("SRJ01", token, device)).toMatchObject({ courierName: "Ravi Kumar", courierPhone: "+919876543213" });
     await expect(advanceDelivery(owner, checkoutId, "dispatched")).rejects.toMatchObject({ code: "invalid_state" });
     await env.db.update(s.orderLines).set({ status: "ready" }).where(and(eq(s.orderLines.tenantId, env.demo.tenantId), eq(s.orderLines.sessionId, a.sessionId)));
     await advanceDelivery(owner, checkoutId, "dispatched");

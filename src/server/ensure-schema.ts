@@ -397,6 +397,14 @@ const STEPS: Step[] = [
       await addIndex(db, "delivery_checkouts", "delivery_manual_pending_idx", "`tenant_id`,`outlet_id`,`payment_mode`,`payment_status`,`manual_payment_claimed_at`");
     },
   },
+  {
+    tag: "0045_flat_cerebro", when: 1792785148925, hash: "3cf6d01dd1eec604e20e9ba88c6b8ebba49c52ee9d0a194498c53791be22d7ca",
+    apply: async (db) => {
+      await addColumn(db, "delivery_checkouts", "courier_name", "varchar(80)");
+      await addColumn(db, "delivery_checkouts", "courier_phone", "varchar(16)");
+      await addColumn(db, "delivery_checkouts", "courier_assigned_at", "datetime(3)");
+    },
+  },
 ];
 
 /** drizzle/0015, the last migration before these steps */

@@ -7,5 +7,5 @@ export default async function DeliveryOrdersPage() {
   const staff = await staffFor(deliveryStaffRoles);
   const rows = await deliveryQueue(staff);
   const pendingPayments = await pendingManualDeliveryPayments(staff);
-  return <DeliveryQueueScreen rows={rows.map(row => ({ ...row, placedAt: row.placedAt?.toISOString() ?? null }))} pendingPayments={pendingPayments.map(row => ({ ...row, claimedAt: row.claimedAt?.toISOString() ?? null }))} />;
+  return <DeliveryQueueScreen canAssignCourier={staff.roles.some(role => role === "owner" || role === "manager")} rows={rows.map(row => ({ ...row, placedAt: row.placedAt?.toISOString() ?? null }))} pendingPayments={pendingPayments.map(row => ({ ...row, claimedAt: row.claimedAt?.toISOString() ?? null }))} />;
 }

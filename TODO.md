@@ -1,12 +1,12 @@
 # TableQR remaining work
 
-Snapshot: 24 October 2026. The restaurant-funded Cashfree delivery prepayment release is deployed to production (`3223a21`). This checklist tracks the remaining product work and the production checks needed to call it complete.
+Snapshot: 24 October 2026. Restaurant-funded Cashfree delivery prepayment shipped in `3223a21`, and manual restaurant-QR delivery payment shipped in `e3da3d0`. The checklist tracks product work and production checks needed to call the platform complete.
 
-## Remaining TODOs (13)
+## Product work (13 items; 2 complete)
 
 - [ ] **1. Restaurant payment onboarding and live acceptance test** — Each restaurant connects its own Cashfree live account; verify credentials are encrypted, webhook signature/status checks pass, success/failure/refund paths update the bill once, and TableQR subscription Cashfree is never used for guest payments. Requires a tenant test account and its live credentials.
-- [ ] **2. Delivery payment by the restaurant’s UPI QR** — Add QR setup and customer payment instructions; keep the order pending until restaurant staff verify the UTR/reference, then release it to the kitchen and record the payment exactly once. COD and tenant Cashfree are available today; delivery QR is still disabled.
-- [ ] **3. Delivery rider/courier connection** — Extend the current staff-managed dispatch flow with assignment, status updates, customer tracking, and a provider adapter when a courier provider/account is selected.
+- [x] **2. Delivery payment by the restaurant’s UPI QR** — Customers submit a UPI reference after phone verification; authorized restaurant staff verify it before the order reaches the kitchen, and payment is recorded once in the bill ledger. COD and tenant Cashfree remain available.
+- [x] **3. Manual delivery rider assignment and customer tracking** — Owners/managers can assign a rider name and phone; the customer sees “on the way” and can call the rider after dispatch. Dispatch/payment transitions remain staff-controlled and audited. A courier-provider API adapter is deferred until a provider/account is selected.
 - [ ] **4. Guest entry and booking journey acceptance pass** — Walk through restaurant welcome → language → dine-in / party reservation / delivery; verify menu, availability, advance amount, tenant gateway vs restaurant QR, confirmation, cancellation/refund, and mobile navigation. Fix any missing links or confusing screens found.
 - [ ] **5. Group guest identity and per-person bill ownership** — Verify every named/verified guest at a table is retained, item ownership and split totals stay correct, and parcel/takeaway items appear in the right bill and kitchen/packing workflow without charging other guests.
 - [ ] **6. Waiter/table assignment reliability** — Verify manual assignment, free-staff load-aware auto-assignment, busy/off-duty fallback, reassignment, waiter table list, and shift visibility across Floor, Orders, Kitchen, and staff PWA.
@@ -21,6 +21,7 @@ Snapshot: 24 October 2026. The restaurant-funded Cashfree delivery prepayment re
 ## Deferred until external approval
 
 - [ ] Replace demo customer OTP with the approved DLT/SMS provider after sender ID, template, and credentials are ready; test delivery, resend limits, expiry, and abuse throttling before enabling it.
+- [ ] Connect a courier provider after the tenant/provider and account are selected; map its assignment, tracking, cancellation, and webhook statuses to the manual dispatch lifecycle.
 
 ## Definition of done for every TODO
 

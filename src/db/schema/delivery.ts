@@ -16,6 +16,7 @@ export const deliveryCheckouts = mysqlTable("delivery_checkouts", {
   paymentProvider: varchar("payment_provider", { length: 30 }), gatewayRef: varchar("gateway_ref", { length: 100 }), gatewayPaymentId: varchar("gateway_payment_id", { length: 100 }),
   manualPaymentQrUrl: varchar("manual_payment_qr_url", { length: 500 }), manualPaymentReference: varchar("manual_payment_reference", { length: 40 }),
   manualPaymentClaimedAt: at("manual_payment_claimed_at"), manualPaymentConfirmedAt: at("manual_payment_confirmed_at"),
+  courierName: varchar("courier_name", { length: 80 }), courierPhone: varchar("courier_phone", { length: 16 }), courierAssignedAt: at("courier_assigned_at"),
   paymentStatus: mysqlEnum("payment_status", ["none", "pending", "paid", "failed", "refund_pending", "refunded", "refund_failed"]).notNull().default("none"),
   paymentFailureReason: varchar("payment_failure_reason", { length: 200 }), refundGatewayRef: varchar("refund_gateway_ref", { length: 100 }),
   refundStatus: mysqlEnum("refund_status", ["none", "pending", "success", "failed"]).notNull().default("none"),
