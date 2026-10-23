@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { BookingClient } from "./booking-client";
 import { getBookingZones } from "@/server/booking/core";
 import { AppError } from "@/server/errors";
@@ -17,10 +18,11 @@ export default async function BookPage(props: PageProps<"/r/[outlet]/book">) {
   // The restaurant's plan has no online booking
   if (!zones) {
     return (
-      <main className="grid min-h-dvh place-items-center p-6 text-center">
-        <div>
+      <main className="grid min-h-dvh place-items-center p-6 text-center text-ink">
+        <div className="max-w-md">
+          <Link href={`/r/${encodeURIComponent(outlet)}`} className="mb-5 inline-flex min-h-11 items-center text-sm font-semibold text-brand-strong">← {hindi ? "रेस्टोरेंट पर वापस जाएँ" : "Back to restaurant"}</Link>
           <h1 className="font-display text-title font-bold text-ink">Online booking is not available here</h1>
-          <p className="mt-2 text-body text-muted">Please call the restaurant to book a table.</p>
+          <p className="mt-2 text-body text-muted">{hindi ? "टेबल बुक करने के लिए कृपया रेस्टोरेंट को कॉल करें।" : "Please call the restaurant to book a table."}</p>
         </div>
       </main>
     );
