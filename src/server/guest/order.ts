@@ -12,6 +12,7 @@ import { publish } from "../realtime/publish";
 import { topics } from "../realtime/token";
 import { visitChanged } from "../floor/assignments";
 import { sendOutletPush } from "../staff/web-push";
+import { announceBill, requestBillInTransaction } from "../billing/payments";
 import type { GuestContext } from "./context";
 import { isWithinCategoryWindow, loadItems } from "./menu";
 
@@ -43,7 +44,19 @@ export async function placeOrder(ctx: GuestContext, input: PlaceInput = {}, now 
     // Portion counters that reached zero take the dish off every phone's menu
     ...placed.soldOutItemIds.map((itemId) => ({ topic: topics.menu, type: "item.availability", data: { itemId, available: false } })),
   ]);
-  await sendOutletPush(ctx, { title: "New table order", body: "A guest placed an order. Open TableQR to view it.", url: "/console", tag: `order-${placed.orderId}` }, { sessionId: ctx.sessionId, kind: "order" });
+  if (placed.roomBillRequest) {
+    void publish(ctx, [
+      { topic: topics.tasks, type: "service_request.created", data: { requestId: placed.roomBillRequest.requestId, tableId: ctx.tableId } },
+      { topic: topics.session(ctx.sessionId), type: "service_request.created", data: { requestId: placed.roomBillRequest.requestId } },
+    ]);
+    announceBill({ tenantId: ctx.tenantId, outletId: ctx.outletId, sessionId: ctx.sessionId }, { tableIds: placed.roomBillRequest.tableIds, state: "bill_requested" });
+  }
+  await sendOutletPush(ctx, {
+    title: placed.roomBillRequest ? "Room order · payment requested" : "New table order",
+    body: placed.roomBillRequest ? "A room guest placed an order and needs to pay for it." : "A guest placed an order. Open TableQR to view it.",
+    url: "/console",
+    tag: `order-${placed.orderId}`,
+  }, { sessionId: ctx.sessionId, kind: placed.roomBillRequest ? "service" : "order" });
   return placed;
 }
 
@@ -67,7 +80,7 @@ export async function placeOrderInTransaction(tx: Tx, ctx: GuestContext, input: 
       const [done] = await tx.select().from(s.orders).where(and(eq(s.orders.tenantId,ctx.tenantId),eq(s.orders.sessionId,ctx.sessionId),eq(s.orders.clientRequestId,input.requestId)));
       if(done) {
         if(done.placedByUserId !== staffDraft.userId || done.placedByParticipantId !== ctx.participantId) throw new AppError("conflict", "This request id was used by another diner or staff member.");
-        return {orderId:done.id,roundNo:done.roundNo,status:done.status,subtotalPaise:0,stations:[] as string[],itemCount:0,soldOutItemIds:[] as string[],replayed:true};
+        return {orderId:done.id,roundNo:done.roundNo,status:done.status,subtotalPaise:0,stations:[] as string[],itemCount:0,soldOutItemIds:[] as string[],roomBillRequest:null,replayed:true};
       }
     }
     if (!session || session.status === "closed") {
@@ -92,9 +105,9 @@ export async function placeOrderInTransaction(tx: Tx, ctx: GuestContext, input: 
         return { orderId: done.id, roundNo: done.roundNo, status: done.status, subtotalPaise: 0, stations: [] as string[], itemCount: 0, soldOutItemIds: [] as string[], replayed: true };
       }
     }
-    const [activeRoomStay] = !staffDraft && !me.guestId
+    const [activeRoomStay] = !staffDraft
       ? await tx
-          .select({ id: s.roomStays.id })
+          .select({ id: s.roomStays.id, foodPay: s.roomStays.foodPay })
           .from(s.rooms)
           .innerJoin(s.roomStays, and(eq(s.roomStays.tenantId, s.rooms.tenantId), eq(s.roomStays.roomId, s.rooms.id), eq(s.roomStays.openKey, s.rooms.id), eq(s.roomStays.status, "open")))
           .innerJoin(s.diningTables, and(eq(s.diningTables.tenantId, s.rooms.tenantId), eq(s.diningTables.id, s.rooms.tableId), eq(s.diningTables.tableClass, ROOM_CLASS)))
@@ -303,6 +316,25 @@ export async function placeOrderInTransaction(tx: Tx, ctx: GuestContext, input: 
       return left !== null && left - qty <= 0;
     }).map(([itemId]) => itemId);
 
-    return { orderId, roundNo, status: outlet.autoAccept ? "accepted" as const : "placed" as const, subtotalPaise, stations, itemCount: lines.reduce((n, p) => n + p.line.qty, 0), soldOutItemIds, replayed: false };
+    let roomBillRequest: { requestId: string; tableIds: string[] } | null = null;
+    if (activeRoomStay?.foodPay === "per_order") {
+      const scope = { tenantId: ctx.tenantId, outletId: ctx.outletId, sessionId: ctx.sessionId };
+      const bill = await requestBillInTransaction(tx, scope, now);
+      const requestId = uuidv7();
+      await tx.insert(s.serviceRequests).values({
+        id: requestId,
+        tenantId: ctx.tenantId,
+        outletId: ctx.outletId,
+        sessionId: ctx.sessionId,
+        tableId: ctx.tableId,
+        participantId: ctx.participantId,
+        kind: "request_bill",
+        clientRequestId: `room-order-bill-${orderId}`,
+        createdAt: now,
+      });
+      roomBillRequest = { requestId, tableIds: bill.tableIds };
+    }
+
+    return { orderId, roundNo, status: outlet.autoAccept ? "accepted" as const : "placed" as const, subtotalPaise, stations, itemCount: lines.reduce((n, p) => n + p.line.qty, 0), soldOutItemIds, roomBillRequest, replayed: false };
 
 }

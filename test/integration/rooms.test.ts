@@ -8,6 +8,7 @@ import { AppError } from "@/server/errors";
 import { getOrCreateDraft } from "@/server/floor/editor";
 import { addCartLine, getCart } from "@/server/guest/cart";
 import { getGuestContext } from "@/server/guest/context";
+import { getWaiterTasks } from "@/server/staff/waiter";
 import { getMenuScreen } from "@/server/guest/menu-screen";
 import { placeOrder } from "@/server/guest/order";
 import { askFromRoom, getRoomPage } from "@/server/guest/room";
@@ -117,6 +118,46 @@ describe("hotel rooms", () => {
     expect((await stayHistory(owner()))[0]).toMatchObject({ number: "204", guestName: "Rahul Mehta", foodPaise: bill.totalPaise });
     await refused(startOrJoinTable({ outletCode: "SRJ01", shortCode: code, deviceId: "room-guest-2" }), "table_not_open");
     await setRoomStatus(owner(), room.id, "vacant");
+  });
+
+  it("creates and routes a separate bill for every room order when per-order payment is selected", async () => {
+    const room = await saveRoom(owner(), { number: "205", roomType: "Deluxe" });
+    const code = await qrOf(room.id);
+    await checkIn(owner(), room.id, { guestName: "Asha Guest", guests: 1, foodPay: "per_order" });
+
+    const placeRoomOrder = async (deviceId: string) => {
+      const seated = await startOrJoinTable({ outletCode: "SRJ01", shortCode: code, deviceId });
+      const ctx = await getGuestContext("SRJ01", code, seated.participantId, deviceId);
+      await addCartLine(ctx, { itemId: env.demo.itemIds.Cola, qty: 1 });
+      const order = await placeOrder(ctx);
+      expect(order.roomBillRequest).toMatchObject({ requestId: expect.any(String), tableIds: [expect.any(String)] });
+      return { ctx, order };
+    };
+
+    const first = await placeRoomOrder("room-205-guest");
+    let [session] = await env.db.select().from(s.tableSessions).where(eq(s.tableSessions.id, first.ctx.sessionId));
+    expect(session.status).toBe("bill_requested");
+    let [bill] = await env.db.select().from(s.bills).where(eq(s.bills.sessionId, first.ctx.sessionId));
+    expect(bill.subtotalPaise).toBe(first.order.subtotalPaise);
+    expect(bill.totalPaise).toBe(bill.subtotalPaise - bill.discountPaise + bill.taxPaise + bill.serviceChargePaise + bill.deliveryFeePaise + bill.tipPaise + bill.bookingCreditPaise + bill.roundOffPaise);
+    const firstTask = (await getWaiterTasks(owner())).requests.find((request) => request.sessionId === first.ctx.sessionId);
+    expect(firstTask?.kind).toBe("request_bill");
+
+    // Paying one order frees the room's food tab, while check-in remains active for another order.
+    await settleAtCounter({ tenantId: first.ctx.tenantId, outletId: first.ctx.outletId, userId: null }, { sessionId: first.ctx.sessionId, method: "cash", receivedPaise: bill.totalPaise });
+    expect((await getRoomPage("SRJ01", code, "room-205-guest")).kind).toBe("room");
+    const second = await placeRoomOrder("room-205-guest");
+    expect(second.ctx.sessionId).not.toBe(first.ctx.sessionId);
+    [session] = await env.db.select().from(s.tableSessions).where(eq(s.tableSessions.id, second.ctx.sessionId));
+    expect(session.status).toBe("bill_requested");
+    [bill] = await env.db.select().from(s.bills).where(eq(s.bills.sessionId, second.ctx.sessionId));
+    expect(bill.subtotalPaise).toBe(second.order.subtotalPaise);
+    expect(bill.totalPaise).toBe(bill.subtotalPaise - bill.discountPaise + bill.taxPaise + bill.serviceChargePaise + bill.deliveryFeePaise + bill.tipPaise + bill.bookingCreditPaise + bill.roundOffPaise);
+    expect((await env.db.select().from(s.serviceRequests).where(eq(s.serviceRequests.sessionId, second.ctx.sessionId))).filter((request) => request.kind === "request_bill")).toHaveLength(1);
+
+    await settleAtCounter({ tenantId: second.ctx.tenantId, outletId: second.ctx.outletId, userId: null }, { sessionId: second.ctx.sessionId, method: "cash", receivedPaise: bill.totalPaise });
+    await checkOut(owner(), room.id);
+    expect((await getRooms(owner())).rooms.find((entry) => entry.id === room.id)?.status).toBe("cleaning");
   });
 
   it("reception may run rooms but not add them, and the plan's room limit holds", async () => {
