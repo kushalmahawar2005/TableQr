@@ -28,7 +28,7 @@ import type { ServiceKind } from "@/server/guest/service-requests";
 import { DiningNav } from "../../_components/dining-nav";
 import { LanguageToggle } from "../../_components/language-toggle";
 import { OutletLogo } from "../../_components/outlet-logo";
-import { cancelLineAction, serviceRequestAction } from "../actions";
+import { cancelLineAction, repeatOrderRoundAction, serviceRequestAction } from "../actions";
 import { g6Copy, type G6Copy } from "../_copy";
 import { useTrackerSync } from "../_hooks/use-tracker-sync";
 import { isRoomCode, placeHi } from "@/domain/rooms";
@@ -79,7 +79,7 @@ export function TrackerScreen({
   const tablePath = `/r/${encodeURIComponent(data.outlet.code)}/t/${encodeURIComponent(shortCode)}`;
   const [busy, setBusy] = useState<string | null>(null);
   const busyRef = useRef(false);
-  const [notice, setNotice] = useState<{ text: string; error?: boolean } | null>(() => preview?.notice ?? null);
+  const [notice, setNotice] = useState<{ text: string; error?: boolean; reviewCart?: boolean } | null>(() => preview?.notice ?? null);
   const [confirm, setConfirm] = useState<Line | "bill" | null>(() =>
     preview?.confirm === "bill"
       ? "bill"
@@ -158,6 +158,29 @@ export function TrackerScreen({
       busyRef.current = false;
       setBusy(null);
       setConfirm(null);
+    }
+  }
+
+  async function repeatRound(orderId: string) {
+    if (preview || busyRef.current || !online || !canOrder) return;
+    busyRef.current = true;
+    setBusy(`repeat:${orderId}`);
+    setNotice(null);
+    try {
+      const result = await repeatOrderRoundAction(data.outlet.code, shortCode, orderId);
+      if (!result.ok) {
+        if (result.error === "gone") { router.replace(tablePath); return; }
+        setNotice({ text: result.error === "blocked" ? c.billBody : c.repeatNone, error: true });
+      } else if (result.added > 0) {
+        setNotice({ text: c.repeatDone(result.added, result.skipped), reviewCart: true });
+      } else {
+        setNotice({ text: c.repeatNone, error: true });
+      }
+    } catch {
+      setNotice({ text: c.repeatNone, error: true });
+    } finally {
+      busyRef.current = false;
+      setBusy(null);
     }
   }
 
@@ -264,6 +287,11 @@ export function TrackerScreen({
               />
               <p className="text-body font-semibold">{notice.text}</p>
             </div>
+            {notice.reviewCart && (
+              <button type="button" onClick={() => router.push(`${tablePath}/cart`)} className="shrink-0 min-h-11 rounded-lg bg-brand px-3 text-caption font-semibold text-brand-on">
+                {c.reviewCart}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setNotice(null)}
@@ -315,6 +343,9 @@ export function TrackerScreen({
                 late={online ? round.lateAt !== null && clock >= round.lateAt : round.isLate}
                 disabled={!online || !!busy}
                 onCancel={setConfirm}
+                onRepeat={() => void repeatRound(round.orderId)}
+                repeating={busy === `repeat:${round.orderId}`}
+                canOrder={canOrder}
               />
             ))}
           </div>
@@ -460,6 +491,9 @@ function RoundView({
   late,
   disabled,
   onCancel,
+  onRepeat,
+  repeating,
+  canOrder,
 }: {
   round: Round;
   c: G6Copy;
@@ -468,6 +502,9 @@ function RoundView({
   late: boolean;
   disabled: boolean;
   onCancel: (line: Line) => void;
+  onRepeat: () => void;
+  repeating: boolean;
+  canOrder: boolean;
 }) {
   const isAllServed = round.status === "served";
   const time = new Intl.DateTimeFormat("en-IN", {
@@ -619,6 +656,16 @@ function RoundView({
           );
         })}
       </ul>
+      {round.canRepeat && (
+        <button
+          type="button"
+          onClick={onRepeat}
+          disabled={disabled || !canOrder || repeating}
+          className="mt-4 min-h-11 w-full rounded-xl border border-brand/30 bg-brand/5 px-4 text-button font-semibold text-brand-strong transition-colors hover:bg-brand/10 focus-visible:outline-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {repeating ? c.repeatWorking : c.repeatOrder}
+        </button>
+      )}
     </section>
   );
 }

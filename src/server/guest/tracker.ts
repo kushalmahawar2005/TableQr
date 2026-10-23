@@ -10,6 +10,7 @@ import { lockOrder, syncOrderStatus, syncTickets } from "../kitchen/order-state"
 import { publish } from "../realtime/publish";
 import { topics } from "../realtime/token";
 import type { GuestContext } from "./context";
+import { addConfiguredLine, assertCartEditable } from "./cart";
 
 // Order tracker (G6): every round with live item status, and cancelling before the kitchen accepts.
 
@@ -47,6 +48,7 @@ export async function getOrderTracker(ctx: GuestContext, now = new Date()) {
       /** "Taking longer than usual, the kitchen knows" after 1.5 times the prep time */
       isLate: lateThreshold !== null && now.getTime() >= lateThreshold,
       lateAt: lateThreshold,
+      canRepeat: own.some(({ line }) => line.participantId === ctx.participantId && line.status !== "cancelled" && line.status !== "voided"),
       lines: own.map(({ line }) => ({
         id: line.id,
         nameEn: line.nameEn,
@@ -65,6 +67,48 @@ export async function getOrderTracker(ctx: GuestContext, now = new Date()) {
 
   const inProgress = lines.filter((l) => ["placed", "accepted", "preparing", "ready"].includes(l.line.status)).reduce((n, l) => n + l.line.qty, 0);
   return { rounds, inProgress };
+}
+
+/** Rebuild only the caller's lines from a prior round into their current cart. Never places an order. */
+export async function repeatOrderRound(ctx: GuestContext, orderId: string, now = new Date()) {
+  await assertCartEditable(ctx);
+  const [order] = await db.select({ id: s.orders.id }).from(s.orders).where(and(
+    eq(s.orders.tenantId, ctx.tenantId),
+    eq(s.orders.outletId, ctx.outletId),
+    eq(s.orders.sessionId, ctx.sessionId),
+    eq(s.orders.id, orderId),
+  )).limit(1);
+  if (!order) throw new AppError("not_found", "This order round is no longer available.");
+
+  const previous = await db.select().from(s.orderLines).where(and(
+    eq(s.orderLines.tenantId, ctx.tenantId),
+    eq(s.orderLines.sessionId, ctx.sessionId),
+    eq(s.orderLines.orderId, orderId),
+    eq(s.orderLines.participantId, ctx.participantId),
+  )).orderBy(asc(s.orderLines.id));
+  const eligible = previous.filter((line) => line.status !== "cancelled" && line.status !== "voided");
+  if (!eligible.length) throw new AppError("not_found", "There are no repeatable items from your order in this round.");
+
+  let added = 0;
+  let skipped = 0;
+  for (const line of eligible) {
+    // Old rows have display-only modifier snapshots. Never repeat those as a different dish.
+    if (line.modifiers?.length && !line.modifierChoices?.length) { skipped++; continue; }
+    try {
+      await addConfiguredLine(ctx, {
+        itemId: line.itemId,
+        qty: line.qty,
+        modifierIds: line.modifierChoices?.map((choice) => choice.modifierId) ?? [],
+        note: line.note ?? undefined,
+        personalForPickup: line.personalForPickup,
+      }, now);
+      added++;
+    } catch {
+      // Menus, stock, modifier choices and cart limits can change after the original order.
+      skipped++;
+    }
+  }
+  return { added, skipped };
 }
 
 /** A guest can cancel their own item until the kitchen accepts it (PS 3.5) */

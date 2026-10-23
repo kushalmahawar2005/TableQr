@@ -65,6 +65,7 @@ export const orders = mysqlTable(
 );
 
 export type ModifierSnapshot = { nameEn: string; nameHi: string | null; priceDeltaPaise: number };
+export type ModifierChoiceSnapshot = { groupId: string; modifierId: string };
 
 export const orderLines = mysqlTable(
   "order_lines",
@@ -80,6 +81,8 @@ export const orderLines = mysqlTable(
     nameEn: varchar("name_en", { length: 100 }).notNull(),
     nameHi: varchar("name_hi", { length: 100 }),
     modifiers: json("modifiers").$type<ModifierSnapshot[]>(),
+    /** Stable option IDs for safely rebuilding a guest's previous order in the cart. */
+    modifierChoices: json("modifier_choices").$type<ModifierChoiceSnapshot[]>(),
     /** Item price plus modifier deltas, per unit */
     unitPricePaise: int("unit_price_paise").notNull(),
     qty: int("qty").notNull(),

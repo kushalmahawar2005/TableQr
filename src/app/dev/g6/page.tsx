@@ -15,7 +15,7 @@ function line(id: string, nameEn: string, nameHi: string, status: Line["status"]
   return { id, nameEn, nameHi, qty, amountPaise: qty * 24000, status, options: [], note: null, isMine: mine, canCancel: mine && status === "placed" };
 }
 function round(n: number, status: Round["status"], lines: Line[], minutes = 3): Round {
-  return { orderId: `r${n}`, roundNo: n, placedAt: NOW - minutes * 60_000, placedBy: n === 1 ? "Bhavna" : "Aarav", status, statusText: GUEST_STATUS_TEXT[status], step: status === "served" ? 3 : ["placed", "accepted", "preparing", "ready"].indexOf(status), isLate: false, lateAt: ["placed", "accepted", "preparing"].includes(status) ? NOW + 600_000 : null, lines };
+  return { orderId: `r${n}`, roundNo: n, placedAt: NOW - minutes * 60_000, placedBy: n === 1 ? "Bhavna" : "Aarav", status, statusText: GUEST_STATUS_TEXT[status], step: status === "served" ? 3 : ["placed", "accepted", "preparing", "ready"].indexOf(status), isLate: false, lateAt: ["placed", "accepted", "preparing"].includes(status) ? NOW + 600_000 : null, canRepeat: lines.some((item) => item.isMine && item.status !== "cancelled" && item.status !== "voided"), lines };
 }
 const base: TrackerScreenData = {
   renderedAt: NOW,

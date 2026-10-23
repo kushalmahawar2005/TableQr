@@ -295,6 +295,12 @@ const STEPS: Step[] = [
       await addColumn(db, "outlets", "wifi_password", "varchar(63)");
     },
   },
+  {
+    tag: "0034_repeat_order_modifier_choices", when: 1792759015664, hash: "905277e364bfc0450e726bbec67df22e94e5641fc8a5041698a629b0d56dc630",
+    apply: async (db) => {
+      await addColumn(db, "order_lines", "modifier_choices", "json");
+    },
+  },
 ];
 
 /** drizzle/0015, the last migration before these steps */

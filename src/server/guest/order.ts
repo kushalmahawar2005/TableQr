@@ -248,6 +248,7 @@ export function placeOrderTx(ctx: GuestContext, input: PlaceInput, now: Date, st
         nameEn: item.item.nameEn,
         nameHi: item.item.nameHi,
         modifiers: p.modifiers.map((m) => ({ nameEn: m.nameEn, nameHi: m.nameHi, priceDeltaPaise: m.priceDeltaPaise })),
+        modifierChoices: p.modifiers.map(({ groupId, modifierId }) => ({ groupId, modifierId })),
         unitPricePaise: p.unitPricePaise,
         qty: line.qty,
         taxRateBp: item.item.taxRateBp,
