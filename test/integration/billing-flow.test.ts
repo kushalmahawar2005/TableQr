@@ -104,6 +104,16 @@ describe("the bill (G8)", () => {
     await failsWith(setSplitMode(g.A, "equal"), "invalid_state");
   });
 
+  it("lets the owner turn online checkout off for this outlet, including at the server boundary", async () => {
+    await env.db.update(s.outlets).set({ guestOnlinePayments: false }).where(eq(s.outlets.id, g.A.outletId));
+    try {
+      expect((await view("A")).onlinePayment).toBe(false);
+      await failsWith(startPayment(g.A, { method: "upi", requestId: rid() }), "invalid_state");
+    } finally {
+      await env.db.update(s.outlets).set({ guestOnlinePayments: true }).where(eq(s.outlets.id, g.A.outletId));
+    }
+  });
+
   it("request bill pauses ordering and marks the table", async () => {
     await requestBill(scope());
     const [table] = await env.db.select().from(s.diningTables).where(eq(s.diningTables.id, env.demo.tableIds.T12));

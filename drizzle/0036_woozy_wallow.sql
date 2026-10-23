@@ -1,0 +1,1 @@
+ALTER TABLE `outlets` ADD `guest_online_payments` boolean DEFAULT true NOT NULL;

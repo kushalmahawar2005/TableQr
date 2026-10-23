@@ -34,6 +34,7 @@ describe("schema update at startup", () => {
     await env.db.execute(sql`ALTER TABLE cart_lines DROP COLUMN personal_for_pickup`);
     await env.db.execute(sql`ALTER TABLE order_lines DROP COLUMN personal_for_pickup`);
     await env.db.execute(sql`ALTER TABLE users DROP COLUMN guide`);
+    await env.db.execute(sql`ALTER TABLE outlets DROP COLUMN guest_online_payments`);
     await env.db.execute(sql`ALTER TABLE staff_roles MODIFY COLUMN role enum('owner','manager','cashier','host','waiter','kitchen','accountant') NOT NULL`);
     await env.db.execute(sql`DELETE FROM plans WHERE code IN ('custom', 'hotel', 'hotel_plus')`);
     // Production still had the old limits
@@ -62,7 +63,7 @@ describe("schema update at startup", () => {
     const limits = await rows<{ n: number; lim: number }>(sql`SELECT t.table_limit AS lim, (SELECT COUNT(*) FROM dining_tables d WHERE d.tenant_id = t.id AND d.is_active = 1) AS n FROM tenants t`);
     for (const l of limits) expect(Number(l.lim)).toBe(Math.max(1, Number(l.n)));
     const recorded = await rows<{ n: number }>(sql`SELECT COUNT(*) AS n FROM __drizzle_migrations WHERE created_at > 1791043208000`);
-    expect(Number(recorded[0].n)).toBe(20);
+    expect(Number(recorded[0].n)).toBe(21);
     const feeColumns = await rows<{ c: string }>(sql`SELECT COLUMN_NAME AS c FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'fee_payments' AND COLUMN_NAME IN ('client_request_id', 'gateway_ref', 'gateway_payment_id', 'failure_reason', 'checked_at') ORDER BY COLUMN_NAME`);
     expect(feeColumns.map((r) => r.c)).toEqual(["checked_at", "client_request_id", "failure_reason", "gateway_payment_id", "gateway_ref"]);
     expect(String((await rows<{ t: string }>(sql`SELECT COLUMN_TYPE AS t FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'fee_payments' AND COLUMN_NAME = 'method'`))[0].t)).toContain("'cashfree'");
@@ -76,11 +77,12 @@ describe("schema update at startup", () => {
 
     expect((await rows<{ n: number }>(sql`SELECT COUNT(*) AS n FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'table_sessions' AND COLUMN_NAME = 'waiter_user_id'`))[0].n).toBe(1);
     expect((await rows<{ n: number }>(sql`SELECT COUNT(*) AS n FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'reservations' AND COLUMN_NAME = 'preorder'`))[0].n).toBe(1);
+    expect((await rows<{ n: number }>(sql`SELECT COUNT(*) AS n FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'outlets' AND COLUMN_NAME = 'guest_online_payments'`))[0].n).toBe(1);
     expect((await rows<{ n: number }>(sql`SELECT COUNT(*) AS n FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'staff_push_subscriptions'`))[0].n).toBe(1);
     // Second start: nothing changes, nothing is recorded twice
     await env.db.execute(sql`UPDATE tenants SET table_limit = 99`);
     await ensureSchema(appDb.$client);
-    expect(Number((await rows<{ n: number }>(sql`SELECT COUNT(*) AS n FROM __drizzle_migrations WHERE created_at > 1791043208000`))[0].n)).toBe(20);
+    expect(Number((await rows<{ n: number }>(sql`SELECT COUNT(*) AS n FROM __drizzle_migrations WHERE created_at > 1791043208000`))[0].n)).toBe(21);
     expect((await rows<{ lim: number }>(sql`SELECT DISTINCT table_limit AS lim FROM tenants`)).map((r) => Number(r.lim))).toEqual([99]);
   });
 });

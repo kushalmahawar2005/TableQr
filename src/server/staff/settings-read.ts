@@ -14,7 +14,7 @@ type Staff = Pick<StaffSession, "tenantId" | "outletId" | "roles">;
 
 export type OutletSettings = {
   name: string; code: string; city: string; address: string; gstin: string | null; fssai: string | null; timezone: string; logoUrl: string | null;
-  sessionMode: string; autoAcceptOrders: boolean; serviceChargeBp: number; tipPresetsBp: number[] | null; reviewUrl: string | null;
+  sessionMode: string; autoAcceptOrders: boolean; guestOnlinePayments: boolean; serviceChargeBp: number; tipPresetsBp: number[] | null; reviewUrl: string | null;
   openingHours: Record<string, [string, string][]> | null;
   roomServices: RoomRequestKind[]; wifiSsid: string; wifiPassword: string;
   tables: number; staff: number; plan: string;
@@ -41,7 +41,7 @@ export async function getOutletSettings(staff: Staff): Promise<OutletSettings> {
   ]);
   return {
     name: outlet.name, code: outlet.code, city: outlet.city, address: outlet.address, gstin: outlet.gstin, fssai: outlet.fssai, timezone: outlet.timezone, logoUrl: brand?.logoUrl ?? null,
-    sessionMode: outlet.sessionMode, autoAcceptOrders: outlet.autoAcceptOrders, serviceChargeBp: outlet.serviceChargeBp, tipPresetsBp: outlet.tipPresetsBp,
+    sessionMode: outlet.sessionMode, autoAcceptOrders: outlet.autoAcceptOrders, guestOnlinePayments: outlet.guestOnlinePayments, serviceChargeBp: outlet.serviceChargeBp, tipPresetsBp: outlet.tipPresetsBp,
     reviewUrl: outlet.reviewUrl, openingHours: outlet.openingHours, tables: Number(tables.n), staff: Number(team.n), plan: plan?.name ?? "",
     roomServices: configuredRoomRequestKinds(outlet.roomServices), wifiSsid: outlet.wifiSsid ?? "", wifiPassword: outlet.wifiPassword ?? "",
   };

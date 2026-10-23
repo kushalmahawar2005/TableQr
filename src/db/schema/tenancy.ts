@@ -168,6 +168,8 @@ export const outlets = mysqlTable(
     openingHours: json("opening_hours").$type<Record<string, [string, string][]>>(),
     sessionMode: mysqlEnum("session_mode", sessionModes).notNull().default("open"),
     autoAcceptOrders: boolean("auto_accept_orders").notNull().default(false),
+    /** Owner can disable guest gateway checkout and collect every bill at the counter instead. */
+    guestOnlinePayments: boolean("guest_online_payments").notNull().default(true),
     /** Open mode: first order of a new session above this needs staff confirmation */
     newSessionCapPaise: int("new_session_cap_paise").notNull().default(300000),
     soldOutDisplay: mysqlEnum("sold_out_display", ["hide", "grey"]).notNull().default("grey"),

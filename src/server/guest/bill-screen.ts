@@ -176,7 +176,7 @@ export async function getBillScreen(outletCode: string, shortCode: string, devic
     lines,
     eligibleIds: eligible,
     tipPresetsBp: inputs.outlet.tipPresetsBp?.length ? inputs.outlet.tipPresetsBp : DEFAULT_TIP_PRESETS_BP,
-    onlinePayment: !!guestGateway(),
+    onlinePayment: !!guestGateway() && inputs.outlet.guestOnlinePayments,
     groupSplit: features.groupSplit,
     latestPayment: latest
       ? { id: latest.id, status: viewOf(latest.status, latest.failureReason), amountPaise: latest.amountPaise, tipPaise: latest.tipPaise }

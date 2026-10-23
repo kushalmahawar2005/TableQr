@@ -177,6 +177,9 @@ export async function startPayment(
   if (!/^[a-zA-Z0-9_-]{8,64}$/.test(requestId)) throw new AppError("invalid_state", "This payment request is not valid.");
   const gateway = guestGateway();
   if (!gateway) throw new AppError("invalid_state", "Online payment is not available here. Please pay at the counter.", { reason: "no_gateway" });
+  const [outletPaymentSetting] = await db.select({ enabled: s.outlets.guestOnlinePayments }).from(s.outlets)
+    .where(and(eq(s.outlets.tenantId, ctx.tenantId), eq(s.outlets.id, ctx.outletId)));
+  if (!outletPaymentSetting?.enabled) throw new AppError("invalid_state", "This restaurant collects payment at the counter. Please ask staff to help.", { reason: "online_payments_disabled" });
 
   const payment = await db.transaction(async (tx) => {
     const session = await lockSession(tx, scopeOf(ctx));

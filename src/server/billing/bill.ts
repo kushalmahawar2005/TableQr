@@ -54,7 +54,7 @@ export async function loadBillInputs(run: Runner, scope: BillScope) {
       .orderBy(s.orderLines.id),
     run.select().from(s.bills).where(and(eq(s.bills.tenantId, scope.tenantId), eq(s.bills.sessionId, scope.sessionId))),
     run
-      .select({ serviceChargeBp: s.outlets.serviceChargeBp, tipPresetsBp: s.outlets.tipPresetsBp })
+      .select({ serviceChargeBp: s.outlets.serviceChargeBp, tipPresetsBp: s.outlets.tipPresetsBp, guestOnlinePayments: s.outlets.guestOnlinePayments })
       .from(s.outlets)
       .where(and(eq(s.outlets.tenantId, scope.tenantId), eq(s.outlets.id, scope.outletId))),
   ]);
@@ -80,7 +80,7 @@ export async function loadBillInputs(run: Runner, scope: BillScope) {
       ])
     : [[], [], []];
 
-  return { session, people, lines, bill: bill ?? null, shares, discounts, payments, outlet: outlet ?? { serviceChargeBp: 0, tipPresetsBp: null } };
+  return { session, people, lines, bill: bill ?? null, shares, discounts, payments, outlet: outlet ?? { serviceChargeBp: 0, tipPresetsBp: null, guestOnlinePayments: true } };
 }
 
 export type BillInputs = Awaited<ReturnType<typeof loadBillInputs>>;

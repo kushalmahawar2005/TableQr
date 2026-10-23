@@ -307,6 +307,12 @@ const STEPS: Step[] = [
       await addColumn(db, "reservations", "preorder", "json");
     },
   },
+  {
+    tag: "0036_woozy_wallow", when: 1792769103935, hash: "91bdbcff19c0cfa35aec84f73cbd54a7beab78dcda31ad5cd3688df4881ac908",
+    apply: async (db) => {
+      await addColumn(db, "outlets", "guest_online_payments", "boolean DEFAULT true NOT NULL");
+    },
+  },
 ];
 
 /** drizzle/0015, the last migration before these steps */

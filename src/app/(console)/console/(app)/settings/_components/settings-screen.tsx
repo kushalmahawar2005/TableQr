@@ -76,6 +76,7 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
   const [sc, setSc] = useState(o.serviceChargeBp ? String(o.serviceChargeBp / 100) : "");
   const [tips, setTips] = useState<number[]>(o.tipPresetsBp?.length ? o.tipPresetsBp.map((b) => b / 100) : [5, 10]);
   const [auto, setAuto] = useState(o.autoAcceptOrders);
+  const [guestOnlinePayments, setGuestOnlinePayments] = useState(o.guestOnlinePayments);
   const [review, setReview] = useState(o.reviewUrl ?? "");
   const [roomServices, setRoomServices] = useState<RoomRequestKind[]>(o.roomServices);
   const [wifiSsid, setWifiSsid] = useState(o.wifiSsid);
@@ -92,7 +93,7 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
   const [logoMessage, setLogoMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
   // What is on screen against what was last saved, so the save bar can say if anything changed
-  const snapshot = JSON.stringify({ city, address, gstin, fssai, sc, tips, auto, review, roomServices, wifiSsid, wifiPassword, hours: hoursOn ? hours : null });
+  const snapshot = JSON.stringify({ city, address, gstin, fssai, sc, tips, auto, guestOnlinePayments, review, roomServices, wifiSsid, wifiPassword, hours: hoursOn ? hours : null });
   const [savedSnapshot, setSavedSnapshot] = useState(snapshot);
   const dirty = snapshot !== savedSnapshot;
 
@@ -215,7 +216,7 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
         city, address, gstin, fssai,
         serviceChargeBp: Math.round(scNum * 100),
         tipPresetsBp: tips.map((t) => Math.round(t * 100)),
-        autoAcceptOrders: auto, reviewUrl: review, roomServices, wifiSsid, wifiPassword,
+        autoAcceptOrders: auto, guestOnlinePayments, reviewUrl: review, roomServices, wifiSsid, wifiPassword,
         openingHours: hoursOn ? hours : null,
       });
       setMsg(res.ok ? { ok: true, text: "Saved." } : { ok: false, text: res.message });
@@ -341,6 +342,9 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
           <Section id="orders" icon={ClipboardList} title="Orders" desc="How new orders reach the kitchen.">
             <Row label="Accept orders automatically" hint={auto ? "Orders go straight to the kitchen." : "Staff accept each order first."}>
               <div className="flex sm:justify-end"><Toggle on={auto} onChange={setAuto} label="Accept orders automatically" disabled={!canEdit} /></div>
+            </Row>
+            <Row label="Guest online payments" hint={guestOnlinePayments ? "Guests can pay their bill online when a payment gateway is configured." : "Guests will request payment at the counter; online checkout is hidden."}>
+              <div className="flex sm:justify-end"><Toggle on={guestOnlinePayments} onChange={setGuestOnlinePayments} label="Allow guests to pay online" disabled={!canEdit} /></div>
             </Row>
             <Row label="Table mode" hint="Changed by TableQR."><Fixed>{MODE[o.sessionMode] ?? o.sessionMode}</Fixed></Row>
             <Row label="Google review link" htmlFor="review" hint="Guests see this after paying."><Input id="review" className={fieldCls} type="url" placeholder="https://g.page/r/…" value={review} onChange={(e) => setReview(e.target.value)} disabled={!canEdit} /></Row>
