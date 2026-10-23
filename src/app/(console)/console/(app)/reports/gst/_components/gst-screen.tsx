@@ -43,7 +43,7 @@ export function GstScreen({ report: r }: { report: GstReport }) {
         <div>
           <p className="text-caption font-semibold text-muted">{r.outlet.name}{r.outlet.gstin ? ` · GSTIN ${r.outlet.gstin}` : ""}</p>
           <h1 className="mt-1 font-display text-title font-bold">GST report</h1>
-          <p className="mt-1 text-body text-muted">{monthName(r.month)}</p>
+          <p className="mt-1 text-body text-muted">{monthName(r.month)} <span className="hidden print:inline print:text-[7.5pt]">· CGST/SGST are split equally on intra-state sales; confirm with your CA before filing.</span></p>
           {!r.outlet.gstin && <p className="hidden print:block text-caption text-muted">GSTIN: Not configured for this outlet</p>}
         </div>
         <div className="flex items-center gap-2 print:hidden">
@@ -139,7 +139,7 @@ export function GstScreen({ report: r }: { report: GstReport }) {
           </section>
         </>
       )}
-      <p className="mt-4 text-caption text-muted">CGST and SGST are half of the tax each, for sales within your state. Check with your CA before filing.</p>
+      <p className="mt-4 text-caption text-muted print:hidden">CGST and SGST are half of the tax each, for sales within your state. Check with your CA before filing.</p>
     </main>
   );
 }
