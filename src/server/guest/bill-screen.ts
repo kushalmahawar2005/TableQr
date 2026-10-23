@@ -4,7 +4,7 @@ import { db } from "@/db";
 import * as s from "@/db/schema";
 import { isPlaceholderName } from "@/domain/guest-name";
 import { ATTEMPT_WINDOW_MS, computeDraft, isBillLocked, loadBillInputs } from "../billing/bill";
-import { guestGateway } from "../payments/gateway";
+import { outletPaymentGateway } from "../payments/outlet-gateway";
 import { guestContextForDevice } from "./menu-screen";
 import { tenantFeatures } from "../plan";
 
@@ -18,7 +18,7 @@ export type PaymentView = "pending" | "success" | "failed" | "cancelled" | "unkn
 export async function getBillScreen(outletCode: string, shortCode: string, deviceId: string | null, now = new Date()) {
   const { t, open, ctx } = await guestContextForDevice(outletCode, shortCode, deviceId);
   const scope = { tenantId: ctx.tenantId, outletId: ctx.outletId, sessionId: ctx.sessionId };
-  const [inputs, features] = await Promise.all([loadBillInputs(db, scope), tenantFeatures(ctx.tenantId)]);
+  const [inputs, features, paymentGateway] = await Promise.all([loadBillInputs(db, scope), tenantFeatures(ctx.tenantId), outletPaymentGateway(ctx.tenantId, ctx.outletId)]);
   const draft = computeDraft(inputs);
   const session = open.session;
   const requested = session.status === "bill_requested";
@@ -176,7 +176,7 @@ export async function getBillScreen(outletCode: string, shortCode: string, devic
     lines,
     eligibleIds: eligible,
     tipPresetsBp: inputs.outlet.tipPresetsBp?.length ? inputs.outlet.tipPresetsBp : DEFAULT_TIP_PRESETS_BP,
-    onlinePayment: !!guestGateway() && inputs.outlet.guestOnlinePayments,
+    onlinePayment: !!paymentGateway && inputs.outlet.guestOnlinePayments,
     groupSplit: features.groupSplit,
     latestPayment: latest
       ? { id: latest.id, status: viewOf(latest.status, latest.failureReason), amountPaise: latest.amountPaise, tipPaise: latest.tipPaise }

@@ -23,7 +23,7 @@ import { priceLine } from "@/domain/pricing";
 import { isWithinCategoryWindow } from "../guest/menu";
 import { configuredGuestServices, type GuestService } from "@/domain/guest-services";
 import { tenantAccess } from "../access";
-import { gatewayFor } from "../payments/gateway";
+import { outletGatewayFromConfig } from "../payments/outlet-gateway";
 
 export const BOOKING_HOLD_MINUTES = 5;
 const LIVE = ["requested", "confirmed", "reminded", "arrived"] as const;
@@ -43,7 +43,7 @@ export type BookingSlot = {
   creditReason: string | null;
 };
 
-type OutletScope = { tenantId: string; brandId: string; outletId: string; outletCode: string; timezone: string; openingHours: WeeklyHours | null; name: string; address: string; city: string; guestServices?: GuestService[] | null; bookingPaymentMode?: "gateway" | "manual_qr"; bookingPaymentQrUrl?: string | null };
+type OutletScope = { tenantId: string; brandId: string; outletId: string; outletCode: string; timezone: string; openingHours: WeeklyHours | null; name: string; address: string; city: string; guestServices?: GuestService[] | null; bookingPaymentMode?: "gateway" | "manual_qr"; bookingPaymentQrUrl?: string | null; paymentGatewayConfig?: string | null };
 
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const publicRef = () => `TQ-${randomBytes(5).toString("hex").toUpperCase()}`;
@@ -51,7 +51,7 @@ const liveStatuses = [...LIVE];
 
 async function outletScope(run: Runner, outletCode: string): Promise<OutletScope> {
   // isolation-exempt: the tenant is resolved from the public outlet code before scoped queries.
-  const [o] = await run.select({ tenantId: s.outlets.tenantId, brandId: s.outlets.brandId, outletId: s.outlets.id, outletCode: s.outlets.code, timezone: s.outlets.timezone, openingHours: s.outlets.openingHours, name: s.outlets.name, address: s.outlets.address, city: s.outlets.city, guestServices: s.outlets.guestServices, bookingPaymentMode: s.outlets.bookingPaymentMode, bookingPaymentQrUrl: s.outlets.bookingPaymentQrUrl })
+  const [o] = await run.select({ tenantId: s.outlets.tenantId, brandId: s.outlets.brandId, outletId: s.outlets.id, outletCode: s.outlets.code, timezone: s.outlets.timezone, openingHours: s.outlets.openingHours, name: s.outlets.name, address: s.outlets.address, city: s.outlets.city, guestServices: s.outlets.guestServices, bookingPaymentMode: s.outlets.bookingPaymentMode, bookingPaymentQrUrl: s.outlets.bookingPaymentQrUrl, paymentGatewayConfig: s.outlets.paymentGatewayConfig })
     .from(s.outlets).where(eq(s.outlets.code, String(outletCode).trim().toUpperCase()));
   if (!o) throw new AppError("not_found", "We could not find this restaurant.");
   return o;
@@ -218,7 +218,7 @@ export async function createBookingHold(outletCode: string, input: { date: strin
     const chosen = await chooseTables(tx, scope, startAt, endAt, Number(input.partySize), input.preference ?? {}, now, true);
     if (!chosen) throw new AppError("conflict", "That time is no longer available.", { reason: "full" });
     const credit = await slotCredit(tx, scope, policy, startAt);
-    if (credit.amountPaise > 0 && scope.bookingPaymentMode !== "manual_qr" && !gatewayFor()) {
+    if (credit.amountPaise > 0 && scope.bookingPaymentMode !== "manual_qr" && !outletGatewayFromConfig(scope.paymentGatewayConfig)) {
       throw new AppError("invalid_state", "This restaurant has not connected online advance payments yet. Please contact the restaurant or choose another time.", { reason: "booking_payment_unavailable" });
     }
     const id = uuidv7();

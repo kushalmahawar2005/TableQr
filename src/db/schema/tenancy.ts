@@ -196,6 +196,8 @@ export const outlets = mysqlTable(
     customDomain: varchar("custom_domain", { length: 253 }),
     customDomainToken: varchar("custom_domain_token", { length: 64 }),
     customDomainVerifiedAt: at("custom_domain_verified_at"),
+    /** Cashfree merchant credentials encrypted with PAYMENT_CREDENTIALS_KEY. */
+    paymentGatewayConfig: varchar("payment_gateway_config", { length: 1600 }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

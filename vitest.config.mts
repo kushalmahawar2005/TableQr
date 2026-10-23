@@ -20,8 +20,6 @@ export default defineConfig({
       DB_NAME: "tableqr_test",
       DB_USER: "tableqr",
       DB_PASSWORD: "tableqr_local",
-      // Guest online bill payment is off in the app for now; the tests still cover it
-      GUEST_ONLINE_PAY: "1",
     },
   },
 });

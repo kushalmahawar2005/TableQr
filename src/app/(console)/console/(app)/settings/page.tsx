@@ -5,6 +5,7 @@ import { getOutletSettings } from "@/server/staff/settings-read";
 import { currentStaff } from "@/server/staff/request";
 import { SettingsScreen } from "./_components/settings-screen";
 import { CustomDomainSettings } from "./_components/custom-domain-settings";
+import { RestaurantPaymentSettings } from "./_components/restaurant-payment-settings";
 
 export const metadata: Metadata = { title: "Settings", robots: { index: false, follow: false } };
 
@@ -16,5 +17,5 @@ export default async function SettingsPage() {
   }
   const o = await getOutletSettings(staff);
   const canEdit = staff.roles.includes("owner");
-  return <><SettingsScreen o={o} canEdit={canEdit} /><div className="mx-auto w-full px-4 pb-8 sm:px-6"><CustomDomainSettings domain={o.customDomain} token={canEdit ? o.customDomainToken : null} verifiedAt={o.customDomainVerifiedAt} canEdit={canEdit} /></div></>;
+  return <><SettingsScreen o={o} canEdit={canEdit} /><div className="mx-auto w-full px-4 pb-8 sm:px-6"><RestaurantPaymentSettings initial={o.paymentGateway} canEdit={canEdit} /><CustomDomainSettings domain={o.customDomain} token={canEdit ? o.customDomainToken : null} verifiedAt={o.customDomainVerifiedAt} canEdit={canEdit} /></div></>;
 }

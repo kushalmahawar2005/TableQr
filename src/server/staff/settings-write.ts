@@ -9,7 +9,8 @@ import { AppError } from "../errors";
 import { audit } from "./audit";
 import type { StaffSession } from "./auth";
 import { guestServices, type GuestService } from "@/domain/guest-services";
-import { gatewayFor } from "../payments/gateway";
+import { outletGatewayFromConfig } from "../payments/outlet-gateway";
+import { encryptMerchantCredentials, outletPaymentGatewayStatus } from "../payments/outlet-gateway";
 
 // Outlet settings the owner may change. Name, code, time zone, table mode and plan stay with TableQR.
 
@@ -38,6 +39,7 @@ export async function updateOutletSettings(staff: Staff, input: SettingsPatch, n
     await requireFeature(staff.tenantId, "delivery");
     try { deliveryPolicy = validateDeliveryPolicy(input.deliveryPolicy); }
     catch (error) { throw bad(error instanceof Error ? error.message : "Choose valid delivery settings."); }
+    if (deliveryPolicy.paymentMode === "gateway") throw bad("Online delivery prepayment is not enabled yet. Choose pay on delivery or the restaurant QR until that checkout is ready.");
   }
   const city = String(input.city ?? "").trim();
   const address = String(input.address ?? "").trim();
@@ -81,7 +83,9 @@ export async function updateOutletSettings(staff: Staff, input: SettingsPatch, n
     const next = { city, address, gstin: gstin || null, fssai: fssai || null, serviceChargeBp: sc, tipPresetsBp: tips, autoAcceptOrders: !!input.autoAcceptOrders, guestOnlinePayments: input.guestOnlinePayments ?? before.guestOnlinePayments, reviewUrl: reviewUrl || null, openingHours: hours, roomServices, wifiSsid: wifiSsid || null, wifiPassword: wifiPassword || null };
     const nextGuestServices = input.guestServices === undefined ? before.guestServices : [...input.guestServices];
     const bookingPaymentMode = input.bookingPaymentMode ?? before.bookingPaymentMode;
-    if (bookingPaymentMode === "gateway" && before.bookingPaymentMode !== "gateway" && !gatewayFor()) throw bad("Online booking payments are not connected yet. Use the restaurant QR option for advances.");
+    const onlinePayments = input.guestOnlinePayments ?? before.guestOnlinePayments;
+    if (onlinePayments && !outletGatewayFromConfig(before.paymentGatewayConfig)) throw bad("Connect this restaurant’s own Cashfree account before enabling guest online payments.");
+    if (bookingPaymentMode === "gateway" && before.bookingPaymentMode !== "gateway" && !outletGatewayFromConfig(before.paymentGatewayConfig)) throw bad("Connect this restaurant’s own Cashfree account before enabling online booking advances, or use the restaurant QR option.");
     if (bookingPaymentMode === "manual_qr" && !before.bookingPaymentQrUrl) throw bad("Upload your payment QR before enabling manual booking advances.");
     if (deliveryPolicy?.paymentMode === "manual_qr" && !before.bookingPaymentQrUrl) throw bad("Upload your restaurant payment QR before selecting manual delivery payments.");
     await tx.update(s.outlets).set({ ...next, ...(deliveryPolicy ? { deliveryPolicy } : {}), guestServices: nextGuestServices, bookingPaymentMode }).where(and(eq(s.outlets.tenantId, staff.tenantId), eq(s.outlets.id, staff.outletId)));
@@ -91,6 +95,25 @@ export async function updateOutletSettings(staff: Staff, input: SettingsPatch, n
       after: { ...next, deliveryPolicy: deliveryPolicy ?? before.deliveryPolicy, guestServices: nextGuestServices, bookingPaymentMode, wifiPassword: "[redacted]", hasWifiPassword: !!wifiPassword },
     });
   });
+}
+
+/** Store a restaurant's own merchant account. Never audit or return the secret. */
+export async function saveRestaurantCashfree(staff: Staff, input: { mode: unknown; clientId: unknown; clientSecret: unknown } | null, now = new Date()) {
+  if (!staff.roles.includes("owner")) throw new AppError("forbidden", "Only the owner can connect restaurant payments.");
+  const encrypted = input ? encryptMerchantCredentials(input) : null;
+  const mode = input ? String(input.mode) : null;
+  const clientId = input ? String(input.clientId).trim() : "";
+  await db.transaction(async (tx) => {
+    const [before] = await tx.select().from(s.outlets).where(and(eq(s.outlets.tenantId, staff.tenantId), eq(s.outlets.id, staff.outletId))).for("update");
+    if (!before) throw new AppError("not_found", "Outlet not found.");
+    if (!encrypted && (before.bookingPaymentMode === "gateway" || before.guestOnlinePayments)) throw bad("Turn off online bill payments and switch booking advances to your restaurant QR before removing Cashfree.");
+    await tx.update(s.outlets).set({ paymentGatewayConfig: encrypted }).where(and(eq(s.outlets.tenantId, staff.tenantId), eq(s.outlets.id, staff.outletId)));
+    await audit(tx, staff, {
+      action: encrypted ? "outlet.payment_gateway_connected" : "outlet.payment_gateway_removed", entity: "outlet", entityId: staff.outletId, now,
+      before: { connected: !!before.paymentGatewayConfig }, after: { connected: !!encrypted, provider: encrypted ? "cashfree" : null, mode, appIdHint: encrypted ? `••••${clientId.slice(-4)}` : null },
+    });
+  });
+  return outletPaymentGatewayStatus(staff.tenantId, staff.outletId);
 }
 
 /** Change the logo for this tenant's shared brand. Guest pages read it from the brand record. */

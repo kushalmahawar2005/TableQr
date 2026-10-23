@@ -1,6 +1,6 @@
 import { AppError } from "@/server/errors";
 import { confirmByGatewayRef, recordRefundResult } from "@/server/billing/payments";
-import { gatewayByName } from "@/server/payments/gateway";
+import { outletGatewayForWebhook } from "@/server/payments/outlet-gateway";
 import { recordReservationRefundResult } from "@/server/booking/credit";
 
 /**
@@ -10,9 +10,9 @@ import { recordReservationRefundResult } from "@/server/booking/credit";
  */
 export async function POST(request: Request, ctx: { params: Promise<{ provider: string }> }) {
   const { provider } = await ctx.params;
-  const gateway = gatewayByName(provider);
-  if (!gateway) return Response.json({ error: "Unknown gateway" }, { status: 404 });
   const raw = await request.text();
+  const gateway = await outletGatewayForWebhook(provider, raw);
+  if (!gateway) return Response.json({ error: "Unknown or unconfigured gateway" }, { status: 404 });
   // Cashfree uses x-webhook-signature + x-webhook-timestamp; the mock uses x-mock-signature
   const signature = request.headers.get("x-webhook-signature") ?? request.headers.get("x-mock-signature");
   const timestamp = request.headers.get("x-webhook-timestamp");

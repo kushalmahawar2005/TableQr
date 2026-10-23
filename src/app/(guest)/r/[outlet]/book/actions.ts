@@ -74,5 +74,5 @@ export async function groupRequestAction(outletCode: string, input: { requestId:
 }
 
 export async function startBookingCreditAction(outletCode: string, token: string, requestId: string, origin: string) {
-  try { return { ok: true as const, data: await startReservationCredit(outletCode, token, requestId, `${origin}/api/booking-credit/return?provider=mock&p=PLACEHOLDER&to=${encodeURIComponent(`/r/${outletCode}/book/details?token=${token}`)}`) }; } catch (e) { return fail(e); }
+  try { return { ok: true as const, data: await startReservationCredit(outletCode, token, requestId, `${origin}/api/booking-credit/return?provider={provider}&p={creditId}&to=${encodeURIComponent(`/r/${outletCode}/book/details?token=${token}`)}`) }; } catch (e) { return fail(e); }
 }

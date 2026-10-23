@@ -295,6 +295,13 @@
       "when": 1792778072922,
       "tag": "0041_great_grey_gargoyle",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "5",
+      "when": 1792780133557,
+      "tag": "0042_massive_red_hulk",
+      "breakpoints": true
     }
   ]
 }

@@ -1,0 +1,1 @@
+ALTER TABLE `outlets` ADD `payment_gateway_config` varchar(1600);

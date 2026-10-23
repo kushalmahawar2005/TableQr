@@ -6,7 +6,7 @@ import * as s from "@/db/schema";
 import type { StaffRole } from "@/lib/staff-permissions";
 import { LOCK_THEN_READ } from "../db-types";
 import { AppError } from "../errors";
-import { gatewayByName } from "../payments/gateway";
+import { gatewayForOutletPayment } from "../payments/outlet-gateway";
 import { publish } from "../realtime/publish";
 import { topics } from "../realtime/token";
 import { audit } from "../staff/audit";
@@ -125,7 +125,7 @@ export async function reconcileRefund(ctx: { tenantId: string; outletId: string 
   if (!row) throw new AppError("not_found", "Refund not found.");
   const { refund, payment } = row;
   if (refund.status !== "pending" || !refund.gatewayRef || !payment.gatewayRef) return refund.status;
-  const gateway = gatewayByName(payment.channel);
+  const gateway = await gatewayForOutletPayment(payment.tenantId, payment.outletId, payment.channel);
   if (!gateway) return refund.status;
   const seen = await gateway.fetchRefund({ gatewayRef: payment.gatewayRef, gatewayRefundId: refund.gatewayRef });
   if (seen.status === "pending") return "pending" as const;

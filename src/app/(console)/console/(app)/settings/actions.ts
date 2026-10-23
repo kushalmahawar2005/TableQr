@@ -5,7 +5,7 @@ import { db } from "@/db";
 import * as schema from "@/db/schema";
 import { storeMenuImage, storePaymentQr } from "@/server/menu-storage";
 import { consoleSectionRoles } from "@/lib/staff-permissions";
-import { updateBookingPaymentQr, updateBrandLogo, updateOutletSettings, type SettingsPatch } from "@/server/staff/settings-write";
+import { saveRestaurantCashfree, updateBookingPaymentQr, updateBrandLogo, updateOutletSettings, type SettingsPatch } from "@/server/staff/settings-write";
 import { staffFor } from "@/server/staff/request";
 import { saveCustomDomain, verifyCustomDomain } from "@/server/staff/custom-domain";
 
@@ -41,6 +41,17 @@ export async function verifyCustomDomainAction(): Promise<{ ok: boolean; message
     if (err instanceof AppError) return { ok: false, message: err.message };
     console.error("[settings] custom domain verify failed", err);
     return { ok: false, message: "Could not verify the domain. Try again." };
+  }
+}
+
+export async function saveRestaurantCashfreeAction(input: { mode: "sandbox" | "production"; clientId: string; clientSecret: string } | null) {
+  try {
+    const status = await saveRestaurantCashfree(await staffFor(consoleSectionRoles.settings), input);
+    return { ok: true as const, status };
+  } catch (err) {
+    if (err instanceof AppError) return { ok: false as const, message: err.message };
+    console.error("[settings] restaurant gateway save failed", err);
+    return { ok: false as const, message: "Could not update the restaurant payment account. Try again." };
   }
 }
 

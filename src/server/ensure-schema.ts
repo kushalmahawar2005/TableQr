@@ -356,6 +356,10 @@ const STEPS: Step[] = [
       await addUniqueIndex(db, "outlets", "outlets_custom_domain_uq", "`custom_domain`");
     },
   },
+  {
+    tag: "0042_massive_red_hulk", when: 1792780133557, hash: "98908a82d666896f68c233e242a613fd5dba2450070e41807094807fe631e312",
+    apply: async (db) => { await addColumn(db, "outlets", "payment_gateway_config", "varchar(1600)"); },
+  },
 ];
 
 /** drizzle/0015, the last migration before these steps */

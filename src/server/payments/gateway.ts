@@ -365,7 +365,7 @@ export const cashfreeMode = (): CashfreeMode | null => parseCashfreeConfig(proce
 /** The mock is for development and tests; production must configure a real gateway. */
 export const mockAllowed = () => process.env.NODE_ENV !== "production" || process.env.PAYMENTS_MOCK === "1";
 
-/** Guest bill gateway. TableQR's Cashfree account is deliberately excluded from this path. */
+/** Development/test mock only. Production guest checkout resolves the outlet's merchant account. */
 export function gatewayFor(): PaymentGateway | null {
   return mockAllowed() ? mockGateway : null;
 }
@@ -373,11 +373,6 @@ export function gatewayFor(): PaymentGateway | null {
 /** TableQR's own Cashfree account, used only for restaurant plan fees. */
 export function platformGateway(): CashfreeGateway | null {
   return configuredCashfree();
-}
-
-/** Guests pay their bill at the counter for now; GUEST_ONLINE_PAY=1 turns online bill payment back on */
-export function guestGateway(): PaymentGateway | null {
-  return process.env.GUEST_ONLINE_PAY === "1" ? gatewayFor() : null;
 }
 
 /** The gateway an existing payment went through, for status checks, webhooks and refunds */

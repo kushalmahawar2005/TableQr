@@ -9,7 +9,7 @@ import { AppError } from "../errors";
 import type { StaffSession } from "./auth";
 import { configuredGuestServices, guestServices, type GuestService } from "@/domain/guest-services";
 import { tenantFeatures } from "../plan";
-import { gatewayFor, guestGateway } from "../payments/gateway";
+import { outletPaymentGatewayStatus } from "../payments/outlet-gateway";
 
 // Outlet profile (read-only): the signed-in outlet's details and its setup counts, scoped to the
 // tenant and outlet.
@@ -19,6 +19,7 @@ type Staff = Pick<StaffSession, "tenantId" | "outletId" | "roles">;
 export type OutletSettings = {
   deliveryPolicy: DeliveryPolicy; deliveryAvailable: boolean;
   guestOnlinePaymentAvailable: boolean; bookingGatewayAvailable: boolean;
+  paymentGateway: Awaited<ReturnType<typeof outletPaymentGatewayStatus>>;
   name: string; code: string; city: string; address: string; gstin: string | null; fssai: string | null; timezone: string; logoUrl: string | null;
   sessionMode: string; autoAcceptOrders: boolean; guestOnlinePayments: boolean; serviceChargeBp: number; tipPresetsBp: number[] | null; reviewUrl: string | null;
   openingHours: Record<string, [string, string][]> | null;
@@ -49,9 +50,10 @@ export async function getOutletSettings(staff: Staff): Promise<OutletSettings> {
     db.select({ logoUrl: s.brands.logoUrl }).from(s.brands).where(and(eq(s.brands.tenantId, staff.tenantId), eq(s.brands.id, outlet.brandId))),
     tenantFeatures(staff.tenantId),
   ]);
+  const paymentGateway = await outletPaymentGatewayStatus(staff.tenantId, staff.outletId);
   return {
     deliveryPolicy: readDeliveryPolicy(outlet.deliveryPolicy), deliveryAvailable: features.delivery,
-    guestOnlinePaymentAvailable: !!guestGateway(), bookingGatewayAvailable: !!gatewayFor(),
+    guestOnlinePaymentAvailable: paymentGateway.available, bookingGatewayAvailable: paymentGateway.available, paymentGateway,
     name: outlet.name, code: outlet.code, city: outlet.city, address: outlet.address, gstin: outlet.gstin, fssai: outlet.fssai, timezone: outlet.timezone, logoUrl: brand?.logoUrl ?? null,
     sessionMode: outlet.sessionMode, autoAcceptOrders: outlet.autoAcceptOrders, guestOnlinePayments: outlet.guestOnlinePayments, serviceChargeBp: outlet.serviceChargeBp, tipPresetsBp: outlet.tipPresetsBp,
     reviewUrl: outlet.reviewUrl, openingHours: outlet.openingHours, tables: Number(tables.n), staff: Number(team.n), plan: plan?.name ?? "",

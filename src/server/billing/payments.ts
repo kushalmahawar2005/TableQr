@@ -10,7 +10,8 @@ import { amountInWords } from "@/domain/words";
 import { LOCK_THEN_READ, type Tx } from "../db-types";
 import { AppError } from "../errors";
 import type { GuestContext } from "../guest/context";
-import { gatewayByName, guestGateway, type GatewayStatus } from "../payments/gateway";
+import { type GatewayStatus } from "../payments/gateway";
+import { gatewayForOutletPayment } from "../payments/outlet-gateway";
 import { publish, type RealtimeEvent } from "../realtime/publish";
 import { topics } from "../realtime/token";
 import { requireStaffRole } from "../staff/waiter";
@@ -157,6 +158,7 @@ export type StartedPayment = {
   totalPaise: number;
   /** Raw gateway order reference, for tests and webhooks; the phone uses checkout. Null if the gateway was unreachable. */
   gatewayRef: string | null;
+  provider: string;
   replayed: boolean;
 };
 
@@ -167,7 +169,7 @@ export type StartedPayment = {
  */
 export async function startPayment(
   ctx: GuestContext,
-  input: { forParticipantIds?: string[]; tipPaise?: number; method: "upi" | "card" | "wallet"; requestId: string },
+  input: { forParticipantIds?: string[]; tipPaise?: number; method: "upi" | "card" | "wallet"; requestId: string; callbackUrl?: string },
   now = new Date(),
 ): Promise<StartedPayment> {
   const tipPaise = input.tipPaise ?? 0;
@@ -175,7 +177,7 @@ export async function startPayment(
   if (!["upi", "card", "wallet"].includes(input.method)) throw new AppError("invalid_state", "Choose a way to pay.");
   const requestId = typeof input.requestId === "string" ? input.requestId.trim() : "";
   if (!/^[a-zA-Z0-9_-]{8,64}$/.test(requestId)) throw new AppError("invalid_state", "This payment request is not valid.");
-  const gateway = guestGateway();
+  const gateway = await gatewayForOutletPayment(ctx.tenantId, ctx.outletId, "cashfree") ?? (process.env.NODE_ENV !== "production" ? await gatewayForOutletPayment(ctx.tenantId, ctx.outletId, "mock") : null);
   if (!gateway) throw new AppError("invalid_state", "Online payment is not available here. Please pay at the counter.", { reason: "no_gateway" });
   const [outletPaymentSetting] = await db.select({ enabled: s.outlets.guestOnlinePayments }).from(s.outlets)
     .where(and(eq(s.outlets.tenantId, ctx.tenantId), eq(s.outlets.id, ctx.outletId)));
@@ -201,7 +203,7 @@ export async function startPayment(
         .where(and(eq(s.payments.tenantId, ctx.tenantId), eq(s.payments.billId, bill.id), eq(s.payments.clientRequestId, requestId)));
       if (replay) {
         if (replay.payerParticipantId !== ctx.participantId) throw new AppError("invalid_state", "This payment request is not valid.");
-        return { id: replay.id, amountPaise: replay.amountPaise, tipPaise: replay.tipPaise, gatewayRef: replay.gatewayRef, replayed: true };
+        return { id: replay.id, amountPaise: replay.amountPaise, tipPaise: replay.tipPaise, gatewayRef: replay.gatewayRef, provider: replay.channel, replayed: true };
       }
     }
     if (session.status !== "bill_requested") {
@@ -236,14 +238,14 @@ export async function startPayment(
       clientRequestId: requestId,
       createdAt: now,
     });
-    return { id, amountPaise, tipPaise, gatewayRef: null as string | null, replayed: false };
+    return { id, amountPaise, tipPaise, gatewayRef: null as string | null, provider: gateway.name, replayed: false };
   }, LOCK_THEN_READ);
 
   // The gateway call happens outside the transaction so no row stays locked on a network call
   let gatewayRef = payment.gatewayRef;
   if (!gatewayRef && !payment.replayed) {
     try {
-      gatewayRef = (await gateway.createOrder({ paymentId: payment.id, amountPaise: payment.amountPaise + payment.tipPaise, receipt: payment.id })).gatewayRef;
+      gatewayRef = (await gateway.createOrder({ paymentId: payment.id, amountPaise: payment.amountPaise + payment.tipPaise, receipt: payment.id, callbackUrl: input.callbackUrl?.replace("{paymentId}", payment.id) })).gatewayRef;
     } catch (err) {
       await db
         .update(s.payments)
@@ -265,6 +267,7 @@ export async function startPayment(
     tipPaise: payment.tipPaise,
     totalPaise: payment.amountPaise + payment.tipPaise,
     gatewayRef,
+    provider: payment.provider,
     replayed: payment.replayed,
   };
 }
@@ -369,7 +372,7 @@ export async function reconcilePayment(scope: { tenantId: string }, paymentId: s
   if (!payment) throw new AppError("not_found", "Payment not found.");
   if (payment.status === "success" || payment.status === "refunded") return "success";
   if (payment.status === "failed" && payment.failureReason === "Cancelled before paying") return "cancelled";
-  const gateway = gatewayByName(payment.channel);
+  const gateway = await gatewayForOutletPayment(payment.tenantId, payment.outletId, payment.channel);
   if (!gateway || !payment.gatewayRef) return payment.status === "failed" ? "failed" : "unknown";
   let status: { status: GatewayStatus; amountPaise: number; gatewayPaymentId?: string; reason?: string };
   try {
@@ -792,7 +795,7 @@ export async function executeRefund(ctx: StaffContext, refundId: string, now = n
       await settle({ status: "success", completedAt: now });
       return "success" as const;
     }
-    const gateway = gatewayByName(payment.channel);
+    const gateway = await gatewayForOutletPayment(payment.tenantId, payment.outletId, payment.channel);
     if (!gateway || !payment.gatewayRef || !payment.gatewayPaymentId) throw new AppError("invalid_state", "This payment cannot be refunded online.");
     let res;
     try {
@@ -834,7 +837,7 @@ export async function checkoutFor(ctx: GuestContext, paymentId: string, callback
     .innerJoin(s.outlets, and(eq(s.outlets.tenantId, s.payments.tenantId), eq(s.outlets.id, s.payments.outletId)))
     .where(and(eq(s.payments.tenantId, ctx.tenantId), eq(s.payments.id, paymentId), eq(s.payments.payerParticipantId, ctx.participantId)));
   if (!row?.payment.gatewayRef || row.payment.status !== "pending") return null;
-  const gateway = gatewayByName(row.payment.channel);
+  const gateway = await gatewayForOutletPayment(row.payment.tenantId, row.payment.outletId, row.payment.channel);
   if (!gateway || row.payment.method === "cash") return null;
   return await gateway.checkout({
     gatewayRef: row.payment.gatewayRef,

@@ -34,8 +34,8 @@ export function DeliverySettings({ value, onChange, disabled, hasPaymentQr }: {
     </div>
     <div className="space-y-2"><Label htmlFor="delivery-payment">Delivery payment method</Label>
       <select id="delivery-payment" value={value.paymentMode} disabled={disabled} className="min-h-11 w-full rounded-xl border border-line bg-surface px-3 text-sm" onChange={event => update({ paymentMode: event.target.value as DeliveryPolicy["paymentMode"] })}>
-        <option value="cod">Pay on delivery</option><option value="gateway">Online gateway checkout</option><option value="manual_qr" disabled={!hasPaymentQr}>Restaurant UPI QR · staff verifies receipt</option>
-      </select><p className="text-xs text-muted">Gateway checkout requires a configured payment gateway. Upload the restaurant payment QR above to select manual verification.</p>
+        <option value="cod">Pay on delivery</option><option value="gateway" disabled>Online prepayment · coming soon</option><option value="manual_qr" disabled={!hasPaymentQr}>Restaurant UPI QR · staff verifies receipt</option>
+      </select><p className="text-xs text-muted">Delivery orders currently support cash/card on delivery or staff-verified UPI QR. Upload the restaurant payment QR above to enable manual verification.</p>
     </div>
   </div>;
 }

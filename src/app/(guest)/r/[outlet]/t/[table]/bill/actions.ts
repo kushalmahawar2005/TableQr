@@ -82,15 +82,16 @@ export async function startPaymentAction(
 ) {
   try {
     const { ctx } = await guestContextForDevice(outlet, table, await device());
+    const billPath = `/r/${encodeURIComponent(outlet)}/t/${encodeURIComponent(table)}/bill`;
+    const callbackUrl = `${publicOrigin(await headers())}/api/payments/return?p=PLACEHOLDER&to=${encodeURIComponent(billPath)}`;
     const started = await startPayment(ctx, {
       forParticipantIds: Array.isArray(input.forParticipantIds) ? input.forParticipantIds.map(String) : [],
       tipPaise: Number(input.tipPaise) || 0,
       method: input.method,
       requestId: String(input.requestId),
+      callbackUrl: callbackUrl.replace("PLACEHOLDER", "{paymentId}"),
     });
-    const billPath = `/r/${encodeURIComponent(outlet)}/t/${encodeURIComponent(table)}/bill`;
-    const callbackUrl = `${publicOrigin(await headers())}/api/payments/return?p=${started.paymentId}&to=${encodeURIComponent(billPath)}`;
-    const checkout = await checkoutFor(ctx, started.paymentId, callbackUrl);
+    const checkout = await checkoutFor(ctx, started.paymentId, callbackUrl.replace("{paymentId}", started.paymentId));
     if (!checkout) return { ok: false as const, error: "gateway_down" as const, paymentId: started.paymentId };
     return { ok: true as const, paymentId: started.paymentId, checkout };
   } catch (err) {
