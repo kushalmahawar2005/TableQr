@@ -1,24 +1,19 @@
-import { and, eq, isNotNull } from "drizzle-orm";
 import { NextResponse, type NextRequest } from "next/server";
-import { db } from "@/db";
-import * as s from "@/db/schema";
+import { outletCodeForCustomDomain } from "@/server/guest/custom-domain";
 
-/** Route only the verified custom-domain root; all app assets, APIs and existing QR paths pass through. */
+/** Route only an owner-enabled, DNS-verified custom-domain root; app assets and QR paths pass through. */
 export async function proxy(request: NextRequest) {
-  const rawHost = request.headers.get("x-forwarded-host")?.split(",")[0]?.trim() ?? request.headers.get("host") ?? "";
-  let host = "";
-  try { host = new URL(`http://${rawHost}`).hostname.toLowerCase(); } catch { return NextResponse.next(); }
+  const host = request.nextUrl.hostname || request.headers.get("host") || "";
   if (!host || host === "localhost" || host.endsWith(".localhost") || host === "127.0.0.1") return NextResponse.next();
 
   const configuredHosts = [process.env.PUBLIC_APP_URL, process.env.NEXT_PUBLIC_APP_URL]
     .flatMap((origin) => { try { return origin ? [new URL(origin).hostname.toLowerCase()] : []; } catch { return []; } });
   if (configuredHosts.includes(host)) return NextResponse.next();
 
-  const [outlet] = await db.select({ code: s.outlets.code }).from(s.outlets)
-    .where(and(eq(s.outlets.customDomain, host), isNotNull(s.outlets.customDomainVerifiedAt))).limit(1);
-  if (!outlet) return NextResponse.next();
+  const outletCode = await outletCodeForCustomDomain(host);
+  if (!outletCode) return NextResponse.next();
   const destination = request.nextUrl.clone();
-  destination.pathname = `/r/${encodeURIComponent(outlet.code)}`;
+  destination.pathname = `/r/${encodeURIComponent(outletCode)}`;
   return NextResponse.rewrite(destination);
 }
 

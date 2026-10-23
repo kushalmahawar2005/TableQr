@@ -405,6 +405,10 @@ const STEPS: Step[] = [
       await addColumn(db, "delivery_checkouts", "courier_assigned_at", "datetime(3)");
     },
   },
+  {
+    tag: "0046_chubby_blonde_phantom", when: 1792788567728, hash: "df50b5907b38a17e5de2e7ddf24f0703f84958725b13c9f3fdaf748d42f87790",
+    apply: async (db) => { await addColumn(db, "outlets", "custom_domain_live", "boolean DEFAULT false NOT NULL"); },
+  },
 ];
 
 /** drizzle/0015, the last migration before these steps */

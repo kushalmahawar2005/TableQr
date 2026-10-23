@@ -2,7 +2,7 @@ import "server-only";
 import { randomBytes } from "node:crypto";
 import { domainToASCII } from "node:url";
 import { resolveTxt } from "node:dns/promises";
-import { and, eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import { db } from "@/db";
 import * as s from "@/db/schema";
 import { AppError } from "../errors";
@@ -27,24 +27,45 @@ function normalizeDomain(input: unknown): string {
 export async function saveCustomDomain(staff: Staff, input: unknown, now = new Date()) {
   if (!staff.roles.includes("owner")) throw new AppError("forbidden", "Only the owner can manage the restaurant domain.");
   const domain = input ? normalizeDomain(input) : null;
+  if (domain) {
+    const [claimed] = await db.select({ id: s.outlets.id }).from(s.outlets)
+      .where(and(eq(s.outlets.customDomain, domain), ne(s.outlets.id, staff.outletId))).limit(1);
+    if (claimed) throw invalid("That domain is already connected to another outlet.");
+  }
   const token = domain ? randomBytes(24).toString("hex") : null;
   try {
     await db.transaction(async (tx) => {
-      const [outlet] = await tx.select({ customDomain: s.outlets.customDomain, customDomainVerifiedAt: s.outlets.customDomainVerifiedAt })
+      const [outlet] = await tx.select({ customDomain: s.outlets.customDomain, customDomainVerifiedAt: s.outlets.customDomainVerifiedAt, customDomainLive: s.outlets.customDomainLive })
         .from(s.outlets).where(and(eq(s.outlets.tenantId, staff.tenantId), eq(s.outlets.id, staff.outletId))).for("update");
       if (!outlet) throw new AppError("not_found", "Outlet not found.");
-      await tx.update(s.outlets).set({ customDomain: domain, customDomainToken: token, customDomainVerifiedAt: null })
+      await tx.update(s.outlets).set({ customDomain: domain, customDomainToken: token, customDomainVerifiedAt: null, customDomainLive: false })
         .where(and(eq(s.outlets.tenantId, staff.tenantId), eq(s.outlets.id, staff.outletId)));
       await audit(tx, staff, { action: "outlet.custom_domain_changed", entity: "outlet", entityId: staff.outletId, now,
-        before: { domain: outlet.customDomain, verified: !!outlet.customDomainVerifiedAt },
-        after: { domain, verified: false } });
+        before: { domain: outlet.customDomain, verified: !!outlet.customDomainVerifiedAt, live: outlet.customDomainLive },
+        after: { domain, verified: false, live: false } });
     });
   } catch (error) {
     if (error instanceof AppError) throw error;
-    if ((error as { code?: string })?.code === "ER_DUP_ENTRY") throw invalid("That domain is already connected to another outlet.");
+    const wrapped = error as { code?: string; cause?: { code?: string } };
+    if (wrapped?.code === "ER_DUP_ENTRY" || wrapped?.cause?.code === "ER_DUP_ENTRY") throw invalid("That domain is already connected to another outlet.");
     throw error;
   }
   return { domain, token, verified: false };
+}
+
+/** A verified domain is used for guest links only after the owner confirms Hostinger + HTTPS setup. */
+export async function setCustomDomainLive(staff: Staff, live: boolean, now = new Date()) {
+  if (!staff.roles.includes("owner")) throw new AppError("forbidden", "Only the owner can manage the restaurant domain.");
+  return db.transaction(async (tx) => {
+    const [outlet] = await tx.select({ customDomain: s.outlets.customDomain, customDomainVerifiedAt: s.outlets.customDomainVerifiedAt, customDomainLive: s.outlets.customDomainLive })
+      .from(s.outlets).where(and(eq(s.outlets.tenantId, staff.tenantId), eq(s.outlets.id, staff.outletId))).for("update");
+    if (!outlet) throw new AppError("not_found", "Outlet not found.");
+    if (live && (!outlet.customDomain || !outlet.customDomainVerifiedAt)) throw invalid("Verify domain ownership before using it for guest links.");
+    await tx.update(s.outlets).set({ customDomainLive: live }).where(and(eq(s.outlets.tenantId, staff.tenantId), eq(s.outlets.id, staff.outletId)));
+    await audit(tx, staff, { action: live ? "outlet.custom_domain_enabled" : "outlet.custom_domain_disabled", entity: "outlet", entityId: staff.outletId, now,
+      before: { domain: outlet.customDomain, live: outlet.customDomainLive }, after: { domain: outlet.customDomain, live } });
+    return { live };
+  });
 }
 
 export async function verifyCustomDomain(staff: Staff, now = new Date()) {

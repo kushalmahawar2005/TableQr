@@ -10,8 +10,13 @@ type Scope = { tenantId: string; outletId: string };
 
 export type TableQr = { tableCode: string; outletName: string; url: string; svg: string; joinCode: string | null } | null;
 
-/** Where guests land after scanning: the configured public address, else the address this request came in on */
-export async function publicBaseUrl() {
+/** Where guests land after scanning: a live outlet domain, then configured address, then request host. */
+export async function publicBaseUrl(scope?: Scope) {
+  if (scope) {
+    const [outlet] = await db.select({ customDomain: s.outlets.customDomain, customDomainVerifiedAt: s.outlets.customDomainVerifiedAt, customDomainLive: s.outlets.customDomainLive })
+      .from(s.outlets).where(and(eq(s.outlets.tenantId, scope.tenantId), eq(s.outlets.id, scope.outletId)));
+    if (outlet?.customDomain && outlet.customDomainVerifiedAt && outlet.customDomainLive) return `https://${outlet.customDomain}`;
+  }
   const configured = (process.env.NEXT_PUBLIC_APP_URL ?? process.env.PUBLIC_APP_URL ?? "").replace(/\/$/, "");
   if (configured) return configured;
   const h = await headers();
@@ -28,7 +33,7 @@ export async function getTableQr(staff: Scope & { outlet: { code: string; name: 
     .innerJoin(s.qrCodes, and(eq(s.qrCodes.tenantId, s.diningTables.tenantId), eq(s.qrCodes.tableId, s.diningTables.id), eq(s.qrCodes.type, "table"), isNull(s.qrCodes.revokedAt)))
     .where(and(eq(s.diningTables.tenantId, staff.tenantId), eq(s.diningTables.outletId, staff.outletId), eq(s.diningTables.id, tableId)));
   if (!row) return null;
-  const url = `${await publicBaseUrl()}/r/${staff.outlet.code}/t/${row.shortCode}`;
+  const url = `${await publicBaseUrl(staff)}/r/${staff.outlet.code}/t/${row.shortCode}`;
   if (!url) throw new AppError("not_found", "QR link is not available.");
   return { tableCode: row.code, outletName: staff.outlet.name, url, svg: qrSvg(url, 240), joinCode: row.joinCode };
 }

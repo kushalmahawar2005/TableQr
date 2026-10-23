@@ -1,0 +1,1 @@
+ALTER TABLE `outlets` ADD `custom_domain_live` boolean DEFAULT false NOT NULL;

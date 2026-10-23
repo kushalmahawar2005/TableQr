@@ -192,10 +192,11 @@ export const outlets = mysqlTable(
     /** Guest-facing Wi-Fi details, shown only to checked-in room guests. */
     wifiSsid: varchar("wifi_ssid", { length: 32 }),
     wifiPassword: varchar("wifi_password", { length: 63 }),
-    /** Optional tenant-owned guest domain; only routed after DNS ownership is verified. */
+    /** Optional tenant-owned guest domain; never used for guest links until the owner marks it live. */
     customDomain: varchar("custom_domain", { length: 253 }),
     customDomainToken: varchar("custom_domain_token", { length: 64 }),
     customDomainVerifiedAt: at("custom_domain_verified_at"),
+    customDomainLive: boolean("custom_domain_live").notNull().default(false),
     /** Cashfree merchant credentials encrypted with PAYMENT_CREDENTIALS_KEY. */
     paymentGatewayConfig: varchar("payment_gateway_config", { length: 1600 }),
     createdAt: createdAt(),

@@ -22,7 +22,7 @@ export default async function QrSheetPage(props: PageProps<"/console/floor/edito
   const size = (typeof q.size === "string" && q.size in SIZES ? q.size : "a6") as keyof typeof SIZES;
   const only = typeof q.table === "string" ? q.table : null;
   const { mm, scale } = SIZES[size];
-  const base = await publicBaseUrl();
+  const base = await publicBaseUrl(staff);
   const rows = await db
     .select({ id: s.diningTables.id, code: s.diningTables.code, joinCode: s.diningTables.joinCode, shortCode: s.qrCodes.shortCode })
     .from(s.diningTables)

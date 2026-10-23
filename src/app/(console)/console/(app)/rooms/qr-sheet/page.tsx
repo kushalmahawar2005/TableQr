@@ -18,7 +18,7 @@ export default async function RoomQrSheetPage(props: { searchParams: Promise<Rec
   const q = await props.searchParams;
   const size = (typeof q.size === "string" && q.size in SIZES ? q.size : "a6") as keyof typeof SIZES;
   const { mm, scale } = SIZES[size];
-  const base = await publicBaseUrl();
+  const base = await publicBaseUrl(staff);
   const rows = await db
     .select({ id: s.rooms.id, number: s.rooms.number, shortCode: s.qrCodes.shortCode })
     .from(s.rooms)

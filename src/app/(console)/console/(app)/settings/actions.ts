@@ -7,7 +7,7 @@ import { storeMenuImage, storePaymentQr } from "@/server/menu-storage";
 import { consoleSectionRoles } from "@/lib/staff-permissions";
 import { saveRestaurantCashfree, updateBookingPaymentQr, updateBrandLogo, updateOutletSettings, type SettingsPatch } from "@/server/staff/settings-write";
 import { staffFor } from "@/server/staff/request";
-import { saveCustomDomain, verifyCustomDomain } from "@/server/staff/custom-domain";
+import { saveCustomDomain, setCustomDomainLive, verifyCustomDomain } from "@/server/staff/custom-domain";
 
 export type SettingsResult = { ok: true } | { ok: false; message: string };
 
@@ -41,6 +41,17 @@ export async function verifyCustomDomainAction(): Promise<{ ok: boolean; message
     if (err instanceof AppError) return { ok: false, message: err.message };
     console.error("[settings] custom domain verify failed", err);
     return { ok: false, message: "Could not verify the domain. Try again." };
+  }
+}
+
+export async function setCustomDomainLiveAction(live: boolean): Promise<{ ok: boolean; live: boolean; message: string }> {
+  try {
+    const result = await setCustomDomainLive(await staffFor(consoleSectionRoles.settings), live);
+    return { ok: true, ...result, message: live ? "Custom domain is now used for guest links." : "Guest links now use your TableQR address." };
+  } catch (err) {
+    if (err instanceof AppError) return { ok: false, live: false, message: err.message };
+    console.error("[settings] custom domain activation failed", err);
+    return { ok: false, live: false, message: "Could not update the guest link domain. Try again." };
   }
 }
 
