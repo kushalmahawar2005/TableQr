@@ -24,8 +24,10 @@ ${card.placedBy ? `<div class="m">By ${esc(card.placedBy.name)}</div>` : ""}
 }
 
 export function kotHtml(cards: KdsCard[]) {
+  const longestTicket = Math.max(1, ...cards.map((card) => card.lines.length + (card.orderNote ? 2 : 0)));
+  const paperHeight = Math.max(64, 34 + longestTicket * 9);
   return `<!doctype html><html><head><meta charset="utf-8"><title>KOT</title><style>
-@page{size:80mm auto;margin:3mm}
+@page{size:80mm ${paperHeight}mm;margin:3mm}
 *{box-sizing:border-box}html{background:#fff;color-scheme:light}
 body{margin:0 auto;max-width:80mm;font-family:ui-monospace,Menlo,Consolas,monospace;color:#000}
 h1{font-size:22px;margin:0;text-align:center}.m{font-size:12px;text-align:center}

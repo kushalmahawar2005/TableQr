@@ -11,9 +11,11 @@ export function billHtml(d: PosBillDetail, outlet: string, kind: "bill" | "recei
   const paid = d.payments.filter((p) => p.status === "success");
   const paidTotal = paid.reduce((n, p) => n + p.amountPaise + p.tipPaise, 0);
   const b = d.bill;
+  const summaryRows = b ? 2 + Number(!!b.discountPaise) + Number(!!b.serviceChargePaise) + Number(!!b.roundOffPaise) : 0;
+  const paperHeight = Math.max(92, 62 + lines.length * 8 + summaryRows * 5 + (kind === "receipt" ? paid.length * 6 + 8 : 0));
   const row = (a: string, v: string, bold = false) => `<div class="r${bold ? " b" : ""}"><span>${a}</span><span>${v}</span></div>`;
   return `<!doctype html><html><head><meta charset="utf-8"><title>${kind === "bill" ? "Bill" : "Receipt"} · Table ${esc(d.tableCode)}</title><style>
-@page{size:80mm auto;margin:4mm}
+@page{size:80mm ${paperHeight}mm;margin:4mm}
 *{box-sizing:border-box}
 html{color-scheme:light;background:#fff}
 body{margin:0 auto;max-width:80mm;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;color:#000;line-height:1.35}
