@@ -36,10 +36,7 @@ export function OrdersScreen({ orders, outlet }: { orders: OrderRow[]; outlet: s
   const [query, setQuery] = useState("");
   const [now, setNow] = useState(() => Date.now());
   const [error, setError] = useState<string | null>(null);
-
-  function printOrder(order: OrderRow) {
-    printOrderSlip(order, outlet);
-  }
+  function printOrder(order: OrderRow) { printOrderSlip(order, outlet); }
 
   function serve(o: OrderRow) {
     setError(null);
@@ -200,10 +197,12 @@ function printOrderSlip(order: OrderRow, outlet: string) {
   const status = LABEL[order.status];
 
   popup.document.open();
+  const pageRule = "@page{size:80mm auto;margin:3mm}";
+  const bodyRule = "body{width:74mm;margin:0 auto;padding:2mm 1mm;font-size:12px;line-height:1.4}";
   popup.document.write(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escape(kind)} ${escape(order.table)} · Order</title><style>
-    @page{size:80mm auto;margin:3mm}
+    ${pageRule}
     *{box-sizing:border-box}html,body{margin:0;background:#fff;color:#111;font-family:Arial,Helvetica,sans-serif}
-    body{width:74mm;margin:0 auto;padding:2mm 1mm;font-size:12px;line-height:1.4}
+    ${bodyRule}
     header{text-align:center;border-bottom:1px dashed #555;padding-bottom:10px;margin-bottom:10px}
     .brand{font-size:15px;font-weight:700;letter-spacing:.02em}.kind{margin:8px 0 2px;font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase}
     h1{margin:0;font-size:23px;line-height:1.15}.meta{margin-top:5px;font-size:13px;font-weight:700}.date{margin-top:3px;color:#444}

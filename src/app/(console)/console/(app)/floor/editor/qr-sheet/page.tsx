@@ -32,7 +32,7 @@ export default async function QrSheetPage(props: PageProps<"/console/floor/edito
 
   return (
     <main className="min-h-dvh bg-neutral-100 text-neutral-900">
-      <style>{`@page{size:${size.toUpperCase()};margin:8mm}@media print{.no-print{display:none!important}body{background:#fff}.poster{break-after:page;border:0!important;box-shadow:none!important;margin:0!important;min-height:calc(100vh - 2px)}}`}</style>
+      <style>{`@page{size:${size.toUpperCase()};margin:8mm}@media print{.no-print{display:none!important}body{background:#fff}.poster{break-after:page;break-inside:avoid;border:0!important;box-shadow:none!important;margin:0!important;min-height:0!important}.poster:last-child{break-after:auto}}`}</style>
       <PrintBar count={tables.length} size={size} outlet={staff.outlet.name} single={!!only} />
       {tables.length === 0 ? (
         <p className="no-print mx-auto max-w-md p-10 text-center text-neutral-600">No tables with a live QR yet. Publish your floor plan first, then come back to print.</p>

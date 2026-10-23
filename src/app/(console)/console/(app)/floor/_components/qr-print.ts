@@ -15,7 +15,7 @@ export function posterHtml(p: { outlet: string; table: string; svg: string; join
 @page{size:${p.size.toUpperCase()};margin:8mm}
 *{box-sizing:border-box}
 body{margin:0;font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#1f2937;text-align:center}
-.card{min-height:calc(100vh - 2px);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:${4 * scale}mm;border:0.4mm dashed #b8b2a7;border-radius:4mm;padding:${6 * scale}mm}
+.card{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:${4 * scale}mm;border:0.4mm dashed #b8b2a7;border-radius:4mm;padding:${6 * scale}mm;break-inside:avoid}
 h1{margin:0;font-size:${7 * scale}mm}
 .sub{margin:0;font-size:${4.2 * scale}mm;color:#4b5563}
 .qr{width:${qr}mm;height:${qr}mm}.qr svg{width:100%;height:100%;display:block}

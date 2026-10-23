@@ -515,11 +515,25 @@ body {
   .recharts-responsive-container, .recharts-wrapper { width: 100% !important; max-width: 100%; height: auto !important; }
   .recharts-surface { width: 100% !important; height: auto !important; }
   body:has(#reports-print) { background: #fff !important; }
-  #reports-print { box-sizing: border-box; padding: 0 10mm !important; color: #111 !important; font-family: Arial, Helvetica, sans-serif; font-size: 10pt; line-height: 1.35; }
-  /* These reports print their screen layout, whose print:p-0 removes the normal page gutter. */
-  #gst-report-print, #items-report-print { box-sizing: border-box; width: 100%; max-width: none; padding: 0 10mm !important; }
+  #reports-print { box-sizing: border-box; width: 100%; max-width: none; margin: 0 !important; padding: 0 !important; color: #111 !important; font-family: Arial, Helvetica, sans-serif; font-size: 9pt; line-height: 1.28; }
+  /* @page already supplies the paper gutter; don't add a second set of side margins. */
+  #gst-report-print, #items-report-print { box-sizing: border-box; width: 100%; max-width: none; margin: 0 !important; padding: 0 !important; }
+  #reports-screen { min-height: 0 !important; }
+  #reports-print .grid { gap: 8pt !important; }
+  #reports-print > section, #reports-print > div, #reports-print section { margin-top: 8pt !important; }
+  #reports-print > div.grid { break-inside: avoid-page; }
+  #gst-report-print section[aria-label="Invoices issued"],
+  #gst-report-print section[aria-label="Paid by"],
+  #items-report-print section[aria-label="Totals"] { break-inside: avoid-page; }
+  #gst-report-print section[aria-label="Business invoices"],
+  #gst-report-print section[aria-label="All invoices"],
+  #items-report-print section[aria-label="Every dish"] { break-inside: auto; }
+  #gst-report-print table, #items-report-print table { width: 100%; border-collapse: collapse; }
+  #gst-report-print thead, #items-report-print thead { display: table-header-group; }
+  #gst-report-print tr, #items-report-print tr { break-inside: avoid; }
+  #gst-report-print th, #gst-report-print td, #items-report-print th, #items-report-print td { border-bottom: 1px solid #c9c9c9; }
   #reports-print h1, #reports-print h2, #reports-print p { color: #111 !important; }
-  #reports-print section { margin-top: 12pt !important; }
+  #reports-print section { margin-top: 8pt !important; }
   #reports-print h2 { break-after: avoid-page; }
   #reports-print .report-paper-table { width: 100%; border-collapse: collapse; font-size: 9pt; }
   #reports-print .report-paper-table thead { display: table-header-group; }
@@ -528,6 +542,9 @@ body {
   #reports-print .report-paper-table td { border-bottom: 1px solid #c9c9c9; padding: 4pt 5pt; text-align: left; vertical-align: top; }
   #reports-print .report-paper-table th { font-weight: 700; }
   #reports-print .report-paper-table td:not(:first-child) { text-align: right; }
+  #reports-print .report-paper-table th, #reports-print .report-paper-table td { padding-top: 2.5pt; padding-bottom: 2.5pt; }
+  #reports-print > :last-child { margin-bottom: 0 !important; }
+  body:has(#reports-screen), body:has(#gst-report-print), body:has(#items-report-print) { min-height: 0 !important; }
 }
 
 /* Solid ink surfaces flip to light in dark mode, so their label must flip to dark */
