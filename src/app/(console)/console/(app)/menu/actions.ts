@@ -24,7 +24,11 @@ export async function pairingsAction(source: string, paired: string[]) { return 
 export async function modifierAction(input: Parameters<typeof saveModifierGroup>[1]) { return run((s) => saveModifierGroup(s, input)); }
 export async function modifierActiveAction(id: string, active: boolean) { return run((s) => setModifierGroupActive(s, id, active)); }
 export async function modifierOrderAction(itemId: string, ids: string[]) { return run((s) => reorderModifierGroups(s, itemId, ids)); }
-export async function importPreviewAction(filename: string, base64: string) { return run(async () => ({ rows: await parseMenuFile(filename, Buffer.from(base64, "base64")) })); }
+export async function importPreviewAction(filename: string, base64: string) { return run(async () => {
+  if (typeof filename !== "string" || filename.length > 128 || !/\.csv$/i.test(filename)) throw new AppError("invalid_state", "Upload a .csv menu file.");
+  if (typeof base64 !== "string" || base64.length > 1_400_000) throw new AppError("invalid_state", "The CSV must be smaller than 1 MB.");
+  return { rows: await parseMenuFile(filename, Buffer.from(base64, "base64")) };
+}); }
 export async function importCommitAction(rows: Parameters<typeof commitMenuCsv>[1]) { return run((s) => commitMenuCsv(s, rows)); }
 export async function uploadImageAction(filename: string, contentType: string, base64: string) { return run(async staff => { const brand = (await import("drizzle-orm")).eq; void brand; const { db } = await import("@/db"); const schema = await import("@/db/schema"); const [outlet] = await db.select({ brandId: schema.outlets.brandId }).from(schema.outlets).where((await import("drizzle-orm")).and((await import("drizzle-orm")).eq(schema.outlets.tenantId, staff.tenantId), (await import("drizzle-orm")).eq(schema.outlets.id, staff.outletId))); if (!outlet) throw new AppError("not_found", "Outlet not found."); return storeMenuImage({ tenantId: staff.tenantId, brandId: outlet.brandId, filename, contentType, bytes: Buffer.from(base64, "base64") }); }); }
 // Menu library: browse and search the TableQR list, then add picked dishes with prices

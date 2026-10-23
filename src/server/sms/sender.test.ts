@@ -12,21 +12,21 @@ afterEach(() => {
 });
 
 describe("SMS mock mode", () => {
-  it("keeps mock OTP enabled in production only with the explicit switch", () => {
+  it("never enables mock OTP in production, even with the old switch", () => {
     env.NODE_ENV = "production";
     delete env.SMS_MOCK;
     expect(smsMockEnabled()).toBe(false);
     expect(smsSender().name).toBe("none");
 
     env.SMS_MOCK = "1";
-    expect(smsMockEnabled()).toBe(true);
-    expect(smsSender().name).toBe("mock");
+    expect(smsMockEnabled()).toBe(false);
+    expect(smsSender().name).toBe("none");
   });
 
   it("accepts true as an enabled switch and keeps local mock OTP available", () => {
     env.NODE_ENV = "production";
     env.SMS_MOCK = "true";
-    expect(smsSender().name).toBe("mock");
+    expect(smsSender().name).toBe("none");
 
     env.NODE_ENV = "test";
     delete env.SMS_MOCK;

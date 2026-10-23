@@ -26,8 +26,8 @@ export async function adminLoginAction(_prev: AdminLoginState, form: FormData): 
   try {
     const ok = await signInPlatformAdmin(String(form.get("email") ?? ""), String(form.get("password") ?? ""));
     if (!ok) return { error: "Email or password is not correct." };
-  } catch (error) {
-    return { error: error instanceof Error ? error.message : "Admin sign-in failed." };
+  } catch {
+    return { error: "Admin sign-in is temporarily unavailable. Please try again shortly." };
   }
   redirect("/admin");
 }

@@ -8,7 +8,7 @@ export const metadata: Metadata = { title: "Test payment", robots: { index: fals
 export const dynamic = "force-dynamic";
 
 // Stand-in for a gateway's hosted page, for development and tests only. Never in production
-// unless PAYMENTS_MOCK=1 is set for a test deployment.
+// Production always requires the tenant's configured payment gateway.
 export default async function MockCheckout(props: { searchParams: Promise<Record<string, string | undefined>> }) {
   if (!mockAllowed()) notFound();
   const q = await props.searchParams;

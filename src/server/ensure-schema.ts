@@ -409,6 +409,12 @@ const STEPS: Step[] = [
     tag: "0046_chubby_blonde_phantom", when: 1792788567728, hash: "df50b5907b38a17e5de2e7ddf24f0703f84958725b13c9f3fdaf748d42f87790",
     apply: async (db) => { await addColumn(db, "outlets", "custom_domain_live", "boolean DEFAULT false NOT NULL"); },
   },
+  {
+    tag: "0047_serious_iron_man", when: 1792790150697, hash: "1154b1dda4aa08a0133fd52309e12315dfeed1f1bbe1225aca57212f4c0e6b00",
+    apply: async (db) => {
+      await db.query("CREATE TABLE IF NOT EXISTS `platform_admin_login_buckets` (`admin_key_hash` char(64) NOT NULL, `attempts` int NOT NULL DEFAULT 0, `window_started_at` datetime(3) NOT NULL, `locked_until` datetime(3), CONSTRAINT `platform_admin_login_buckets_admin_key_hash` PRIMARY KEY (`admin_key_hash`))");
+    },
+  },
 ];
 
 /** drizzle/0015, the last migration before these steps */

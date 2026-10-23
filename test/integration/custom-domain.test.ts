@@ -7,7 +7,7 @@ import * as s from "@/db/schema";
 import { AppError } from "@/server/errors";
 import { outletCodeForCustomDomain } from "@/server/guest/custom-domain";
 import { saveCustomDomain, setCustomDomainLive } from "@/server/staff/custom-domain";
-import { proxy } from "../../proxy";
+import { proxy } from "../../src/proxy";
 import { resetTestDb } from "./setup-db";
 
 let env: Awaited<ReturnType<typeof resetTestDb>>;

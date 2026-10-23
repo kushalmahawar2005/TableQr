@@ -8,6 +8,8 @@ import { verifyAdminPassword } from "./password";
 
 const COOKIE = "tq_platform_admin";
 const SESSION_HOURS = 12;
+const ADMIN_LOGIN = { maxAttempts: 5, windowMs: 15 * 60_000 } as const;
+const DUMMY_PASSWORD_HASH = "scrypt$16384$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
 function secret() {
   const value = process.env.PLATFORM_ADMIN_SESSION_SECRET;
@@ -43,11 +45,33 @@ export async function currentPlatformAdmin() {
 }
 
 export async function signInPlatformAdmin(email: string, password: string) {
-  const [admin] = await db.select().from(s.platformAdmins).where(and(eq(s.platformAdmins.email, email.trim().toLowerCase()), eq(s.platformAdmins.isActive, true)));
-  if (!admin || !(await verifyAdminPassword(password, admin.passwordHash))) return false;
+  const normalizedEmail = typeof email === "string" ? email.trim().toLowerCase() : "";
+  if (normalizedEmail.length > 160 || !normalizedEmail.includes("@") || typeof password !== "string" || password.length > 1_024) return false;
+  const [admin] = await db.select().from(s.platformAdmins).where(and(eq(s.platformAdmins.email, normalizedEmail), eq(s.platformAdmins.isActive, true)));
+  const now = new Date();
+  const bucketKey = createHmac("sha256", secret()).update(`platform-admin-login:${admin?.id ?? "unknown"}`).digest("hex");
+  const valid = await db.transaction(async (tx) => {
+    await tx.insert(s.platformAdminLoginBuckets).values({ adminKeyHash: bucketKey, attempts: 0, windowStartedAt: now }).onDuplicateKeyUpdate({ set: { adminKeyHash: bucketKey } });
+    const [bucket] = await tx.select().from(s.platformAdminLoginBuckets).where(eq(s.platformAdminLoginBuckets.adminKeyHash, bucketKey)).for("update");
+    if (bucket?.lockedUntil && bucket.lockedUntil > now) return false;
+    const expired = !bucket || now.getTime() - bucket.windowStartedAt.getTime() >= ADMIN_LOGIN.windowMs;
+    const passwordOk = await verifyAdminPassword(password, admin?.passwordHash ?? DUMMY_PASSWORD_HASH);
+    if (!passwordOk || !admin) {
+      const attempts = (expired ? 0 : bucket?.attempts ?? 0) + 1;
+      await tx.update(s.platformAdminLoginBuckets).set({
+        attempts,
+        windowStartedAt: expired ? now : bucket!.windowStartedAt,
+        lockedUntil: attempts >= ADMIN_LOGIN.maxAttempts ? new Date(now.getTime() + ADMIN_LOGIN.windowMs) : null,
+      }).where(eq(s.platformAdminLoginBuckets.adminKeyHash, bucketKey));
+      return false;
+    }
+    await tx.update(s.platformAdminLoginBuckets).set({ attempts: 0, windowStartedAt: now, lockedUntil: null }).where(eq(s.platformAdminLoginBuckets.adminKeyHash, bucketKey));
+    await tx.update(s.platformAdmins).set({ lastLoginAt: now }).where(eq(s.platformAdmins.id, admin.id));
+    return true;
+  });
+  if (!valid || !admin) return false;
   const jar = await cookies();
   jar.set(COOKIE, tokenFor(admin.id), { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: SESSION_HOURS * 3600 });
-  await db.update(s.platformAdmins).set({ lastLoginAt: new Date() }).where(eq(s.platformAdmins.id, admin.id));
   return true;
 }
 

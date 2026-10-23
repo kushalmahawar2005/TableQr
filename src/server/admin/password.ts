@@ -12,10 +12,16 @@ export async function hashAdminPassword(password: string) {
 }
 
 export async function verifyAdminPassword(password: string, stored: string | null) {
-  if (!stored) return false;
-  const [kind, n, salt, encoded] = stored.split("$");
-  if (kind !== "scrypt" || !salt || !encoded) return false;
-  const actual = await scrypt(password, Buffer.from(salt, "base64url"), 32, { ...PARAMS, N: Number(n) });
-  const expected = Buffer.from(encoded, "base64url");
-  return expected.length === actual.length && timingSafeEqual(expected, actual);
+  if (typeof password !== "string" || password.length > 1_024 || !stored || stored.length > 256) return false;
+  const [kind, n, salt, encoded, extra] = stored.split("$");
+  if (kind !== "scrypt" || n !== String(PARAMS.N) || !salt || !encoded || extra) return false;
+  try {
+    const saltBytes = Buffer.from(salt, "base64url");
+    const expected = Buffer.from(encoded, "base64url");
+    if (saltBytes.length !== 16 || expected.length !== 32) return false;
+    const actual = await scrypt(password, saltBytes, 32, PARAMS);
+    return timingSafeEqual(expected, actual);
+  } catch {
+    return false;
+  }
 }

@@ -2,6 +2,8 @@ import "server-only";
 
 import { asc, sql } from "drizzle-orm";
 import { db } from "@/db";
+import { mockAllowed } from "@/server/payments/gateway";
+import { smsMockEnabled } from "@/server/sms/sender";
 import * as s from "@/db/schema";
 import type { SettingsData } from "@/app/admin/admin-types";
 import { requirePlatformAdmin } from "./auth";
@@ -18,8 +20,8 @@ export async function getSettingsData(): Promise<SettingsData> {
   let dbOk = true;
   try { await db.execute(sql`select 1`); } catch { dbOk = false; }
   const production = process.env.NODE_ENV === "production";
-  const paymentsMock = process.env.PAYMENTS_MOCK === "1" || process.env.PAYMENTS_MOCK === "true";
-  const smsMock = process.env.SMS_MOCK === "1" || process.env.SMS_MOCK === "true";
+  const paymentsMock = mockAllowed() && (process.env.PAYMENTS_MOCK === "1" || process.env.PAYMENTS_MOCK === "true");
+  const smsMock = smsMockEnabled();
 
   return {
     me: { name: me.name, email: me.email, role: me.role },

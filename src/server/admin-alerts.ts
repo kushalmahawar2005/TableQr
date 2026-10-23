@@ -21,7 +21,7 @@ export function emailAdmin(subject: string, lines: string[]) {
   const base = (env("PUBLIC_APP_URL") ?? env("NEXT_PUBLIC_APP_URL") ?? "").replace(/\/$/, "");
   const link = base ? `${base}/admin` : null;
   const send = async () => {
-    const mail = nodemailer.createTransport({ host: env("SMTP_HOST")!, port, secure: port === 465, auth: { user: env("SMTP_USER")!, pass: env("SMTP_PASS")! } });
+    const mail = nodemailer.createTransport({ host: env("SMTP_HOST")!, port, secure: port === 465, disableFileAccess: true, disableUrlAccess: true, auth: { user: env("SMTP_USER")!, pass: env("SMTP_PASS")! } });
     await mail.sendMail({
       from: `TableQR <${env("SMTP_USER")}>`,
       to,

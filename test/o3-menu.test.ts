@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseMenuCsv, parseMenuFile } from "@/server/staff/menu-import";
 import { storeMenuImage } from "@/server/menu-storage";
-import * as XLSX from "xlsx";
 import sharp from "sharp";
 import { unlink } from "node:fs/promises";
 
@@ -16,15 +15,10 @@ describe("O3 menu manager import validation", () => {
   it("rejects missing required headers", () => {
     expect(() => parseMenuCsv("name,price\nPaneer,320")).toThrow(/requires/i);
   });
-  it("parses XLSX through the server-side spreadsheet adapter", async () => {
-    const book = XLSX.utils.book_new();
-    const sheet = XLSX.utils.aoa_to_sheet([["category", "english name", "price", "station", "prep minutes"], ["Mains", "Test Curry", 210, "Main", 12]]);
-    XLSX.utils.book_append_sheet(book, sheet, "Menu");
-    const rows = await parseMenuFile("menu.xlsx", XLSX.write(book, { type: "buffer", bookType: "xlsx" }));
+  it("accepts CSV imports only", async () => {
+    const rows = await parseMenuFile("menu.csv", Buffer.from("category,english name,price,station,prep minutes\nMains,Test Curry,210,Main,12"));
     expect(rows[0].nameEn).toBe("Test Curry");
-  });
-  it("rejects malformed spreadsheet input", async () => {
-    await expect(parseMenuFile("menu.xlsx", Buffer.from("not an xlsx"))).rejects.toThrow();
+    await expect(parseMenuFile("menu.xlsx", Buffer.from("not an xlsx"))).rejects.toThrow(/CSV/i);
   });
   it("rejects unsafe image MIME types and oversized files before storage", async () => {
     await expect(storeMenuImage({ tenantId: "t", brandId: "b", filename: "x.svg", contentType: "image/svg+xml", bytes: Buffer.from("x") })).rejects.toThrow(/JPG/);

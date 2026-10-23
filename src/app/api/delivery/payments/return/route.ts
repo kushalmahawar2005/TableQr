@@ -1,6 +1,10 @@
 import { reconcileDeliveryPaymentById } from "@/server/delivery/payment";
+import { readRequestBodyLimited } from "@/server/http-body";
 
 async function handle(request: Request) {
+  if (request.method === "POST" && (await readRequestBodyLimited(request, 65_536)) === null) {
+    return new Response("Request body too large", { status: 413 });
+  }
   const url = new URL(request.url);
   const checkoutId = url.searchParams.get("c") ?? "";
   const outletCode = url.searchParams.get("o") ?? "";

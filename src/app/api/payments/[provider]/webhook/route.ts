@@ -3,6 +3,7 @@ import { confirmByGatewayRef, recordRefundResult } from "@/server/billing/paymen
 import { outletGatewayForWebhook } from "@/server/payments/outlet-gateway";
 import { recordReservationRefundResult } from "@/server/booking/credit";
 import { confirmDeliveryGatewayPayment, recordDeliveryRefundResult } from "@/server/delivery/payment";
+import { readRequestTextLimited } from "@/server/http-body";
 
 /**
  * Gateway webhook (PS 6.4, 10.1). The signature over the exact raw body is checked before
@@ -11,7 +12,8 @@ import { confirmDeliveryGatewayPayment, recordDeliveryRefundResult } from "@/ser
  */
 export async function POST(request: Request, ctx: { params: Promise<{ provider: string }> }) {
   const { provider } = await ctx.params;
-  const raw = await request.text();
+  const raw = await readRequestTextLimited(request, 1_048_576);
+  if (raw === null) return Response.json({ error: "Payload too large" }, { status: 413 });
   const gateway = await outletGatewayForWebhook(provider, raw);
   if (!gateway) return Response.json({ error: "Unknown or unconfigured gateway" }, { status: 404 });
   // Cashfree uses x-webhook-signature + x-webhook-timestamp; the mock uses x-mock-signature

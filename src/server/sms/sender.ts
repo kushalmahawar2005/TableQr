@@ -1,7 +1,6 @@
 import "server-only";
 
-// SMS boundary for one-time codes. Production mock mode is an explicit temporary switch and
-// returns a visible demo code; turn it off as soon as the DLT-backed sender is configured.
+// SMS boundary for one-time codes. Mock codes are development/test-only and never leave production.
 
 export interface SmsSender {
   readonly name: string;
@@ -37,9 +36,9 @@ class NotConfigured implements SmsSender {
 export const mockSms = new MockSms();
 
 export function smsMockEnabled() {
-  return /^(1|true)$/i.test(process.env.SMS_MOCK ?? "");
+  return process.env.NODE_ENV !== "production" && /^(1|true)$/i.test(process.env.SMS_MOCK ?? "");
 }
 
 export function smsSender(): SmsSender {
-  return process.env.NODE_ENV === "production" && !smsMockEnabled() ? new NotConfigured() : mockSms;
+  return process.env.NODE_ENV === "production" ? new NotConfigured() : mockSms;
 }

@@ -7,6 +7,7 @@ import type { TooltipValueType } from "recharts"
 
 // Format: { THEME_NAME: CSS_SELECTOR }
 const THEMES = { light: "", dark: ".dark" } as const
+const SAFE_CSS_COLOR = /^(?:#[\da-f]{3,8}|var\(--[a-z][\w-]*\)|(?:rgb|hsl)a?\(\s*[\d.%\s,/-]+\))$/i
 
 const INITIAL_DIMENSION = { width: 320, height: 200 } as const
 type TooltipNameType = number | string
@@ -56,7 +57,8 @@ function ChartContainer({
   }
 }) {
   const uniqueId = React.useId()
-  const chartId = `chart-${id ?? uniqueId.replace(/:/g, "")}`
+  const safeId = (id ?? uniqueId).replace(/[^a-z\d_-]/gi, "").slice(0, 128) || "chart"
+  const chartId = `chart-${safeId}`
 
   return (
     <ChartContext.Provider value={{ config }}>
@@ -101,7 +103,8 @@ ${colorConfig
     const color =
       itemConfig.theme?.[theme as keyof typeof itemConfig.theme] ??
       itemConfig.color
-    return color ? `  --color-${key}: ${color};` : null
+    if (!/^[a-z\d_-]{1,80}$/i.test(key) || !color || !SAFE_CSS_COLOR.test(color)) return null
+    return `  --color-${key}: ${color};`
   })
   .join("\n")}
 }

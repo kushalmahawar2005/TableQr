@@ -362,8 +362,8 @@ function configuredCashfree(): CashfreeGateway | null {
 
 export const cashfreeMode = (): CashfreeMode | null => parseCashfreeConfig(process.env)?.mode ?? null;
 
-/** The mock is for development and tests; production must configure a real gateway. */
-export const mockAllowed = () => process.env.NODE_ENV !== "production" || process.env.PAYMENTS_MOCK === "1";
+/** The mock is for development and tests only; production must configure a real gateway. */
+export const mockAllowed = () => process.env.NODE_ENV !== "production";
 
 /** Development/test mock only. Production guest checkout resolves the outlet's merchant account. */
 export function gatewayFor(): PaymentGateway | null {

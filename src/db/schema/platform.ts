@@ -1,5 +1,6 @@
 import {
   boolean,
+  char,
   int,
   json,
   mysqlEnum,
@@ -52,3 +53,11 @@ export const platformAdmins = mysqlTable(
   },
   (t) => [uniqueIndex("platform_admins_email_uq").on(t.email)],
 );
+
+/** Durable throttle buckets for platform-admin password attempts (keyed by an HMAC, not email). */
+export const platformAdminLoginBuckets = mysqlTable("platform_admin_login_buckets", {
+  adminKeyHash: char("admin_key_hash", { length: 64 }).primaryKey(),
+  attempts: int("attempts").notNull().default(0),
+  windowStartedAt: at("window_started_at").notNull(),
+  lockedUntil: at("locked_until"),
+});
