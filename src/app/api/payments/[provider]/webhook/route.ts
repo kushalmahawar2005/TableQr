@@ -2,6 +2,7 @@ import { AppError } from "@/server/errors";
 import { confirmByGatewayRef, recordRefundResult } from "@/server/billing/payments";
 import { outletGatewayForWebhook } from "@/server/payments/outlet-gateway";
 import { recordReservationRefundResult } from "@/server/booking/credit";
+import { confirmDeliveryGatewayPayment, recordDeliveryRefundResult } from "@/server/delivery/payment";
 
 /**
  * Gateway webhook (PS 6.4, 10.1). The signature over the exact raw body is checked before
@@ -33,11 +34,18 @@ export async function POST(request: Request, ctx: { params: Promise<{ provider: 
         gatewayPaymentId: event.gatewayPaymentId,
         reason: event.reason,
       });
-      return Response.json({ ok: true, known: !!res });
+      const delivery = res ? false : await confirmDeliveryGatewayPayment(gateway.name, {
+        gatewayRef: event.gatewayRef,
+        status: event.status,
+        amountPaise: event.amountPaise,
+        gatewayPaymentId: event.gatewayPaymentId,
+        reason: event.reason,
+      });
+      return Response.json({ ok: true, known: !!res || delivery });
     }
     if (event.kind === "refund") {
       const known = await recordRefundResult(gateway.name, event);
-      return Response.json({ ok: true, known: known || await recordReservationRefundResult(gateway.name, event.gatewayRefundId, event.status) });
+      return Response.json({ ok: true, known: known || await recordReservationRefundResult(gateway.name, event.gatewayRefundId, event.status) || await recordDeliveryRefundResult(gateway.name, event.gatewayRefundId, event.status) });
     }
     return Response.json({ ok: true, ignored: true });
   } catch (err) {

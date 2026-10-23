@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { mockAllowed, mockGateway, type GatewayStatus } from "@/server/payments/gateway";
+import { publicOrigin } from "@/server/guest/invite";
 
 export const metadata: Metadata = { title: "Test payment", robots: { index: false, follow: false } };
 export const dynamic = "force-dynamic";
@@ -12,11 +14,15 @@ export default async function MockCheckout(props: { searchParams: Promise<Record
   const q = await props.searchParams;
   const ref = q.ref ?? "";
   const callback = q.callback ?? "";
-  let callbackPath = callback;
-  if (callback.startsWith("http://localhost:3000") || callback.startsWith("http://127.0.0.1:3000")) {
-    try { const parsed = new URL(callback); callbackPath = `${parsed.pathname}${parsed.search}`; } catch { notFound(); }
-  }
-  if (!mockGateway.orderOf(ref) || !(callbackPath.startsWith("/api/payments/return") || callbackPath.startsWith("/api/booking-credit/return"))) notFound();
+  let callbackPath = "";
+  try {
+    const origin = process.env.PUBLIC_APP_URL?.replace(/\/+$/, "") || publicOrigin(await headers());
+    const parsed = new URL(callback, origin);
+    const allowedOrigins = new Set([origin, "http://localhost:3000", "http://127.0.0.1:3000"]);
+    if (!allowedOrigins.has(parsed.origin)) notFound();
+    callbackPath = `${parsed.pathname}${parsed.search}`;
+  } catch { notFound(); }
+  if (!mockGateway.orderOf(ref) || !(callbackPath.startsWith("/api/payments/return") || callbackPath.startsWith("/api/booking-credit/return") || callbackPath.startsWith("/api/delivery/payments/return"))) notFound();
 
   async function finish(form: FormData) {
     "use server";

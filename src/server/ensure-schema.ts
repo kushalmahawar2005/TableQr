@@ -52,6 +52,16 @@ async function addUniqueIndex(db: Pool, table: string, index: string, columns: s
   }
 }
 
+async function addIndex(db: Pool, table: string, index: string, columns: string) {
+  if (await hasIndex(db, table, index)) return;
+  try {
+    await db.query(`CREATE INDEX \`${index}\` ON \`${table}\` (${columns})`);
+  } catch (err) {
+    if (await hasIndex(db, table, index)) return;
+    throw err;
+  }
+}
+
 const STEPS: Step[] = [
   {
     tag: "0016_plan_kitchen_display",
@@ -359,6 +369,22 @@ const STEPS: Step[] = [
   {
     tag: "0042_massive_red_hulk", when: 1792780133557, hash: "98908a82d666896f68c233e242a613fd5dba2450070e41807094807fe631e312",
     apply: async (db) => { await addColumn(db, "outlets", "payment_gateway_config", "varchar(1600)"); },
+  },
+  {
+    tag: "0043_sour_toad_men", when: 1792782078349, hash: "3fa57ed695fc78cc3c7dfa5027cb9a3b2e1796fc09e71e18aff9daa0858ef9b1",
+    apply: async (db) => {
+      await addColumn(db, "delivery_checkouts", "payment_mode", "enum('cod','gateway','manual_qr') DEFAULT 'cod' NOT NULL");
+      await addColumn(db, "delivery_checkouts", "payment_provider", "varchar(30)");
+      await addColumn(db, "delivery_checkouts", "gateway_ref", "varchar(100)");
+      await addColumn(db, "delivery_checkouts", "gateway_payment_id", "varchar(100)");
+      await addColumn(db, "delivery_checkouts", "payment_status", "enum('none','pending','paid','failed','refund_pending','refunded','refund_failed') DEFAULT 'none' NOT NULL");
+      await addColumn(db, "delivery_checkouts", "payment_failure_reason", "varchar(200)");
+      await addColumn(db, "delivery_checkouts", "refund_gateway_ref", "varchar(100)");
+      await addColumn(db, "delivery_checkouts", "refund_status", "enum('none','pending','success','failed') DEFAULT 'none' NOT NULL");
+      await addUniqueIndex(db, "delivery_checkouts", "delivery_gateway_ref_uq", "`payment_provider`,`gateway_ref`");
+      await addUniqueIndex(db, "delivery_checkouts", "delivery_refund_gateway_ref_uq", "`payment_provider`,`refund_gateway_ref`");
+      await addIndex(db, "delivery_checkouts", "delivery_payment_status_idx", "`tenant_id`,`payment_status`,`created_at`");
+    },
   },
 ];
 

@@ -355,6 +355,39 @@ async function confirmPaymentTx(tx: Tx, paymentId: string, verdict: Verdict, now
   return { status: "success" as const, alreadyFinal: false, ...applied };
 }
 
+/**
+ * A gateway capture made before a delivery order exists is attached to its bill as the order is
+ * committed. This keeps the regular bill/payment ledger authoritative and prevents staff from
+ * accidentally collecting the already-paid delivery total again.
+ */
+export async function settleExternalGatewayInTransaction(tx: Tx, input: {
+  paymentId: string; tenantId: string; outletId: string; sessionId: string; participantId: string;
+  provider: string; gatewayRef: string; gatewayPaymentId: string; amountPaise: number;
+}, now: Date) {
+  const [bill] = await tx.select().from(s.bills).where(and(eq(s.bills.tenantId, input.tenantId), eq(s.bills.outletId, input.outletId), eq(s.bills.sessionId, input.sessionId))).for("update");
+  if (!bill) throw new AppError("not_found", "Delivery bill not found.");
+  const shares = await tx.select().from(s.billShares).where(and(eq(s.billShares.tenantId, input.tenantId), eq(s.billShares.billId, bill.id))).for("update");
+  const allocations = shares.map(share => ({ shareId: share.id, amountPaise: Math.max(0, share.amountPaise - share.paidPaise) })).filter(allocation => allocation.amountPaise > 0);
+  const duePaise = allocations.reduce((total, allocation) => total + allocation.amountPaise, 0);
+  if (duePaise !== input.amountPaise) throw new AppError("invalid_state", "The confirmed delivery payment does not match its bill.");
+  const [existing] = await tx.select().from(s.payments).where(and(eq(s.payments.tenantId, input.tenantId), eq(s.payments.id, input.paymentId)));
+  if (existing) {
+    if (existing.gatewayRef !== input.gatewayRef || existing.amountPaise !== input.amountPaise || existing.channel !== input.provider) throw new AppError("conflict", "This payment reference is already attached to another bill.");
+    if (existing.status === "success") return { paymentId: existing.id, scope: await scopeOfBill(tx, input.tenantId, input.outletId, bill.id), closedTableIds: undefined as string[] | undefined };
+    throw new AppError("conflict", "This delivery payment has already been processed.");
+  }
+  await tx.insert(s.payments).values({
+    id: input.paymentId, tenantId: input.tenantId, outletId: input.outletId, billId: bill.id,
+    allocations, payerParticipantId: input.participantId, method: "upi", channel: input.provider,
+    gatewayRef: input.gatewayRef, amountPaise: input.amountPaise, tipPaise: 0, status: "pending",
+    failureReason: null, clientRequestId: `delivery-${input.paymentId}`, gatewayPaymentId: input.gatewayPaymentId,
+    checkedAt: now, takenByUserId: null, createdAt: now, updatedAt: now,
+  });
+  const confirmed = await confirmPaymentTx(tx, input.paymentId, { gatewayRef: input.gatewayRef, status: "success", amountPaise: input.amountPaise, gatewayPaymentId: input.gatewayPaymentId }, now);
+  if (confirmed.status !== "success") throw new AppError("invalid_state", "The delivery payment could not be applied to its bill.");
+  return { paymentId: input.paymentId, scope: confirmed.scope!, closedTableIds: confirmed.closedTableIds };
+}
+
 async function scopeOfBill(tx: Tx, tenantId: string, outletId: string, billId: string): Promise<BillScope> {
   const [{ sessionId }] = await tx.select({ sessionId: s.bills.sessionId }).from(s.bills).where(and(eq(s.bills.tenantId, tenantId), eq(s.bills.id, billId)));
   return { tenantId, outletId, sessionId };

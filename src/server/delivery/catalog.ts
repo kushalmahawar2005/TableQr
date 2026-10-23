@@ -8,6 +8,7 @@ import { priceLine } from "@/domain/pricing";
 import { readFeatures } from "@/lib/plan-features";
 import { tenantAccess } from "../access";
 import { AppError } from "../errors";
+import { outletGatewayFromConfig } from "../payments/outlet-gateway";
 import { isWithinCategoryWindow, loadItems } from "../guest/menu";
 import type { Runner } from "../db-types";
 
@@ -22,7 +23,8 @@ export async function deliveryOutlet(code: string, ordering = true, now = new Da
   if (ordering) {
     if (!readFeatures(row.custom ?? row.features).delivery) throw new AppError("forbidden", "Delivery is not available for this restaurant.");
     if (!policy.acceptingOrders) throw new AppError("outlet_unavailable", "Delivery is paused. Please contact the restaurant.");
-    if (policy.paymentMode !== "cod") throw new AppError("outlet_unavailable", "Delivery prepayment is not available yet. Please contact the restaurant.");
+    if (policy.paymentMode === "manual_qr") throw new AppError("outlet_unavailable", "Restaurant QR prepayment is not available for delivery yet. Please choose another service or contact staff.");
+    if (policy.paymentMode === "gateway" && !outletGatewayFromConfig(row.outlet.paymentGatewayConfig)) throw new AppError("outlet_unavailable", "Online delivery payment is not available right now. Please contact the restaurant.");
     if (!isOpenAt(row.outlet.openingHours, row.outlet.timezone, now)) throw new AppError("outlet_unavailable", "This restaurant is closed right now.");
   }
   return { ...row.outlet, policy, logoUrl: row.logoUrl };

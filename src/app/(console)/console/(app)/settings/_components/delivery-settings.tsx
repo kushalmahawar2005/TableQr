@@ -5,14 +5,14 @@ import type { DeliveryPolicy } from "@/domain/delivery";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-export function DeliverySettings({ value, onChange, disabled, hasPaymentQr }: {
-  value: DeliveryPolicy; onChange: (next: DeliveryPolicy) => void; disabled: boolean; hasPaymentQr: boolean;
+export function DeliverySettings({ value, onChange, disabled, hasGateway }: {
+  value: DeliveryPolicy; onChange: (next: DeliveryPolicy) => void; disabled: boolean; hasGateway: boolean;
 }) {
   // Keep text while typing, including separators, without losing incomplete pincodes.
   const [codes, setCodes] = useState(value.pincodes.join(", "));
   const update = (patch: Partial<DeliveryPolicy>) => onChange({ ...value, ...patch });
   return <div className="space-y-5 py-5">
-    <p className="rounded-xl bg-brand-soft p-3 text-sm text-ink">Pay-on-delivery checkout is available from your public restaurant link when enabled. Online gateway and QR prepayment are being connected and will remain unavailable to guests until ready.</p>
+    <p className="rounded-xl bg-brand-soft p-3 text-sm text-ink">Online delivery payments go directly to this restaurant’s own Cashfree account. TableQR’s Cashfree account is only used for restaurant subscriptions.</p>
     <label className="flex min-h-11 items-center justify-between gap-4 text-sm font-semibold">
       Accept delivery orders
       <input type="checkbox" checked={value.acceptingOrders} disabled={disabled} onChange={event => update({ acceptingOrders: event.target.checked })} className="size-5 accent-[var(--brand)]" />
@@ -34,8 +34,8 @@ export function DeliverySettings({ value, onChange, disabled, hasPaymentQr }: {
     </div>
     <div className="space-y-2"><Label htmlFor="delivery-payment">Delivery payment method</Label>
       <select id="delivery-payment" value={value.paymentMode} disabled={disabled} className="min-h-11 w-full rounded-xl border border-line bg-surface px-3 text-sm" onChange={event => update({ paymentMode: event.target.value as DeliveryPolicy["paymentMode"] })}>
-        <option value="cod">Pay on delivery</option><option value="gateway" disabled>Online prepayment · coming soon</option><option value="manual_qr" disabled={!hasPaymentQr}>Restaurant UPI QR · staff verifies receipt</option>
-      </select><p className="text-xs text-muted">Delivery orders currently support cash/card on delivery or staff-verified UPI QR. Upload the restaurant payment QR above to enable manual verification.</p>
+        <option value="cod">Pay on delivery</option><option value="gateway" disabled={!hasGateway}>Online prepayment · restaurant Cashfree</option><option value="manual_qr" disabled>Restaurant UPI QR · coming soon</option>
+      </select><p className="text-xs text-muted">{value.paymentMode === "gateway" ? "Guests pay before the kitchen receives the order. Payment is verified by Cashfree and added to the bill ledger." : hasGateway ? "Connect the restaurant’s own Live Cashfree account to enable online prepayment." : "Restaurant QR delivery payments are not available yet. Pay on delivery remains available."}</p>
     </div>
   </div>;
 }

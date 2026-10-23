@@ -100,6 +100,7 @@ export async function outletGatewayForWebhook(provider: string, rawBody: string)
   let scope: { tenantId: string; outletId: string } | undefined;
   const paymentMatch = [orderId ? eq(s.payments.gatewayRef, orderId) : undefined, paymentId ? eq(s.payments.gatewayPaymentId, paymentId) : undefined].filter((x): x is NonNullable<typeof x> => !!x);
   if (paymentMatch.length) {
+    // isolation-exempt: signed payment gateway reference is needed to resolve its tenant and outlet.
     const [payment] = await db.select({ tenantId: s.payments.tenantId, outletId: s.payments.outletId })
       .from(s.payments).where(and(eq(s.payments.channel, "cashfree"), or(...paymentMatch))).limit(1);
     if (payment) scope = payment;
@@ -107,9 +108,19 @@ export async function outletGatewayForWebhook(provider: string, rawBody: string)
   if (!scope) {
     const creditMatch = [orderId ? eq(s.reservationCredits.gatewayRef, orderId) : undefined, paymentId ? eq(s.reservationCredits.gatewayPaymentId, paymentId) : undefined, refundId ? eq(s.reservationCredits.refundGatewayRef, refundId) : undefined].filter((x): x is NonNullable<typeof x> => !!x);
     if (creditMatch.length) {
+      // isolation-exempt: signed payment gateway reference is needed to resolve its tenant and outlet.
       const [credit] = await db.select({ tenantId: s.reservationCredits.tenantId, outletId: s.reservationCredits.outletId })
         .from(s.reservationCredits).where(and(eq(s.reservationCredits.provider, "cashfree"), or(...creditMatch))).limit(1);
       if (credit) scope = credit;
+    }
+  }
+  if (!scope) {
+    const deliveryMatch = [orderId ? eq(s.deliveryCheckouts.gatewayRef, orderId) : undefined, paymentId ? eq(s.deliveryCheckouts.gatewayPaymentId, paymentId) : undefined, refundId ? eq(s.deliveryCheckouts.refundGatewayRef, refundId) : undefined].filter((x): x is NonNullable<typeof x> => !!x);
+    if (deliveryMatch.length) {
+      // isolation-exempt: signed payment gateway reference is needed to resolve its tenant and outlet.
+      const [checkout] = await db.select({ tenantId: s.deliveryCheckouts.tenantId, outletId: s.deliveryCheckouts.outletId })
+        .from(s.deliveryCheckouts).where(and(eq(s.deliveryCheckouts.paymentProvider, "cashfree"), or(...deliveryMatch))).limit(1);
+      if (checkout) scope = checkout;
     }
   }
   if (!scope) return null;

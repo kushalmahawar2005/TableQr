@@ -10,6 +10,7 @@ import { AppError } from "../errors";
 import { placeOrderInTransaction } from "../guest/order";
 import { quoteKey } from "@/domain/pricing";
 import { syncBill } from "../billing/bill";
+import { announceBill, settleExternalGatewayInTransaction } from "../billing/payments";
 import { publish } from "../realtime/publish";
 import { topics } from "../realtime/token";
 import { TAKEAWAY_CLASS } from "../floor/takeaway-class";
@@ -35,7 +36,7 @@ export async function createDeliveryCheckout(code: string, deviceId: string, inp
     await tx.select({ id: s.tenants.id }).from(s.tenants).where(eq(s.tenants.id, outlet.tenantId)).for("update");
     const [recent] = await tx.select({ n: count() }).from(s.deliveryCheckouts).where(and(eq(s.deliveryCheckouts.tenantId, outlet.tenantId), eq(s.deliveryCheckouts.deviceId, deviceId), gte(s.deliveryCheckouts.createdAt, new Date(now.getTime() - 3600_000))));
     if (Number(recent.n) >= 10) throw new AppError("rate_limited", "Too many checkout attempts. Please try again later.");
-    await tx.insert(s.deliveryCheckouts).values({ id, tenantId: outlet.tenantId, outletId: outlet.id, deviceId, tokenHash: deliveryTokenHash(token), lines, address, totalPaise: quote.totalPaise, deliveryFeePaise: quote.deliveryFeePaise, expiresAt: new Date(now.getTime() + 30 * 60_000), createdAt: now });
+    await tx.insert(s.deliveryCheckouts).values({ id, tenantId: outlet.tenantId, outletId: outlet.id, deviceId, tokenHash: deliveryTokenHash(token), lines, address, paymentMode: outlet.policy.paymentMode, totalPaise: quote.totalPaise, deliveryFeePaise: quote.deliveryFeePaise, expiresAt: new Date(now.getTime() + 30 * 60_000), createdAt: now });
   }, LOCK_THEN_READ);
   return { token, quote };
 }
@@ -52,14 +53,33 @@ export async function deliveryCheckout(code: string, token: string, deviceId: st
 
 export async function placeDeliveryOrder(code: string, token: string, deviceId: string, expectedTotalPaise: number, now = new Date()) {
   const { outlet: found, row } = await deliveryCheckout(code, token, deviceId, now);
+  return placeKnownDeliveryOrder(code, found, row, deviceId, expectedTotalPaise, now);
+}
+
+/** Server-only continuation used after the restaurant's gateway confirms a delivery payment. */
+export async function placePaidDeliveryOrder(checkoutId: string, now = new Date()) {
+  // isolation-exempt: checkout id is an opaque UUID from a server-verified payment; resolve tenant from row.
+  const [row] = await db.select().from(s.deliveryCheckouts).where(eq(s.deliveryCheckouts.id, checkoutId)).limit(1);
+  if (!row || row.paymentMode !== "gateway" || row.paymentStatus !== "paid") throw new AppError("forbidden", "The delivery payment has not been confirmed.");
+  const [outlet] = await db.select().from(s.outlets).where(and(eq(s.outlets.tenantId, row.tenantId), eq(s.outlets.id, row.outletId))).limit(1);
+  if (!outlet) throw new AppError("not_found", "Restaurant not found.");
+  const found = await deliveryOutlet(outlet.code, false, now);
+  return placeKnownDeliveryOrder(outlet.code, found, row, row.deviceId, row.totalPaise, now);
+}
+
+async function placeKnownDeliveryOrder(code: string, found: Awaited<ReturnType<typeof deliveryOutlet>>, row: typeof s.deliveryCheckouts.$inferSelect, deviceId: string, expectedTotalPaise: number, now: Date) {
   // A lost response can be retried even after delivery has been paused.
   if (row.sessionId) return { sessionId: row.sessionId, replayed: true };
   const outlet = await deliveryOutlet(code, true, now);
+  if (outlet.id !== row.outletId || outlet.tenantId !== row.tenantId || row.deviceId !== deviceId) throw new AppError("not_found", "Delivery checkout not found.");
   const placed = await db.transaction(async tx => {
     const [checkout] = await tx.select().from(s.deliveryCheckouts).where(and(eq(s.deliveryCheckouts.tenantId, outlet.tenantId), eq(s.deliveryCheckouts.id, row.id))).for("update");
     if (checkout.sessionId) return { sessionId: checkout.sessionId, replayed: true as const };
     if (checkout.expiresAt <= now || checkout.status !== "draft") throw new AppError("expired", "Your checkout expired.");
     if (!checkout.guestId || !checkout.verifiedAt || !checkFirstName(checkout.name ?? "").ok) throw new AppError("verification_required", "Verify your phone before placing this delivery order.");
+    if (checkout.paymentMode === "gateway" && (checkout.paymentStatus !== "paid" || !checkout.gatewayPaymentId)) throw new AppError("invalid_state", "Complete the restaurant’s secure online payment before placing this delivery order.", { reason: "payment_required" });
+    if (checkout.paymentMode === "manual_qr") throw new AppError("invalid_state", "Restaurant QR prepayment is not available for delivery yet.");
+    if (checkout.paymentMode === "cod" && checkout.paymentStatus !== "none") throw new AppError("invalid_state", "This delivery checkout has an unexpected payment state.");
     const itemIds = [...new Set(checkout.lines.map(line => line.itemId))];
     await tx.select({ id: s.outletItemOverrides.id }).from(s.outletItemOverrides).where(and(eq(s.outletItemOverrides.tenantId, outlet.tenantId), eq(s.outletItemOverrides.outletId, outlet.id), inArray(s.outletItemOverrides.itemId, itemIds))).orderBy(s.outletItemOverrides.id).for("update");
     const quote = await priceDeliveryCart(tx, outlet, checkout.lines, checkout.address.pincode, now);
@@ -77,10 +97,16 @@ export async function placeDeliveryOrder(code: string, token: string, deviceId: 
     // Delivery never inherits optional dine-in service charges.
     await syncBill(tx, ctx, now, { serviceChargeWaived: true, requestedAt: now });
     await tx.update(s.tableSessions).set({ status: "bill_requested", orderingLocked: true }).where(and(eq(s.tableSessions.tenantId, outlet.tenantId), eq(s.tableSessions.id, sessionId)));
+    const billPayment = checkout.paymentMode === "gateway"
+      ? await settleExternalGatewayInTransaction(tx, { paymentId: checkout.id, tenantId: outlet.tenantId, outletId: outlet.id, sessionId, participantId, provider: checkout.paymentProvider ?? "", gatewayRef: checkout.gatewayRef ?? "", gatewayPaymentId: checkout.gatewayPaymentId ?? "", amountPaise: checkout.totalPaise }, now)
+      : null;
     await tx.update(s.deliveryCheckouts).set({ status: "placed", sessionId, deliveryFeePaise: quote.deliveryFeePaise, totalPaise: quote.totalPaise, placedAt: now }).where(and(eq(s.deliveryCheckouts.tenantId, outlet.tenantId), eq(s.deliveryCheckouts.id, row.id)));
-    return { sessionId, order, replayed: false as const };
+    return { sessionId, order, billPayment, replayed: false as const };
   }, LOCK_THEN_READ);
-  if (!placed.replayed) await publish(deliveryScope(found), [{ topic: topics.kitchen, type: "ticket.created", data: { orderId: placed.order!.orderId, stations: placed.order!.stations } }, { topic: topics.floor, type: "delivery.placed", data: { sessionId: placed.sessionId } }]);
+  if (!placed.replayed) {
+    await publish(deliveryScope(found), [{ topic: topics.kitchen, type: "ticket.created", data: { orderId: placed.order!.orderId, stations: placed.order!.stations } }, { topic: topics.floor, type: "delivery.placed", data: { sessionId: placed.sessionId } }]);
+    if (placed.billPayment) announceBill(placed.billPayment.scope, placed.billPayment.closedTableIds ? { tableIds: placed.billPayment.closedTableIds, state: "paid" } : undefined, [{ topic: topics.session(placed.sessionId), type: "payment.updated", data: { paymentId: placed.billPayment.paymentId } }, { topic: topics.session(placed.sessionId), type: "session.closed" }]);
+  }
   return { sessionId: placed.sessionId, replayed: placed.replayed };
 }
 
@@ -88,5 +114,5 @@ export async function deliveryStatus(code: string, token: string, deviceId: stri
   const { outlet, row } = await deliveryCheckout(code, token, deviceId, now);
   const orders = row.sessionId ? await db.select({ status: s.orders.status }).from(s.orders).where(and(eq(s.orders.tenantId, outlet.tenantId), eq(s.orders.sessionId, row.sessionId))) : [];
   const [bill] = row.sessionId ? await db.select({ totalPaise: s.bills.totalPaise, status: s.bills.status }).from(s.bills).where(and(eq(s.bills.tenantId, outlet.tenantId), eq(s.bills.sessionId, row.sessionId))) : [];
-  return { status: row.status, name: row.name, address: row.address, totalPaise: bill?.totalPaise ?? row.totalPaise, deliveryFeePaise: row.deliveryFeePaise, paid: bill?.status === "paid", kitchenStatus: orders[0]?.status ?? null };
+  return { id: row.id, status: row.status, name: row.name, address: row.address, totalPaise: bill?.totalPaise ?? row.totalPaise, deliveryFeePaise: row.deliveryFeePaise, paid: bill?.status === "paid" || row.paymentStatus === "paid", paymentMode: row.paymentMode, paymentStatus: row.paymentStatus, paymentFailureReason: row.paymentFailureReason, refundStatus: row.refundStatus, kitchenStatus: orders[0]?.status ?? null };
 }

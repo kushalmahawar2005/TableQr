@@ -7,6 +7,7 @@ import { readFeatures } from "@/lib/plan-features";
 import { tenantAccess } from "@/server/access";
 import { AppError } from "@/server/errors";
 import { configuredGuestServices } from "@/domain/guest-services";
+import { outletGatewayFromConfig } from "@/server/payments/outlet-gateway";
 
 /** Public restaurant entry point. Resolve the tenant from the public outlet code, then scope all
  * other reads to that tenant so an untrusted URL cannot reveal another restaurant's details. */
@@ -23,6 +24,7 @@ export async function getRestaurantHome(outletCode: string) {
     accentColor: s.outlets.accentColor,
     guestServices: s.outlets.guestServices,
     deliveryPolicy: s.outlets.deliveryPolicy,
+    paymentGatewayConfig: s.outlets.paymentGatewayConfig,
   }).from(s.outlets)
     .innerJoin(s.tenants, eq(s.tenants.id, s.outlets.tenantId))
     .innerJoin(s.plans, eq(s.plans.code, s.tenants.planCode))
@@ -35,8 +37,10 @@ export async function getRestaurantHome(outletCode: string) {
   }
   const features = readFeatures(row.customFeatures ?? row.planFeatures);
   const selected = configuredGuestServices(row.guestServices);
+  const deliveryPolicy = readDeliveryPolicy(row.deliveryPolicy);
+  const deliveryPaymentReady = deliveryPolicy.paymentMode === "cod" || (deliveryPolicy.paymentMode === "gateway" && !!outletGatewayFromConfig(row.paymentGatewayConfig));
   return {
     outlet: { code: row.code, name: row.name, city: row.city, logoUrl: row.logoUrl, accentColor: row.accentColor },
-    services: { delivery: features.delivery && readDeliveryPolicy(row.deliveryPolicy).acceptingOrders && readDeliveryPolicy(row.deliveryPolicy).paymentMode === "cod", dineIn: features.dineIn && selected.includes("dineIn"), reservations: features.reservations && selected.includes("reservations"), rooms: features.rooms && selected.includes("rooms") },
+    services: { delivery: features.delivery && deliveryPolicy.acceptingOrders && deliveryPaymentReady, dineIn: features.dineIn && selected.includes("dineIn"), reservations: features.reservations && selected.includes("reservations"), rooms: features.rooms && selected.includes("rooms") },
   };
 }

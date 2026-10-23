@@ -13,16 +13,24 @@ export default async function DeliveryPage({ params, searchParams }: { params: P
   const { lang } = query;
   const jar = await cookies();
   const token = jar.get(`tq_delivery_${outlet.trim().toUpperCase().replace(/[^A-Z0-9]/g, "")}`)?.value;
-  // Existing order tracking stays accessible when new delivery orders are paused.
+  let initialStatus: Awaited<ReturnType<typeof deliveryStatus>> | undefined;
+  // Existing orders and pending/failed prepayments remain visible when new orders are paused.
   if (token && query.new !== "1") {
     try {
       const status = await deliveryStatus(outlet, token, jar.get("tq_device")?.value ?? "");
-      if (status.status !== "draft") return <DeliveryScreen outletCode={outlet} initialStatus={status} hindi={lang === "hi"} />;
+      if (status.status !== "draft" || status.paymentStatus !== "none") initialStatus = status;
     } catch (error) { if (!(error instanceof AppError)) throw error; }
   }
-  try { return <DeliveryScreen outletCode={outlet} data={await deliveryMenu(outlet)} hindi={lang === "hi"} />; }
+  if (initialStatus) return <DeliveryScreen outletCode={outlet} initialStatus={initialStatus} hindi={lang === "hi"} />;
+  let data: Awaited<ReturnType<typeof deliveryMenu>> | undefined;
+  let menuError: string | undefined;
+  try {
+    data = await deliveryMenu(outlet);
+  }
   catch (error) {
     if (!(error instanceof AppError)) throw error;
-    return <main className="py-10"><Link href={`/r/${encodeURIComponent(outlet)}`} className="text-brand-strong">← Restaurant</Link><h1 className="mt-6 text-2xl font-bold">Delivery</h1><p className="mt-3 text-muted">{error.message}</p></main>;
+    menuError = error.message;
   }
+  if (menuError) return <main className="py-10"><Link href={`/r/${encodeURIComponent(outlet)}`} className="text-brand-strong">← Restaurant</Link><h1 className="mt-6 text-2xl font-bold">Delivery</h1><p className="mt-3 text-muted">{menuError}</p></main>;
+  return <DeliveryScreen outletCode={outlet} data={data} hindi={lang === "hi"} />;
 }

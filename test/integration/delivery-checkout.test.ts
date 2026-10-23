@@ -5,7 +5,9 @@ import * as s from "@/db/schema";
 import { DEFAULT_DELIVERY_POLICY } from "@/domain/delivery";
 import { settleAtCounter } from "@/server/billing/payments";
 import { createDeliveryCheckout, deliveryCheckout, deliveryStatus, placeDeliveryOrder } from "@/server/delivery/checkout";
+import { reconcileDeliveryPayment, startDeliveryPayment } from "@/server/delivery/payment";
 import { sendDeliveryOtp, verifyDeliveryOtp } from "@/server/delivery/otp";
+import { mockGateway } from "@/server/payments/gateway";
 import { advanceDelivery, deliveryQueue } from "@/server/delivery/staff";
 import { getFloor } from "@/server/floor/read";
 import { resolveStaff, signInStaff, type StaffSession } from "@/server/staff/auth";
@@ -69,5 +71,32 @@ describe("verified delivery checkout", () => {
     await settleAtCounter(owner, { sessionId: a.sessionId, method: "cash", receivedPaise: bill.totalPaise });
     await advanceDelivery(owner, checkoutId, "delivered");
     expect((await deliveryStatus("SRJ01", token, device)).status).toBe("delivered");
+  });
+
+  it("does not place a prepaid delivery until the restaurant gateway confirms payment, then settles its bill", async () => {
+    const gatewayDevice = "delivery-gateway-device";
+    await env.db.update(s.outlets).set({ deliveryPolicy: { ...DEFAULT_DELIVERY_POLICY, acceptingOrders: true, pincodes: ["302001"], deliveryFeePaise: 3000, paymentMode: "gateway" } }).where(eq(s.outlets.id, env.demo.outletId));
+    const created = await createDeliveryCheckout("SRJ01", gatewayDevice, { lines: [{ itemId: env.demo.itemIds["Dal Makhani"], qty: 1, modifierIds: [] }], address });
+    const scoped = await deliveryCheckout("SRJ01", created.token, gatewayDevice);
+    const otp = await sendDeliveryOtp("SRJ01", created.token, gatewayDevice, "9876543211");
+    await verifyDeliveryOtp("SRJ01", created.token, gatewayDevice, otp.challengeId, otp.devCode!, "Kiran");
+    await expect(placeDeliveryOrder("SRJ01", created.token, gatewayDevice, created.quote.totalPaise)).rejects.toMatchObject({ code: "invalid_state" });
+
+    const started = await startDeliveryPayment("SRJ01", created.token, gatewayDevice, "https://tableqr.test/api/delivery/payments/return?c={checkoutId}");
+    const gatewayRef = started.checkout.kind === "form" ? started.checkout.fields.ref : "";
+    expect(gatewayRef).toMatch(/^mock_/);
+    expect((await deliveryCheckout("SRJ01", created.token, gatewayDevice)).row.sessionId).toBeNull();
+
+    mockGateway.settle(gatewayRef, "success");
+    expect(await reconcileDeliveryPayment("SRJ01", created.token, gatewayDevice)).toBe("paid");
+    const completed = await deliveryCheckout("SRJ01", created.token, gatewayDevice);
+    expect(completed.row.sessionId).toBeTruthy();
+    expect(completed.row.paymentStatus).toBe("paid");
+    const [bill] = await env.db.select().from(s.bills).where(eq(s.bills.sessionId, completed.row.sessionId!));
+    const [payment] = await env.db.select().from(s.payments).where(eq(s.payments.id, scoped.row.id));
+    expect(bill.status).toBe("paid");
+    expect(bill.totalPaise).toBe(created.quote.totalPaise);
+    expect(payment).toMatchObject({ status: "success", channel: "mock", gatewayRef, amountPaise: created.quote.totalPaise });
+    expect((await deliveryStatus("SRJ01", created.token, gatewayDevice)).paid).toBe(true);
   });
 });

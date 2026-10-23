@@ -302,6 +302,13 @@
       "when": 1792780133557,
       "tag": "0042_massive_red_hulk",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "5",
+      "when": 1792782078349,
+      "tag": "0043_sour_toad_men",
+      "breakpoints": true
     }
   ]
 }

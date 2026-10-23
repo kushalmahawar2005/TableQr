@@ -1,5 +1,6 @@
 "use server";
 import { cookies } from "next/headers";
+import { headers } from "next/headers";
 import { uuidv7 } from "@/db/id";
 import type { DeliveryAddress, DeliveryCartLine } from "@/db/schema/delivery";
 import { createDeliveryCheckout, deliveryStatus, placeDeliveryOrder } from "@/server/delivery/checkout";
@@ -7,6 +8,8 @@ import { priceDeliveryCart, deliveryOutlet } from "@/server/delivery/catalog";
 import { sendDeliveryOtp, verifyDeliveryOtp } from "@/server/delivery/otp";
 import { db } from "@/db";
 import { AppError } from "@/server/errors";
+import { publicOrigin } from "@/server/guest/invite";
+import { reconcileDeliveryPayment, startDeliveryPayment } from "@/server/delivery/payment";
 
 const cookieName = (outlet: string) => `tq_delivery_${String(outlet).trim().toUpperCase().replace(/[^A-Z0-9]/g, "")}`;
 async function identity(outlet: string) {
@@ -42,6 +45,13 @@ export async function verifyDeliveryAction(outlet: string, challengeId: string, 
 export async function placeDeliveryAction(outlet: string, totalPaise: number) {
   return result(async () => { const who = await identity(outlet); return placeDeliveryOrder(outlet, who.token, who.deviceId, totalPaise); });
 }
+export async function startDeliveryPaymentAction(outlet: string) {
+  return result(async () => {
+    const who = await identity(outlet);
+    const callback = `${publicOrigin(await headers())}/api/delivery/payments/return?c={checkoutId}&o=${encodeURIComponent(outlet)}`;
+    return startDeliveryPayment(outlet, who.token, who.deviceId, callback);
+  });
+}
 export async function deliveryStatusAction(outlet: string) {
-  return result(async () => { const who = await identity(outlet); return deliveryStatus(outlet, who.token, who.deviceId); });
+  return result(async () => { const who = await identity(outlet); await reconcileDeliveryPayment(outlet, who.token, who.deviceId); return deliveryStatus(outlet, who.token, who.deviceId); });
 }
