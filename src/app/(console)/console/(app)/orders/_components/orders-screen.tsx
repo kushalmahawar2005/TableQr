@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { Check, ChefHat, Clock, Receipt, RefreshCw, Search, Utensils, TriangleAlert } from "lucide-react";
+import { Check, ChefHat, Clock, Printer, Receipt, RefreshCw, Search, Utensils, TriangleAlert } from "lucide-react";
 import type { OrderRow } from "@/server/staff/orders-read";
 import { VisitRecord } from "../../reservations/_components/visit-record";
 import { servedAction } from "../actions";
@@ -36,6 +36,13 @@ export function OrdersScreen({ orders, outlet }: { orders: OrderRow[]; outlet: s
   const [query, setQuery] = useState("");
   const [now, setNow] = useState(() => Date.now());
   const [error, setError] = useState<string | null>(null);
+  const [printOrderId, setPrintOrderId] = useState<string | null>(null);
+
+  function printOrder(id: string) {
+    window.addEventListener("afterprint", () => setPrintOrderId(null), { once: true });
+    setPrintOrderId(id);
+    requestAnimationFrame(() => window.print());
+  }
 
   function serve(o: OrderRow) {
     setError(null);
@@ -133,7 +140,7 @@ export function OrdersScreen({ orders, outlet }: { orders: OrderRow[]; outlet: s
             const stepIndex = STEPS.findIndex((s) => s.key === o.status);
             const took = o.servedAt ? Math.max(0, Math.round((new Date(o.servedAt).getTime() - new Date(o.placedAt).getTime()) / 60_000)) : null;
             return (
-              <li key={o.id} className={`overflow-hidden rounded-card border bg-surface shadow-[0_1px_2px_rgb(31_41_55/0.04)] ${isSlow ? "border-danger/50" : "border-line"}`}>
+              <li key={o.id} data-print-order={printOrderId === o.id ? "selected" : undefined} className={`overflow-hidden rounded-card border bg-surface shadow-[0_1px_2px_rgb(31_41_55/0.04)] ${isSlow ? "border-danger/50" : "border-line"}`}>
                 <div className={`h-1 ${o.status === "ready" ? "bg-[var(--state-available)]" : isSlow ? "bg-danger" : o.status === "preparing" ? "bg-[var(--state-held)]" : "bg-ink/10"}`} aria-hidden="true" />
                 <div className="p-4 sm:p-5">
                 <div className="flex items-start justify-between gap-3">
@@ -165,11 +172,14 @@ export function OrdersScreen({ orders, outlet }: { orders: OrderRow[]; outlet: s
                 <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-3">
                   <span><span className="block text-caption text-muted">Order total</span><span className="font-display text-section font-bold tabular text-ink">{money(o.totalPaise)}</span></span>
                   {o.status === "ready" && o.readyLineIds.length > 0 && (
-                    <button type="button" disabled={pending} onClick={() => serve(o)} className="ml-auto min-h-11 rounded-input bg-brand px-4 text-body font-semibold text-white shadow-sm hover:bg-brand/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:opacity-50">
+                    <button type="button" disabled={pending} onClick={() => serve(o)} className="print-hidden ml-auto min-h-11 rounded-input bg-brand px-4 text-body font-semibold text-white shadow-sm hover:bg-brand/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:opacity-50">
                       Mark served
                     </button>
                   )}
-                  <VisitRecord sessionId={o.sessionId} className="rounded-input px-2 py-1 text-body font-semibold text-ink underline underline-offset-4 hover:bg-ink/5 focus-visible:outline-2 focus-visible:outline-ink">View table record</VisitRecord>
+                  <button type="button" onClick={() => printOrder(o.id)} aria-label={`Print ${o.takeaway ? "takeaway" : "table"} ${o.table} order`} className="print-hidden inline-flex min-h-11 items-center gap-2 rounded-input border border-line bg-surface px-3 text-body font-semibold text-ink hover:border-ink/40 focus-visible:outline-2 focus-visible:outline-ink">
+                    <Printer className="size-4" aria-hidden="true" />Print
+                  </button>
+                  <VisitRecord sessionId={o.sessionId} className="print-hidden rounded-input px-2 py-1 text-body font-semibold text-ink underline underline-offset-4 hover:bg-ink/5 focus-visible:outline-2 focus-visible:outline-ink">View table record</VisitRecord>
                 </div>
                 </div>
               </li>
@@ -178,6 +188,14 @@ export function OrdersScreen({ orders, outlet }: { orders: OrderRow[]; outlet: s
         </ul>
         </div>
       )}
+      <style>{`@media print {
+        @page { margin: 12mm; }
+        body * { visibility: hidden !important; }
+        [data-print-order="selected"], [data-print-order="selected"] * { visibility: visible !important; }
+        [data-print-order="selected"] { position: absolute !important; inset: 0 auto auto 0 !important; width: 100% !important; margin: 0 !important; border: 1px solid #d1d5db !important; border-radius: 8px !important; background: #fff !important; color: #111827 !important; box-shadow: none !important; }
+        [data-print-order="selected"] * { color: #111827 !important; border-color: #d1d5db !important; }
+        .print-hidden { display: none !important; }
+      }`}</style>
     </main>
   );
 }
