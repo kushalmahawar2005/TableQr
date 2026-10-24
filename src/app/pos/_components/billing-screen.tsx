@@ -499,8 +499,8 @@ function WhatsAppBill({ hi, text, defaultPhone = "", onSend, sendPdf }: { hi: bo
   const [phone, setPhone] = useState(defaultPhone);
   const [state, setState] = useState<{ kind: "idle" | "sending" | "sent" } | { kind: "error"; text: string }>({ kind: "idle" });
   const ok = !!whatsappNumber(phone);
-  if (!open && ok && !sendPdf)
-    return <a href={whatsappLink(text, phone)} target="_blank" rel="noreferrer noopener" onClick={() => onSend?.(phone)} className={quiet}>{L("WhatsApp bill", "WhatsApp पर बिल")}</a>;
+  if (!open && !sendPdf)
+    return <a href={whatsappLink(text, ok ? phone : null)} target="_blank" rel="noreferrer noopener" onClick={() => { if (ok) onSend?.(phone); }} className={quiet}>{L("WhatsApp bill", "WhatsApp पर बिल")}</a>;
   if (!open)
     return (
       <span className="inline-flex items-center gap-2">
