@@ -6,41 +6,30 @@ export type BillMessage = {
   outlet: string;
   table: string;
   kind: "bill" | "receipt";
-  number?: string | null;
-  lines: { name: string; qty: number; amountPaise: number }[];
-  subtotalPaise: number;
-  discountPaise?: number;
-  serviceChargePaise?: number;
-  taxPaise?: number;
-  roundOffPaise?: number;
+  phone?: string | null;
+  date?: number | Date | string | null;
   totalPaise: number;
   paidPaise?: number;
-  /** The bill as a page that saves as a PDF */
+  /** Shareable bill page; guests can view or save it as a PDF. */
   link?: string | null;
 };
 
 const rs = (paise: number) => `₹${(paise / 100).toLocaleString("en-IN", { minimumFractionDigits: paise % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
 
 export function billMessage(b: BillMessage): string {
+  const date = b.date ? new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric", timeZone: "Asia/Kolkata" }).format(new Date(b.date)) : null;
+  const duePaise = Math.max(0, b.totalPaise - (b.paidPaise ?? 0));
   const lines = [
-    `*${b.outlet}*`,
-    `${b.kind === "bill" ? "Bill" : "Receipt"} · Table ${b.table}${b.number ? ` · ${b.number}` : ""}`,
+    `*${b.outlet}${b.phone ? ` · ${b.phone}` : ""}*`,
+    `${b.kind === "bill" ? "Bill" : "Receipt"}: ${rs(b.totalPaise)}`,
+    `${b.kind === "bill" ? "Due" : "Paid"}: ${rs(b.kind === "bill" ? duePaise : (b.paidPaise ?? b.totalPaise))}`,
+    date ? `Date: ${date}` : "",
     "",
-    ...b.lines.map((l) => `${l.qty} × ${l.name} — ${rs(l.amountPaise)}`),
+    b.link ? `*View ${b.kind === "bill" ? "bill" : "receipt"}*\n${b.link}` : "",
     "",
-    `Items: ${rs(b.subtotalPaise)}`,
-    b.discountPaise ? `Discount: −${rs(b.discountPaise)}` : "",
-    b.serviceChargePaise ? `Service charge: ${rs(b.serviceChargePaise)}` : "",
-    b.taxPaise ? `GST: ${rs(b.taxPaise)}` : "",
-    b.roundOffPaise ? `Round off: ${b.roundOffPaise < 0 ? "−" : ""}${rs(Math.abs(b.roundOffPaise))}` : "",
-    `*Total: ${rs(b.totalPaise)}*`,
-    b.paidPaise ? `Paid: ${rs(b.paidPaise)}` : "",
-    "",
-    b.link ? `Bill (PDF): ${b.link}` : "",
-    "",
-    "Thank you for dining with us!",
+    "Sent via TableQR",
   ];
-  return lines.filter((l, i, all) => l !== "" || (all[i - 1] !== "" && i > 0)).join("\n").trim();
+  return lines.filter((line, index, all) => line !== "" || (all[index - 1] !== "" && index > 0)).join("\n").trim();
 }
 
 /** A 10-digit Indian mobile, with or without +91, as WhatsApp wants it (91XXXXXXXXXX); null if not one */

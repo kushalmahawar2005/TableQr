@@ -134,13 +134,6 @@ export default async function ReceiptPage(props: { params: Promise<{ outlet: str
               outlet: r.outlet.name,
               table: r.table.code,
               kind: "receipt",
-              number: inv?.number,
-              lines: snap.lines.map((l) => ({ name: l.nameEn, qty: l.qty, amountPaise: l.amountPaise })),
-              subtotalPaise: snap.subtotalPaise,
-              discountPaise: snap.discountPaise,
-              serviceChargePaise: snap.serviceChargePaise,
-              taxPaise: Object.values(snap.taxBreakup ?? {}).reduce((n, v) => n + v, 0),
-              roundOffPaise: snap.roundOffPaise,
               totalPaise: snap.totalPaise,
             })}
           />

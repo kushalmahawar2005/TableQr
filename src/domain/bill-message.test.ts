@@ -2,14 +2,15 @@ import { describe, expect, it } from "vitest";
 import { billMessage, whatsappLink, whatsappNumber } from "./bill-message";
 
 describe("bill on WhatsApp", () => {
-  it("writes the bill as a short message with only the lines that apply", () => {
-    const text = billMessage({ outlet: "Spice Route", table: "T4", kind: "bill", lines: [{ name: "Dal Makhani", qty: 2, amountPaise: 52000 }], subtotalPaise: 52000, discountPaise: 5200, taxPaise: 2340, totalPaise: 49140 });
-    expect(text).toContain("*Spice Route*");
-    expect(text).toContain("2 × Dal Makhani — ₹520");
-    expect(text).toContain("Discount: −₹52");
-    expect(text).toContain("*Total: ₹491.40*");
-    expect(text).not.toContain("Service charge");
-    expect(text).not.toMatch(/\n\n\n/);
+  it("formats a concise bill and due message with a share link", () => {
+    const text = billMessage({ outlet: "BMW", table: "T4", kind: "bill", phone: "6367828788", date: "2026-10-20T10:00:00.000Z", totalPaise: 100000, paidPaise: 50000, link: "https://x.test/b/abc.def" });
+    expect(text).toContain("*BMW · 6367828788*");
+    expect(text).toContain("Bill: ₹1,000");
+    expect(text).toContain("Due: ₹500");
+    expect(text).toContain("Date: 20 Oct 2026");
+    expect(text).toContain("*View bill*\nhttps://x.test/b/abc.def");
+    expect(text).toContain("Sent via TableQR");
+    expect(text).not.toContain("Tomato Soup");
   });
 
   it("accepts Indian mobile numbers in any common shape and builds the link", () => {
@@ -21,9 +22,9 @@ describe("bill on WhatsApp", () => {
     expect(whatsappLink("Hi")).toBe("https://wa.me/?text=Hi");
   });
 
-  it("adds the PDF link when there is one", () => {
-    const text = billMessage({ outlet: "Spice Route", table: "T4", kind: "bill", lines: [], subtotalPaise: 0, totalPaise: 0, link: "https://x.test/b/abc.def" });
-    expect(text).toContain("Bill (PDF): https://x.test/b/abc.def");
-    expect(text).not.toMatch(/\n\n\n/);
+  it("keeps a receipt's paid amount distinct from a bill's due amount", () => {
+    const text = billMessage({ outlet: "Spice Route", table: "T4", kind: "receipt", totalPaise: 49140, paidPaise: 49140 });
+    expect(text).toContain("Receipt: ₹491.40");
+    expect(text).toContain("Paid: ₹491.40");
   });
 });
