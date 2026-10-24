@@ -109,6 +109,8 @@ export function BillingScreen({ initial, realtimeUrl, embedded = false, openSess
   const dueNow = detail ? detail.shares.filter((s) => !share || s.participantId === share).reduce((n, s) => n + Math.max(0, s.amountPaise - s.paidPaise), 0) : 0;
   const canPay = !!detail?.bill && detail.status === "bill_requested" && !pendingOnline && dueNow > 0 && !offline;
   const paidSoFar = detail ? detail.payments.filter((p) => p.status === "success").reduce((n, p) => n + p.amountPaise + p.tipPaise, 0) : 0;
+  const knownGuestPhones = detail ? [...new Set(detail.people.map((person) => whatsappNumber(person.phone ?? "")).filter((value): value is string => !!value))] : [];
+  const defaultWhatsAppPhone = knownGuestPhones.length === 1 ? knownGuestPhones[0] : "";
   const personName = (id: string | null) => detail?.people.find((p) => p.id === id)?.name ?? L("Table", "टेबल");
   const quick = detail ? [...new Set([dueNow, Math.ceil(dueNow / 5000) * 5000, Math.ceil(dueNow / 10000) * 10000, Math.ceil(dueNow / 50000) * 50000, Math.ceil(dueNow / 200000) * 200000])].filter((v) => v >= dueNow).slice(0, 5) : [];
   const receivedPaise = Math.round(Number(received || "0") * 100);
@@ -231,6 +233,7 @@ export function BillingScreen({ initial, realtimeUrl, embedded = false, openSess
                       <WhatsAppBill
                         key={detail.sessionId}
                         hi={hi}
+                        defaultPhone={defaultWhatsAppPhone}
                         sendPdf={detail.pdfOnWhatsApp && detail.bill ? async (phone) => { const r = await actions.sendBillAction({ sessionId: detail.sessionId, phone }); return r.ok ? null : r.error; } : undefined}
                         onSend={(phone) => void actions.rememberCustomerAction({ sessionId: detail.sessionId, phone, name: detail.people.find((p) => p.name && !/^guest\b/i.test(p.name))?.name ?? null })}
                         text={billMessage({
@@ -490,12 +493,14 @@ function DiscountBox({ hi, current, disabled, onApply, onClear }: {
  * Send this bill to the guest's WhatsApp. With WhatsApp Business connected, Send delivers the bill
  * PDF straight to their number; without it, WhatsApp opens with the bill filled in.
  */
-function WhatsAppBill({ hi, text, onSend, sendPdf }: { hi: boolean; text: string; onSend?: (phone: string) => void; sendPdf?: (phone: string) => Promise<string | null> }) {
+function WhatsAppBill({ hi, text, defaultPhone = "", onSend, sendPdf }: { hi: boolean; text: string; defaultPhone?: string; onSend?: (phone: string) => void; sendPdf?: (phone: string) => Promise<string | null> }) {
   const L = (en: string, hin: string) => (hi ? hin : en);
   const [open, setOpen] = useState(false);
-  const [phone, setPhone] = useState("");
+  const [phone, setPhone] = useState(defaultPhone);
   const [state, setState] = useState<{ kind: "idle" | "sending" | "sent" } | { kind: "error"; text: string }>({ kind: "idle" });
   const ok = !!whatsappNumber(phone);
+  if (!open && ok && !sendPdf)
+    return <a href={whatsappLink(text, phone)} target="_blank" rel="noreferrer noopener" onClick={() => onSend?.(phone)} className={quiet}>{L("WhatsApp bill", "WhatsApp पर बिल")}</a>;
   if (!open)
     return (
       <span className="inline-flex items-center gap-2">

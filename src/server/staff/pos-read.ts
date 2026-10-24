@@ -65,7 +65,10 @@ export async function posBillDetail(staff: StaffSession, sessionId: string) {
     .where(and(eq(s.tableSessions.tenantId, staff.tenantId), eq(s.tableSessions.outletId, staff.outletId), eq(s.tableSessions.id, sessionId)));
   if (!row) throw new AppError("not_found", "Bill not found in this outlet.");
   const [people, lines, shares, payments] = await Promise.all([
-    db.select({ id: s.participants.id, name: s.participants.displayName, paidOutAt: s.participants.paidOutAt }).from(s.participants).where(and(eq(s.participants.tenantId, staff.tenantId), eq(s.participants.sessionId, sessionId), isNull(s.participants.removedAt))).orderBy(asc(s.participants.joinedAt), asc(s.participants.id)),
+    db.select({ id: s.participants.id, name: s.participants.displayName, paidOutAt: s.participants.paidOutAt, phone: s.guests.phone }).from(s.participants)
+      .leftJoin(s.guests, and(eq(s.guests.tenantId, s.participants.tenantId), eq(s.guests.id, s.participants.guestId)))
+      .where(and(eq(s.participants.tenantId, staff.tenantId), eq(s.participants.sessionId, sessionId), isNull(s.participants.removedAt)))
+      .orderBy(asc(s.participants.joinedAt), asc(s.participants.id)),
     db.select({ id: s.orderLines.id, participantId: s.orderLines.participantId, name: s.orderLines.nameEn, nameHi: s.orderLines.nameHi, qty: s.orderLines.qty, unitPricePaise: s.orderLines.unitPricePaise, status: s.orderLines.status, note: s.orderLines.note, personalForPickup: s.orderLines.personalForPickup, roundNo: s.orders.roundNo }).from(s.orderLines).innerJoin(s.orders, and(eq(s.orders.tenantId, s.orderLines.tenantId), eq(s.orders.id, s.orderLines.orderId))).where(and(eq(s.orderLines.tenantId, staff.tenantId), eq(s.orderLines.sessionId, sessionId))).orderBy(s.orders.roundNo),
     row.bill ? db.select().from(s.billShares).where(and(eq(s.billShares.tenantId, staff.tenantId), eq(s.billShares.billId, row.bill.id))) : Promise.resolve([]),
     row.bill ? db.select().from(s.payments).where(and(eq(s.payments.tenantId, staff.tenantId), eq(s.payments.billId, row.bill.id))).orderBy(desc(s.payments.createdAt)) : Promise.resolve([]),
