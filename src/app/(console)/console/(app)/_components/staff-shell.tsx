@@ -286,6 +286,11 @@ export function StaffShell({
           })}
         </nav>
         <div className="border-t border-line p-2">
+          {!preview && (
+            <div className={folded ? "hidden" : "mb-2"}>
+              <InstallApp name={staff.outlet} logoUrl={logoUrl} compact />
+            </div>
+          )}
           <div className={`hidden px-2 pb-2 ${folded ? "" : "lg:block"}`}>
             <p className="truncate text-body font-semibold">{staff.name}</p>
             <p className="truncate text-caption text-muted">{role}</p>
@@ -406,7 +411,6 @@ export function StaffShell({
             />
           </div>
         </header>
-        {!preview && <div className="mx-auto w-full max-w-screen-2xl px-4 pt-3 sm:px-6 print:hidden"><InstallApp name={staff.outlet} logoUrl={logoUrl} /></div>}
         {!preview && <NotificationPermissionOnboarding lang={lang} />}
         {children}
       </div>

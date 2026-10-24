@@ -19,7 +19,7 @@ function hiddenForNow() {
   }
 }
 
-export function InstallApp({ className = "", name = "TableQR", logoUrl = null }: { className?: string; name?: string; logoUrl?: string | null }) {
+export function InstallApp({ className = "", name = "TableQR", logoUrl = null, compact = false }: { className?: string; name?: string; logoUrl?: string | null; compact?: boolean }) {
   const [prompt, setPrompt] = useState<InstallEvent | null>(null);
   const [ios, setIos] = useState(false);
   const [show, setShow] = useState(false);
@@ -67,30 +67,30 @@ export function InstallApp({ className = "", name = "TableQR", logoUrl = null }:
   };
 
   return (
-    <div role="region" aria-label="Install the app" className={`flex items-start gap-3 rounded-card border border-line bg-surface p-3.5 shadow-[0_1px_3px_rgb(0_0_0/0.06)] ${className}`}>
-      <span aria-hidden className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-input border border-line bg-brand-soft font-display text-section font-bold text-brand-strong">
+    <div role="region" aria-label="Install the app" className={`flex items-start gap-3 rounded-card border border-line bg-surface p-3.5 shadow-[0_1px_3px_rgb(0_0_0/0.06)] ${compact ? "gap-2 rounded-input p-2 shadow-none" : ""} ${className}`}>
+      <span aria-hidden className={`grid size-10 shrink-0 place-items-center overflow-hidden rounded-input border border-line bg-brand-soft font-display text-section font-bold text-brand-strong ${compact ? "size-8 rounded-md text-sm" : ""}`}>
         {logoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element -- tenant logos may be hosted on owner-controlled HTTPS origins
           <img src={logoUrl} alt="" className="size-full object-contain p-1" />
         ) : name.trim().slice(0, 1).toUpperCase() || "T"}
       </span>
       <div className="min-w-0 flex-1">
-        <p className="break-words text-body font-semibold text-ink">Install {name} on this phone</p>
+        <p className={`break-words font-semibold text-ink ${compact ? "text-caption leading-snug" : "text-body"}`}>Install {name} on this phone</p>
         {ios ? (
-          <p className="mt-0.5 text-caption text-muted">
+          <p className={`mt-0.5 text-muted ${compact ? "text-[11px] leading-snug" : "text-caption"}`}>
             Tap <HugeiconsIcon icon={Share08Icon} size={14} className="inline align-[-2px]" aria-label="Share" /> Share, then <span className="font-semibold text-ink">Add to Home Screen</span>.
           </p>
         ) : (
-          <p className="mt-0.5 text-caption text-muted">Opens like an app, full screen, straight from your home screen.</p>
+          <p className={`mt-0.5 text-muted ${compact ? "text-[11px] leading-snug" : "text-caption"}`}>Opens like an app, full screen, straight from your home screen.</p>
         )}
         {!ios && prompt && (
-          <button type="button" onClick={() => void install()} className="mt-2.5 inline-flex min-h-10 items-center gap-2 rounded-input bg-ink px-3.5 text-body font-semibold text-white hover:bg-ink/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink">
+          <button type="button" onClick={() => void install()} className={`mt-2.5 inline-flex min-h-10 items-center gap-2 rounded-input bg-ink px-3.5 text-body font-semibold text-white hover:bg-ink/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink ${compact ? "mt-2 min-h-8 w-full justify-center px-2 text-caption" : ""}`}>
             <HugeiconsIcon icon={Download04Icon} size={18} aria-hidden />
             Install app
           </button>
         )}
       </div>
-      <button type="button" onClick={close} aria-label="Not now" className="grid size-9 shrink-0 place-items-center rounded-input text-muted hover:bg-ink/5 hover:text-ink">
+      <button type="button" onClick={close} aria-label="Not now" className={`grid size-9 shrink-0 place-items-center rounded-input text-muted hover:bg-ink/5 hover:text-ink ${compact ? "size-7" : ""}`}>
         <HugeiconsIcon icon={Cancel01Icon} size={18} aria-hidden />
       </button>
     </div>
