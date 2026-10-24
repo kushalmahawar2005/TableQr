@@ -16,7 +16,7 @@ import { OtpInput } from "./otp-input";
 import { PhoneField } from "./phone-field";
 import { TextField } from "./text-field";
 
-type Challenge = { id: string; phone: string; expiresAt: number; resendAt: number; devCode?: string };
+type Challenge = { id: string; phone: string; expiresAt: number; resendAt: number; devCode?: string; skipOtp?: boolean };
 type Problem = "wrong" | "expired" | "sms_failed" | "rate_limited" | "network" | null;
 
 type State = {
@@ -142,6 +142,17 @@ export function VerifyForm({
     }
     const t = Date.now();
     setNow(t);
+    if (r.ok && r.skipOtp) {
+      set({ busy: "verifying" });
+      try {
+        const verified = await verifyCodeAction(outletCode, shortCode, { challengeId: r.challengeId, code: "0000", name: st.name, consent: st.consent });
+        if (verified.ok) return router.replace(returnToCart ? `${tablePath}/cart` : verified.to);
+        set({ busy: null, problem: verified.error === "invalid_name" ? null : "network", nameRejected: verified.error === "invalid_name" });
+      } catch {
+        set({ busy: null, problem: "network" });
+      }
+      return;
+    }
     if (r.ok) {
       const res = r;
       setSt((s) => {

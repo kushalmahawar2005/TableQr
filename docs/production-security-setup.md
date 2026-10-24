@@ -22,6 +22,17 @@ The DLT OTP template must contain the OTP variable in the format Fast2SMS expect
 
 The Fast2SMS OTP endpoint accepts an OTP template ID, Indian mobile number, app-supplied OTP, and expiry. Confirm the approved template ID and variable mapping in the Fast2SMS panel before enabling the variables.
 
+## Temporary pre-launch guest testing
+
+If the product is not yet launched, guest OTP entry can be skipped for one test phone only. Set these server-side variables in Hostinger and redeploy:
+
+```text
+OTP_TEST_BYPASS=1
+OTP_TEST_PHONE=<10-digit test phone number>
+```
+
+The allowlisted number is verified with a server-side test code and the guest flow proceeds without showing an OTP prompt. Other guest numbers still use the configured SMS provider, and staff invitation verification is unchanged. Remove `OTP_TEST_BYPASS` and `OTP_TEST_PHONE` before launch; with the flag absent, all guest OTP checks use the normal provider flow.
+
 ## Validate before deployment
 
 Run:
