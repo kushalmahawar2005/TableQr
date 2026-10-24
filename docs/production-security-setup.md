@@ -38,6 +38,10 @@ The code changes require a new production build/deploy to activate the Fast2SMS 
 
 Staff push uses the existing VAPID key pair configured in Hostinger. Keep the same pair across deploys and app instances. A browser permission prompt still requires a user gesture and cannot be forced by the app at install time.
 
+## Restaurant custom domains
+
+Set `CUSTOM_DOMAIN_CNAME_TARGET` in the deployed Node.js app to the exact DNS destination Hostinger shows for that app. If left empty, the settings screen suggests the hostname in `PUBLIC_APP_URL` / `NEXT_PUBLIC_APP_URL`; use Hostinger's value if it differs. For each restaurant, the owner adds the domain to the same app in hPanel, publishes the displayed ownership TXT record plus the host's required CNAME/ALIAS record, waits for Hostinger's HTTPS certificate, opens the guest link and confirms the right restaurant loads, then enables the custom URL in TableQR settings. Keep the TXT proof record in DNS: TableQR checks it with a short cache and redirects unavailable, unverified, or disabled custom-domain requests to the configured public app URL. Set `PUBLIC_APP_URL` to the canonical TableQR app origin so that fallback always has a destination.
+
 ## References
 
 - Fast2SMS [Send OTP API](https://docs.fast2sms.com/reference/send-otp)

@@ -24,6 +24,24 @@ function normalizeDomain(input: unknown): string {
   return ascii;
 }
 
+/** DNS target for restaurant-owned domains. Set the hosting provider's exact target when it differs from the app hostname. */
+export function customDomainDnsTarget(): string | null {
+  const configured = process.env.CUSTOM_DOMAIN_CNAME_TARGET?.trim();
+  if (configured) {
+    const raw = configured.replace(/^https?:\/\//i, "").split(/[/?#]/, 1)[0].replace(/\.$/, "");
+    const target = domainToASCII(raw).toLowerCase();
+    const labels = target.split(".");
+    if (target.length <= 253 && labels.length >= 2 && labels.every((label) => label.length <= 63 && /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label))) return target;
+  }
+  for (const origin of [process.env.PUBLIC_APP_URL, process.env.NEXT_PUBLIC_APP_URL]) {
+    try {
+      const hostname = origin ? new URL(origin).hostname.toLowerCase() : "";
+      if (hostname && hostname !== "localhost" && !hostname.endsWith(".localhost")) return hostname;
+    } catch { /* Try the next configured public URL. */ }
+  }
+  return null;
+}
+
 export async function saveCustomDomain(staff: Staff, input: unknown, now = new Date()) {
   if (!staff.roles.includes("owner")) throw new AppError("forbidden", "Only the owner can manage the restaurant domain.");
   const domain = input ? normalizeDomain(input) : null;
@@ -55,8 +73,9 @@ export async function saveCustomDomain(staff: Staff, input: unknown, now = new D
 }
 
 /** A verified domain is used for guest links only after the owner confirms Hostinger + HTTPS setup. */
-export async function setCustomDomainLive(staff: Staff, live: boolean, now = new Date()) {
+export async function setCustomDomainLive(staff: Staff, live: boolean, confirmedHttps = false, now = new Date()) {
   if (!staff.roles.includes("owner")) throw new AppError("forbidden", "Only the owner can manage the restaurant domain.");
+  if (live && !confirmedHttps) throw invalid("Open the secure guest page and confirm it loads before switching guest links.");
   return db.transaction(async (tx) => {
     const [outlet] = await tx.select({ customDomain: s.outlets.customDomain, customDomainVerifiedAt: s.outlets.customDomainVerifiedAt, customDomainLive: s.outlets.customDomainLive })
       .from(s.outlets).where(and(eq(s.outlets.tenantId, staff.tenantId), eq(s.outlets.id, staff.outletId))).for("update");
