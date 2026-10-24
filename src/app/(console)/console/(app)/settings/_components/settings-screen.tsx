@@ -82,6 +82,9 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
   const [auto, setAuto] = useState(o.autoAcceptOrders);
   const [guestOnlinePayments, setGuestOnlinePayments] = useState(o.guestOnlinePayments);
   const [publicServices, setPublicServices] = useState<GuestService[]>(o.guestServices);
+  const [announcementActive, setAnnouncementActive] = useState(o.announcementActive);
+  const [announcementTitle, setAnnouncementTitle] = useState(o.announcementTitle);
+  const [announcementBody, setAnnouncementBody] = useState(o.announcementBody);
   const [bookingPaymentMode, setBookingPaymentMode] = useState(o.bookingPaymentMode);
   const [bookingAdvance, setBookingAdvance] = useState(o.bookingAdvancePaise ? String(o.bookingAdvancePaise / 100) : "0");
   const [paymentQr, setPaymentQr] = useState(o.bookingPaymentQrUrl);
@@ -102,7 +105,7 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
   const [logoMessage, setLogoMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
   // What is on screen against what was last saved, so the save bar can say if anything changed
-  const snapshot = JSON.stringify({ city, address, gstin, fssai, sc, tips, auto, guestOnlinePayments, publicServices, bookingPaymentMode, bookingAdvance, deliveryPolicy, review, roomServices, wifiSsid, wifiPassword, hours: hoursOn ? hours : null });
+  const snapshot = JSON.stringify({ city, address, gstin, fssai, sc, tips, auto, guestOnlinePayments, publicServices, announcementActive, announcementTitle, announcementBody, bookingPaymentMode, bookingAdvance, deliveryPolicy, review, roomServices, wifiSsid, wifiPassword, hours: hoursOn ? hours : null });
   const [savedSnapshot, setSavedSnapshot] = useState(snapshot);
   const dirty = snapshot !== savedSnapshot;
 
@@ -230,6 +233,7 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
         tipPresetsBp: tips.map((t) => Math.round(t * 100)),
         autoAcceptOrders: auto, guestOnlinePayments, reviewUrl: review, roomServices, wifiSsid, wifiPassword,
         guestServices: publicServices,
+        announcementActive, announcementTitle, announcementBody,
         bookingPaymentMode,
         bookingAdvancePaise: Math.round(bookingAdvanceNum * 100),
         ...(o.deliveryAvailable ? { deliveryPolicy } : {}),
@@ -370,7 +374,13 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
             {o.availableGuestServices.map(service => <Row key={service} label={GUEST_SERVICE_LABELS[service].title} hint={GUEST_SERVICE_LABELS[service].hint}>
               <div className="flex sm:justify-end"><Toggle on={publicServices.includes(service)} onChange={enabled => setPublicServices(current => enabled ? [...current, service] : current.filter(value => value !== service))} label={`Show ${GUEST_SERVICE_LABELS[service].title}`} disabled={!canEdit} /></div>
             </Row>)}
-            <div className="py-4 text-sm text-muted">Only services included in your package can appear. Turning off party reservations also pauses new public bookings. Existing bookings and table or room QR codes stay accessible.</div>
+            <div className="py-4 text-sm text-muted">This link shows party reservations and home delivery only. Dine in opens from table QR codes, and room service opens from room QR codes. Turning off party reservations pauses new public bookings.</div>
+            <div className="space-y-3 py-4">
+              <div className="flex items-center justify-between gap-4"><div><p className="text-sm font-semibold">Guest announcement</p><p className="mt-0.5 text-xs text-muted">Publish a short message guests see on your restaurant link.</p></div><Toggle on={announcementActive} onChange={setAnnouncementActive} label="Publish guest announcement" disabled={!canEdit} /></div>
+              <Input aria-label="Announcement title" maxLength={80} placeholder="Title, e.g. Weekend special" className={fieldCls} value={announcementTitle} onChange={event => setAnnouncementTitle(event.target.value)} disabled={!canEdit} />
+              <textarea aria-label="Announcement message" maxLength={240} rows={3} placeholder="Write a short update for guests" className="w-full resize-y rounded-xl border border-line bg-surface px-3 py-2 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-brand" value={announcementBody} onChange={event => setAnnouncementBody(event.target.value)} disabled={!canEdit} />
+              <p className="text-right text-xs text-muted">{announcementBody.length}/240</p>
+            </div>
             <Row label="Booking advance per reservation" hint="This fixed deposit is charged when a guest books and is credited to their final bill. Set ₹0 to collect only preorder or peak-slot advances."><div className="relative sm:ml-auto sm:max-w-xs"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted">₹</span><Input inputMode="decimal" type="number" min="0" max="10000000" step="0.01" className={`${fieldCls} w-full pl-8`} value={bookingAdvance} onChange={event => setBookingAdvance(event.target.value)} disabled={!canEdit} /></div></Row>
             <Row label="Booking advance payments" hint={!o.bookingGatewayAvailable ? "Online gateway checkout is not connected. Use the restaurant QR option to collect advances and verify them in bookings." : "Choose how guests pay for reservation advances and preordered food."}><select className={`${fieldCls} w-full border border-line bg-surface px-3`} value={bookingPaymentMode} onChange={event => setBookingPaymentMode(event.target.value as typeof bookingPaymentMode)} disabled={!canEdit}><option value="gateway" disabled={!o.bookingGatewayAvailable}>Online gateway checkout {!o.bookingGatewayAvailable ? "(not connected)" : ""}</option><option value="manual_qr" disabled={!paymentQr}>Restaurant’s UPI QR · staff verifies receipt</option></select></Row>
             <div className="py-4">

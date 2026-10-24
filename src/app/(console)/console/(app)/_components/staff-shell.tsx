@@ -286,11 +286,6 @@ export function StaffShell({
           })}
         </nav>
         <div className="border-t border-line p-2">
-          {!preview && (
-            <div className={folded ? "hidden" : "mb-2"}>
-              <InstallApp name={staff.outlet} logoUrl={logoUrl} compact />
-            </div>
-          )}
           <div className={`hidden px-2 pb-2 ${folded ? "" : "lg:block"}`}>
             <p className="truncate text-body font-semibold">{staff.name}</p>
             <p className="truncate text-caption text-muted">{role}</p>
@@ -313,6 +308,11 @@ export function StaffShell({
               </div>
             )}
           </div>
+          {!preview && !folded && (
+            <div className="mb-1 px-1">
+              <InstallApp name={staff.outlet} logoUrl={logoUrl} compact />
+            </div>
+          )}
           <ThemeToggle
             dark={dark}
             onChange={setDark}

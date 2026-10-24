@@ -28,6 +28,7 @@ export type OutletSettings = {
   guestServices: GuestService[]; availableGuestServices: GuestService[];
   bookingPaymentMode: "gateway" | "manual_qr"; bookingPaymentQrUrl: string | null;
   bookingAdvancePaise: number;
+  announcementActive: boolean; announcementTitle: string; announcementBody: string;
   tables: number; staff: number; plan: string;
 };
 
@@ -62,6 +63,7 @@ export async function getOutletSettings(staff: Staff): Promise<OutletSettings> {
     guestServices: configuredGuestServices(outlet.guestServices), availableGuestServices: guestServices.filter(service => features[service]),
     bookingPaymentMode: outlet.bookingPaymentMode, bookingPaymentQrUrl: outlet.bookingPaymentQrUrl,
     bookingAdvancePaise: outlet.bookingAdvancePaise,
+    announcementActive: outlet.announcementActive, announcementTitle: outlet.announcementTitle ?? "", announcementBody: outlet.announcementBody ?? "",
     customDomain: outlet.customDomain ?? null, customDomainVerifiedAt: outlet.customDomainVerifiedAt ?? null, customDomainToken: outlet.customDomainToken ?? null, customDomainLive: outlet.customDomainLive,
   };
 }

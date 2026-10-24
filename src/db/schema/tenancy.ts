@@ -175,6 +175,10 @@ export const outlets = mysqlTable(
     /** Choices shown on the public restaurant entry link; null follows the tenant's package. */
     deliveryPolicy: json("delivery_policy").$type<DeliveryPolicy>(),
     guestServices: json("guest_services").$type<GuestService[]>(),
+    /** One owner-managed announcement displayed on the public guest entry page. */
+    announcementActive: boolean("announcement_active").notNull().default(false),
+    announcementTitle: varchar("announcement_title", { length: 80 }),
+    announcementBody: varchar("announcement_body", { length: 240 }),
     bookingPaymentMode: mysqlEnum("booking_payment_mode", ["gateway", "manual_qr"]).notNull().default("gateway"),
     bookingPaymentQrUrl: varchar("booking_payment_qr_url", { length: 500 }),
     /** Optional fixed advance due for every online reservation, in paise; separate from preorder spend. */

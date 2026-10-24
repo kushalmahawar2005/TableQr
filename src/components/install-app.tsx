@@ -23,6 +23,7 @@ export function InstallApp({ className = "", name = "TableQR", logoUrl = null, c
   const [prompt, setPrompt] = useState<InstallEvent | null>(null);
   const [ios, setIos] = useState(false);
   const [show, setShow] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   useEffect(() => {
     const installed = window.matchMedia("(display-mode: standalone)").matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
@@ -35,6 +36,10 @@ export function InstallApp({ className = "", name = "TableQR", logoUrl = null, c
     const onInstalled = () => setShow(false);
     window.addEventListener("beforeinstallprompt", onPrompt);
     window.addEventListener("appinstalled", onInstalled);
+    // Keep the install entry visible even if Chromium fired before React hydrated, or the
+    // browser does not expose a prompt event (desktop Safari and some managed browsers).
+    // The click then gives browser-specific instructions instead of silently hiding the feature.
+    const showTimer = window.setTimeout(() => setShow(true), 0);
     // iPhone and iPad Safari: no prompt event, so explain the Share menu instead
     const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
     if (isIos) {
@@ -45,6 +50,7 @@ export function InstallApp({ className = "", name = "TableQR", logoUrl = null, c
     return () => {
       window.removeEventListener("beforeinstallprompt", onPrompt);
       window.removeEventListener("appinstalled", onInstalled);
+      window.clearTimeout(showTimer);
     };
   }, []);
 
@@ -59,7 +65,10 @@ export function InstallApp({ className = "", name = "TableQR", logoUrl = null, c
     }
   };
   const install = async () => {
-    if (!prompt) return;
+    if (!prompt) {
+      setHelpOpen(true);
+      return;
+    }
     await prompt.prompt();
     const { outcome } = await prompt.userChoice;
     setPrompt(null);
@@ -83,12 +92,21 @@ export function InstallApp({ className = "", name = "TableQR", logoUrl = null, c
         ) : (
           <p className={`mt-0.5 text-muted ${compact ? "text-[11px] leading-snug" : "text-caption"}`}>Opens like an app, full screen, straight from your home screen.</p>
         )}
-        {!ios && prompt && (
+        {!ios && (
           <button type="button" onClick={() => void install()} className={`mt-2.5 inline-flex min-h-10 items-center gap-2 rounded-input bg-ink px-3.5 text-body font-semibold text-white hover:bg-ink/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink ${compact ? "mt-2 min-h-8 w-full justify-center px-2 text-caption" : ""}`}>
             <HugeiconsIcon icon={Download04Icon} size={18} aria-hidden />
             Install app
           </button>
         )}
+        {helpOpen && !ios && <div role="status" className={`mt-2 rounded-lg bg-paper p-2 text-xs leading-relaxed text-muted ${compact ? "text-[11px]" : ""}`}>
+          { /android/i.test(navigator.userAgent)
+            ? "In Chrome, open ⋮ and choose Install app or Add to Home screen."
+            : /iphone|ipad|ipod/i.test(navigator.userAgent)
+              ? "Tap Share, then Add to Home Screen."
+              : /safari/i.test(navigator.userAgent) && !/chrome|chromium|android/i.test(navigator.userAgent)
+                ? "In Safari, choose File → Add to Dock."
+                : "In Chrome, open ⋮ → Cast, save and share → Install page as app."}
+        </div>}
       </div>
       <button type="button" onClick={close} aria-label="Not now" className={`grid size-9 shrink-0 place-items-center rounded-input text-muted hover:bg-ink/5 hover:text-ink ${compact ? "size-7" : ""}`}>
         <HugeiconsIcon icon={Cancel01Icon} size={18} aria-hidden />

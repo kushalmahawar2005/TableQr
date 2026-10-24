@@ -27,6 +27,7 @@ export type SettingsPatch = {
   guestServices?: GuestService[];
   bookingPaymentMode?: "gateway" | "manual_qr";
   bookingAdvancePaise?: number;
+  announcementActive?: boolean; announcementTitle?: string; announcementBody?: string;
 };
 
 const bad = (message: string) => new AppError("invalid_state", message, { reason: "settings" });
@@ -36,6 +37,12 @@ export async function updateOutletSettings(staff: Staff, input: SettingsPatch, n
   if (input.guestOnlinePayments !== undefined && typeof input.guestOnlinePayments !== "boolean") throw bad("Choose a valid online payment preference.");
   if (input.bookingPaymentMode !== undefined && !["gateway", "manual_qr"].includes(input.bookingPaymentMode)) throw bad("Choose a valid booking payment method.");
   if (input.bookingAdvancePaise !== undefined && (!Number.isSafeInteger(input.bookingAdvancePaise) || input.bookingAdvancePaise < 0 || input.bookingAdvancePaise > 1_000_000_000)) throw bad("Reservation advance must be between ₹0 and ₹10,000,000.");
+  if (input.announcementActive !== undefined && typeof input.announcementActive !== "boolean") throw bad("Choose whether the announcement is published.");
+  const announcementTitle = String(input.announcementTitle ?? "").trim();
+  const announcementBody = String(input.announcementBody ?? "").trim();
+  const announcementChanged = input.announcementTitle !== undefined || input.announcementBody !== undefined;
+  if (announcementTitle.length > 80 || announcementBody.length > 240) throw bad("Announcement title must be 80 characters or fewer and its message 240 characters or fewer.");
+  if (announcementChanged && (!!announcementTitle !== !!announcementBody)) throw bad("Add both an announcement title and message, or clear both.");
   let deliveryPolicy: DeliveryPolicy | undefined;
   if (input.deliveryPolicy !== undefined) {
     await requireFeature(staff.tenantId, "delivery");
@@ -82,7 +89,11 @@ export async function updateOutletSettings(staff: Staff, input: SettingsPatch, n
   return db.transaction(async (tx) => {
     const [before] = await tx.select().from(s.outlets).where(and(eq(s.outlets.tenantId, staff.tenantId), eq(s.outlets.id, staff.outletId))).for("update");
     if (!before) throw new AppError("not_found", "Outlet not found.");
-    const next = { city, address, gstin: gstin || null, fssai: fssai || null, serviceChargeBp: sc, tipPresetsBp: tips, autoAcceptOrders: !!input.autoAcceptOrders, guestOnlinePayments: input.guestOnlinePayments ?? before.guestOnlinePayments, reviewUrl: reviewUrl || null, openingHours: hours, roomServices, wifiSsid: wifiSsid || null, wifiPassword: wifiPassword || null };
+    const savedAnnouncementTitle = input.announcementTitle === undefined ? before.announcementTitle : announcementTitle || null;
+    const savedAnnouncementBody = input.announcementBody === undefined ? before.announcementBody : announcementBody || null;
+    const announcementWillBeActive = input.announcementActive ?? before.announcementActive;
+    if (announcementWillBeActive && (!savedAnnouncementTitle || !savedAnnouncementBody)) throw bad("Add a title and message before publishing the announcement.");
+    const next = { city, address, gstin: gstin || null, fssai: fssai || null, serviceChargeBp: sc, tipPresetsBp: tips, autoAcceptOrders: !!input.autoAcceptOrders, guestOnlinePayments: input.guestOnlinePayments ?? before.guestOnlinePayments, reviewUrl: reviewUrl || null, openingHours: hours, roomServices, wifiSsid: wifiSsid || null, wifiPassword: wifiPassword || null, announcementActive: announcementWillBeActive, announcementTitle: savedAnnouncementTitle, announcementBody: savedAnnouncementBody };
     const nextGuestServices = input.guestServices === undefined ? before.guestServices : [...input.guestServices];
     const bookingPaymentMode = input.bookingPaymentMode ?? before.bookingPaymentMode;
     const onlinePayments = input.guestOnlinePayments ?? before.guestOnlinePayments;
@@ -96,7 +107,7 @@ export async function updateOutletSettings(staff: Staff, input: SettingsPatch, n
     await tx.update(s.outlets).set({ ...next, ...(deliveryPolicy ? { deliveryPolicy } : {}), guestServices: nextGuestServices, bookingPaymentMode, bookingAdvancePaise }).where(and(eq(s.outlets.tenantId, staff.tenantId), eq(s.outlets.id, staff.outletId)));
     await audit(tx, staff, {
       action: "outlet.settings_changed", entity: "outlet", entityId: staff.outletId, now,
-      before: { deliveryPolicy: before.deliveryPolicy, city: before.city, address: before.address, gstin: before.gstin, fssai: before.fssai, serviceChargeBp: before.serviceChargeBp, tipPresetsBp: before.tipPresetsBp, autoAcceptOrders: before.autoAcceptOrders, guestOnlinePayments: before.guestOnlinePayments, guestServices: before.guestServices, bookingPaymentMode: before.bookingPaymentMode, bookingAdvancePaise: before.bookingAdvancePaise, reviewUrl: before.reviewUrl, openingHours: before.openingHours, roomServices: before.roomServices, wifiSsid: before.wifiSsid, hasWifiPassword: !!before.wifiPassword },
+      before: { deliveryPolicy: before.deliveryPolicy, city: before.city, address: before.address, gstin: before.gstin, fssai: before.fssai, serviceChargeBp: before.serviceChargeBp, tipPresetsBp: before.tipPresetsBp, autoAcceptOrders: before.autoAcceptOrders, guestOnlinePayments: before.guestOnlinePayments, guestServices: before.guestServices, bookingPaymentMode: before.bookingPaymentMode, bookingAdvancePaise: before.bookingAdvancePaise, reviewUrl: before.reviewUrl, openingHours: before.openingHours, roomServices: before.roomServices, wifiSsid: before.wifiSsid, hasWifiPassword: !!before.wifiPassword, announcementActive: before.announcementActive, announcementTitle: before.announcementTitle, announcementBody: before.announcementBody },
       after: { ...next, deliveryPolicy: deliveryPolicy ?? before.deliveryPolicy, guestServices: nextGuestServices, bookingPaymentMode, bookingAdvancePaise, wifiPassword: "[redacted]", hasWifiPassword: !!wifiPassword },
     });
   });

@@ -20,6 +20,9 @@ export async function getRestaurantHome(outletCode: string) {
     name: s.outlets.name,
     city: s.outlets.city,
     code: s.outlets.code,
+    announcementActive: s.outlets.announcementActive,
+    announcementTitle: s.outlets.announcementTitle,
+    announcementBody: s.outlets.announcementBody,
     logoUrl: s.brands.logoUrl,
     accentColor: s.outlets.accentColor,
     guestServices: s.outlets.guestServices,
@@ -40,7 +43,7 @@ export async function getRestaurantHome(outletCode: string) {
   const deliveryPolicy = readDeliveryPolicy(row.deliveryPolicy);
   const deliveryPaymentReady = deliveryPolicy.paymentMode === "cod" || (deliveryPolicy.paymentMode === "gateway" && !!outletGatewayFromConfig(row.paymentGatewayConfig));
   return {
-    outlet: { code: row.code, name: row.name, city: row.city, logoUrl: row.logoUrl, accentColor: row.accentColor },
+    outlet: { code: row.code, name: row.name, city: row.city, logoUrl: row.logoUrl, accentColor: row.accentColor, announcement: row.announcementActive && row.announcementTitle && row.announcementBody ? { title: row.announcementTitle, body: row.announcementBody } : null },
     services: { delivery: features.delivery && deliveryPolicy.acceptingOrders && deliveryPaymentReady, dineIn: features.dineIn && selected.includes("dineIn"), reservations: features.reservations && selected.includes("reservations"), rooms: features.rooms && selected.includes("rooms") },
   };
 }
