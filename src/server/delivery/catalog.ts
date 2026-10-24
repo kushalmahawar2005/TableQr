@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import * as s from "@/db/schema";
 import { readDeliveryPolicy, deliveryQuote } from "@/domain/delivery";
@@ -32,8 +32,33 @@ export async function deliveryOutlet(code: string, ordering = true, now = new Da
 
 export async function deliveryMenu(code: string, now = new Date()) {
   const outlet = await deliveryOutlet(code, true, now);
-  const items = await loadItems(db, { tenantId: outlet.tenantId, outletId: outlet.id, brandId: outlet.brandId }, now);
-  return { outlet: { code: outlet.code, name: outlet.name, logoUrl: outlet.logoUrl, paymentQrUrl: outlet.policy.paymentMode === "manual_qr" ? outlet.bookingPaymentQrUrl : null, policy: outlet.policy }, items: items.filter(item => isWithinCategoryWindow(item.categoryWindow, outlet.timezone, now)).map(item => ({ id: item.item.id, name: item.item.nameEn, nameHi: item.item.nameHi, description: item.item.descriptionEn, pricing: item.pricing })) };
+  const [categories, loaded] = await Promise.all([
+    db.select({ id: s.menuCategories.id, nameEn: s.menuCategories.nameEn, nameHi: s.menuCategories.nameHi, imageUrl: s.menuCategories.imageUrl })
+      .from(s.menuCategories)
+      .where(and(eq(s.menuCategories.tenantId, outlet.tenantId), eq(s.menuCategories.brandId, outlet.brandId), eq(s.menuCategories.isActive, true)))
+      .orderBy(asc(s.menuCategories.sortOrder)),
+    loadItems(db, { tenantId: outlet.tenantId, outletId: outlet.id, brandId: outlet.brandId }, now),
+  ]);
+  const visible = loaded.filter(item => isWithinCategoryWindow(item.categoryWindow, outlet.timezone, now));
+  const items = visible.map(({ item, pricing, categoryWindow }) => ({
+    id: item.id,
+    categoryId: item.categoryId,
+    name: item.nameEn,
+    nameHi: item.nameHi,
+    description: item.descriptionEn,
+    descriptionHi: item.descriptionHi,
+    imageUrl: item.imageUrl,
+    isVeg: item.isVeg,
+    isJain: item.isJain,
+    available: pricing.isAvailable,
+    pricing,
+    categoryWindow,
+  }));
+  const menuCategories = categories.map(category => ({
+    ...category,
+    items: items.filter(item => item.categoryId === category.id),
+  })).filter(category => category.items.length > 0);
+  return { outlet: { code: outlet.code, name: outlet.name, logoUrl: outlet.logoUrl, paymentQrUrl: outlet.policy.paymentMode === "manual_qr" ? outlet.bookingPaymentQrUrl : null, policy: outlet.policy }, categories: menuCategories, items };
 }
 
 export function cleanDeliveryCart(raw: s.DeliveryCartLine[]): s.DeliveryCartLine[] {

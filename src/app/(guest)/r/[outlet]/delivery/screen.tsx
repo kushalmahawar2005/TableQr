@@ -8,6 +8,8 @@ import type { deliveryStatus } from "@/server/delivery/checkout";
 import { priceLine } from "@/domain/pricing";
 import { openCheckout } from "@/lib/payments/checkout";
 import { OutletLogo } from "../t/[table]/_components/outlet-logo";
+import { CategoryBar } from "../t/[table]/menu/_components/category-bar";
+import { Thumb, VegMark } from "../t/[table]/menu/_components/menu-row";
 import { claimManualQrDeliveryAction, deliveryStatusAction, placeDeliveryAction, quoteDeliveryAction, resendDeliveryAction, startDeliveryAction, startDeliveryPaymentAction, verifyDeliveryAction } from "./actions";
 
 type Menu = Awaited<ReturnType<typeof deliveryMenu>>;
@@ -55,6 +57,22 @@ export function DeliveryScreen({ outletCode, data, initialStatus, hindi: initial
     setSelected(null);
   }
   const totalQty = cart.reduce((sum, line) => sum + line.qty, 0);
+  const visibleItems = data?.items.filter(item => `${item.name} ${item.nameHi ?? ""} ${item.description ?? ""} ${item.descriptionHi ?? ""}`.toLowerCase().includes(search.toLowerCase())) ?? [];
+  const visibleIds = new Set(visibleItems.map(item => item.id));
+  const visibleCategories = data?.categories.map(category => ({
+    id: category.id,
+    label: hindi ? category.nameHi || category.nameEn : category.nameEn,
+    photo: category.imageUrl ?? category.items.find(item => item.imageUrl)?.imageUrl ?? null,
+    items: category.items.filter(item => visibleIds.has(item.id)),
+  })).filter(category => category.items.length > 0) ?? [];
+  function itemQty(itemId: string) { return cart.filter(line => line.itemId === itemId).reduce((sum, line) => sum + line.qty, 0); }
+  function removeOne(itemId: string) {
+    setCart(current => {
+      const index = current.findIndex(line => line.itemId === itemId);
+      if (index < 0) return current;
+      return current.map((line, i) => i === index ? { ...line, qty: line.qty - 1 } : line).filter(line => line.qty > 0);
+    });
+  }
   const statusMessage = !status ? "" : status.status === "draft" && status.paymentStatus === "pending" && status.paymentMode === "manual_qr" ? t("Payment reference submitted · waiting for restaurant verification", "पेमेंट रेफरेंस भेज दिया · रेस्टोरेंट की पुष्टि का इंतज़ार") : status.status === "draft" && status.paymentStatus === "pending" ? t("Checking your payment securely…", "आपका पेमेंट सुरक्षित रूप से जाँचा जा रहा है…") : status.status === "draft" && status.paymentStatus.startsWith("refund") ? t("Payment received · refund in progress", "पेमेंट मिला · रिफंड चल रहा है") : status.status === "draft" && status.paymentStatus === "failed" ? t("Payment was not completed. No order was placed.", "पेमेंट पूरा नहीं हुआ। ऑर्डर नहीं हुआ।") : status.status === "placed" ? t(status.kitchenStatus === "ready" || status.kitchenStatus === "served" ? "Packed · awaiting dispatch" : "Restaurant is preparing your order", status.kitchenStatus === "ready" || status.kitchenStatus === "served" ? "पैक हो गया · भेजने की तैयारी" : "रेस्टोरेंट आपका ऑर्डर तैयार कर रहा है") : status.status === "dispatched" ? t("Your order is on the way", "आपका ऑर्डर रास्ते में है") : status.status === "delivered" ? t("Delivered", "डिलीवर हो गया") : status.status === "cancelled" ? t("Cancelled", "रद्द किया गया") : t("Complete payment to continue", "जारी रखने के लिए पेमेंट पूरा करें");
   return <main lang={hindi ? "hi" : "en"} className="mx-auto w-full max-w-2xl px-4 py-5 pb-[calc(7rem+env(safe-area-inset-bottom))] text-ink sm:px-6 sm:py-8">
     <header className="flex items-center justify-between gap-3"><Link href={`/r/${encodeURIComponent(outletCode)}`} className="inline-flex min-h-11 items-center gap-2 rounded-full border border-line bg-surface px-4 text-sm font-semibold text-ink shadow-sm">← {t("Restaurant", "रेस्टोरेंट")}</Link><button type="button" onClick={() => setHindi(value => !value)} className="min-h-11 rounded-full border border-line bg-surface px-4 text-sm font-semibold">{hindi ? "English" : "हिन्दी"}</button></header>
@@ -70,7 +88,50 @@ export function DeliveryScreen({ outletCode, data, initialStatus, hindi: initial
       {status.paymentFailureReason && <p role="status" className="rounded-xl bg-brand-soft p-3 text-sm">{status.paymentFailureReason}</p>}{status.status === "draft" && status.paymentStatus === "pending" && status.paymentMode === "gateway" && <button type="button" disabled={pending} className={button} onClick={() => run(payDelivery)}>{t("Continue secure payment", "सुरक्षित पेमेंट जारी रखें")}</button>}
       <button type="button" disabled={pending} className={control} onClick={() => run(loadStatus)}>{t("Refresh status", "स्थिति देखें")}</button><Link href={`/r/${encodeURIComponent(outletCode)}/delivery?new=1&lang=${hindi ? "hi" : "en"}`} className="block py-2 text-center text-sm text-brand-strong">{t("Start another order", "नया ऑर्डर करें")}</Link>
     </section> : <>
-    {step === "menu" && data && <><section className="mt-6 rounded-3xl border border-line bg-brand-soft p-5 sm:p-6"><p className="text-xs font-bold uppercase tracking-[.14em] text-brand-strong">{t("Order from", "यहाँ से ऑर्डर करें")}</p><h1 className="mt-2 font-display text-3xl font-bold">{t("Delivery menu", "डिलीवरी मेन्यू")}</h1><p className="mt-2 max-w-lg text-sm leading-relaxed text-muted">{t(`Freshly prepared · about ${data.outlet.policy.estimatedMinutes} minutes. ${data.outlet.policy.paymentMode === "gateway" ? "Pay securely before preparation." : data.outlet.policy.paymentMode === "manual_qr" ? "Pay using the restaurant QR." : "Pay when your order arrives."}`, `ताज़ा तैयार · लगभग ${data.outlet.policy.estimatedMinutes} मिनट। ${data.outlet.policy.paymentMode === "gateway" ? "तैयारी से पहले सुरक्षित पेमेंट करें।" : data.outlet.policy.paymentMode === "manual_qr" ? "रेस्टोरेंट QR से पेमेंट करें।" : "ऑर्डर मिलने पर भुगतान करें।"}`)}</p></section><label className="mt-5 block"><span className="sr-only">{t("Search menu", "मेन्यू में खोजें")}</span><input aria-label="Search menu" value={search} onChange={event => setSearch(event.target.value)} placeholder={t("Search dishes…", "डिश खोजें…")} className={`${control} rounded-2xl bg-surface shadow-sm`} /></label><div className="mt-4 space-y-3">{data.items.filter(item => `${item.name} ${item.nameHi ?? ""}`.toLowerCase().includes(search.toLowerCase())).map(item => <article key={item.id} className="flex items-center justify-between gap-4 rounded-2xl border border-line bg-surface p-4 shadow-sm transition hover:border-brand/50"><div className="min-w-0"><h2 className="font-semibold">{hindi ? item.nameHi || item.name : item.name}</h2><p className="mt-1 text-sm font-semibold text-brand-strong">{money(item.pricing.pricePaise)}</p>{item.pricing.groups.length > 0 && <p className="mt-1 text-xs text-muted">{t("Customise your dish", "अपनी पसंद के विकल्प चुनें")}</p>}</div><button type="button" onClick={() => { if (item.pricing.groups.length) { setSelected(item); setChoices([]); } else add(item, []); }} className="min-h-11 shrink-0 rounded-xl bg-brand px-5 font-semibold text-brand-on shadow-sm">{t("Add +", "+ जोड़ें")}</button></article>)}</div>{data.items.length === 0 && <p className="rounded-2xl border border-dashed border-line p-6 text-center text-sm text-muted">{t("No delivery dishes are available right now.", "अभी डिलीवरी के लिए कोई डिश उपलब्ध नहीं है।")}</p>}{cart.length > 0 && <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/95 p-3 pb-[calc(.75rem+env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgb(0_0_0/0.08)] backdrop-blur"><div className="mx-auto max-w-2xl"><button type="button" onClick={() => setStep("address")} className={button}>{t(`View cart · ${totalQty} ${totalQty === 1 ? "item" : "items"}`, `कार्ट देखें · ${totalQty} आइटम`)}</button></div></div>}</>}
+    {step === "menu" && data && <>
+      <section className="mt-6 overflow-hidden rounded-3xl border border-line bg-surface shadow-sm">
+        <div className="relative bg-brand-soft px-5 py-6 sm:px-7">
+          <p className="text-xs font-bold uppercase tracking-[.14em] text-brand-strong">{t("Home delivery", "घर पर डिलीवरी")}</p>
+          <h1 className="mt-2 font-display text-3xl font-bold">{t("Order your favourites", "अपनी पसंद का खाना ऑर्डर करें")}</h1>
+          <p className="mt-2 max-w-lg text-sm leading-relaxed text-muted">{t(`Freshly prepared · about ${data.outlet.policy.estimatedMinutes} minutes. ${data.outlet.policy.paymentMode === "gateway" ? "Pay securely before preparation." : data.outlet.policy.paymentMode === "manual_qr" ? "Pay using the restaurant QR." : "Pay when your order arrives."}`, `ताज़ा तैयार · लगभग ${data.outlet.policy.estimatedMinutes} मिनट। ${data.outlet.policy.paymentMode === "gateway" ? "तैयारी से पहले सुरक्षित पेमेंट करें।" : data.outlet.policy.paymentMode === "manual_qr" ? "रेस्टोरेंट QR से पेमेंट करें।" : "ऑर्डर मिलने पर भुगतान करें।"}`)}</p>
+        </div>
+        <div className="p-4 sm:px-6">
+          <label className="block">
+            <span className="sr-only">{t("Search menu", "मेन्यू में खोजें")}</span>
+            <input aria-label="Search menu" value={search} onChange={event => setSearch(event.target.value)} placeholder={t("Search dishes…", "डिश खोजें…")} className={`${control} rounded-2xl bg-paper`} />
+          </label>
+        </div>
+      </section>
+      {visibleCategories.length > 0 && <CategoryBar categories={visibleCategories.map(({ id, label, photo }) => ({ id, label, photo }))} label={t("Menu categories", "मेन्यू कैटेगरी")} />}
+      <div className="mt-4 space-y-7">
+        {visibleCategories.map(category => <section key={category.id} id={`cat-${category.id}`} className="scroll-mt-36">
+          <div className="mb-3 flex items-end justify-between gap-3"><div><h2 className="text-xl font-bold">{category.label}</h2><p className="mt-0.5 text-xs text-muted">{t(`${category.items.length} dishes`, `${category.items.length} डिश`)}</p></div></div>
+          <ul className="m-0 list-none p-0">
+            {category.items.map(item => {
+              const qty = itemQty(item.id);
+              const available = item.available;
+              const itemName = hindi ? item.nameHi || item.name : item.name;
+              return <li key={item.id} className={`mb-3 flex gap-3 rounded-2xl border border-line/80 bg-surface p-3 shadow-[0_1px_3px_rgb(0_0_0/0.05)] ${!available ? "opacity-65" : ""}`}>
+                <Thumb photo={item.imageUrl} soldOut={!available} size="size-[88px]" />
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <div className="flex items-center gap-1.5"><VegMark veg={item.isVeg} label={item.isVeg ? t("Vegetarian", "शाकाहारी") : t("Non-vegetarian", "मांसाहारी")} />{item.isJain && <span className="rounded border border-line px-1 text-[10px] font-semibold text-muted">Jain</span>}</div>
+                  <h3 className="mt-1.5 text-sm font-bold text-ink">{itemName}</h3>
+                  <p className={`mt-0.5 text-sm font-semibold tabular ${available ? "text-ink" : "text-muted"}`}>{money(item.pricing.pricePaise)}</p>
+                  {(hindi ? item.descriptionHi || item.description : item.description) && <p className="mt-1 line-clamp-2 text-xs text-muted">{hindi ? item.descriptionHi || item.description : item.description}</p>}
+                  {item.pricing.groups.length > 0 && <p className="mt-1 text-xs text-muted">{t("Customise this dish", "अपनी पसंद के विकल्प चुनें")}</p>}
+                </div>
+                <div className="flex shrink-0 flex-col items-end justify-end">
+                  {!qty ? <button type="button" disabled={!available} onClick={() => { if (item.pricing.groups.length) { setSelected(item); setChoices([]); } else add(item, []); }} className="min-h-10 min-w-[72px] rounded-xl border border-brand bg-surface px-3 text-sm font-bold text-brand-strong shadow-sm disabled:cursor-not-allowed disabled:opacity-50">{available ? t("Add +", "+ जोड़ें") : t("Sold out", "खत्म")}</button> : <div className="flex min-h-10 items-center gap-2 rounded-xl border border-brand/30 bg-brand-soft px-2"><button type="button" aria-label={t(`Remove ${itemName}`, `${itemName} हटाएँ`)} onClick={() => removeOne(item.id)} className="grid size-8 place-items-center rounded-lg text-lg font-bold text-brand-strong">−</button><span className="min-w-4 text-center text-sm font-bold tabular">{qty}</span><button type="button" disabled={!available} aria-label={t(`Add ${itemName}`, `${itemName} जोड़ें`)} onClick={() => item.pricing.groups.length ? (setSelected(item), setChoices([])) : add(item, [])} className="grid size-8 place-items-center rounded-lg text-lg font-bold text-brand-strong disabled:opacity-50">+</button></div>}
+                </div>
+              </li>;
+            })}
+          </ul>
+        </section>)}
+      </div>
+      {data.items.length === 0 && <p className="rounded-2xl border border-dashed border-line p-6 text-center text-sm text-muted">{t("No delivery dishes are available right now.", "अभी डिलीवरी के लिए कोई डिश उपलब्ध नहीं है।")}</p>}
+      {data.items.length > 0 && visibleCategories.length === 0 && <p className="mt-5 rounded-2xl border border-dashed border-line p-6 text-center text-sm text-muted">{t("No dishes match your search.", "आपकी खोज से कोई डिश नहीं मिली।")}</p>}
+      {cart.length > 0 && <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-paper/95 p-3 pb-[calc(.75rem+env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgb(0_0_0/0.08)] backdrop-blur"><div className="mx-auto max-w-2xl"><button type="button" onClick={() => setStep("address")} className="flex min-h-14 w-full items-center justify-between gap-3 rounded-2xl bg-brand px-4 py-3 text-left font-bold text-brand-on shadow-lg"><span>{t(`View cart · ${totalQty} ${totalQty === 1 ? "item" : "items"}`, `कार्ट देखें · ${totalQty} आइटम`)}</span><span>{t("Continue", "आगे बढ़ें")} →</span></button></div></div>}
+    </>}
     {selected && <section role="dialog" aria-modal="true" aria-label={selected.name} className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 sm:items-center"><div className="max-h-[85dvh] w-full max-w-md space-y-4 overflow-y-auto rounded-2xl bg-surface p-5"><div className="flex justify-between gap-3"><h2 className="font-bold">{selected.name}</h2><button type="button" onClick={() => setSelected(null)} className="min-h-11 px-3" aria-label="Close">✕</button></div>{selected.pricing.groups.map(group => <fieldset key={group.id} className="space-y-2"><legend className="font-semibold">{group.nameEn} · {group.minSelect > 0 ? t("Required", "ज़रूरी") : t("Optional", "वैकल्पिक")}</legend>{group.modifiers.map(option => <label key={option.id} className="flex min-h-11 items-center gap-3 text-sm"><input type="checkbox" checked={choices.includes(option.id)} onChange={event => setChoices(current => event.target.checked ? group.maxSelect === 1 ? [...current.filter(id => !group.modifiers.some(modifier => modifier.id === id)), option.id] : [...current, option.id] : current.filter(id => id !== option.id))} />{option.nameEn} {option.priceDeltaPaise ? `+ ${money(option.priceDeltaPaise)}` : ""}</label>)}</fieldset>)}<button type="button" className={button} onClick={() => add(selected, choices)}>{t("Add to cart", "कार्ट में जोड़ें")}</button></div></section>}
     {step !== "menu" && <div className="mt-5 space-y-4"><button type="button" disabled={pending} onClick={() => { setStep("menu"); setQuote(null); }} className="min-h-11 text-sm text-brand-strong">← {t("Edit cart", "कार्ट बदलें")}</button><h1 className="text-2xl font-bold">{t(step === "otp" ? "Verify your phone" : step === "review" ? "Review and place order" : "Delivery details", step === "otp" ? "फ़ोन सत्यापित करें" : step === "review" ? "ऑर्डर की पुष्टि करें" : "डिलीवरी की जानकारी")}</h1>
       {step === "address" && <form className="space-y-4" onSubmit={event => { event.preventDefault(); run(async () => { const response = await startDeliveryAction(outletCode, cart, address, phone); if (!response.ok) { setError(response.message); return; } setOtp(response.data.otp); setResendAt(Date.now() + response.data.otp.resendIn * 1000); setQuote(response.data.quote); setStep("otp"); }); }}>
