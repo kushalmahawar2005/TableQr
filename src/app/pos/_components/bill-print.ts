@@ -12,7 +12,11 @@ export function billHtml(d: PosBillDetail, outlet: string, kind: "bill" | "recei
   const paidTotal = paid.reduce((n, p) => n + p.amountPaise + p.tipPaise, 0);
   const b = d.bill;
   const summaryRows = b ? 2 + Number(!!b.deliveryFeePaise) + Number(!!b.discountPaise) + Number(!!b.serviceChargePaise) + Number(!!b.roundOffPaise) : 0;
-  const paperHeight = Math.max(92, 62 + lines.length * 8 + summaryRows * 5 + (kind === "receipt" ? paid.length * 6 + 8 : 0));
+  // Long dish names wrap on the roll; reserve extra height so Chrome doesn't spill the last lines
+  // onto a second page. One row is about 36 mono characters at this print width.
+  const wrappedItemRows = lines.reduce((count, line) => count + Math.max(1, Math.ceil(`${line.qty}× ${line.name}${line.note && /parcel|pack/i.test(line.note) ? " (PARCEL)" : ""}`.length / 36)), 0);
+  const extraItemRows = Math.max(0, wrappedItemRows - lines.length);
+  const paperHeight = Math.max(92, 62 + lines.length * 8 + extraItemRows * 4.5 + summaryRows * 5 + (kind === "receipt" ? paid.length * 6 + 8 : 0));
   const row = (a: string, v: string, bold = false) => `<div class="r${bold ? " b" : ""}"><span>${a}</span><span>${v}</span></div>`;
   return `<!doctype html><html><head><meta charset="utf-8"><title>${kind === "bill" ? "Bill" : "Receipt"} · Table ${esc(d.tableCode)}</title><style>
 @page{size:80mm ${paperHeight}mm;margin:0}
@@ -46,7 +50,7 @@ export function printHtml(html: string) {
   frame.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0";
   document.body.appendChild(frame);
   const doc = frame.contentDocument;
-  if (!doc) return;
+  if (!doc) { frame.remove(); return; }
   doc.open();
   doc.write(html);
   doc.close();

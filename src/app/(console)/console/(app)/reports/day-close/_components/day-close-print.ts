@@ -9,7 +9,10 @@ const METHOD: Record<string, string> = { cash: "Cash", card: "Card", upi: "UPI",
 
 export function dayCloseHtml(r: DayClose, outlet: string) {
   const optionalRows = Number(!!r.refunds.paise) + Number(!!r.bills.discountPaise) + Number(!!r.bills.serviceChargePaise) + Number(!!r.bills.roundOffPaise) + Number(!!r.bills.tipsPaise) + Number(!!r.removed.qty);
-  const paperHeight = Math.max(130, 102 + (r.methods.length + optionalRows + r.topItems.length + r.openTables.length) * 5);
+  const extraWrappedRows = Math.max(0, Math.ceil(outlet.length / 25) - 1)
+    + r.topItems.reduce((n, item, index) => n + Math.max(0, Math.ceil(`${index + 1}. ${item.name} x${item.qty} ${rs(item.paise)}`.length / 26) - 1), 0)
+    + (r.openTables.length ? Math.max(0, Math.ceil(`Still open: ${r.openTables.map((table) => table.table).join(", ")}`.length / 26) - 1) : 0);
+  const paperHeight = Math.max(130, 102 + (r.methods.length + optionalRows + r.topItems.length + r.openTables.length) * 5 + extraWrappedRows * 5);
   const row = (a: string, v: string, cls = "") => `<div class="r ${cls}"><span>${esc(a)}</span><span>${esc(v)}</span></div>`;
   const date = new Date(`${r.date}T12:00:00Z`).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
   const printed = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" }).format(Date.now());

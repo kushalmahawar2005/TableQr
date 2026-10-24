@@ -32,18 +32,22 @@ export function printPoster(html: string) {
   frame.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0";
   document.body.appendChild(frame);
   const doc = frame.contentDocument;
-  if (!doc) return;
+  if (!doc) { frame.remove(); return; }
   doc.open();
   doc.write(html);
   doc.close();
-  const done = () => setTimeout(() => frame.remove(), 1500);
-  frame.onload = () => {
+  let printed = false;
+  const printOnce = () => {
+    if (printed || !frame.isConnected) return;
+    printed = true;
+    frame.dataset.printed = "1";
     frame.contentWindow?.focus();
     frame.contentWindow?.print();
-    done();
+    setTimeout(() => frame.remove(), 1500);
   };
+  frame.onload = printOnce;
   // Some browsers do not fire onload for document.write content
-  setTimeout(() => { if (frame.isConnected && !frame.dataset.printed) { frame.dataset.printed = "1"; frame.contentWindow?.focus(); frame.contentWindow?.print(); done(); } }, 400);
+  setTimeout(printOnce, 400);
 }
 
 export function downloadSvg(svg: string, name: string) {

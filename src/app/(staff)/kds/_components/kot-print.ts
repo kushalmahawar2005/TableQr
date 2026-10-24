@@ -24,8 +24,13 @@ ${card.placedBy ? `<div class="m">By ${esc(card.placedBy.name)}</div>` : ""}
 }
 
 export function kotHtml(cards: KdsCard[]) {
-  const longestTicket = Math.max(1, ...cards.map((card) => card.lines.length + (card.orderNote ? 2 : 0)));
-  const paperHeight = Math.max(64, 34 + longestTicket * 9);
+  const longestTicketRows = Math.max(1, ...cards.map((card) => card.lines.reduce((rows, line) => {
+    const extras = [...line.modifiers.map((m) => m.en), line.personalForPickup ? "PARCEL · PACK FOR TAKEAWAY" : "", line.note ?? ""].filter(Boolean).join(", ");
+    const dishRows = Math.max(1, Math.ceil(`${line.qty} × ${line.nameEn}`.length / 28));
+    const extraRows = extras ? Math.max(1, Math.ceil(extras.length / 40)) : 0;
+    return rows + dishRows + extraRows;
+  }, 0) + (card.orderNote ? Math.max(1, Math.ceil(card.orderNote.length / 40)) + 2 : 0)));
+  const paperHeight = Math.max(64, 34 + longestTicketRows * 9);
   return `<!doctype html><html><head><meta charset="utf-8"><title>KOT</title><style>
 @page{size:80mm ${paperHeight}mm;margin:0}
 *{box-sizing:border-box}html{background:#fff;color-scheme:light}

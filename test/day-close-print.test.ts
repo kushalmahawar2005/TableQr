@@ -13,7 +13,7 @@ describe("day close print", () => {
       topItems: [{ name: "Tomato <Soup>", qty: 4, paise: 40000 }], openTables: [{ table: "T1", totalPaise: 0 }],
     } as DayClose;
     const html = dayCloseHtml(r, "BMW");
-    expect(html).toContain("@page{size:80mm 130mm;margin:0}");
+    expect(Number(html.match(/@page\{size:80mm (\d+)mm;margin:0\}/)?.[1])).toBeGreaterThanOrEqual(130);
     expect(html).toContain("DAY CLOSE");
     expect(html).toContain("UPI (1)");
     expect(html).toContain("₹315.00");
@@ -21,5 +21,18 @@ describe("day close print", () => {
     expect(html).toContain("Still open: T1");
     expect(html).not.toMatch(/Cash counted|Signature/);
     expect(html).not.toMatch(/sidebar|<nav|Dashboard/);
+  });
+
+  it("adds roll length when long outlet names, dishes or open-table lists wrap", () => {
+    const r = {
+      date: "2026-10-12", isToday: false,
+      bills: { count: 0, subtotalPaise: 0, discountPaise: 0, serviceChargePaise: 0, taxPaise: 0, tipsPaise: 0, roundOffPaise: 0, totalPaise: 0 },
+      methods: [], collectedPaise: 0, refunds: { count: 0, paise: 0 }, netPaise: 0, orders: 0, itemsSold: 0,
+      removed: { qty: 0, paise: 0 }, visits: { count: 0, covers: 0 }, averageBillPaise: 0,
+      topItems: [{ name: "A very long restaurant special dish name that wraps over several lines", qty: 1, paise: 10000 }],
+      openTables: [{ table: "TABLE-123456789", totalPaise: 0 }, { table: "TABLE-987654321", totalPaise: 0 }],
+    } as DayClose;
+    const html = dayCloseHtml(r, "A restaurant name long enough to wrap across a narrow receipt roll");
+    expect(Number(html.match(/@page\{size:80mm (\d+)mm;margin:0\}/)?.[1])).toBeGreaterThan(130);
   });
 });

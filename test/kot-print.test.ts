@@ -23,4 +23,19 @@ describe("KOT slip", () => {
   it("marks a takeaway as PARCEL", () => {
     expect(kotHtml([card(["TA-3"])])).toContain("<h1>PARCEL TA-3</h1>");
   });
+
+  it("extends the thermal page for long dish and packing notes", () => {
+    const base = card(["T1"]);
+    const long: KdsCard = {
+      ...base,
+      lines: [{
+        ...base.lines[0],
+        nameEn: "A very long dish name that needs multiple lines on a narrow kitchen printer slip",
+        note: "Please pack every part separately and add extra napkins for this table",
+        modifiers: [{ en: "Extra butter and a separate side of sauce", hi: null }],
+      }],
+    };
+    const html = kotHtml([long]);
+    expect(Number(html.match(/@page\{size:80mm (\d+)mm;margin:0\}/)?.[1])).toBeGreaterThan(64);
+  });
 });
