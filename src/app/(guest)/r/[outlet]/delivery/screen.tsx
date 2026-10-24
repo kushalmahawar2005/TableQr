@@ -57,13 +57,17 @@ export function DeliveryScreen({ outletCode, data, initialStatus, hindi: initial
     setSelected(null);
   }
   const totalQty = cart.reduce((sum, line) => sum + line.qty, 0);
-  const visibleItems = data?.items.filter(item => `${item.name} ${item.nameHi ?? ""} ${item.description ?? ""} ${item.descriptionHi ?? ""}`.toLowerCase().includes(search.toLowerCase())) ?? [];
+  // Older/stale menu payloads can omit one of these collections. Keep the guest
+  // page usable instead of crashing during render while the menu is refreshed.
+  const menuItems = Array.isArray(data?.items) ? data.items : [];
+  const menuCategories = Array.isArray(data?.categories) ? data.categories : [];
+  const visibleItems = menuItems.filter(item => `${item.name} ${item.nameHi ?? ""} ${item.description ?? ""} ${item.descriptionHi ?? ""}`.toLowerCase().includes(search.toLowerCase()));
   const visibleIds = new Set(visibleItems.map(item => item.id));
-  const visibleCategories = data?.categories.map(category => ({
+  const visibleCategories = menuCategories.map(category => ({
     id: category.id,
     label: hindi ? category.nameHi || category.nameEn : category.nameEn,
-    photo: category.imageUrl ?? category.items.find(item => item.imageUrl)?.imageUrl ?? null,
-    items: category.items.filter(item => visibleIds.has(item.id)),
+    photo: category.imageUrl ?? category.items?.find(item => item.imageUrl)?.imageUrl ?? null,
+    items: (Array.isArray(category.items) ? category.items : []).filter(item => visibleIds.has(item.id)),
   })).filter(category => category.items.length > 0) ?? [];
   function itemQty(itemId: string) { return cart.filter(line => line.itemId === itemId).reduce((sum, line) => sum + line.qty, 0); }
   function removeOne(itemId: string) {
@@ -128,8 +132,7 @@ export function DeliveryScreen({ outletCode, data, initialStatus, hindi: initial
           </ul>
         </section>)}
       </div>
-      {data.items.length === 0 && <p className="rounded-2xl border border-dashed border-line p-6 text-center text-sm text-muted">{t("No delivery dishes are available right now.", "अभी डिलीवरी के लिए कोई डिश उपलब्ध नहीं है।")}</p>}
-      {data.items.length > 0 && visibleCategories.length === 0 && <p className="mt-5 rounded-2xl border border-dashed border-line p-6 text-center text-sm text-muted">{t("No dishes match your search.", "आपकी खोज से कोई डिश नहीं मिली।")}</p>}
+      {visibleCategories.length === 0 && <p className="mt-5 rounded-2xl border border-dashed border-line p-6 text-center text-sm text-muted">{menuItems.length > 0 ? t("No dishes match your search.", "आपकी खोज से कोई डिश नहीं मिली।") : t("No delivery dishes are available right now.", "अभी डिलीवरी के लिए कोई डिश उपलब्ध नहीं है।")}</p>}
       {cart.length > 0 && <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-paper/95 p-3 pb-[calc(.75rem+env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgb(0_0_0/0.08)] backdrop-blur"><div className="mx-auto max-w-2xl"><button type="button" onClick={() => setStep("address")} className="flex min-h-14 w-full items-center justify-between gap-3 rounded-2xl bg-brand px-4 py-3 text-left font-bold text-brand-on shadow-lg"><span>{t(`View cart · ${totalQty} ${totalQty === 1 ? "item" : "items"}`, `कार्ट देखें · ${totalQty} आइटम`)}</span><span>{t("Continue", "आगे बढ़ें")} →</span></button></div></div>}
     </>}
     {selected && <section role="dialog" aria-modal="true" aria-label={selected.name} className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 sm:items-center"><div className="max-h-[85dvh] w-full max-w-md space-y-4 overflow-y-auto rounded-2xl bg-surface p-5"><div className="flex justify-between gap-3"><h2 className="font-bold">{selected.name}</h2><button type="button" onClick={() => setSelected(null)} className="min-h-11 px-3" aria-label="Close">✕</button></div>{selected.pricing.groups.map(group => <fieldset key={group.id} className="space-y-2"><legend className="font-semibold">{group.nameEn} · {group.minSelect > 0 ? t("Required", "ज़रूरी") : t("Optional", "वैकल्पिक")}</legend>{group.modifiers.map(option => <label key={option.id} className="flex min-h-11 items-center gap-3 text-sm"><input type="checkbox" checked={choices.includes(option.id)} onChange={event => setChoices(current => event.target.checked ? group.maxSelect === 1 ? [...current.filter(id => !group.modifiers.some(modifier => modifier.id === id)), option.id] : [...current, option.id] : current.filter(id => id !== option.id))} />{option.nameEn} {option.priceDeltaPaise ? `+ ${money(option.priceDeltaPaise)}` : ""}</label>)}</fieldset>)}<button type="button" className={button} onClick={() => add(selected, choices)}>{t("Add to cart", "कार्ट में जोड़ें")}</button></div></section>}
