@@ -17,7 +17,22 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await env.conn.end();
+  // This suite deliberately rewinds the test schema to emulate a pre-release production DB.
+  // Drop that temporary schema after the assertions so following integration suites can migrate
+  // from a clean database instead of inheriting the simulated legacy migration journal.
+  if (env) {
+    const [databaseRows] = await env.conn.query("SELECT DATABASE() AS db");
+    const databaseName = String((databaseRows as Array<{ db?: string }>)[0]?.db ?? "");
+    if (databaseName !== "tableqr_test") throw new Error("Refusing to clean a non-test database");
+    await env.conn.query("SET FOREIGN_KEY_CHECKS = 0");
+    const [tableRows] = await env.conn.query("SHOW FULL TABLES WHERE Table_type = 'BASE TABLE'");
+    for (const row of tableRows as Array<Record<string, unknown>>) {
+      const name = String(Object.values(row)[0]).replace(/`/g, "``");
+      await env.conn.query(`DROP TABLE IF EXISTS \`${name}\``);
+    }
+    await env.conn.query("SET FOREIGN_KEY_CHECKS = 1");
+    await env.conn.end();
+  }
   await appDb.$client.end();
 });
 

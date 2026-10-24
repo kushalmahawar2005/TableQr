@@ -21,7 +21,10 @@ import type { StaffSession } from "@/server/staff/auth";
 
 let env: Awaited<ReturnType<typeof resetTestDb>>;
 const now = new Date(Date.now() + 24 * 3600_000);
-const date = serviceDate(now, "Asia/Kolkata");
+// Booking slots start on half-hour boundaries; round the deterministic test clock up so holds
+// stay valid regardless of when the suite is started.
+now.setUTCSeconds(0, 0);
+now.setUTCMinutes(Math.ceil(now.getUTCMinutes() / 30) * 30);
 let host: StaffSession;
 const fails = async (p: Promise<unknown>) => { const e = await p.then(() => null, (x) => x); expect(e).toBeInstanceOf(AppError); };
 
@@ -30,10 +33,11 @@ beforeAll(async () => {
   host = { tenantId: env.demo.tenantId, outletId: env.demo.outletId, userId: env.demo.staffIds.host, sessionId: uuidv7(), name: "Anil Kumar", roles: ["host"], expiresAt: Date.now() + 3600_000, outlet: { code: "SRJ01", name: "Spice Route", timezone: "Asia/Kolkata" } };
   await env.db.insert(s.bookingPolicies).values({ id: uuidv7(), tenantId: env.demo.tenantId, outletId: env.demo.outletId, pacingCoversPerSlot: 1, peakCreditPaise: 800, updatedAt: now });
 });
-afterAll(async () => { await env.conn.end(); await appDb.$client.end(); });
+afterAll(async () => { await env?.conn.end(); await appDb.$client.end(); });
 
 async function hold(label: string, offset: number, credit = false) {
   const at = now.getTime() + offset * 3600_000;
+  const date = serviceDate(new Date(at), "Asia/Kolkata");
   if (credit) await createReservation(host, { name: `Pacer ${label}`, phone: "9876500000", partySize: 2, startAt: at, tableIds: [env.demo.tableIds.T2], source: "staff" }, now);
   return createBookingHold("SRJ01", { date, startAt: at, partySize: 2, requestId: `lock-${label}`, holdToken: `token-${label}` }, now);
 }

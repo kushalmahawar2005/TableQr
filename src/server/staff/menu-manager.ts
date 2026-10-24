@@ -130,10 +130,10 @@ export async function archiveCategory(staff: StaffSession, categoryId: string, r
     .where(and(eq(s.menuCategories.tenantId, staff.tenantId), eq(s.menuCategories.brandId, brandId), eq(s.menuCategories.id, categoryId)));
   if (!category) throw new AppError("not_found", "Category not found.");
   const itemsInCategory = and(eq(s.menuItems.tenantId, staff.tenantId), eq(s.menuItems.brandId, brandId), eq(s.menuItems.categoryId, categoryId));
-  const [active] = await db.select({ n: sql<number>`count(*)` }).from(s.menuItems).where(and(itemsInCategory, eq(s.menuItems.isActive, true)));
+  const [active] = await db.select({ n: sql<number>`count(*)` }).from(s.menuItems).where(and(itemsInCategory, eq(s.menuItems.tenantId, staff.tenantId), eq(s.menuItems.isActive, true)));
   if (!restore && Number(active?.n ?? 0) > 0 && !withDishes) throw new AppError("conflict", `This category has ${active.n} dish(es) on the menu. Hide them too, or move them first.`, { reason: "has_dishes", count: Number(active.n) });
   if (!restore && withDishes && Number(active?.n ?? 0) > 0) {
-    await db.update(s.menuItems).set({ isActive: false }).where(and(itemsInCategory, eq(s.menuItems.isActive, true)));
+    await db.update(s.menuItems).set({ isActive: false }).where(and(itemsInCategory, eq(s.menuItems.tenantId, staff.tenantId), eq(s.menuItems.isActive, true)));
     await menuChanged(staff, "category", categoryId, "dishes_hidden");
   }
   await db.update(s.menuCategories).set({ isActive: restore }).where(and(eq(s.menuCategories.tenantId, staff.tenantId), eq(s.menuCategories.brandId, brandId), eq(s.menuCategories.id, categoryId)));
