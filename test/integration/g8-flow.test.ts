@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { createHmac } from "node:crypto";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { db as appDb } from "@/db";
 import * as s from "@/db/schema";
 import { POST as webhook } from "@/app/api/payments/[provider]/webhook/route";
@@ -24,6 +25,9 @@ import { removeParticipant } from "@/server/guest/host-controls";
 import { placeOrder } from "@/server/guest/order";
 import { startOrJoinTable } from "@/server/guest/session";
 import { mockGateway, type WebhookEvent } from "@/server/payments/gateway";
+import { encryptMerchantCredentials } from "@/server/payments/outlet-gateway";
+import { requestRefund } from "@/server/billing/refunds";
+import { resolveStaff, signInStaff } from "@/server/staff/auth";
 import { onPublish, type RealtimeEvent } from "@/server/realtime/publish";
 import type { StaffContext } from "@/server/staff/context";
 import { attachVerifiedTestGuest, resetTestDb } from "./setup-db";
@@ -66,6 +70,16 @@ const hook = (event: WebhookEvent, tamper = false) => {
   });
 };
 
+const cashfreeHook = (raw: string, secret: string) => {
+  const timestamp = "1792588800";
+  const signature = createHmac("sha256", secret).update(`${timestamp}${raw}`).digest("base64");
+  return webhook(new Request("https://restaurant.example/api/payments/cashfree/webhook", {
+    method: "POST",
+    body: raw,
+    headers: { "x-webhook-signature": signature, "x-webhook-timestamp": timestamp },
+  }), { params: Promise.resolve({ provider: "cashfree" }) });
+};
+
 beforeAll(() => {
   stop = onPublish((_s, sent) => events.push(...sent));
 });
@@ -100,6 +114,11 @@ afterAll(async () => {
   stop();
   if (env) await env.conn.end();
   await appDb.$client.end();
+});
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe("people on the bill", () => {
@@ -229,11 +248,13 @@ describe("void after payment", () => {
     // The refund goes to the gateway; it stays pending until a verified gateway event says done
     expect(await executeRefund(cashier, refund.id)).toBe("pending");
     const [sent] = await env.db.select().from(s.refunds).where(eq(s.refunds.id, refund.id));
+    const [paidRow] = await env.db.select().from(s.payments).where(eq(s.payments.id, paid.paymentId));
     expect((await view("B")).refundPendingPaise).toBe(27300);
-    const bad = await hook({ kind: "refund", gatewayRefundId: sent.gatewayRef!, gatewayPaymentId: "x", status: "success", amountPaise: 27300 }, true);
+    const refundEvent = { kind: "refund" as const, gatewayRefundId: sent.gatewayRef!, gatewayPaymentId: paidRow.gatewayPaymentId!, status: "success" as const, amountPaise: 27300 };
+    const bad = await hook(refundEvent, true);
     expect(bad.status).toBe(401);
     expect((await view("B")).refundPendingPaise).toBe(27300);
-    expect((await hook({ kind: "refund", gatewayRefundId: sent.gatewayRef!, gatewayPaymentId: "x", status: "success", amountPaise: 27300 })).status).toBe(200);
+    expect((await hook(refundEvent)).status).toBe(200);
     const [done] = await env.db.select().from(s.refunds).where(eq(s.refunds.id, refund.id));
     expect(done.status).toBe("success");
     expect(done.completedAt).not.toBeNull();
@@ -255,6 +276,96 @@ describe("gateway webhooks", () => {
     const [row] = await env.db.select().from(s.payments).where(eq(s.payments.id, start.paymentId));
     expect(row).toMatchObject({ status: "success", gatewayPaymentId: "pay_1" });
     expect(await env.db.select().from(s.refunds)).toHaveLength(0);
+  });
+
+  it("creates guest orders with the restaurant's account and accepts only its signed Cashfree webhook once", async () => {
+    const merchantId = "restaurant_cashfree_app_123";
+    const merchantSecret = "restaurant_cashfree_secret_456";
+    vi.stubEnv("NODE_ENV", "test");
+    vi.stubEnv("PAYMENT_CREDENTIALS_KEY", "d".repeat(64));
+    vi.stubEnv("CASHFREE_MODE", "sandbox");
+    vi.stubEnv("CASHFREE_CLIENT_ID", "tableqr_platform_app_123");
+    vi.stubEnv("CASHFREE_CLIENT_SECRET", "tableqr_platform_secret_456");
+
+    const encrypted = encryptMerchantCredentials({ mode: "sandbox", clientId: merchantId, clientSecret: merchantSecret });
+    await env.db.update(s.outlets).set({ paymentGatewayConfig: encrypted }).where(eq(s.outlets.id, g.A.outletId));
+    await requestBill(scope());
+
+    const apiCalls: { url: string; init: RequestInit }[] = [];
+    let orderNumber = 0;
+    vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
+      apiCalls.push({ url, init });
+      if (url.endsWith("/refunds")) return Response.json({ refund_id: "restaurant_refund_001", refund_status: "PENDING" });
+      orderNumber += 1;
+      return Response.json({ order_id: `restaurant_order_00${orderNumber}` });
+    });
+    const start = await startPayment(g.B, {
+      method: "upi",
+      requestId: rid(),
+      callbackUrl: "https://restaurant.example/payment-return?p={paymentId}",
+    });
+
+    expect(start.provider).toBe("cashfree");
+    expect(apiCalls).toHaveLength(1);
+    expect(apiCalls[0].init.headers).toMatchObject({ "x-client-id": merchantId, "x-client-secret": merchantSecret });
+    expect(apiCalls[0].init.headers).not.toMatchObject({ "x-client-id": "tableqr_platform_app_123", "x-client-secret": "tableqr_platform_secret_456" });
+    expect(JSON.parse(String(apiCalls[0].init.body)).order_meta.notify_url).toBe("https://restaurant.example/api/payments/cashfree/webhook");
+
+    const raw = JSON.stringify({
+      type: "PAYMENT_SUCCESS_WEBHOOK",
+      data: {
+        order: { order_id: start.gatewayRef },
+        payment: { cf_payment_id: 908172635, payment_status: "SUCCESS", payment_amount: start.totalPaise / 100 },
+      },
+    });
+    const wrongSecretResponse = await cashfreeHook(raw, "tableqr_platform_secret_456");
+    expect(wrongSecretResponse.status).toBe(401);
+    expect((await view("B")).people.find((person) => person.isMe)?.status).toBe("paying");
+
+    expect((await cashfreeHook(raw, merchantSecret)).status).toBe(200);
+    expect((await cashfreeHook(raw, merchantSecret)).status).toBe(200);
+    const person = (await view("B")).people.find((entry) => entry.isMe)!;
+    expect(person).toMatchObject({ status: "paid", paidPaise: start.totalPaise });
+    const [payment] = await env.db.select().from(s.payments).where(eq(s.payments.id, start.paymentId));
+    expect(payment).toMatchObject({ channel: "cashfree", gatewayRef: "restaurant_order_001", gatewayPaymentId: "908172635", status: "success" });
+    expect(await env.db.select().from(s.payments).where(eq(s.payments.gatewayRef, "restaurant_order_001"))).toHaveLength(1);
+
+    const failedStart = await startPayment(g.C, { method: "upi", requestId: rid(), callbackUrl: "https://restaurant.example/payment-return?p={paymentId}" });
+    const failedRaw = JSON.stringify({
+      type: "PAYMENT_FAILED_WEBHOOK",
+      data: { order: { order_id: failedStart.gatewayRef }, payment: { cf_payment_id: 908172636, payment_status: "FAILED", payment_amount: failedStart.totalPaise / 100 } },
+    });
+    expect((await cashfreeHook(failedRaw, merchantSecret)).status).toBe(200);
+    const [failedPayment] = await env.db.select().from(s.payments).where(eq(s.payments.id, failedStart.paymentId));
+    expect(failedPayment).toMatchObject({ status: "failed", gatewayPaymentId: "908172636" });
+    expect((await view("C")).people.find((person) => person.isMe)?.status).toBe("unpaid");
+
+    const manager = (await resolveStaff((await signInStaff({ outletCode: "SRJ01", phone: "9000000002", pin: "2222" })).token))!;
+    const refund = await requestRefund(manager, {
+      paymentId: start.paymentId,
+      amountPaise: 1000,
+      reason: "Cashfree refund test",
+      requestId: rid(),
+    });
+    expect(refund.status).toBe("pending");
+    expect(apiCalls.at(-1)?.url).toBe("https://sandbox.cashfree.com/pg/orders/restaurant_order_001/refunds");
+    const refundRaw = JSON.stringify({
+      type: "REFUND_STATUS_WEBHOOK",
+      data: { refund: { refund_id: "restaurant_refund_001", cf_payment_id: 908172635, refund_status: "SUCCESS", refund_amount: 10 } },
+    });
+    const wrongAmount = JSON.stringify({
+      type: "REFUND_STATUS_WEBHOOK",
+      data: { refund: { refund_id: "restaurant_refund_001", cf_payment_id: 908172635, refund_status: "SUCCESS", refund_amount: 9 } },
+    });
+    expect((await cashfreeHook(wrongAmount, merchantSecret)).status).toBe(200);
+    const [stillPending] = await env.db.select().from(s.refunds).where(eq(s.refunds.id, refund.refundId));
+    expect(stillPending.status).toBe("pending");
+    expect((await cashfreeHook(refundRaw, merchantSecret)).status).toBe(200);
+    expect((await cashfreeHook(refundRaw, merchantSecret)).status).toBe(200);
+    const [refunded] = await env.db.select().from(s.refunds).where(eq(s.refunds.id, refund.refundId));
+    expect(refunded).toMatchObject({ gatewayRef: "restaurant_refund_001", amountPaise: 1000, status: "success" });
+    expect((await view("B")).people.find((person) => person.isMe)?.paidPaise).toBe(start.totalPaise);
+    expect((await env.db.select().from(s.payments).where(eq(s.payments.id, start.paymentId)))[0].status).toBe("success");
   });
 });
 

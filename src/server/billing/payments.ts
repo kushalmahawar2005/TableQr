@@ -879,20 +879,29 @@ export async function executeRefund(ctx: StaffContext, refundId: string, now = n
 }
 
 /** A verified gateway refund event: the only way an online refund becomes "success" */
-export async function recordRefundResult(channel: string, event: { gatewayRefundId: string; status: "success" | "failed" }, now = new Date()) {
+export async function recordRefundResult(channel: string, event: { gatewayRefundId: string; status: "success" | "failed"; gatewayPaymentId?: string; amountPaise?: number }, now = new Date()) {
   // isolation-exempt: a verified gateway event names its refund; its tenant is read from the row
-  const [row] = await db
-    .select({ refund: s.refunds, payment: s.payments })
-    .from(s.refunds)
-    .innerJoin(s.payments, and(eq(s.payments.tenantId, s.refunds.tenantId), eq(s.payments.id, s.refunds.paymentId)))
-    .where(and(eq(s.refunds.gatewayRef, event.gatewayRefundId), eq(s.payments.channel, channel)));
-  if (!row || row.refund.status !== "pending") return false;
-  await db
-    .update(s.refunds)
-    .set({ status: event.status, completedAt: event.status === "success" ? now : null })
-    .where(and(eq(s.refunds.tenantId, row.refund.tenantId), eq(s.refunds.id, row.refund.id)));
-  const [bill] = await db.select({ sessionId: s.bills.sessionId }).from(s.bills).where(and(eq(s.bills.tenantId, row.payment.tenantId), eq(s.bills.id, row.payment.billId)));
-  if (bill) await publish({ tenantId: row.payment.tenantId, outletId: row.payment.outletId }, [{ topic: topics.session(bill.sessionId), type: "refund.updated", data: { refundId: row.refund.id } }]);
+  // Lock and recheck the pending row so concurrent/replayed callbacks cannot reverse a final result.
+  const updated = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .select({ refund: s.refunds, payment: s.payments })
+      .from(s.refunds)
+      .innerJoin(s.payments, and(eq(s.payments.tenantId, s.refunds.tenantId), eq(s.payments.id, s.refunds.paymentId)))
+      .where(and(eq(s.refunds.gatewayRef, event.gatewayRefundId), eq(s.payments.channel, channel)))
+      .for("update");
+    if (!row || row.refund.status !== "pending") return null;
+    if (event.amountPaise !== undefined && event.amountPaise !== row.refund.amountPaise) return null;
+    if (event.gatewayPaymentId && event.gatewayPaymentId !== row.payment.gatewayPaymentId) return null;
+    await tx
+      .update(s.refunds)
+      .set({ status: event.status, completedAt: event.status === "success" ? now : null })
+      .where(and(eq(s.refunds.tenantId, row.refund.tenantId), eq(s.refunds.id, row.refund.id), eq(s.refunds.status, "pending")));
+    const [bill] = await tx.select({ sessionId: s.bills.sessionId }).from(s.bills).where(and(eq(s.bills.tenantId, row.payment.tenantId), eq(s.bills.id, row.payment.billId)));
+    return { refund: row.refund, payment: row.payment, bill };
+  }, LOCK_THEN_READ);
+  if (!updated) return false;
+  const { refund, payment, bill } = updated;
+  if (bill) await publish({ tenantId: payment.tenantId, outletId: payment.outletId }, [{ topic: topics.session(bill.sessionId), type: "refund.updated", data: { refundId: refund.id } }]);
   return true;
 }
 
