@@ -2,7 +2,7 @@
 
 Snapshot: 24 October 2026. Restaurant-funded Cashfree delivery prepayment shipped in `3223a21`, and manual restaurant-QR delivery payment shipped in `e3da3d0`. Guest identity, waiter assignment, the room guest journey, and the local guest-entry/booking acceptance pass are covered in code and automated integration tests. The checklist tracks product work and production checks needed to call the platform complete.
 
-## Product work (13 items; 6 complete)
+## Product work (13 items; 8 complete)
 
 - [ ] **1. Restaurant payment onboarding and live acceptance test** — Each restaurant connects its own Cashfree live account; verify credentials are encrypted, webhook signature/status checks pass, success/failure/refund paths update the bill once, and TableQR subscription Cashfree is never used for guest payments. Requires a tenant test account and its live credentials.
 - [x] **2. Delivery payment by the restaurant’s UPI QR** — Customers submit a UPI reference after phone verification; authorized restaurant staff verify it before the order reaches the kitchen, and payment is recorded once in the bill ledger. COD and tenant Cashfree remain available.
