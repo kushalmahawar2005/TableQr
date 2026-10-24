@@ -70,12 +70,17 @@ export async function sendOutletPush(scope: { tenantId: string; outletId: string
     const recipients = devices.filter(device => eligible.has(device.userId));
     if (!recipients.length) return;
 
+    const [outlet] = await db.select({ code: s.outlets.code }).from(s.outlets).where(and(eq(s.outlets.tenantId, scope.tenantId), eq(s.outlets.id, scope.outletId)));
+    const icon = outlet ? `/staff-icon/192?outlet=${encodeURIComponent(outlet.code)}` : "/staff-icon/192";
+    const badge = outlet ? `/staff-icon/180?outlet=${encodeURIComponent(outlet.code)}` : "/staff-icon/180";
+
     const payload = JSON.stringify({
       title: message.title.slice(0, 120),
       body: message.body.slice(0, 240),
       url: message.url?.startsWith("/") ? message.url : "/console",
       tag: (message.tag ?? "tableqr-staff").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 32) || "tableqr-staff",
-      icon: "/staff-icon/192",
+      icon,
+      badge,
     });
     await Promise.allSettled(recipients.map(async (device) => {
       try {

@@ -40,6 +40,7 @@ import {
   type ReactNode,
 } from "react";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { InstallApp } from "@/components/install-app";
 import { NotificationPermissionOnboarding } from "@/components/notification-permission-onboarding";
 import type { Lang } from "@/lib/i18n";
 import { signOutAction } from "../../login/actions";
@@ -405,6 +406,7 @@ export function StaffShell({
             />
           </div>
         </header>
+        {!preview && <div className="mx-auto w-full max-w-screen-2xl px-4 pt-3 sm:px-6 print:hidden"><InstallApp name={staff.outlet} logoUrl={logoUrl} /></div>}
         {!preview && <NotificationPermissionOnboarding lang={lang} />}
         {children}
       </div>

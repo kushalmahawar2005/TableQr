@@ -1,28 +1,34 @@
-// The installable staff app (waiters first, and every other role): one icon on the phone that
-// opens the console, which sends each person to their own screen after sign-in. Only staff pages
-// link this manifest, so guest pages are never offered as an install.
+import { staffAppBrandForOutletCode } from "@/server/staff/pwa-branding";
+import { staffAppIconUrl } from "@/lib/staff-app";
 
-export const dynamic = "force-static";
+// The staff manifest is requested with the outlet code learned at sign-in. It contains only
+// public restaurant branding; staff sessions and guest pages are never included in the response.
+export const dynamic = "force-dynamic";
 
-export function GET() {
+export async function GET(request: Request) {
+  const code = new URL(request.url).searchParams.get("outlet");
+  const brand = await staffAppBrandForOutletCode(code);
+  const name = brand?.name?.trim() || "TableQR Staff";
+  const icon = (size: 180 | 192 | 512) => staffAppIconUrl(size, brand?.code);
+  const icons = [
+    ...(brand?.logoUrl ? [{ src: brand.logoUrl, sizes: "any", purpose: "any" }] : []),
+    { src: icon(192), sizes: "192x192", type: "image/png", purpose: "any" },
+    { src: icon(512), sizes: "512x512", type: "image/png", purpose: "maskable" },
+  ];
   return Response.json(
     {
-      id: "/console",
-      name: "TableQR Staff",
-      short_name: "TableQR",
-      description: "Orders, tables and bills for restaurant staff.",
+      id: brand ? `/console?outlet=${encodeURIComponent(brand.code)}` : "/console",
+      name: brand ? `${name} Staff` : name,
+      short_name: name.slice(0, 12),
+      description: `Orders, tables and bills for ${name} staff.`,
       start_url: "/console",
       scope: "/",
       display: "standalone",
       orientation: "portrait",
       background_color: "#f3f1ec",
-      theme_color: "#1f2937",
-      icons: [
-        { src: "/staff-icon/192", sizes: "192x192", type: "image/png", purpose: "any" },
-        { src: "/staff-icon/512", sizes: "512x512", type: "image/png", purpose: "any" },
-        { src: "/staff-icon/512", sizes: "512x512", type: "image/png", purpose: "maskable" },
-      ],
+      theme_color: /^#[\da-f]{6}$/i.test(brand?.accentColor ?? "") ? brand!.accentColor : "#1f2937",
+      icons,
     },
-    { headers: { "Content-Type": "application/manifest+json" } },
+    { headers: { "Content-Type": "application/manifest+json", "Cache-Control": "public, max-age=300, stale-while-revalidate=600" } },
   );
 }

@@ -1,17 +1,31 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { InstallApp } from "@/components/install-app";
 import { NotificationPermissionOnboarding } from "@/components/notification-permission-onboarding";
-import { staffAppMetadata, staffAppViewport } from "@/lib/staff-app";
+import { staffAppMetadataFor, staffAppViewportFor } from "@/lib/staff-app";
+import { currentStaff } from "@/server/staff/request";
+import { staffAppBrandForOutletCode } from "@/server/staff/pwa-branding";
+import { cache } from "react";
 
-// The waiter app installs to the phone's home screen as the TableQR Staff app.
-export const metadata: Metadata = { ...staffAppMetadata };
-export const viewport = staffAppViewport;
+const waiterAppBrand = cache(async () => {
+  const staff = await currentStaff();
+  return staffAppBrandForOutletCode(staff?.outlet.code);
+});
 
-export default function WaiterLayout({ children }: LayoutProps<"/waiter">) {
+// The waiter app uses the signed-in outlet's public name, logo and accent color.
+export async function generateMetadata(): Promise<Metadata> {
+  return staffAppMetadataFor(await waiterAppBrand());
+}
+
+export async function generateViewport(): Promise<Viewport> {
+  return staffAppViewportFor(await waiterAppBrand());
+}
+
+export default async function WaiterLayout({ children }: LayoutProps<"/waiter">) {
+  const brand = await waiterAppBrand();
   return (
     <>
       <div className="mx-auto w-full max-w-xl px-4 pt-3 empty:hidden">
-        <InstallApp />
+        <InstallApp name={brand?.name ?? "TableQR"} logoUrl={brand?.logoUrl} />
       </div>
       <div className="mx-auto w-full max-w-xl px-4">
         <NotificationPermissionOnboarding />

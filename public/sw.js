@@ -6,7 +6,7 @@ self.addEventListener("push", (event) => {
   const options = {
     body: typeof data.body === "string" ? data.body : "There is a new update for your restaurant.",
     icon: typeof data.icon === "string" ? data.icon : "/staff-icon/192",
-    badge: "/staff-icon/180",
+    badge: typeof data.badge === "string" ? data.badge : "/staff-icon/180",
     tag: typeof data.tag === "string" ? data.tag : "tableqr-staff",
     renotify: true,
     data: { url: typeof data.url === "string" ? data.url : "/console" },

@@ -19,7 +19,7 @@ function hiddenForNow() {
   }
 }
 
-export function InstallApp({ className = "" }: { className?: string }) {
+export function InstallApp({ className = "", name = "TableQR", logoUrl = null }: { className?: string; name?: string; logoUrl?: string | null }) {
   const [prompt, setPrompt] = useState<InstallEvent | null>(null);
   const [ios, setIos] = useState(false);
   const [show, setShow] = useState(false);
@@ -68,9 +68,14 @@ export function InstallApp({ className = "" }: { className?: string }) {
 
   return (
     <div role="region" aria-label="Install the app" className={`flex items-start gap-3 rounded-card border border-line bg-surface p-3.5 shadow-[0_1px_3px_rgb(0_0_0/0.06)] ${className}`}>
-      <span aria-hidden className="grid size-10 shrink-0 place-items-center rounded-input bg-ink font-display text-section font-bold text-white">T</span>
+      <span aria-hidden className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-input border border-line bg-brand-soft font-display text-section font-bold text-brand-strong">
+        {logoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element -- tenant logos may be hosted on owner-controlled HTTPS origins
+          <img src={logoUrl} alt="" className="size-full object-contain p-1" />
+        ) : name.trim().slice(0, 1).toUpperCase() || "T"}
+      </span>
       <div className="min-w-0 flex-1">
-        <p className="text-body font-semibold text-ink">Install TableQR on this phone</p>
+        <p className="break-words text-body font-semibold text-ink">Install {name} on this phone</p>
         {ios ? (
           <p className="mt-0.5 text-caption text-muted">
             Tap <HugeiconsIcon icon={Share08Icon} size={14} className="inline align-[-2px]" aria-label="Share" /> Share, then <span className="font-semibold text-ink">Add to Home Screen</span>.

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { BellRing, X } from "lucide-react";
 import type { Lang } from "@/lib/i18n";
+import { notificationSetupMode } from "@/lib/notification-onboarding";
 import { enableStaffPushNotifications, serializePushSubscription } from "@/lib/staff-push-client";
 import { pushSetupAction, savePushSubscriptionAction } from "@/app/(console)/console/(app)/_components/push-actions";
 
@@ -28,24 +29,28 @@ export function NotificationPermissionOnboarding({ lang = "en" }: { lang?: Lang 
     void pushSetupAction().then((config) => {
       if (!active || !config.enabled) return;
       if (Notification.permission === "granted") {
+        let dismissed = false;
+        try { dismissed = localStorage.getItem(SEEN_KEY) === "yes"; } catch { /* continue with session-only setup */ }
         void navigator.serviceWorker.getRegistration("/").then(async (registration) => {
           const subscription = await registration?.pushManager.getSubscription();
           if (subscription) {
             const saved = await savePushSubscriptionAction(serializePushSubscription(subscription));
             if (saved.ok) return;
-            if (!active) return;
+            if (!active || dismissed) return;
             setNeedsPermission(false);
             setError(saved.error);
             setVisible(true);
             return;
           }
-          if (!active) return;
+          if (!active || notificationSetupMode("granted", dismissed, false) === "hidden") return;
           setNeedsPermission(false);
           setVisible(true);
         }).catch(() => {});
         return;
       }
-      try { if (localStorage.getItem(SEEN_KEY) === "yes") return; } catch { /* keep the prompt available if storage is blocked */ }
+      let dismissed = false;
+      try { dismissed = localStorage.getItem(SEEN_KEY) === "yes"; } catch { /* keep the prompt available if storage is blocked */ }
+      if (notificationSetupMode(Notification.permission, dismissed, false) === "hidden") return;
       setNeedsPermission(true);
       setVisible(true);
     }).catch(() => {});
@@ -79,7 +84,7 @@ export function NotificationPermissionOnboarding({ lang = "en" }: { lang?: Lang 
           </span>
           <div className="min-w-0 flex-1">
             <p className="break-words font-semibold text-ink">{hi ? "नए ऑर्डर और अनुरोधों के अलर्ट पाएं" : "Get alerts for new orders and requests"}</p>
-            <p className="mt-0.5 break-words text-sm text-muted">{hi ? "नए ऑर्डर और टेबल अनुरोधों के अलर्ट ऐप बंद होने पर भी पाएं।" : "Get alerts for new orders and table requests, even when the app is closed."}</p>
+            <p className="mt-0.5 break-words text-sm text-muted">{needsPermission ? (hi ? "नए ऑर्डर और टेबल अनुरोधों के अलर्ट ऐप बंद होने पर भी पाएं।" : "Get alerts for new orders and table requests, even when the app is closed.") : (hi ? "इस फ़ोन पर नोटिफिकेशन चालू हैं। नए ऑर्डर अलर्ट सेटअप पूरा करें।" : "Notifications are allowed on this phone. Finish setting up new order alerts.")}</p>
             {error && <p role="alert" className="mt-1 break-words text-sm font-medium text-danger">{error}</p>}
           </div>
         </div>

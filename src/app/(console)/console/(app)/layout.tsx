@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import type { Metadata, Viewport } from "next";
 import { redirect } from "next/navigation";
 import { visibleSections } from "@/lib/console-nav";
 import { LANG_COOKIE, parseLang } from "@/lib/i18n";
@@ -13,6 +14,22 @@ import { getGuide } from "@/server/staff/guide";
 import { Guide } from "./_components/guide/guide";
 import { AccessBanner, PausedScreen } from "./_components/access-notice";
 import { outletLogoFor } from "@/server/staff/settings-read";
+import { staffAppMetadataFor, staffAppViewportFor } from "@/lib/staff-app";
+import { staffAppBrandForOutletCode } from "@/server/staff/pwa-branding";
+import { cache } from "react";
+
+const consoleAppBrand = cache(async () => {
+  const staff = await currentStaff();
+  return staffAppBrandForOutletCode(staff?.outlet.code);
+});
+
+export async function generateMetadata(): Promise<Metadata> {
+  return staffAppMetadataFor(await consoleAppBrand());
+}
+
+export async function generateViewport(): Promise<Viewport> {
+  return staffAppViewportFor(await consoleAppBrand());
+}
 
 // Staff console: sign-in first, then a sidebar showing only what this role may open (UI spec 3.5).
 export default async function ConsoleLayout({ children }: LayoutProps<"/console">) {
