@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { randomBytes } from "node:crypto";
 import { outletCodeForCustomDomain } from "@/server/guest/custom-domain";
+import { requestHostname } from "@/server/request-host";
 
 /** Apply a per-request CSP nonce and safely route owner-enabled custom guest domains. */
 export async function proxy(request: NextRequest) {
@@ -26,7 +27,7 @@ export async function proxy(request: NextRequest) {
   requestHeaders.set("Content-Security-Policy", csp);
 
   let response: NextResponse | undefined;
-  const host = (request.nextUrl.hostname || request.headers.get("host") || "").toLowerCase();
+  const host = requestHostname(request.headers, request.nextUrl.hostname);
   const isLocal = !host || host === "localhost" || host.endsWith(".localhost") || host === "127.0.0.1";
 
   if (!isLocal) {
