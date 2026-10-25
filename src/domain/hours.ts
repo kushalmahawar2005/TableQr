@@ -58,6 +58,20 @@ export function isOpenAt(hours: WeeklyHours | null | undefined, timeZone: string
   return yesterday.some(([from, to]) => toMinutes(from) > toMinutes(to) && minutes < toMinutes(to));
 }
 
+/**
+ * When the outlet's business day ends, in minutes after midnight. An outlet open past midnight
+ * (Friday 18:00 to 02:00) keeps counting the night's bills on the day it opened: the day ends an
+ * hour after the latest such closing, rounded up to the hour, so late payments still fall inside.
+ * Capped at 6 am; 0 (midnight) when no window runs past midnight.
+ */
+export function dayCutoffMinutes(hours: WeeklyHours | null | undefined): number {
+  let latest = -1;
+  for (const ranges of Object.values(hours ?? {})) {
+    for (const [from, to] of ranges ?? []) if (toMinutes(to) < toMinutes(from)) latest = Math.max(latest, toMinutes(to));
+  }
+  return latest < 0 ? 0 : Math.min(6 * 60, Math.ceil(latest / 60) * 60 + 60);
+}
+
 export type OpeningInfo = {
   isOpen: boolean;
   /** "HH:MM" local time the current window ends; null when closed or no hours are set */

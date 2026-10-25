@@ -5,7 +5,7 @@ import type { DayClose } from "@/server/staff/day-close";
 describe("day close print", () => {
   it("is a plain receipt-sized document with the money lines and no console around it", () => {
     const r = {
-      date: "2026-10-12", isToday: true,
+      date: "2026-10-12", isToday: true, cutoffMinutes: 0,
       bills: { count: 2, subtotalPaise: 30000, discountPaise: 0, serviceChargePaise: 0, taxPaise: 1500, tipsPaise: 0, roundOffPaise: 0, totalPaise: 31500 },
       methods: [{ method: "upi", paise: 21000, count: 1 }, { method: "cash", paise: 10500, count: 1 }],
       collectedPaise: 31500, refunds: { count: 0, paise: 0 }, netPaise: 31500, orders: 7, itemsSold: 5,
@@ -25,7 +25,7 @@ describe("day close print", () => {
 
   it("adds roll length when long outlet names, dishes or open-table lists wrap", () => {
     const r = {
-      date: "2026-10-12", isToday: false,
+      date: "2026-10-12", isToday: false, cutoffMinutes: 0,
       bills: { count: 0, subtotalPaise: 0, discountPaise: 0, serviceChargePaise: 0, taxPaise: 0, tipsPaise: 0, roundOffPaise: 0, totalPaise: 0 },
       methods: [], collectedPaise: 0, refunds: { count: 0, paise: 0 }, netPaise: 0, orders: 0, itemsSold: 0,
       removed: { qty: 0, paise: 0 }, visits: { count: 0, covers: 0 }, averageBillPaise: 0,

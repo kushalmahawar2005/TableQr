@@ -1,8 +1,9 @@
 import { localTime, serviceDate } from "./booking-policy";
 import { localClock } from "./hours";
 
-// O1 Owner Dashboard: pure helpers. Every day is the outlet's own calendar day, local midnight to
-// the next local midnight; the browser's and the server process's time zones never take part.
+// O1 Owner Dashboard: pure helpers. Every day is the outlet's own business day, local midnight (or
+// the outlet's past-midnight cutoff) to the next one; the browser's and the server process's time
+// zones never take part.
 
 /** A bill waiting this long after the guest asked for it is shown as an alert */
 export const BILL_REQUESTED_ALERT_MINUTES = 10;
@@ -21,21 +22,24 @@ export function addDays(date: string, days: number): string {
 
 export type DayRange = { date: string; start: Date; end: Date };
 
-/** One outlet-local calendar day as a half-open UTC range [start, end) */
-export function dayRange(date: string, timeZone: string): DayRange {
-  return { date, start: localTime(date, 0, timeZone), end: localTime(addDays(date, 1), 0, timeZone) };
+/** One outlet-local business day as a half-open UTC range [start, end); `cutoff` minutes past midnight still belong to it */
+export function dayRange(date: string, timeZone: string, cutoff = 0): DayRange {
+  return { date, start: localTime(date, cutoff, timeZone), end: localTime(addDays(date, 1), cutoff, timeZone) };
 }
 
+/** The business date at `now`: before the cutoff it is still the day before */
+const businessDate = (now: Date, timeZone: string, cutoff: number) => serviceDate(new Date(now.getTime() - cutoff * 60_000), timeZone);
+
 /** Today and yesterday in the outlet's time zone */
-export function todayAndYesterday(now: Date, timeZone: string) {
-  const today = serviceDate(now, timeZone);
-  return { today: dayRange(today, timeZone), yesterday: dayRange(addDays(today, -1), timeZone) };
+export function todayAndYesterday(now: Date, timeZone: string, cutoff = 0) {
+  const today = businessDate(now, timeZone, cutoff);
+  return { today: dayRange(today, timeZone, cutoff), yesterday: dayRange(addDays(today, -1), timeZone, cutoff) };
 }
 
 /** The last `days` outlet-local days, oldest first, ending with today */
-export function lastDays(now: Date, timeZone: string, days = TREND_DAYS): DayRange[] {
-  const today = serviceDate(now, timeZone);
-  return Array.from({ length: days }, (_, i) => dayRange(addDays(today, i - (days - 1)), timeZone));
+export function lastDays(now: Date, timeZone: string, days = TREND_DAYS, cutoff = 0): DayRange[] {
+  const today = businessDate(now, timeZone, cutoff);
+  return Array.from({ length: days }, (_, i) => dayRange(addDays(today, i - (days - 1)), timeZone, cutoff));
 }
 
 /** Index of the range holding `at`, or -1 */

@@ -6,6 +6,7 @@ import {
   BILL_REQUESTED_ALERT_MINUTES,
   LATE_LOOKBACK_HOURS,
   TOP_ITEMS,
+  TREND_DAYS,
   UPCOMING_WINDOW_MINUTES,
   averageOf,
   bucketOf,
@@ -23,6 +24,7 @@ import { AppError } from "../errors";
 import { loadPolicy } from "../floor/policy";
 import { isItemAvailable } from "../guest/menu";
 import type { StaffSession } from "./auth";
+import { outletDayCutoff } from "./business-day";
 import { tenantFeatures } from "../plan";
 import { lowStock } from "./inventory";
 
@@ -144,7 +146,7 @@ export async function topItems(scope: Scope, range: DayRange, limit = TOP_ITEMS)
 export async function getRevenueTrend(staff: Staff, now = new Date()) {
   guard(staff);
   const scope = { tenantId: staff.tenantId, outletId: staff.outletId };
-  const days = lastDays(now, staff.outlet.timezone);
+  const days = lastDays(now, staff.outlet.timezone, TREND_DAYS, await outletDayCutoff(staff.tenantId, staff.outletId));
   const money = revenueByDay(await paidBills(scope, days[0].start, days[days.length - 1].end), days);
   return days.map((d, i) => ({ date: d.date, revenuePaise: money[i].revenuePaise }));
 }
@@ -203,7 +205,7 @@ export async function getDashboard(staff: Staff, now = new Date()) {
   guard(staff);
   const scope = { tenantId: staff.tenantId, outletId: staff.outletId };
   const tz = staff.outlet.timezone;
-  const { today, yesterday } = todayAndYesterday(now, tz);
+  const { today, yesterday } = todayAndYesterday(now, tz, await outletDayCutoff(staff.tenantId, staff.outletId));
   const ranges = [today, yesterday];
   const upcomingEnd = new Date(now.getTime() + UPCOMING_WINDOW_MINUTES * 60_000);
   const lateSince = new Date(now.getTime() - LATE_LOOKBACK_HOURS * 3600_000);

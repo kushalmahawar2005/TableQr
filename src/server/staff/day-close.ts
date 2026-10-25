@@ -5,23 +5,30 @@ import * as s from "@/db/schema";
 import { canSee } from "@/lib/staff-permissions";
 import { AppError } from "../errors";
 import type { StaffSession } from "./auth";
+import { outletDayCutoff } from "./business-day";
 
 // Day close: everything one business day at this outlet adds up to, for counting the cash drawer
-// and sending the owner a summary. A day is the outlet's calendar day in India time (IST), the same
-// day boundary the dashboard and reports use. Money from bills is counted when the bill was paid.
+// and sending the owner a summary. A day is the outlet's business day in India time (IST), the same
+// day boundary the dashboard and reports use: midnight to midnight, or for an outlet open past
+// midnight, up to its cutoff (e.g. 3 am) so the night's bills stay on the day they began.
+// Money from bills is counted when the bill was paid.
 
 type Staff = Pick<StaffSession, "tenantId" | "outletId" | "roles">;
 const DAY = 86_400_000;
 const IST = 330 * 60_000;
 
-export const istToday = (now = new Date()) => new Date(now.getTime() + IST).toISOString().slice(0, 10);
+/** Today's business date; `cutoffMinutes` after midnight still belongs to the day before */
+export const istToday = (now = new Date(), cutoffMinutes = 0) => new Date(now.getTime() + IST - cutoffMinutes * 60_000).toISOString().slice(0, 10);
+/** Start of a business date as a UTC instant */
+export const istDayStart = (date: string, cutoffMinutes = 0) => new Date(Date.parse(`${date}T00:00:00Z`) - IST + cutoffMinutes * 60_000);
 
 export type DayClose = Awaited<ReturnType<typeof getDayClose>>;
 
 export async function getDayClose(staff: Staff, date: string, now = new Date()) {
   if (!canSee(staff.roles, "reports")) throw new AppError("forbidden", "Your role cannot see the day close.");
-  const day = /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : istToday(now);
-  const from = new Date(Date.parse(`${day}T00:00:00Z`) - IST);
+  const cutoff = await outletDayCutoff(staff.tenantId, staff.outletId);
+  const day = /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : istToday(now, cutoff);
+  const from = istDayStart(day, cutoff);
   const to = new Date(from.getTime() + DAY);
 
   const [[bills], methods, [refunds], [orders], lines, [visits], top, open] = await Promise.all([
@@ -81,7 +88,9 @@ export async function getDayClose(staff: Staff, date: string, now = new Date()) 
   const collected = methods.reduce((n, m) => n + m.paise, 0);
   return {
     date: day,
-    isToday: day === istToday(now),
+    isToday: day === istToday(now, cutoff),
+    /** Business day ends this many minutes after midnight (0 = midnight) */
+    cutoffMinutes: cutoff,
     bills: { count: bills.n, subtotalPaise: bills.subtotal, discountPaise: bills.discount, serviceChargePaise: bills.service, taxPaise: bills.tax, tipsPaise: bills.tips, roundOffPaise: bills.roundOff, totalPaise: bills.total },
     methods: methods.map((m) => ({ method: m.method, paise: m.paise, count: m.n })).sort((a, b) => b.paise - a.paise),
     collectedPaise: collected,

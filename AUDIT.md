@@ -7,7 +7,7 @@ Work top to bottom, one part at a time. Money and guest-facing parts come first 
 ## Pinned: open items from the 25 October review (do these first)
 
 - [x] **P1.** POS bill/receipt print has no GSTIN, FSSAI or invoice number (A6). Fixed: paid GST bills print as a tax invoice with GSTIN, FSSAI, address, invoice number and CGST/SGST per rate.
-- [ ] **P2.** Business-day cutoff so orders after midnight count in the right Day close and reports (A7, F5).
+- [x] **P2.** Business-day cutoff so orders after midnight count in the right Day close and reports (A7, F5). Fixed: the cutoff comes from opening hours (an hour after the latest past-midnight closing, max 6 am); Day close, dashboard, reports and items report use it. GST stays on calendar dates.
 - [ ] **P3.** 58 mm thermal printer support: paper-width setting for every slip (D4).
 - [ ] **P4.** Render and check the guest receipt print `/r/[outlet]/t/[table]/paid/receipt` (A1).
 - [ ] **P5.** Line-by-line review of delivery and COD: checkout, OTP, payment, dispatch, rider, refunds (B6, C6).
@@ -42,7 +42,7 @@ Findings go under the part as `- [ ] finding` and are ticked when fixed with the
 - [ ] **A6. Invoices and GST** — invoice numbering per financial year, tax invoice vs receipt, GST report, Excel export.
   - [x] Receipt (POS bill/receipt print) has no GSTIN, FSSAI or invoice number; required for a GST-registered restaurant.
 - [ ] **A7. Day close** — `/console/reports/day-close`: totals match bills and payments; print.
-  - [ ] Restaurants open past midnight: orders after 12 am land on the next calendar day. Needs a business-day cutoff setting.
+  - [x] Restaurants open past midnight: orders after 12 am land on the next calendar day. Needs a business-day cutoff setting.
 
 ### B. Guest side (what customers see)
 

@@ -6,9 +6,12 @@ import { canSee } from "@/lib/staff-permissions";
 import { AppError } from "../errors";
 import type { StaffSession } from "./auth";
 import { requireFeature } from "../plan";
+import { outletDayCutoff } from "./business-day";
 
 // Reports (read-only): the signed-in outlet over 7, 30 or 90 days. Revenue is net sales from paid
-// bills (bills.total_paise, tips excluded), the same definition as the dashboard. Days are IST.
+// bills (bills.total_paise, tips excluded), the same definition as the dashboard. Days are IST
+// business days (past midnight up to the outlet's cutoff counts as the day before); hours of the
+// day are plain IST clock hours.
 
 type Staff = Pick<StaffSession, "tenantId" | "outletId" | "roles">;
 export type ReportRange = 7 | 30 | 90;
@@ -36,13 +39,14 @@ export type Report = {
   };
 };
 
-const istDay = (d: Date) => new Date(d.getTime() + IST).toISOString().slice(0, 10);
-
 export async function getReport(staff: Staff, range: ReportRange, now: Date): Promise<Report> {
   if (!canSee(staff.roles, "reports")) throw new AppError("forbidden", "Your role cannot view reports.");
   await requireFeature(staff.tenantId, "fullReports");
   if (![7, 30, 90].includes(range)) range = 30;
-  const todayStartUtc = new Date(Math.floor((now.getTime() + IST) / DAY) * DAY - IST);
+  // Shifting an instant by this gives its business date as a UTC calendar date
+  const shift = IST - (await outletDayCutoff(staff.tenantId, staff.outletId)) * 60_000;
+  const istDay = (d: Date) => new Date(d.getTime() + shift).toISOString().slice(0, 10);
+  const todayStartUtc = new Date(Math.floor((now.getTime() + shift) / DAY) * DAY - shift);
   const from = new Date(todayStartUtc.getTime() - (range - 1) * DAY);
   const scopeBill = and(eq(s.bills.tenantId, staff.tenantId), eq(s.bills.outletId, staff.outletId));
   const scopeOrder = and(eq(s.orders.tenantId, staff.tenantId), eq(s.orders.outletId, staff.outletId));
@@ -88,7 +92,7 @@ export async function getReport(staff: Staff, range: ReportRange, now: Date): Pr
     days[i].revenuePaise += b.total; days[i].bills += 1;
     totals.revenuePaise += b.total; totals.bills += 1; totals.tipsPaise += b.tip; totals.taxPaise += b.tax;
     extra.discountPaise += b.discount; extra.serviceChargePaise += b.service;
-    const w = new Date(b.closedAt.getTime() + IST).getUTCDay();
+    const w = new Date(b.closedAt.getTime() + shift).getUTCDay();
     weekday[w].revenuePaise += b.total; weekday[w].bills += 1;
   }
   const byHour = Array.from({ length: 24 }, () => 0);

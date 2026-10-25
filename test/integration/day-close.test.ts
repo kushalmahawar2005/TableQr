@@ -54,4 +54,18 @@ describe("day close", () => {
     // Another day knows nothing about today
     expect((await getDayClose(owner, "2020-01-01")).bills.count).toBe(0);
   });
+
+  it("keeps a bill paid after midnight on the day it began when the outlet is open late", async () => {
+    await env.db.update(s.outlets).set({ openingHours: { sat: [["18:00", "02:00"]] } }).where(eq(s.outlets.id, owner.outletId));
+    const [bill] = await env.db.select().from(s.bills).where(eq(s.bills.status, "paid"));
+    // 01:30 IST on 11 Jan 2026, after a Saturday night that runs till 2 am (cutoff 3 am)
+    const late = new Date("2026-01-10T20:00:00Z");
+    await env.db.update(s.bills).set({ closedAt: late }).where(eq(s.bills.id, bill.id));
+    await env.db.update(s.payments).set({ createdAt: late }).where(eq(s.payments.billId, bill.id));
+
+    const night = await getDayClose(owner, "2026-01-10");
+    expect(night).toMatchObject({ cutoffMinutes: 180, bills: { count: 1, totalPaise: bill.totalPaise } });
+    expect(night.collectedPaise).toBe(bill.totalPaise);
+    expect((await getDayClose(owner, "2026-01-11")).bills.count).toBe(0);
+  });
 });

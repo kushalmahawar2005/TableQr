@@ -6,25 +6,26 @@ import { canSee } from "@/lib/staff-permissions";
 import { AppError } from "../errors";
 import { requireFeature } from "../plan";
 import type { StaffSession } from "./auth";
-import { istToday } from "./day-close";
+import { outletDayCutoff } from "./business-day";
+import { istDayStart, istToday } from "./day-close";
 
 // Item and staff report: every dish sold in a date range (and the ones that did not sell), sales by
 // who put the order in, and the discounts and cancelled items each person is answerable for.
-// Days run on India time, like Day close and the GST report.
+// Days are business days on India time, like Day close.
 
 type Staff = Pick<StaffSession, "tenantId" | "outletId" | "roles">;
-const IST = 330 * 60_000;
 const DAY = 86_400_000;
 const SOLD = ["placed", "accepted", "preparing", "ready", "served"] as const;
 const isDate = (d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d);
-const startOf = (date: string) => new Date(Date.parse(`${date}T00:00:00Z`) - IST);
 
 export type SalesDetail = Awaited<ReturnType<typeof getSalesDetail>>;
 
 export async function getSalesDetail(staff: Staff, input: { from?: string; to?: string }, now = new Date()) {
   if (!canSee(staff.roles, "reports")) throw new AppError("forbidden", "Your role cannot view reports.");
   await requireFeature(staff.tenantId, "fullReports");
-  const today = istToday(now);
+  const cutoff = await outletDayCutoff(staff.tenantId, staff.outletId);
+  const startOf = (date: string) => istDayStart(date, cutoff);
+  const today = istToday(now, cutoff);
   let to = input.to && isDate(input.to) ? input.to : today;
   if (to > today) to = today;
   let from = input.from && isDate(input.from) ? input.from : to;

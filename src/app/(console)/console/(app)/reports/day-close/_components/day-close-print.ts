@@ -7,6 +7,9 @@ const esc = (v: string) => v.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&l
 const rs = (paise: number) => `${paise < 0 ? "− " : ""}₹${(Math.abs(paise) / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const METHOD: Record<string, string> = { cash: "Cash", card: "Card", upi: "UPI", wallet: "Wallet / online" };
 
+/** "3 am" for a business day that runs past midnight */
+export const dayEndsAt = (minutes: number) => `${Math.floor(minutes / 60) % 12 || 12}${minutes % 60 ? `:${String(minutes % 60).padStart(2, "0")}` : ""} am`;
+
 export function dayCloseHtml(r: DayClose, outlet: string) {
   const optionalRows = Number(!!r.refunds.paise) + Number(!!r.bills.discountPaise) + Number(!!r.bills.serviceChargePaise) + Number(!!r.bills.roundOffPaise) + Number(!!r.bills.tipsPaise) + Number(!!r.removed.qty);
   const extraWrappedRows = Math.max(0, Math.ceil(outlet.length / 25) - 1)
@@ -31,6 +34,7 @@ hr{border:0;border-top:1px dashed #000;margin:8px 0}
 <h1>${esc(outlet)}</h1>
 <div class="c w">DAY CLOSE</div>
 <div class="c m">${esc(date)}${r.isToday ? " (so far)" : ""}</div>
+${r.cutoffMinutes ? `<div class="c m">Day runs till ${dayEndsAt(r.cutoffMinutes)} next morning</div>` : ""}
 <div class="c m">Printed ${esc(printed)}</div>
 <hr>
 <h2>Money in</h2>

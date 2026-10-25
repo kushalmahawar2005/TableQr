@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { printHtml } from "@/app/pos/_components/bill-print";
 import type { DayClose } from "@/server/staff/day-close";
-import { dayCloseHtml } from "./day-close-print";
+import { dayCloseHtml, dayEndsAt } from "./day-close-print";
 
 // Day close: one page to count the drawer against, print, or send to the owner on WhatsApp.
 
@@ -49,7 +49,7 @@ export function DayCloseScreen({ report: r, outletName, today }: { report: DayCl
         <div>
           <p className="text-caption font-semibold text-muted">{outletName}</p>
           <h1 className="mt-1 font-display text-title font-bold">Day close</h1>
-          <p className="text-body text-muted">{new Date(`${r.date}T12:00:00Z`).toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}{r.isToday ? " · today so far" : ""}</p>
+          <p className="text-body text-muted">{new Date(`${r.date}T12:00:00Z`).toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}{r.isToday ? " · today so far" : ""}{r.cutoffMinutes ? ` · runs till ${dayEndsAt(r.cutoffMinutes)} next morning` : ""}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button type="button" className={btn} onClick={() => shift(-1)}>‹ Previous day</button>

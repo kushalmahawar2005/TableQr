@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { inWindow, isOpenAt, localClock, nextLocalMidnight, openingInfo } from "./hours";
+import { dayCutoffMinutes, inWindow, isOpenAt, localClock, nextLocalMidnight, openingInfo } from "./hours";
 
 const IST = "Asia/Kolkata";
 // 2026-10-03 is a Saturday. 14:30Z is 20:00 IST.
@@ -95,5 +95,18 @@ describe("openingInfo", () => {
 
   it("treats an outlet with no hours as always open", () => {
     expect(openingInfo(null, IST, satEvening)).toEqual({ isOpen: true, closesAt: null, nextOpen: null });
+  });
+});
+
+describe("business day cutoff", () => {
+  it("is midnight unless a window runs past midnight", () => {
+    expect(dayCutoffMinutes(null)).toBe(0);
+    expect(dayCutoffMinutes({ mon: [["11:00", "23:30"]] })).toBe(0);
+  });
+
+  it("ends an hour after the latest past-midnight closing, rounded up to the hour, at most 6 am", () => {
+    expect(dayCutoffMinutes({ fri: [["18:00", "02:00"]], sat: [["18:00", "01:15"]] })).toBe(180);
+    expect(dayCutoffMinutes({ sat: [["20:00", "00:00"]] })).toBe(60);
+    expect(dayCutoffMinutes({ sat: [["20:00", "07:00"]] })).toBe(360);
   });
 });
