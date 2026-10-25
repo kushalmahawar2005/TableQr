@@ -476,19 +476,41 @@ export async function cancelIfUnattempted(scope: { tenantId: string }, paymentId
   return "cancelled";
 }
 
-/** Scheduled every minute (PS 6.4): re-check pending payments with the gateway */
+/** An attempt the gateway has seen no payment for is closed after this long, so it stops holding the bill */
+export const ABANDONED_ATTEMPT_MS = 30 * 60_000;
+
+/**
+ * Scheduled every minute (PS 6.4): re-check open payment attempts with the gateway. While one is
+ * open the bill cannot be reopened, so attempts nobody paid are closed too: one that never reached
+ * the gateway after 10 minutes, and one the gateway has no payment for after 30. A late payment on
+ * a closed attempt is still recorded when the gateway reports it.
+ */
 export async function reconcilePendingPayments(scope: { tenantId: string; outletId: string }, now = new Date()) {
-  const since = new Date(now.getTime() - 60 * 60_000);
+  const since = new Date(now.getTime() - 24 * 60 * 60_000);
   const pending = await db
-    .select({ id: s.payments.id, createdAt: s.payments.createdAt })
+    .select({ id: s.payments.id, createdAt: s.payments.createdAt, status: s.payments.status, gatewayRef: s.payments.gatewayRef, billId: s.payments.billId })
     .from(s.payments)
-    .where(and(eq(s.payments.tenantId, scope.tenantId), eq(s.payments.outletId, scope.outletId), eq(s.payments.status, "pending"), sql`${s.payments.createdAt} >= ${since}`))
+    .where(and(eq(s.payments.tenantId, scope.tenantId), eq(s.payments.outletId, scope.outletId), inArray(s.payments.status, ["initiated", "pending"]), sql`${s.payments.createdAt} >= ${since}`))
+    .orderBy(s.payments.createdAt)
     .limit(50);
   let settled = 0;
   for (const p of pending) {
+    const age = now.getTime() - p.createdAt.getTime();
+    if (p.status === "initiated" && !p.gatewayRef) {
+      if (age <= ATTEMPT_WINDOW_MS) continue;
+      const [closed] = await db.update(s.payments).set({ status: "failed", failureReason: "Never reached the payment gateway", checkedAt: now })
+        .where(and(eq(s.payments.tenantId, scope.tenantId), eq(s.payments.id, p.id), eq(s.payments.status, "initiated")));
+      if (closed.affectedRows) {
+        const [bill] = await db.select({ sessionId: s.bills.sessionId }).from(s.bills).where(and(eq(s.bills.tenantId, scope.tenantId), eq(s.bills.id, p.billId)));
+        if (bill) announceBill({ ...scope, sessionId: bill.sessionId }, undefined, [{ topic: topics.session(bill.sessionId), type: "payment.updated", data: { paymentId: p.id } }]);
+      }
+      continue;
+    }
     const view = await reconcilePayment(scope, p.id, now).catch(() => "unknown" as const);
     if (view === "success" || view === "failed") settled++;
-    else if (now.getTime() - p.createdAt.getTime() > ATTEMPT_WINDOW_MS) {
+    else if (view === "pending" && age > ABANDONED_ATTEMPT_MS) {
+      await cancelIfUnattempted(scope, p.id, now).catch(() => undefined);
+    } else if (age > ATTEMPT_WINDOW_MS) {
       // Still unknown after 10 minutes: flag to the cashier, never guess
       await publish(scope, [{ topic: topics.tasks, type: "payment.stuck", data: { paymentId: p.id } }]);
     }

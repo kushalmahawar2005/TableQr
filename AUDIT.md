@@ -37,6 +37,7 @@ Findings go under the part as `- [ ] finding` and are ticked when fixed with the
   - [x] Guest receipt print not yet rendered and checked (P4).
   - [x] A guest on a restaurant's own domain who paid online came back to the main domain, where their device cookie is missing. Payment, delivery and booking returns now come back to the domain the guest is on; the booking advance no longer takes its return address from the browser.
   - [x] The mock checkout got a return address with an unreplaced placeholder.
+  - [x] An online attempt nobody paid (webhook lost, guest never came back) stayed open after the minute re-check's 1-hour window, blocking reopen and paid-and-left until a manager released it. The re-check now looks back 24 hours and closes attempts the gateway has no payment for after 30 minutes, and ones that never reached the gateway after 10.
 - [ ] **A2. Counter billing (POS)** — `/pos`, `/console/billing`: discounts, add items after bill asked, cash change, card/UPI, takeaway, bill/receipt print, reopen bill.
 - [ ] **A3. Refunds** — staff refund flow, gateway refund webhooks, counter refunds, overpayment refunds.
 - [ ] **A4. Payment webhooks and reconciliation** — `/api/payments/*`, `/api/fees/*`, minute re-check, amount checks, replay safety. *(Cross-outlet forged webhook fixed in `3b60206`.)*

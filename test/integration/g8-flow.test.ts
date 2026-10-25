@@ -439,6 +439,24 @@ describe("returning from the gateway", () => {
     expect(await reconcilePendingPayments({ tenantId: g.A.tenantId, outletId: g.A.outletId })).toBe(1);
     expect((await view("B")).people.find((p) => p.isMe)?.status).toBe("paid");
   });
+
+  it("closes attempts nobody paid so the bill can be reopened, and still records a late payment", async () => {
+    await requestBill(scope());
+    const open = await startPayment(g.B, { method: "upi", requestId: rid() });
+    const lost = await startPayment(g.C, { method: "upi", requestId: rid() });
+    // The server stopped before the gateway order was made
+    await env.db.update(s.payments).set({ status: "initiated", gatewayRef: null }).where(eq(s.payments.id, lost.paymentId));
+    const later = new Date(Date.now() + 31 * 60_000);
+    await reconcilePendingPayments({ tenantId: g.A.tenantId, outletId: g.A.outletId }, later);
+    const rows = new Map((await env.db.select().from(s.payments)).map((p) => [p.id, p]));
+    expect(rows.get(open.paymentId)).toMatchObject({ status: "failed", failureReason: "Cancelled before paying" });
+    expect(rows.get(lost.paymentId)).toMatchObject({ status: "failed", failureReason: "Never reached the payment gateway" });
+    await reopenBill({ kind: "guest", ctx: g.A });
+
+    mockGateway.settle(open.gatewayRef!, "success");
+    await confirmPayment(open.paymentId, { gatewayRef: open.gatewayRef!, status: "success", amountPaise: open.totalPaise });
+    expect((await env.db.select().from(s.payments).where(eq(s.payments.id, open.paymentId)))[0].status).toBe("success");
+  });
 });
 
 describe("paying for others", () => {
