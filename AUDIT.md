@@ -55,6 +55,8 @@ Findings go under the part as `- [ ] finding` and are ticked when fixed with the
 
 ### B. Guest side (what customers see)
 
+Checked 25 Oct: review boards g1-g7 and b1-b4 render at 360 px with no horizontal overflow (g3 only overflows through its own fixed-width demo phone frames). The real flows below still need the full pass.
+
 - [ ] **B1. Restaurant home and entry** — `/r/[outlet]`, language choice, closed state, announcements, custom domain.
 - [ ] **B2. Table QR scan and verify** — `/t/[table]`, `/verify`, OTP send/resend/expiry, join code, group at one table, table already busy.
   - [x] Remove `OTP_TEST_BYPASS` / `OTP_TEST_PHONE` from Hostinger before launch; bypass code removed too.
