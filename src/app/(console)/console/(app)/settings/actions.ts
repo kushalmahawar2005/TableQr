@@ -7,6 +7,8 @@ import { storeMenuImage, storePaymentQr } from "@/server/menu-storage";
 import { consoleSectionRoles } from "@/lib/staff-permissions";
 import { saveRestaurantCashfree, updateBookingPaymentQr, updateBrandLogo, updateOutletSettings, type SettingsPatch } from "@/server/staff/settings-write";
 import { staffFor } from "@/server/staff/request";
+import { archivePrinter, assignPrinters, printSetup, savePrinter, type PrinterInput, type PrintSetup } from "@/server/print/printers";
+import { recentPrintJobs, type JobRow } from "@/server/print/jobs";
 import { saveCustomDomain, setCustomDomainLive, verifyCustomDomain } from "@/server/staff/custom-domain";
 
 export type SettingsResult = { ok: true } | { ok: false; message: string };
@@ -109,5 +111,31 @@ export async function uploadBookingPaymentQrAction(filename: string, contentType
     if (error instanceof AppError) return { ok: false, message: error.message };
     console.error("[settings] payment QR upload failed", error);
     return { ok: false, message: "Could not save the payment QR. Try again." };
+  }
+}
+
+type PrintersResult = { ok: true; setup: PrintSetup } | { ok: false; message: string };
+
+async function printerWork(work: (staff: Awaited<ReturnType<typeof staffFor>>) => Promise<unknown>): Promise<PrintersResult> {
+  try {
+    const staff = await staffFor(consoleSectionRoles.settings, "settings");
+    await work(staff);
+    return { ok: true, setup: await printSetup(staff) };
+  } catch (err) {
+    if (err instanceof AppError) return { ok: false, message: err.message };
+    console.error("[settings] printers failed", err);
+    return { ok: false, message: "That didn't go through. Try again." };
+  }
+}
+
+export async function savePrinterAction(input: PrinterInput) { return printerWork((s) => savePrinter(s, input)); }
+export async function removePrinterAction(printerId: string) { return printerWork((s) => archivePrinter(s, String(printerId))); }
+export async function assignPrintersAction(input: { receiptPrinterId: string | null; kitchenPrinterId: string | null }) { return printerWork((s) => assignPrinters(s, input)); }
+
+export async function recentPrintsAction(): Promise<{ ok: true; jobs: JobRow[] } | { ok: false; message: string }> {
+  try {
+    return { ok: true, jobs: await recentPrintJobs(await staffFor(consoleSectionRoles.settings, "settings")) };
+  } catch (err) {
+    return { ok: false, message: err instanceof AppError ? err.message : "Print history could not be loaded." };
   }
 }

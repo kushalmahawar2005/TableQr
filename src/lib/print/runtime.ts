@@ -82,9 +82,10 @@ function printInFrame(html: string) {
  * Prints a slip. A print someone just asked for opens in a small window of its own, so the page it
  * prints is the slip alone: nothing of the console around it, and its own paper size and margins.
  * A print nobody is waiting at (a kitchen ticket printing itself) goes through a hidden frame, as
- * does any print a pop-up blocker refuses.
+ * does any print a pop-up blocker refuses. Returns which of the two was used.
  */
-export function printHtml(html: string, opts: { background?: boolean } = {}) {
-  if (!opts.background && printInPopup(html)) return;
+export function printHtml(html: string, opts: { background?: boolean } = {}): "window" | "frame" {
+  if (!opts.background && printInPopup(html)) return "window";
   printInFrame(html);
+  return "frame";
 }

@@ -7,7 +7,7 @@ import type { OrderRow } from "@/server/staff/orders-read";
 import { VisitRecord } from "../../reservations/_components/visit-record";
 import { servedAction } from "../actions";
 import { placeEn } from "@/domain/rooms";
-import { printHtml } from "@/app/pos/_components/bill-print";
+import { usePrint } from "@/components/print/print-provider";
 import { orderSlipHtml } from "./order-slip-print";
 
 type Status = OrderRow["status"];
@@ -38,7 +38,8 @@ export function OrdersScreen({ orders, outlet }: { orders: OrderRow[]; outlet: s
   const [query, setQuery] = useState("");
   const [now, setNow] = useState(() => Date.now());
   const [error, setError] = useState<string | null>(null);
-  function printOrder(order: OrderRow) { printOrderSlip(order, outlet); }
+  const printer = usePrint().manager;
+  function printOrder(order: OrderRow) { void printer.print({ kind: "order_slip", subject: { type: "order", id: order.id }, build: (paper) => orderSlipHtml(slipOf(order), outlet, paper) }); }
 
   function serve(o: OrderRow) {
     setError(null);
@@ -188,15 +189,13 @@ export function OrdersScreen({ orders, outlet }: { orders: OrderRow[]; outlet: s
   );
 }
 
-function printOrderSlip(order: OrderRow, outlet: string) {
-  printHtml(orderSlipHtml({
-    table: order.table,
-    takeaway: order.takeaway,
-    roundNo: order.roundNo,
-    placedAt: order.placedAt,
-    statusLabel: LABEL[order.status],
-    items: order.items,
-    note: order.note,
-    totalPaise: order.totalPaise,
-  }, outlet));
-}
+const slipOf = (order: OrderRow) => ({
+  table: order.table,
+  takeaway: order.takeaway,
+  roundNo: order.roundNo,
+  placedAt: order.placedAt,
+  statusLabel: LABEL[order.status],
+  items: order.items,
+  note: order.note,
+  totalPaise: order.totalPaise,
+});

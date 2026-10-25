@@ -17,6 +17,7 @@ import { outletLogoFor } from "@/server/staff/settings-read";
 import { staffAppMetadataFor, staffAppViewportFor } from "@/lib/staff-app";
 import { staffAppBrandForOutletCode } from "@/server/staff/pwa-branding";
 import { cache } from "react";
+import { StaffPrintProvider } from "@/components/print/staff-print-provider";
 
 const consoleAppBrand = cache(async () => {
   const staff = await currentStaff();
@@ -55,8 +56,10 @@ export default async function ConsoleLayout({ children }: LayoutProps<"/console"
   const kitchen = canSee(staff, "kitchen");
   return (
     <StaffShell theme={theme} sidebar={sidebar} lang={lang} sections={sections} kitchen={kitchen} plan={planName ? { name: planName, canManage: canAsk } : undefined} logoUrl={logoUrl} outlets={outlets.map((o) => ({ id: o.id, name: o.name, current: o.id === staff.outletId }))} staff={{ name: staff.name, roles: staff.roles, outlet: staff.outlet.name, shiftEnds: staff.expiresAt }}>
-      <AccessBanner access={access} canAsk={canAsk} outlet={staff.outlet.name} />
-      {children}
+      <StaffPrintProvider outletId={staff.outletId}>
+        <AccessBanner access={access} canAsk={canAsk} outlet={staff.outlet.name} />
+        {children}
+      </StaffPrintProvider>
       <Guide lang={lang} name={staff.name} sections={sections} kitchen={kitchen} welcomeSeen={!!guide.welcome} />
     </StaffShell>
   );

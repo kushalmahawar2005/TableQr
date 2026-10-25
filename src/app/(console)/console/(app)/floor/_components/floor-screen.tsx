@@ -42,7 +42,8 @@ import {
 } from "../actions";
 import { s1Copy, type S1Copy } from "../_copy";
 import * as pos from "@/server/staff/pos-actions";
-import { billHtml, printHtml } from "@/app/pos/_components/bill-print";
+import { billHtml } from "@/app/pos/_components/bill-print";
+import { usePrint } from "@/components/print/print-provider";
 import { combinableFree } from "./floor-logic";
 import { WaiterAssignment } from "./waiter-assignment";
 import { FloorMap } from "./floor-map";
@@ -122,6 +123,7 @@ export function FloorScreen({
   preview?: FloorPreview;
 }) {
   const c = s1Copy[lang];
+  const printer = usePrint().manager;
   const router = useRouter();
   const navOnline = useSyncExternalStore(
     subscribe,
@@ -255,15 +257,10 @@ export function FloorScreen({
       // The table's bill as it stands, on the receipt printer (same slip as Billing prints)
       const sessionId = selected.visit.sessionId;
       void pos.detailAction(sessionId).then((r) => {
-        if (r.ok)
-          printHtml(
-            billHtml(
-              r.data,
-              data.outlet.name,
-              r.data.bill?.status === "paid" ? "receipt" : "bill",
-            ),
-          );
-        else setNotice({ text: r.error, error: true });
+        if (r.ok) {
+          const kind = r.data.bill?.status === "paid" ? "receipt" : "bill";
+          void printer.print({ kind, subject: { type: "session", id: sessionId }, build: (paper) => billHtml(r.data, data.outlet.name, kind, paper) });
+        } else setNotice({ text: r.error, error: true });
       });
     } else if (a === "clear")
       void run(() => clearEmptyAction(id), c.toast.cleared(code));

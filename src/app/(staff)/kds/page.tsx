@@ -4,6 +4,7 @@ import { LANG_COOKIE, parseLang } from "@/lib/i18n";
 import { KDS_COOKIE, resolveKdsDevice } from "@/server/kitchen/device";
 import { kdsBoard } from "@/server/kitchen/kds";
 import { KdsScreen } from "./_components/kds-screen";
+import { KdsPrintProvider } from "./_components/kds-print-provider";
 import { KdsSetup } from "./_components/kds-setup";
 
 export const metadata: Metadata = { title: "Kitchen", robots: { index: false, follow: false } };
@@ -18,10 +19,12 @@ export default async function KitchenDisplayPage() {
   if (!device) return <KdsSetup initialLang={parseLang(jar.get(LANG_COOKIE)?.value)} />;
   const board = await kdsBoard(device, null);
   return (
+    <KdsPrintProvider outletId={device.outletId}>
     <KdsScreen
       initial={board}
       device={{ station: device.station, expeditor: device.expeditor, lang: device.lang, outletName: device.outlet.name, timezone: device.outlet.timezone }}
       realtimeUrl={process.env.REALTIME_URL?.replace(/^http/, "ws") ?? null}
     />
+    </KdsPrintProvider>
   );
 }

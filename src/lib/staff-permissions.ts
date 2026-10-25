@@ -118,3 +118,18 @@ export const canPrice = (roles: readonly StaffRole[], permission: PricingPermiss
 /** Who signs a kitchen wall screen in, with their own phone and PIN: kitchen staff, managers and owners */
 export const kdsSetupRoles = ["kitchen", "manager", "owner"] as const satisfies readonly StaffRole[];
 export const kdsWorkRoles = ["kitchen", "manager", "owner"] as const satisfies readonly StaffRole[];
+
+/**
+ * Who may print which slip. Setting printers up is a Settings action, so managers and owners; anyone
+ * who prints a slip as part of their work may print it. Checked on the server for every job.
+ */
+export const printRoles = {
+  receipt: ["cashier", "waiter", "host", "reception", "accountant", "manager", "owner"],
+  bill: ["cashier", "waiter", "host", "reception", "accountant", "manager", "owner"],
+  kot: ["kitchen", "waiter", "manager", "owner"],
+  order_slip: ["cashier", "waiter", "manager", "owner"],
+  day_close: ["manager", "owner", "accountant"],
+  test: ["manager", "owner"],
+} as const satisfies Record<string, readonly StaffRole[]>;
+export type PrintRoleKind = keyof typeof printRoles;
+export const canPrintKind = (roles: readonly StaffRole[], kind: PrintRoleKind) => canUse(roles, printRoles[kind]);

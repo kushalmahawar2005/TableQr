@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { printHtml } from "@/app/pos/_components/bill-print";
+import { usePrint } from "@/components/print/print-provider";
 import { PaperToggle } from "@/app/pos/_components/paper-toggle";
 import type { DayClose } from "@/server/staff/day-close";
 import { dayCloseHtml, dayEndsAt } from "./day-close-print";
@@ -39,6 +39,7 @@ function Stat({ label, value, note }: { label: string; value: string; note?: str
 
 export function DayCloseScreen({ report: r, outletName, today }: { report: DayClose; outletName: string; today: string }) {
   const router = useRouter();
+  const printer = usePrint().manager;
   const go = (date: string) => router.push(`/console/reports/day-close?date=${date}`);
   const shift = (days: number) => go(new Date(Date.parse(`${r.date}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10));
   const text = shareText(r, outletName);
@@ -116,7 +117,7 @@ export function DayCloseScreen({ report: r, outletName, today }: { report: DayCl
 
       <div className="mt-5 flex flex-wrap gap-2 print:hidden">
         <a className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[#1f8f4e] bg-[#1f8f4e] px-4 text-sm font-semibold text-white" href={`https://wa.me/?text=${encodeURIComponent(text)}`} target="_blank" rel="noreferrer noopener">Send on WhatsApp</a>
-        <button type="button" className={btn} onClick={() => printHtml(dayCloseHtml(r, outletName))}>Print</button>
+        <button type="button" className={btn} onClick={() => void printer.print({ kind: "day_close", subject: { type: "day", id: r.date }, build: (paper) => dayCloseHtml(r, outletName, paper) })}>Print</button>
         <PaperToggle />
         <button type="button" className={btn} onClick={() => void navigator.clipboard?.writeText(text)}>Copy summary</button>
       </div>

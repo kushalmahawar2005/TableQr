@@ -4,6 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import * as s from "@/db/schema";
 import { reconcilePendingPayments } from "@/server/billing/payments";
+import { prunePrintJobs } from "@/server/print/jobs";
 import { reconcilePendingRefunds } from "@/server/billing/refunds";
 import { escalateServiceRequests } from "@/server/guest/service-requests";
 import { expireReadyWaitlists, processBookingNotifications } from "@/server/booking/notifications";
@@ -24,6 +25,8 @@ export async function POST(request: Request) {
   const now = new Date();
   const bookingJobs = await processBookingNotifications(now);
   const waitlistExpired = await expireReadyWaitlists(now);
+  // Old print records are cleared a batch at a time; a failure here never holds up the rest
+  await prunePrintJobs(now).catch((error) => console.error("[service-tasks] print clean-up failed", error));
   for (const { tenantId } of tenants) {
     const outlets = await db.select({ outletId: s.outlets.id }).from(s.outlets)
       .where(and(eq(s.outlets.tenantId, tenantId)));

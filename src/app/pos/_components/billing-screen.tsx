@@ -11,7 +11,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { cn } from "@/lib/utils";
 import { signOutAction } from "@/app/(console)/console/login/actions";
 import { AddItemsDialog } from "./add-items-dialog";
-import { billHtml, printHtml } from "./bill-print";
+import { usePrint } from "@/components/print/print-provider";
+import { billHtml } from "./bill-print";
 import { PaperToggle } from "./paper-toggle";
 import { DISCOUNT_FREE_LIMIT_PERCENT, discountNeedsApproval } from "@/domain/discount-limit";
 import { RefundPanel } from "./refund-panel";
@@ -128,7 +129,8 @@ export function BillingScreen({ initial, realtimeUrl, embedded = false, openSess
   };
   const doReopen = () => detail && void run(() => actions.reopenAction(detail.sessionId, approval), async () => { closeSheet(); open(detail.sessionId); });
   const doVoid = () => { if (!detail || sheet?.kind !== "void") return; void run(() => actions.voidAction({ sessionId: detail.sessionId, lineId: sheet.lineId, reason, approval }), async () => { closeSheet(); open(detail.sessionId); }); };
-  const print = (kind: "bill" | "receipt") => detail && printHtml(billHtml(detail, queue.identity.outlet, kind));
+  const printer = usePrint().manager;
+  const print = (kind: "bill" | "receipt") => detail && void printer.print({ kind, subject: { type: "session", id: detail.sessionId }, build: (paper) => billHtml(detail, queue.identity.outlet, kind, paper) });
 
   const lines = detail?.lines ?? [];
   const live = lines.filter((l) => l.status !== "voided" && l.status !== "cancelled");

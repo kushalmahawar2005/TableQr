@@ -20,7 +20,8 @@ import { KdsActionsProvider, useKdsActions, wallActions, type KdsActions } from 
 import { kdsCopy, type KdsCopy } from "../_copy";
 import { cookable, createAnnouncer, liveCard, sortCards, type Announcer, type Connection, type KdsCard } from "./kds-logic";
 import { autoKotSaved, kotHtml, saveAutoKot } from "./kot-print";
-import { printHtml, savePaper } from "@/app/pos/_components/bill-print";
+import { savePaper } from "@/app/pos/_components/bill-print";
+import { usePrint } from "@/components/print/print-provider";
 import { usePaper } from "@/app/pos/_components/paper-toggle";
 import { audioReady, playLate, playNewTicket, rememberedAnnouncements, saveAnnouncements, setSoundPref, soundPreference, subscribeSoundPref, unlockAudio } from "./sound";
 import { TicketCard, type CardAction } from "./ticket-card";
@@ -69,6 +70,7 @@ export function KdsScreen(props: { initial: KdsBoard; device: KdsDeviceView; rea
 
 function KdsBoardScreen(props: { initial: KdsBoard; device: KdsDeviceView; realtimeUrl: string | null; preview?: KdsPreview; embedded?: boolean }) {
   const { device, preview } = props;
+  const { manager: printer } = usePrint();
   const actions = useKdsActions();
   const lang = device.lang;
   const c = kdsCopy[lang];
@@ -122,14 +124,14 @@ function KdsBoardScreen(props: { initial: KdsBoard; device: KdsDeviceView; realt
       saveAnnouncements(announcer.current.snapshot());
       if (autoKot && heard.arrived.length) {
         const fresh = cards.filter((x) => heard.arrived.includes(x.ticketId));
-        if (fresh.length) printHtml(kotHtml(fresh), { background: true });
+        if (fresh.length) void printer.print({ kind: "kot", subject: { type: "ticket", id: fresh[0].ticketId }, build: (paper) => kotHtml(fresh, paper), background: true });
       }
       if (sound === "on") {
         if (heard.late.length) playLate();
         else playNewTicket();
       }
     }
-  }, [cards, board.station, preview, sound, autoKot]);
+  }, [cards, board.station, preview, sound, autoKot, printer]);
 
   function say(message: string) {
     clearTimeout(toastTimer.current);
@@ -211,7 +213,7 @@ function KdsBoardScreen(props: { initial: KdsBoard; device: KdsDeviceView; realt
       leaving={leaving.has(card.ticketId)}
       onAction={onAction}
       onBumpLine={onBumpLine}
-      onPrint={() => printHtml(kotHtml([card]))}
+      onPrint={() => void printer.print({ kind: "kot", subject: { type: "ticket", id: card.ticketId }, build: (paper) => kotHtml([card], paper) })}
     />
   );
 

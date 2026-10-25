@@ -7,6 +7,9 @@ import { SettingsScreen } from "./_components/settings-screen";
 import { CustomDomainSettings } from "./_components/custom-domain-settings";
 import { RestaurantPaymentSettings } from "./_components/restaurant-payment-settings";
 import { customDomainDnsTarget } from "@/server/staff/custom-domain";
+import { PrinterSettings } from "./_components/printer-settings";
+import { printSetup } from "@/server/print/printers";
+import { recentPrintJobs } from "@/server/print/jobs";
 
 export const metadata: Metadata = { title: "Settings", robots: { index: false, follow: false } };
 
@@ -18,5 +21,5 @@ export default async function SettingsPage() {
   }
   const o = await getOutletSettings(staff);
   const canEdit = staff.roles.includes("owner");
-  return <><SettingsScreen o={o} canEdit={canEdit} /><div className="mx-auto w-full px-4 pb-40 sm:px-6 sm:pb-28"><RestaurantPaymentSettings initial={o.paymentGateway} canEdit={canEdit} /><CustomDomainSettings domain={o.customDomain} token={canEdit ? o.customDomainToken : null} verifiedAt={o.customDomainVerifiedAt} live={o.customDomainLive} dnsTarget={customDomainDnsTarget()} canEdit={canEdit} /></div></>;
+  return <><SettingsScreen o={o} canEdit={canEdit} /><div className="mx-auto w-full px-4 pb-40 sm:px-6 sm:pb-28"><RestaurantPaymentSettings initial={o.paymentGateway} canEdit={canEdit} /><PrinterSettings initial={await printSetup(staff)} outletId={staff.outletId} outletName={staff.outlet.name} recent={await recentPrintJobs(staff)} /><CustomDomainSettings domain={o.customDomain} token={canEdit ? o.customDomainToken : null} verifiedAt={o.customDomainVerifiedAt} live={o.customDomainLive} dnsTarget={customDomainDnsTarget()} canEdit={canEdit} /></div></>;
 }

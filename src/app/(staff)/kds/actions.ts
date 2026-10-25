@@ -2,6 +2,8 @@
 import { cookies } from "next/headers";
 import { AppError } from "@/server/errors";
 import { KDS_COOKIE, KDS_DEVICE_DAYS, kdsSetupOptions, requireKdsDevice, revokeKdsDevice, setupKdsDevice, updateKdsDevice } from "@/server/kitchen/device";
+import { recordPrintJob } from "@/server/print/jobs";
+import { printSetup } from "@/server/print/printers";
 import { kdsAccept, kdsBoard, kdsOlder, kdsBumpLine, kdsBumpTicket, kdsRealtimeToken, kdsRecall, kdsSearch, kdsStart, kdsStock } from "@/server/kitchen/kds";
 
 // S2 server actions. The screen, its outlet and its station come from the httpOnly device cookie;
@@ -95,4 +97,20 @@ export async function logoutAction(phone: string, pin: string) {
     (await cookies()).delete({ name: KDS_COOKIE, path: "/kds" });
     return undefined;
   });
+}
+
+// Printing from a kitchen wall screen: its outlet comes from the device cookie, and a device may only
+// report kitchen tickets.
+export async function printSetupAction() {
+  return run(async () => printSetup(await device()));
+}
+
+export async function recordPrintAction(report: Parameters<typeof recordPrintJob>[1]) {
+  try {
+    const d = await device();
+    return { ok: true as const, data: await recordPrintJob({ tenantId: d.tenantId, outletId: d.outletId, roles: [], userId: null, deviceId: d.deviceId }, report) };
+  } catch (err) {
+    if (err instanceof AppError) return { ok: false as const, message: err.message, refused: true as const };
+    throw err;
+  }
 }
