@@ -173,12 +173,12 @@ describe("polling controller", () => {
 });
 
 describe("screen", () => {
-  it("shows the eight KPIs, deltas, trend, operations, attention and top items", () => {
+  it("shows the seven KPIs, deltas, trend, operations, attention and top items", () => {
     const html = render("busy");
-    for (const label of ["Today&#x27;s Sales", "Orders Today", "Guests Served", "Average Bill", "Tables in Use", "Bookings Coming Up", "Waiting List", "Unpaid Bills"]) expect(html).toContain(label);
+    for (const label of ["Today&#x27;s Sales", "Orders Today", "Average Bill", "Tables in Use", "Bookings Coming Up", "Waiting List", "Unpaid Bills"]) expect(html).toContain(label);
     expect(html).toContain("₹84,625");
     expect(html).toContain("+12%");
-    expect(html).toContain("No change");
+    expect(html).toContain("₹12,940");
     expect(html).toContain("Money from paid bills");
     expect(html).toContain("Revenue trend for the last 7 days");
     expect(html).toContain("Sales, Last 7 Days");

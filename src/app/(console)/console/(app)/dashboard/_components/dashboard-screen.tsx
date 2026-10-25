@@ -149,15 +149,14 @@ export function DashboardScreen({
 
         {data.view !== "money" && <QuickActions />}
 
-        {data.view !== "operations" && <DashboardSecondaryStats data={data} />}
-
         <NeedsAttention data={data} />
 
-        {/* Match the reference's floor-first operations area while keeping each panel content-sized. */}
+        {/* Each column stacks panels end to end, so no column is left with an empty gap beneath it */}
         {data.view !== "money" && (
           <div className="grid items-start gap-5 xl:grid-cols-12">
-            <div className="min-w-0 xl:col-span-6">
+            <div className="min-w-0 space-y-5 xl:col-span-6">
               <LiveFloor data={data} />
+              {data.view !== "operations" && <RecentPayments payments={data.operations.recentPayments} timezone={data.timezone} />}
             </div>
 
             <div className="min-w-0 space-y-5 xl:col-span-3">
@@ -168,16 +167,20 @@ export function DashboardScreen({
             <div className="min-w-0 space-y-5 xl:col-span-3">
               <CustomerRequests initialRequests={data.operations.customerRequests} />
               <UpcomingReservations data={data} />
+              <LiveActivity feed={data.operations.activityFeed} />
             </div>
           </div>
         )}
 
-        <div className="grid items-start gap-5 xl:grid-cols-2 2xl:grid-cols-4">
-          {data.view !== "operations" && <RecentPayments payments={data.operations.recentPayments} timezone={data.timezone} />}
-          {data.view !== "operations" && <SalesPerformance trend={trend} />}
-          {data.view !== "operations" && <TopDishes data={data} />}
-          {data.view !== "money" && <LiveActivity feed={data.operations.activityFeed} />}
-        </div>
+        {data.view !== "operations" && (
+          <div className="grid items-start gap-5 xl:grid-cols-2">
+            {data.view === "money" && <RecentPayments payments={data.operations.recentPayments} timezone={data.timezone} />}
+            <SalesPerformance trend={trend} />
+            <TopDishes data={data} />
+          </div>
+        )}
+
+        {data.view !== "operations" && <DashboardSecondaryStats data={data} />}
       </main>
     </div>
   );

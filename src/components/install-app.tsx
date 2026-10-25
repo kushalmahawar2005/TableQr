@@ -75,42 +75,44 @@ export function InstallApp({ className = "", name = "TableQR", logoUrl = null, c
     if (outcome === "accepted") setShow(false);
   };
 
+  const small = compact ? "text-[11px] leading-snug" : "text-caption";
   return (
-    <div role="region" aria-label="Install the app" className={`flex items-start gap-3 rounded-card border border-line bg-surface p-3.5 shadow-[0_1px_3px_rgb(0_0_0/0.06)] ${compact ? "gap-2 rounded-input p-2 shadow-none" : ""} ${className}`}>
-      <span aria-hidden className={`grid size-10 shrink-0 place-items-center overflow-hidden rounded-input border border-line bg-brand-soft font-display text-section font-bold text-brand-strong ${compact ? "size-8 rounded-md text-sm" : ""}`}>
-        {logoUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element -- tenant logos may be hosted on owner-controlled HTTPS origins
-          <img src={logoUrl} alt="" className="size-full object-contain p-1" />
-        ) : name.trim().slice(0, 1).toUpperCase() || "T"}
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className={`break-words font-semibold text-ink ${compact ? "text-caption leading-snug" : "text-body"}`}>Install {name} on this phone</p>
-        {ios ? (
-          <p className={`mt-0.5 text-muted ${compact ? "text-[11px] leading-snug" : "text-caption"}`}>
-            Tap <HugeiconsIcon icon={Share08Icon} size={14} className="inline align-[-2px]" aria-label="Share" /> Share, then <span className="font-semibold text-ink">Add to Home Screen</span>.
-          </p>
-        ) : (
-          <p className={`mt-0.5 text-muted ${compact ? "text-[11px] leading-snug" : "text-caption"}`}>Opens like an app, full screen, straight from your home screen.</p>
-        )}
-        {!ios && (
-          <button type="button" onClick={() => void install()} className={`mt-2.5 inline-flex min-h-10 items-center gap-2 rounded-input bg-ink px-3.5 text-body font-semibold text-white hover:bg-ink/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink ${compact ? "mt-2 min-h-8 w-full justify-center px-2 text-caption" : ""}`}>
-            <HugeiconsIcon icon={Download04Icon} size={18} aria-hidden />
+    <div role="region" aria-label="Install the app" className={`rounded-card border border-line bg-surface p-3.5 shadow-[0_1px_3px_rgb(0_0_0/0.06)] ${compact ? "rounded-input p-2 shadow-none" : ""} ${className}`}>
+      {/* Icon, title and close share the first row; the text and button below use the full card width, so a narrow card never squeezes them into one word per line */}
+      <div className={`flex items-center ${compact ? "gap-2" : "gap-3"}`}>
+        <span aria-hidden className={`grid shrink-0 place-items-center overflow-hidden rounded-input font-display font-bold text-brand-strong ${logoUrl ? "" : "border border-line bg-brand-soft"} ${compact ? "size-8 rounded-md text-sm" : "size-10 text-section"}`}>
+          {logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element -- tenant logos may be hosted on owner-controlled HTTPS origins
+            <img src={logoUrl} alt="" className="size-full object-contain" />
+          ) : name.trim().slice(0, 1).toUpperCase() || "T"}
+        </span>
+        <p className={`min-w-0 flex-1 break-words font-semibold text-ink ${compact ? "text-caption leading-snug" : "text-body leading-snug"}`}>Install {name} on this phone</p>
+        <button type="button" onClick={close} aria-label="Not now" className={`grid shrink-0 place-items-center rounded-input text-muted hover:bg-ink/5 hover:text-ink ${compact ? "size-7" : "size-9"}`}>
+          <HugeiconsIcon icon={Cancel01Icon} size={18} aria-hidden />
+        </button>
+      </div>
+      {ios ? (
+        <p className={`mt-2 text-muted ${small}`}>
+          Tap <HugeiconsIcon icon={Share08Icon} size={14} className="inline align-[-2px]" aria-label="Share" /> Share, then <span className="font-semibold text-ink">Add to Home Screen</span>.
+        </p>
+      ) : (
+        <>
+          <p className={`mt-2 text-muted ${small}`}>Opens like an app, full screen, straight from your home screen.</p>
+          <button type="button" onClick={() => void install()} className={`mt-2.5 inline-flex w-full items-center justify-center gap-2 whitespace-nowrap rounded-input bg-ink px-3.5 font-semibold text-white hover:bg-ink/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink ${compact ? "min-h-8 px-2 text-caption" : "min-h-10 text-body"}`}>
+            <HugeiconsIcon icon={Download04Icon} size={18} aria-hidden className="shrink-0" />
             Install app
           </button>
-        )}
-        {helpOpen && !ios && <div role="status" className={`mt-2 rounded-lg bg-paper p-2 text-xs leading-relaxed text-muted ${compact ? "text-[11px]" : ""}`}>
-          { /android/i.test(navigator.userAgent)
-            ? "In Chrome, open ⋮ and choose Install app or Add to Home screen."
-            : /iphone|ipad|ipod/i.test(navigator.userAgent)
-              ? "Tap Share, then Add to Home Screen."
-              : /safari/i.test(navigator.userAgent) && !/chrome|chromium|android/i.test(navigator.userAgent)
-                ? "In Safari, choose File → Add to Dock."
-                : "In Chrome, open ⋮ → Cast, save and share → Install page as app."}
-        </div>}
-      </div>
-      <button type="button" onClick={close} aria-label="Not now" className={`grid size-9 shrink-0 place-items-center rounded-input text-muted hover:bg-ink/5 hover:text-ink ${compact ? "size-7" : ""}`}>
-        <HugeiconsIcon icon={Cancel01Icon} size={18} aria-hidden />
-      </button>
+        </>
+      )}
+      {helpOpen && !ios && <div role="status" className={`mt-2 rounded-lg bg-paper p-2 text-xs leading-relaxed text-muted ${compact ? "text-[11px]" : ""}`}>
+        { /android/i.test(navigator.userAgent)
+          ? "In Chrome, open ⋮ and choose Install app or Add to Home screen."
+          : /iphone|ipad|ipod/i.test(navigator.userAgent)
+            ? "Tap Share, then Add to Home Screen."
+            : /safari/i.test(navigator.userAgent) && !/chrome|chromium|android/i.test(navigator.userAgent)
+              ? "In Safari, choose File → Add to Dock."
+              : "In Chrome, open ⋮ → Cast, save and share → Install page as app."}
+      </div>}
     </div>
   );
 }

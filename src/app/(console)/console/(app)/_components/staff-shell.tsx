@@ -784,10 +784,10 @@ function OutletSwitcher({
 
 function OutletBrandMark({ name, logoUrl }: { name: string; logoUrl: string | null }) {
   return (
-    <span className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-xl border border-line bg-sage/70 shadow-xs" aria-label={logoUrl ? `${name} logo` : `${name} initial`}>
+    <span className={`grid size-10 shrink-0 place-items-center overflow-hidden rounded-xl ${logoUrl ? "" : "border border-line bg-sage/70 shadow-xs"}`} aria-label={logoUrl ? `${name} logo` : `${name} initial`}>
       {logoUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={logoUrl} alt="" className="size-full object-contain p-1" />
+        <img src={logoUrl} alt="" className="size-full object-contain" />
       ) : <span aria-hidden="true" className="font-display text-lg font-bold text-ink">{name.trim().charAt(0).toUpperCase() || "R"}</span>}
     </span>
   );

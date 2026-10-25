@@ -74,9 +74,11 @@ export function CustomerRequests({ initialRequests }: { initialRequests: Custome
               <div key={r.id} className="flex items-center justify-between gap-2 py-2.5 first:pt-0 last:pb-0">
                 <div className="flex min-w-0 items-center gap-2.5">
                   <span className="shrink-0 rounded bg-neutral-100 px-1.5 py-0.5 text-xs font-bold text-ink">{r.tableCode}</span>
-                  <span className={`grid size-7 shrink-0 place-items-center rounded-lg ${color}`}>
-                    <Icon className="size-3.5" aria-hidden="true" />
-                  </span>
+                  {!isBill && (
+                    <span className={`grid size-7 shrink-0 place-items-center rounded-lg ${color}`}>
+                      <Icon className="size-3.5" aria-hidden="true" />
+                    </span>
+                  )}
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-ink">{label}</p>
                     <p className={`text-[11px] tabular ${waiting ? "font-bold text-terracotta" : "text-muted"}`}>

@@ -1,4 +1,4 @@
-import { Calendar, CreditCard, FileText, Receipt, Users, Wallet } from "lucide-react";
+import { Calendar, CreditCard, FileText, HandCoins, Receipt, Wallet } from "lucide-react";
 import Link from "next/link";
 import type { DashboardData, RevenueTrend } from "@/server/staff/dashboard";
 import { Delta, dayLabel, focusRing, money } from "./dashboard-shared";
@@ -53,16 +53,16 @@ export function DashboardKpis({ data, trend }: { data: DashboardData; trend: Rev
           <div className={footer}><span className="whitespace-nowrap text-[10px] font-medium text-muted">Yesterday</span><span className={deltaBadge}><Delta today={k.orders.today} yesterday={k.orders.yesterday} compact /></span></div>
         </Link>
 
-        <Link href="/console/reports" className={`${card} xl:col-span-1`}>
+        <Link href="/console/billing" className={`${card} xl:col-span-1`}>
           <div className="flex items-center justify-between gap-2">
-            <p className="text-[12px] font-semibold leading-4 text-muted sm:text-[13px]">Guests Served</p>
-            <span className={`${iconBox} bg-sage text-forest`} aria-hidden="true"><Users className="size-[18px]" /></span>
+            <p className="text-[12px] font-semibold leading-4 text-muted sm:text-[13px]">Unpaid Bills</p>
+            <span className={`${iconBox} bg-terracotta/10 text-terracotta`} aria-hidden="true"><HandCoins className="size-[18px]" /></span>
           </div>
           <div className="mt-2">
-            <p className="font-display text-[30px] font-bold leading-none tracking-tight text-ink tabular sm:text-[32px]">{k.covers.today}</p>
-            <p className="mt-2 min-h-8 text-xs font-medium leading-4 text-muted">Guests at your tables today</p>
+            <p className="font-display text-[30px] font-bold leading-none tracking-tight text-ink tabular sm:text-[32px]">{money(k.outstandingPaise)}</p>
+            <p className="mt-2 min-h-8 text-xs font-medium leading-4 text-muted">Still to collect</p>
           </div>
-          <div className={footer}><span className="whitespace-nowrap text-[10px] font-medium text-muted">Yesterday</span><span className={deltaBadge}><Delta today={k.covers.today} yesterday={k.covers.yesterday} compact /></span></div>
+          <div className={`${footer} justify-start`}><span className="text-[11px] font-medium text-muted">Open bills right now</span></div>
         </Link>
 
         <Link href="/console/floor" className={`${card} xl:col-span-1`}>
@@ -101,7 +101,7 @@ export function DashboardKpis({ data, trend }: { data: DashboardData; trend: Rev
   );
 }
 
-/** Lower-priority operational counts sit beneath the primary KPIs and quick actions. */
+/** Lower-priority operational counts sit at the bottom of the dashboard, under the main panels. */
 export function DashboardSecondaryStats({ data }: { data: DashboardData }) {
   const k = data.kpis;
   const wl = data.operations.waitlist;
@@ -109,7 +109,7 @@ export function DashboardSecondaryStats({ data }: { data: DashboardData }) {
 
   return (
     <section aria-label="Additional dashboard metrics">
-      <div className="grid grid-cols-3 gap-px overflow-hidden rounded-card border border-line bg-line">
+      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-card border border-line bg-line">
         <Link href="/console/reservations" className={stripCell}>
           <p className="flex items-center gap-1.5 text-xs font-semibold text-muted"><Calendar className="size-3.5" aria-hidden="true" />Bookings Coming Up</p>
           <p className="mt-1 text-xl font-bold text-ink tabular">{k.upcomingReservations}</p>
@@ -119,11 +119,6 @@ export function DashboardSecondaryStats({ data }: { data: DashboardData }) {
           <p className="text-xs font-semibold text-muted">Waiting List</p>
           <p className="mt-1 text-xl font-bold text-ink tabular">{k.waitlist}</p>
           <p className="mt-0.5 hidden text-xs font-medium text-muted sm:block">{wl.waiting} waiting · {wl.notified} notified</p>
-        </Link>
-        <Link href="/console/billing" className={stripCell}>
-          <p className="text-xs font-semibold text-muted">Unpaid Bills</p>
-          <p className="mt-1 text-xl font-bold text-ink tabular">{money(k.outstandingPaise)}</p>
-          <p className="mt-0.5 hidden text-xs font-medium text-muted sm:block">Still to collect</p>
         </Link>
       </div>
     </section>

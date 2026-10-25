@@ -1,4 +1,4 @@
-import { CheckCircle2, Clock } from "lucide-react";
+import { CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 import type { KitchenOrderItem } from "@/server/staff/dashboard";
 import { EmptyLine, Panel, viewAllClass } from "./dashboard-shared";
@@ -33,13 +33,9 @@ export function KitchenOrders({ orders }: { orders: KitchenOrderItem[] }) {
               <div key={o.id} className="flex items-center justify-between gap-2 py-2 first:pt-0 last:pb-0">
                 <div className="flex min-w-0 items-center gap-2.5">
                   <span className="shrink-0 rounded bg-neutral-100 px-1.5 py-0.5 text-xs font-bold text-ink">{o.tableCode}</span>
-                  <p className="min-w-0 truncate text-sm font-semibold text-ink">{o.items}</p>
+                  <p className="line-clamp-2 min-w-0 break-words text-sm font-semibold leading-snug text-ink">{o.items}</p>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
-                  <span className={`flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-bold tabular ${delayed ? "bg-rose-50 text-rose-700" : "bg-neutral-100 text-muted"}`}>
-                    <Clock className="size-3" aria-hidden="true" />
-                    {o.elapsedMinutes}m
-                  </span>
                   {o.status === "ready" ? (
                     <span className="flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-bold text-emerald-700">
                       <CheckCircle2 className="size-3" aria-hidden="true" /> Ready
