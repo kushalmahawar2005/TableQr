@@ -122,7 +122,7 @@ function KdsBoardScreen(props: { initial: KdsBoard; device: KdsDeviceView; realt
       saveAnnouncements(announcer.current.snapshot());
       if (autoKot && heard.arrived.length) {
         const fresh = cards.filter((x) => heard.arrived.includes(x.ticketId));
-        if (fresh.length) printHtml(kotHtml(fresh));
+        if (fresh.length) printHtml(kotHtml(fresh), { background: true });
       }
       if (sound === "on") {
         if (heard.late.length) playLate();

@@ -55,6 +55,29 @@ describe("day close", () => {
     expect((await getDayClose(owner, "2020-01-01")).bills.count).toBe(0);
   });
 
+  it("lists only visits that have something on them as still open, and says which are takeaway", async () => {
+    const seat = async (table: string, device: string) => {
+      const qr = env.demo.tableQr[table];
+      const { participantId } = await startOrJoinTable({ outletCode: "SRJ01", shortCode: qr, deviceId: device, displayName: "Guest" });
+      return attachVerifiedTestGuest(appDb, await getGuestContext("SRJ01", qr, participantId, device), "Guest");
+    };
+    await seat("T5", "dc-empty");
+    const ordered = await seat("T6", "dc-ordered");
+    await addCartLine(ordered, { itemId: env.demo.itemIds["Dal Makhani"], qty: 1 });
+    await placeOrder(ordered);
+    const before = await getDayClose(owner, istToday());
+    // An empty seated table nobody ordered at is not an open bill; one with an order is
+    expect(before.openTables.map((t) => t.table)).not.toContain("T5");
+    expect(before.openTables.find((t) => t.table === "T6")).toMatchObject({ takeaway: false });
+    // A takeaway counter is named as one
+    await env.db.update(s.diningTables).set({ tableClass: "takeaway" }).where(eq(s.diningTables.id, env.demo.tableIds.T6));
+    expect((await getDayClose(owner, istToday())).openTables.find((t) => t.table === "T6")).toMatchObject({ takeaway: true });
+    await env.db.update(s.diningTables).set({ tableClass: "4-top" }).where(eq(s.diningTables.id, env.demo.tableIds.T6));
+    // The money lines are the same whatever is open
+    const after = await getDayClose(owner, istToday());
+    expect({ ...after, openTables: [] }).toEqual({ ...before, openTables: [] });
+  });
+
   it("keeps a bill paid after midnight on the day it began when the outlet is open late", async () => {
     await env.db.update(s.outlets).set({ openingHours: { sat: [["18:00", "02:00"]] } }).where(eq(s.outlets.id, owner.outletId));
     const [bill] = await env.db.select().from(s.bills).where(eq(s.bills.status, "paid"));

@@ -7,7 +7,8 @@ import type { OrderRow } from "@/server/staff/orders-read";
 import { VisitRecord } from "../../reservations/_components/visit-record";
 import { servedAction } from "../actions";
 import { placeEn } from "@/domain/rooms";
-import { forPaper, paperSaved } from "@/app/pos/_components/bill-print";
+import { printHtml } from "@/app/pos/_components/bill-print";
+import { orderSlipHtml } from "./order-slip-print";
 
 type Status = OrderRow["status"];
 const STEPS: { key: Status; label: string }[] = [{ key: "placed", label: "Placed" }, { key: "accepted", label: "Accepted" }, { key: "preparing", label: "Cooking" }, { key: "ready", label: "Ready" }, { key: "served", label: "Served" }];
@@ -188,35 +189,14 @@ export function OrdersScreen({ orders, outlet }: { orders: OrderRow[]; outlet: s
 }
 
 function printOrderSlip(order: OrderRow, outlet: string) {
-  const popup = window.open("", "_blank", "popup,width=420,height=720");
-  if (!popup) return;
-
-  const escape = (value: string) => value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]!);
-  const placed = new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" }).format(new Date(order.placedAt));
-  const kind = order.takeaway ? "Takeaway" : "Table";
-  const items = order.items.map((item) => `<li><span class="qty">${item.qty} ×</span><span>${escape(item.name)}</span></li>`).join("");
-  const status = LABEL[order.status];
-
-  popup.document.open();
-  // `80mm auto` is ignored by Chromium's print preview, which silently falls back to A4.
-  // Give each slip a real custom page size, estimated from its content, so Save as PDF
-  // previews the same narrow receipt that an 80 mm thermal printer will receive.
-  const noteHeight = order.note ? Math.ceil(order.note.length / 42) * 4 : 0;
-  const paperHeight = Math.max(88, 72 + order.items.length * 8 + noteHeight);
-  const pageRule = `@page{size:80mm ${paperHeight}mm;margin:0}`;
-  const bodyRule = "body{width:80mm;margin:0;padding:4mm;font-size:12px;line-height:1.4}";
-  popup.document.write(forPaper(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escape(kind)} ${escape(order.table)} · Order</title><style>
-    ${pageRule}
-    *{box-sizing:border-box}html,body{margin:0;background:#fff;color:#111;font-family:Arial,Helvetica,sans-serif}
-    ${bodyRule}
-    header{text-align:center;border-bottom:1px dashed #555;padding-bottom:10px;margin-bottom:10px}
-    .brand{font-size:15px;font-weight:700;letter-spacing:.02em}.kind{margin:8px 0 2px;font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase}
-    h1{margin:0;font-size:23px;line-height:1.15}.meta{margin-top:5px;font-size:13px;font-weight:700}.date{margin-top:3px;color:#444}
-    .status{display:inline-block;margin-top:8px;padding:3px 8px;border:1px solid #777;border-radius:20px;font-size:10px;text-transform:uppercase;letter-spacing:.06em}
-    ul{list-style:none;margin:0;padding:0}li{display:flex;gap:8px;padding:7px 0;border-bottom:1px dotted #aaa;font-size:14px;font-weight:600}.qty{min-width:30px;font-weight:700}
-    .note{margin-top:10px;padding:7px;border:1px solid #aaa;font-size:12px}.total{display:flex;justify-content:space-between;margin-top:10px;padding-top:9px;border-top:1px solid #111;font-size:16px;font-weight:700}
-    footer{margin-top:12px;padding-top:8px;border-top:1px dashed #777;text-align:center;font-size:10px;color:#444}
-    @media screen{body{margin:18px auto;padding:14px;border:1px solid #ddd;box-shadow:0 2px 12px #0002}}
-  </style></head><body><header><div class="brand">${escape(outlet)}</div><div class="kind">Order slip</div><h1>${escape(kind)} ${escape(order.table)}</h1><div class="meta">Round ${order.roundNo}</div><div class="date">${escape(placed)}</div><span class="status">${escape(status)}</span></header><ul>${items || "<li>No active items</li>"}</ul>${order.note ? `<p class="note"><b>Kitchen note:</b> ${escape(order.note)}</p>` : ""}<div class="total"><span>Order total</span><span>${escape(money(order.totalPaise))}</span></div><footer>Order summary · Not a tax invoice</footer><script>window.addEventListener('load',()=>{const b=document.body.getBoundingClientRect(),k=Math.min(1,${paperSaved()}*96/25.4/b.width),s=document.createElement('style');s.textContent='@page{size:${paperSaved()}mm '+(Math.ceil(b.height*k*25.4/96)+4)+'mm;margin:0}';document.head.appendChild(s);window.focus();setTimeout(()=>window.print(),150)});window.addEventListener('afterprint',()=>window.close());</script></body></html>`));
-  popup.document.close();
+  printHtml(orderSlipHtml({
+    table: order.table,
+    takeaway: order.takeaway,
+    roundNo: order.roundNo,
+    placedAt: order.placedAt,
+    statusLabel: LABEL[order.status],
+    items: order.items,
+    note: order.note,
+    totalPaise: order.totalPaise,
+  }, outlet));
 }

@@ -1,64 +1,77 @@
+import { paperSaved } from "@/lib/print/runtime";
+import { charsPerLine, dateTime, esc, profileFor, row, rs, thermalDocument, wrapRows, type PaperMm } from "@/lib/print/thermal";
 import type { DayClose } from "@/server/staff/day-close";
 
-// The day close as its own small document: black on white, no console around it, sized for an
-// 80 mm receipt printer and still tidy on A4. Printed through the same hidden frame as POS bills.
+// The day close as its own small document: black on white, no console around it, laid out for an
+// 80 mm or 58 mm receipt roll and still tidy on A4. A day that is still going is a summary "so far",
+// not a final report, and says so. The sums are the day close's own; this only lays them out.
 
-const esc = (v: string) => v.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
-const rs = (paise: number) => `${paise < 0 ? "− " : ""}₹${(Math.abs(paise) / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const METHOD: Record<string, string> = { cash: "Cash", card: "Card", upi: "UPI", wallet: "Wallet / online" };
 
 /** "3 am" for a business day that runs past midnight */
 export const dayEndsAt = (minutes: number) => `${Math.floor(minutes / 60) % 12 || 12}${minutes % 60 ? `:${String(minutes % 60).padStart(2, "0")}` : ""} am`;
 
-export function dayCloseHtml(r: DayClose, outlet: string) {
-  const optionalRows = Number(!!r.refunds.paise) + Number(!!r.bills.discountPaise) + Number(!!r.bills.serviceChargePaise) + Number(!!r.bills.roundOffPaise) + Number(!!r.bills.tipsPaise) + Number(!!r.removed.qty);
-  const extraWrappedRows = Math.max(0, Math.ceil(outlet.length / 25) - 1)
-    + r.topItems.reduce((n, item, index) => n + Math.max(0, Math.ceil(`${index + 1}. ${item.name} x${item.qty} ${rs(item.paise)}`.length / 26) - 1), 0)
-    + (r.openTables.length ? Math.max(0, Math.ceil(`Still open: ${r.openTables.map((table) => table.table).join(", ")}`.length / 26) - 1) : 0);
-  const paperHeight = Math.max(130, 102 + (r.methods.length + optionalRows + r.topItems.length + r.openTables.length) * 5 + extraWrappedRows * 5);
-  const row = (a: string, v: string, cls = "") => `<div class="r ${cls}"><span>${esc(a)}</span><span>${esc(v)}</span></div>`;
+const openLabel = (t: DayClose["openTables"][number]) => `${t.takeaway ? "Takeaway" : "Table"} ${t.table}`;
+
+export function dayCloseHtml(r: DayClose, outlet: string, paper: PaperMm = paperSaved()) {
+  const profile = profileFor(paper);
   const date = new Date(`${r.date}T12:00:00Z`).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
-  const printed = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" }).format(Date.now());
-  return `<!doctype html><html><head><meta charset="utf-8"><title>Day close · ${esc(r.date)}</title><style>
-@page{size:80mm ${paperHeight}mm;margin:0}
-*{box-sizing:border-box}
-html{color-scheme:light;background:#fff}
-body{margin:0;width:80mm;padding:4mm;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;color:#000;line-height:1.4}
-h1{font-size:16px;text-align:center;margin:0 0 2px}
-h2{font-size:12px;margin:0 0 4px;text-transform:uppercase;letter-spacing:.04em}
-.c{text-align:center}.m{font-size:11px}
-hr{border:0;border-top:1px dashed #000;margin:8px 0}
-.r{display:flex;justify-content:space-between;gap:8px}
-.b{font-weight:700;font-size:14px}.w{font-weight:700}
-</style></head><body>
-<h1>${esc(outlet)}</h1>
-<div class="c w">DAY CLOSE</div>
-<div class="c m">${esc(date)}${r.isToday ? " (so far)" : ""}</div>
-${r.cutoffMinutes ? `<div class="c m">Day runs till ${dayEndsAt(r.cutoffMinutes)} next morning</div>` : ""}
-<div class="c m">Printed ${esc(printed)}</div>
+  const methods = r.methods.length ? r.methods.map((m) => row(`${METHOD[m.method] ?? m.method} (${m.count})`, rs(m.paise))).join("") : row("No payments", rs(0));
+  const still = r.openTables.length
+    ? `<hr><h2>${r.isToday ? "Still open" : "Unsettled from this day"} (${r.openTables.length})</h2>${r.openTables.map((t) => row(openLabel(t), t.totalPaise ? rs(t.totalPaise) : "")).join("")}`
+    : "";
+  const top = r.topItems.length
+    ? `<hr><h2>Most ordered</h2>${r.topItems.map((t, i) => `<div class="it"><div class="n">${i + 1}. ${esc(t.name)}</div>${row(`× ${t.qty}`, rs(t.paise))}</div>`).join("")}`
+    : "";
+
+  const body = `<h1>${esc(outlet)}</h1>
+<div class="c t"><b>${r.isToday ? "DAY SUMMARY" : "DAY CLOSE REPORT"}</b></div>
+<div class="c m">${r.isToday ? "So far today · not final" : "Final for this business day"}</div>
+<hr>
+${row("Date", date)}
+${r.cutoffMinutes ? `<div class="m">Day runs till ${dayEndsAt(r.cutoffMinutes)} next morning</div>` : ""}
+${row("Printed", dateTime(Date.now()))}
 <hr>
 <h2>Money in</h2>
-${r.methods.length ? r.methods.map((m) => row(`${METHOD[m.method] ?? m.method} (${m.count})`, rs(m.paise))).join("") : row("No payments", rs(0))}
-${r.refunds.paise ? row(`Refunds (${r.refunds.count})`, `- ${rs(r.refunds.paise)}`) : ""}
+${methods}
+${r.refunds.paise ? row(`Refunds (${r.refunds.count})`, `− ${rs(r.refunds.paise)}`) : ""}
 ${row("COLLECTED", rs(r.netPaise), "b")}
 <hr>
-<h2>Bills</h2>
+<h2>Sales</h2>
 ${row("Paid bills", String(r.bills.count))}
-${row("Food and drinks", rs(r.bills.subtotalPaise))}
-${r.bills.discountPaise ? row("Discounts", `- ${rs(r.bills.discountPaise)}`) : ""}
+${row("Food & drinks", rs(r.bills.subtotalPaise))}
+${r.bills.discountPaise ? row("Discounts", `− ${rs(r.bills.discountPaise)}`) : ""}
 ${r.bills.serviceChargePaise ? row("Service charge", rs(r.bills.serviceChargePaise)) : ""}
 ${row("GST", rs(r.bills.taxPaise))}
 ${r.bills.roundOffPaise ? row("Round off", rs(r.bills.roundOffPaise)) : ""}
-${row("SALES", rs(r.bills.totalPaise), "w")}
+${row("SALES", rs(r.bills.totalPaise), "b")}
 ${r.bills.tipsPaise ? row("Tips (on top)", rs(r.bills.tipsPaise)) : ""}
 ${row("Average bill", rs(r.averageBillPaise))}
 <hr>
+<h2>Volume</h2>
 ${row("Guests", String(r.visits.covers || r.visits.count))}
 ${row("Orders", String(r.orders))}
 ${row("Items sold", String(r.itemsSold))}
-${r.removed.qty ? row(`Cancelled/voided (${r.removed.qty})`, rs(r.removed.paise)) : ""}
-${r.topItems.length ? `<hr><h2>Most ordered</h2>${r.topItems.map((t, i) => row(`${i + 1}. ${t.name} x${t.qty}`, rs(t.paise))).join("")}` : ""}
-${r.openTables.length ? `<hr><div class="w">Still open: ${esc(r.openTables.map((t) => t.table).join(", "))}</div>` : ""}
-<div class="c m">TableQR</div>
-</body></html>`;
+${r.removed.qty ? row(`Voided (${r.removed.qty})`, rs(r.removed.paise)) : ""}
+${top}${still}
+<hr>
+<div class="c m">Powered by TableQR</div>`;
+
+  // Height before measuring: long outlet or dish names wrap onto more rows
+  const perLine = charsPerLine(profile);
+  const rows = 22 + r.methods.length + Number(!!r.refunds.paise) + Number(!!r.bills.discountPaise) + Number(!!r.bills.serviceChargePaise) + Number(!!r.bills.roundOffPaise) + Number(!!r.bills.tipsPaise) + Number(!!r.removed.qty)
+    + wrapRows(outlet, Math.floor(perLine * 0.6)) - 1
+    + r.topItems.reduce((n, t, i) => n + 1 + wrapRows(`${i + 1}. ${t.name}`, perLine), 0)
+    + (r.openTables.length ? 2 + r.openTables.length : 0);
+
+  return thermalDocument({
+    title: `${r.isToday ? "Day summary" : "Day close"} ${r.date}`,
+    paper,
+    css: `h1{font-size:${profile.fsLarge + 3}px;text-align:center;line-height:1.2;font-weight:700;margin-bottom:2px}
+.t{font-size:${profile.fsLarge}px;letter-spacing:.06em}
+h2{font-size:${profile.fs}px;margin:2px 0 3px;text-transform:uppercase;letter-spacing:.05em}
+.it{margin:2px 0}.it .n{font-weight:700}`,
+    slips: [body],
+    estimateMm: rows * 4.6 + 12,
+  });
 }

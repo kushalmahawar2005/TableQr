@@ -74,13 +74,22 @@ export async function getDayClose(staff: Staff, date: string, now = new Date()) 
       .groupBy(s.orderLines.nameEn)
       .orderBy(desc(sql`sum(${s.orderLines.qty})`))
       .limit(5),
-    // Tables still open right now, with what they owe: settle these before closing the day
+    // Sessions still open, with what they owe: settle these before closing the day. Only a visit that
+    // has something on it counts (an order, or a bill), and only one that began by the end of this
+    // business day; an empty table nobody ordered at is not an open bill
     db
-      .select({ table: s.diningTables.code, total: s.bills.totalPaise })
+      .select({ table: s.diningTables.code, total: s.bills.totalPaise, tableClass: s.diningTables.tableClass })
       .from(s.tableSessions)
       .innerJoin(s.diningTables, and(eq(s.diningTables.tenantId, s.tableSessions.tenantId), eq(s.diningTables.id, s.tableSessions.tableId)))
       .leftJoin(s.bills, and(eq(s.bills.tenantId, s.tableSessions.tenantId), eq(s.bills.sessionId, s.tableSessions.id)))
-      .where(and(eq(s.tableSessions.tenantId, staff.tenantId), eq(s.tableSessions.outletId, staff.outletId), ne(s.tableSessions.status, "closed"))),
+      .where(and(
+        eq(s.tableSessions.tenantId, staff.tenantId),
+        eq(s.tableSessions.outletId, staff.outletId),
+        ne(s.tableSessions.status, "closed"),
+        lt(s.tableSessions.openedAt, to),
+        sql`exists (select 1 from ${s.orders} where ${s.orders.tenantId} = ${s.tableSessions.tenantId} and ${s.orders.sessionId} = ${s.tableSessions.id})`,
+      ))
+      .orderBy(s.tableSessions.openedAt),
   ]);
 
   const served = lines.filter((l) => l.status !== "voided" && l.status !== "cancelled");
@@ -102,6 +111,6 @@ export async function getDayClose(staff: Staff, date: string, now = new Date()) 
     visits: { count: visits.n, covers: visits.covers },
     averageBillPaise: bills.n ? Math.round(bills.total / bills.n) : 0,
     topItems: top,
-    openTables: open.map((o) => ({ table: o.table, totalPaise: o.total ?? 0 })),
+    openTables: open.map((o) => ({ table: o.table, totalPaise: o.total ?? 0, takeaway: o.tableClass === "takeaway" })),
   };
 }
