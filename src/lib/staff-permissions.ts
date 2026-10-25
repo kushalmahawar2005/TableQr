@@ -24,6 +24,8 @@ export const consoleSectionRoles = {
   /** Phone numbers of guests: owners and managers only */
   customers: ["manager", "owner"],
   team: ["manager", "owner"],
+  /** The daily attendance register: managers and owners mark who was present, absent or on a half day */
+  attendance: ["manager", "owner"],
   settings: ["manager", "owner"],
   /** What the restaurant pays TableQR, and paying it */
   plan: ["manager", "owner"],

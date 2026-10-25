@@ -386,6 +386,13 @@
       "when": 1792953913197,
       "tag": "0054_printer_management",
       "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "5",
+      "when": 1792958027622,
+      "tag": "0055_attendance_register",
+      "breakpoints": true
     }
   ]
 }
