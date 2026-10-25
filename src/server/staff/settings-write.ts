@@ -82,7 +82,8 @@ export async function updateOutletSettings(staff: Staff, input: SettingsPatch, n
     for (const d of DAYS) {
       const ranges = (input.openingHours[d] ?? []).map(([a, b]) => [String(a), String(b)] as [string, string]);
       if (ranges.length > 3) throw bad("At most 3 time slots per day.");
-      for (const [a, b] of ranges) if (!TIME.test(a) || !TIME.test(b) || a >= b) throw bad("Each opening time must be before its closing time (up to 11:59 pm).");
+      // A closing time earlier than the opening time runs past midnight (08:00 to 02:00 closes at 2 am the next day)
+      for (const [a, b] of ranges) if (!TIME.test(a) || !TIME.test(b) || a === b) throw bad("Opening and closing time cannot be the same. A closing time like 2:00 am counts as the next day.");
       hours[d] = ranges.sort((x, y) => x[0].localeCompare(y[0]));
     }
   }

@@ -441,6 +441,7 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
                           <input type="time" aria-label={`${label} opens`} value={a} disabled={!canEdit} onChange={(e) => setDay(k, ranges.map((r, j) => (j === n ? [e.target.value, r[1]] : r)))} className="h-8 bg-transparent text-sm" />
                           <span className="text-muted">to</span>
                           <input type="time" aria-label={`${label} closes`} value={b} disabled={!canEdit} onChange={(e) => setDay(k, ranges.map((r, j) => (j === n ? [r[0], e.target.value] : r)))} className="h-8 bg-transparent text-sm" />
+                          {b && a && b < a && <span className="whitespace-nowrap text-xs font-semibold text-muted">next day</span>}
                           {canEdit && ranges.length > 1 && <button type="button" aria-label="Remove time slot" onClick={() => setDay(k, ranges.filter((_, j) => j !== n))} className="text-muted hover:text-danger"><X className="size-4" /></button>}
                         </span>
                       ))}
