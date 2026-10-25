@@ -15,6 +15,15 @@ Work top to bottom, one part at a time. Money and guest-facing parts come first 
 - [x] **P7.** Before launch, the owner removes `OTP_TEST_BYPASS` and `OTP_TEST_PHONE` in Hostinger hPanel (B2, F9). *Owner action.* Done 25 Oct: the owner removed both variables and the bypass code was removed (revert of `0c8c5b5`).
 - [ ] **P8.** UI redesign: on hold until the owner names the screens. Broken or overflowing UI found during the audit is still fixed.
 
+## Sweeps done 25 Oct
+
+- **Phone width:** 19 console pages at 390 px and the guest, waiter, kitchen-display and login pages at 360 px have no horizontal overflow (real pages, logged in as the demo owner).
+- **Auth:** every server action file and API route has a guard (staff session, device cookie, token, signature or shared secret); return addresses only trigger a server-to-server check.
+- **Times:** server code reads time only in UTC or the outlet's time zone; no machine-local date calls.
+- **HTML safety:** the only raw-HTML spots are our own QR SVGs and print templates that escape user text.
+- **Dependencies:** `npm audit` reports 0 vulnerabilities; all 53 migrations apply.
+- **Production setup (owner, Hostinger hPanel):** `OTP_SECRET` (32+ random characters), `SMS_PROVIDER=fast2sms` with the Fast2SMS key and approved DLT OTP template, `PAYMENT_CREDENTIALS_KEY`, `PUBLIC_APP_URL`, `CUSTOM_DOMAIN_CNAME_TARGET` if used. `npm run security:preflight` lists what is still missing.
+
 ## How each part is checked
 
 Every part gets the same pass before it is ticked:
