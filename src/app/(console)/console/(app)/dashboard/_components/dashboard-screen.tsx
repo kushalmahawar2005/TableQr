@@ -145,36 +145,38 @@ export function DashboardScreen({
 
         {setup}
 
-        <DashboardKpis data={data} trend={trend} />
+        {data.view !== "operations" && <DashboardKpis data={data} trend={trend} />}
 
-        <QuickActions />
+        {data.view !== "money" && <QuickActions />}
 
-        <DashboardSecondaryStats data={data} />
+        {data.view !== "operations" && <DashboardSecondaryStats data={data} />}
 
         <NeedsAttention data={data} />
 
         {/* Match the reference's floor-first operations area while keeping each panel content-sized. */}
-        <div className="grid items-start gap-5 xl:grid-cols-12">
-          <div className="min-w-0 xl:col-span-6">
-            <LiveFloor data={data} />
-          </div>
+        {data.view !== "money" && (
+          <div className="grid items-start gap-5 xl:grid-cols-12">
+            <div className="min-w-0 xl:col-span-6">
+              <LiveFloor data={data} />
+            </div>
 
-          <div className="min-w-0 space-y-5 xl:col-span-3">
-            {showStaff && <StaffOnDuty duty={dutyData} />}
-            <KitchenOrders orders={data.operations.kitchenOrders} />
-          </div>
+            <div className="min-w-0 space-y-5 xl:col-span-3">
+              {showStaff && <StaffOnDuty duty={dutyData} />}
+              <KitchenOrders orders={data.operations.kitchenOrders} />
+            </div>
 
-          <div className="min-w-0 space-y-5 xl:col-span-3">
-            <CustomerRequests initialRequests={data.operations.customerRequests} />
-            <UpcomingReservations data={data} />
+            <div className="min-w-0 space-y-5 xl:col-span-3">
+              <CustomerRequests initialRequests={data.operations.customerRequests} />
+              <UpcomingReservations data={data} />
+            </div>
           </div>
-        </div>
+        )}
 
         <div className="grid items-start gap-5 xl:grid-cols-2 2xl:grid-cols-4">
-          <RecentPayments payments={data.operations.recentPayments} timezone={data.timezone} />
-          <SalesPerformance trend={trend} />
-          <TopDishes data={data} />
-          <LiveActivity feed={data.operations.activityFeed} />
+          {data.view !== "operations" && <RecentPayments payments={data.operations.recentPayments} timezone={data.timezone} />}
+          {data.view !== "operations" && <SalesPerformance trend={trend} />}
+          {data.view !== "operations" && <TopDishes data={data} />}
+          {data.view !== "money" && <LiveActivity feed={data.operations.activityFeed} />}
         </div>
       </main>
     </div>

@@ -13,7 +13,7 @@ import { outletDayCutoff } from "./business-day";
 // business days (past midnight up to the outlet's cutoff counts as the day before); hours of the
 // day are plain IST clock hours.
 
-type Staff = Pick<StaffSession, "tenantId" | "outletId" | "roles">;
+type Staff = Pick<StaffSession, "tenantId" | "outletId" | "roles" | "access">;
 export type ReportRange = 7 | 30 | 90;
 const DAY = 86_400_000;
 const IST = 330 * 60_000;

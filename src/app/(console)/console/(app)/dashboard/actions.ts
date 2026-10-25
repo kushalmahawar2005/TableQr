@@ -5,7 +5,7 @@ import * as s from "@/db/schema";
 import { consoleSectionRoles } from "@/lib/staff-permissions";
 import { AppError } from "@/server/errors";
 import type { StaffSession } from "@/server/staff/auth";
-import { getDashboard, getRevenueTrend } from "@/server/staff/dashboard";
+import { dashboardView, getDashboard, getRevenueTrend } from "@/server/staff/dashboard";
 import { staffRealtimeToken, topics } from "@/server/realtime/token";
 import { staffFor } from "@/server/staff/request";
 
@@ -33,6 +33,8 @@ export async function revenueTrendAction() {
 export async function resolveServiceRequestAction(requestId: string) {
   try {
     const staff = await staffFor(consoleSectionRoles.dashboard, "dashboard");
+    // The money-only view has no floor to act on
+    if (dashboardView(staff.roles) === "money") return { ok: false };
     const now = new Date();
     await db
       .update(s.serviceRequests)
@@ -54,6 +56,8 @@ export async function resolveServiceRequestAction(requestId: string) {
 export async function checkInReservationAction(reservationId: string) {
   try {
     const staff = await staffFor(consoleSectionRoles.dashboard, "dashboard");
+    // The money-only view has no floor to act on
+    if (dashboardView(staff.roles) === "money") return { ok: false };
     const now = new Date();
     await db
       .update(s.reservations)

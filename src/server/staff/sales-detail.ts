@@ -13,7 +13,7 @@ import { istDayStart, istToday } from "./day-close";
 // who put the order in, and the discounts and cancelled items each person is answerable for.
 // Days are business days on India time, like Day close.
 
-type Staff = Pick<StaffSession, "tenantId" | "outletId" | "roles">;
+type Staff = Pick<StaffSession, "tenantId" | "outletId" | "roles" | "access">;
 const DAY = 86_400_000;
 const SOLD = ["placed", "accepted", "preparing", "ready", "served"] as const;
 const isDate = (d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d);

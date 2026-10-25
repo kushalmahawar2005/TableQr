@@ -444,6 +444,31 @@ describe("access, safety and read-only", () => {
     await failsWith(getDashboard(host, NOW), "forbidden");
   });
 
+  it("when the admin gives it to other roles, an accountant sees only money and a host only the floor", async () => {
+    const access = { dashboard: ["manager", "accountant", "host"] } as StaffSession["access"];
+    const full = await dash(owner);
+    expect(full.view).toBe("full");
+
+    const accountant = await getDashboard({ ...owner, roles: ["accountant"], access }, NOW);
+    expect(accountant.view).toBe("money");
+    expect(accountant.kpis.revenue.today).toBe(full.kpis.revenue.today);
+    expect(accountant.operations.kitchenOrders).toEqual([]);
+    expect(accountant.operations.customerRequests).toEqual([]);
+    expect(accountant.kpis.openTables).toEqual({ open: 0, total: 0 });
+    expect((await getRevenueTrend({ ...owner, roles: ["accountant"], access }, NOW)).length).toBeGreaterThan(0);
+
+    const floor = await getDashboard({ ...owner, roles: ["host"], access }, NOW);
+    expect(floor.view).toBe("operations");
+    expect(floor.kpis.revenue).toEqual({ today: 0, yesterday: 0 });
+    expect(floor.kpis.outstandingPaise).toBe(0);
+    expect(floor.secondary).toEqual({ taxPaise: 0, serviceChargePaise: 0, tipPaise: 0 });
+    expect(floor.operations.recentPayments).toEqual([]);
+    expect(floor.topItems).toEqual([]);
+    expect(floor.alerts.pendingRefunds).toEqual({ count: 0, paise: 0 });
+    expect(floor.kpis.openTables).toEqual(full.kpis.openTables);
+    expect(await getRevenueTrend({ ...owner, roles: ["host"], access }, NOW)).toEqual([]);
+  });
+
   it("never exposes phone numbers, gateway references, tokens or staff ids", async () => {
     await booking({ name: "Phone Guest", phone: "9876543210", startAt: min(20), status: "confirmed" });
     await booking({ name: "Late Phone", phone: "9123456780", startAt: min(-30), status: "confirmed" });

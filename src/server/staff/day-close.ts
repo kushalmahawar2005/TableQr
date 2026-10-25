@@ -13,7 +13,7 @@ import { outletDayCutoff } from "./business-day";
 // midnight, up to its cutoff (e.g. 3 am) so the night's bills stay on the day they began.
 // Money from bills is counted when the bill was paid.
 
-type Staff = Pick<StaffSession, "tenantId" | "outletId" | "roles">;
+type Staff = Pick<StaffSession, "tenantId" | "outletId" | "roles" | "access">;
 const DAY = 86_400_000;
 const IST = 330 * 60_000;
 

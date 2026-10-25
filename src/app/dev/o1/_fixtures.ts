@@ -32,6 +32,7 @@ const busy: DashboardData = {
   date: DATE,
   greeting: "Good evening",
   generatedAt: NOW,
+  view: "full",
   kpis: {
     revenue: { today: 8_462_500, yesterday: 7_540_000 },
     orders: { today: 64, yesterday: 71 },
@@ -82,6 +83,7 @@ const quiet: DashboardData = {
   ...busy,
   greeting: "Good morning",
   generatedAt: localTime(DATE, 9 * 60 + 5, TZ).getTime(),
+  view: "full",
   kpis: { revenue: { today: 0, yesterday: 0 }, orders: { today: 0, yesterday: 0 }, covers: { today: 0, yesterday: 0 }, averageBill: { today: 0, yesterday: 0 }, paidBills: 0, openTables: { open: 0, total: 18 }, upcomingReservations: 0, waitlist: 0, outstandingPaise: 0 },
   secondary: { taxPaise: 0, serviceChargePaise: 0, tipPaise: 0 },
   operations: { tables: { available: 18, reserved: 0, seated: 0, billRequested: 0, blocked: 0, total: 18 }, tableTiles: [], waitlist: { waiting: 0, notified: 0 }, upcoming: [], billRequestedTables: 0, kitchenOrders: [], customerRequests: [], recentPayments: [], activityFeed: [] },

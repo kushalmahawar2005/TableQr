@@ -33,11 +33,23 @@ import { lowStock } from "./inventory";
 // paid bills: bills.total_paise, which already has discounts and applied booking credit taken off
 // and never includes tips. Money is integer paise; days are outlet-local calendar days.
 
-type Staff = Pick<StaffSession, "tenantId" | "outletId" | "roles" | "outlet">;
+type Staff = Pick<StaffSession, "tenantId" | "outletId" | "roles" | "access" | "outlet">;
 type Scope = { tenantId: string; outletId: string };
 
 function guard(staff: Staff) {
   if (!canSee(staff, "dashboard")) throw new AppError("forbidden", "Your role cannot view the dashboard.");
+}
+
+/**
+ * What a role sees on the dashboard. Money (sales, payments, refunds) is for owners, managers,
+ * accountants and cashiers; the floor (tables, kitchen, requests, guests) for owners, managers
+ * and the floor roles. Someone with both sees all; the rest is removed on the server, not hidden.
+ */
+export type DashboardView = "full" | "money" | "operations";
+export function dashboardView(roles: readonly string[]): DashboardView {
+  const money = roles.some((r) => ["owner", "manager", "accountant", "cashier"].includes(r));
+  const floor = roles.some((r) => ["owner", "manager", "host", "waiter", "kitchen", "reception"].includes(r));
+  return money && floor ? "full" : money ? "money" : "operations";
 }
 
 const OPEN_TABLE_STATES = ["seated", "bill_requested"] as const;
@@ -145,6 +157,7 @@ export async function topItems(scope: Scope, range: DayRange, limit = TOP_ITEMS)
 /** Last 7 outlet-local days of net sales, oldest first */
 export async function getRevenueTrend(staff: Staff, now = new Date()) {
   guard(staff);
+  if (dashboardView(staff.roles) === "operations") return [];
   const scope = { tenantId: staff.tenantId, outletId: staff.outletId };
   const days = lastDays(now, staff.outlet.timezone, TREND_DAYS, await outletDayCutoff(staff.tenantId, staff.outletId));
   const money = revenueByDay(await paidBills(scope, days[0].start, days[days.length - 1].end), days);
@@ -466,7 +479,7 @@ export async function getDashboard(staff: Staff, now = new Date()) {
     })),
   ].sort((a, b) => b.timestamp - a.timestamp).slice(0, 10);
 
-  return {
+  return redactDashboard(dashboardView(staff.roles), {
     outletName: outlet?.name ?? staff.outlet.name,
     timezone: tz,
     date: today.date,
@@ -505,7 +518,35 @@ export async function getDashboard(staff: Staff, now = new Date()) {
       lowStock: low.map((l) => l.name),
     },
     topItems: top,
-  };
+  });
+}
+
+/** Takes out what the view may not see; the numbers and lists are removed, not just hidden on screen */
+function redactDashboard<T extends {
+  kpis: { revenue: { today: number; yesterday: number }; averageBill: { today: number | null; yesterday: number | null }; paidBills: number; outstandingPaise: number; orders: { today: number; yesterday: number }; covers: { today: number; yesterday: number }; openTables: { open: number; total: number }; upcomingReservations: number; waitlist: number };
+  secondary: { taxPaise: number; serviceChargePaise: number; tipPaise: number };
+  operations: { tables: Record<string, number>; tableTiles: unknown[]; waitlist: { waiting: number; notified: number }; upcoming: unknown[]; billRequestedTables: number; kitchenOrders: unknown[]; customerRequests: unknown[]; recentPayments: unknown[]; activityFeed: unknown[] };
+  alerts: { pendingRefunds: { count: number; paise: number }; slowBills: unknown[]; soldOut: number; late: unknown[]; blockedTables: number; lowStock: unknown[] };
+  topItems: unknown[];
+}>(view: DashboardView, data: T): T & { view: DashboardView } {
+  if (view === "full") return { ...data, view };
+  const zero = (o: Record<string, number>) => Object.fromEntries(Object.keys(o).map((k) => [k, 0]));
+  if (view === "operations") {
+    return {
+      ...data, view,
+      kpis: { ...data.kpis, revenue: { today: 0, yesterday: 0 }, averageBill: { today: null, yesterday: null }, paidBills: 0, outstandingPaise: 0 },
+      secondary: { taxPaise: 0, serviceChargePaise: 0, tipPaise: 0 },
+      operations: { ...data.operations, recentPayments: [] },
+      alerts: { ...data.alerts, pendingRefunds: { count: 0, paise: 0 } },
+      topItems: [],
+    };
+  }
+  return {
+    ...data, view,
+    kpis: { ...data.kpis, orders: { today: 0, yesterday: 0 }, covers: { today: 0, yesterday: 0 }, openTables: { open: 0, total: 0 }, upcomingReservations: 0, waitlist: 0 },
+    operations: { tables: zero(data.operations.tables), tableTiles: [], waitlist: { waiting: 0, notified: 0 }, upcoming: [], billRequestedTables: 0, kitchenOrders: [], customerRequests: [], recentPayments: data.operations.recentPayments, activityFeed: [] },
+    alerts: { pendingRefunds: data.alerts.pendingRefunds, slowBills: data.alerts.slowBills, soldOut: 0, late: [], blockedTables: 0, lowStock: [] },
+  } as T & { view: DashboardView };
 }
 
 /** Active items of this outlet's menu that guests cannot order now, by the guest menu's own rule */

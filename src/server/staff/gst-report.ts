@@ -12,7 +12,7 @@ import { istToday } from "./day-close";
 // for the CA or Tally. Every plan has it: filing GST is not optional. Months run on India time,
 // the same day boundary as Day close.
 
-type Staff = Pick<StaffSession, "tenantId" | "outletId" | "roles">;
+type Staff = Pick<StaffSession, "tenantId" | "outletId" | "roles" | "access">;
 const IST = 330 * 60_000;
 const DAY = 86_400_000;
 

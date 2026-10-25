@@ -12,7 +12,7 @@ import { isPlaceholderName } from "@/domain/guest-name";
 // the waitlist and bills sent on WhatsApp, joined up by phone. Shows how often they come and when
 // they last did, so the owner knows the regulars. Offers go only to people who agreed to them.
 
-type Staff = Pick<StaffSession, "tenantId" | "outletId" | "roles">;
+type Staff = Pick<StaffSession, "tenantId" | "outletId" | "roles" | "access">;
 
 export type Customer = {
   phone: string;
