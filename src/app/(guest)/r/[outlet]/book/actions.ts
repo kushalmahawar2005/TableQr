@@ -1,6 +1,7 @@
 "use server";
 
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
+import { requestOrigin } from "@/server/request-host";
 import { DEVICE_COOKIE } from "@/lib/guest-device";
 import { AppError } from "@/server/errors";
 import { arriveBookingPublic, bookingByToken, bookingPreorderMenu, cancelBookingPublic, createBookingHold, createGroupRequest, getBookingAvailability, confirmBooking, lateBookingPublic, rescheduleBookingPublic, saveBookingPreorder } from "@/server/booking/core";
@@ -73,6 +74,7 @@ export async function groupRequestAction(outletCode: string, input: { requestId:
   try { return { ok: true as const, data: await createGroupRequest(outletCode, input) }; } catch (e) { return fail(e); }
 }
 
-export async function startBookingCreditAction(outletCode: string, token: string, requestId: string, origin: string) {
+export async function startBookingCreditAction(outletCode: string, token: string, requestId: string) {
+  const origin = requestOrigin(await headers());
   try { return { ok: true as const, data: await startReservationCredit(outletCode, token, requestId, `${origin}/api/booking-credit/return?provider={provider}&p={creditId}&to=${encodeURIComponent(`/r/${outletCode}/book/details?token=${token}`)}`) }; } catch (e) { return fail(e); }
 }

@@ -1,3 +1,4 @@
+import { requestOrigin } from "@/server/request-host";
 import { reconcileDeliveryPaymentById } from "@/server/delivery/payment";
 import { readRequestBodyLimited } from "@/server/http-body";
 
@@ -12,7 +13,7 @@ async function handle(request: Request) {
   if (/^[0-9a-f-]{36}$/i.test(checkoutId)) {
     try { await reconcileDeliveryPaymentById(checkoutId); } catch { /* status can be checked again from the order page */ }
   }
-  const base = url.origin.replace("0.0.0.0", "localhost");
+  const base = requestOrigin(request.headers, url.host);
   const back = /^[A-Z0-9_-]{1,32}$/i.test(outletCode)
     ? `/r/${encodeURIComponent(outletCode)}/delivery?payment=1`
     : "/";

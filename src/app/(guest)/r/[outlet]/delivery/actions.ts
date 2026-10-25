@@ -8,7 +8,7 @@ import { priceDeliveryCart, deliveryOutlet } from "@/server/delivery/catalog";
 import { sendDeliveryOtp, verifyDeliveryOtp } from "@/server/delivery/otp";
 import { db } from "@/db";
 import { AppError } from "@/server/errors";
-import { publicOrigin } from "@/server/guest/invite";
+import { requestOrigin } from "@/server/request-host";
 import { reconcileDeliveryPayment, startDeliveryPayment } from "@/server/delivery/payment";
 
 const cookieName = (outlet: string) => `tq_delivery_${String(outlet).trim().toUpperCase().replace(/[^A-Z0-9]/g, "")}`;
@@ -51,7 +51,7 @@ export async function claimManualQrDeliveryAction(outlet: string, totalPaise: nu
 export async function startDeliveryPaymentAction(outlet: string) {
   return result(async () => {
     const who = await identity(outlet);
-    const callback = `${publicOrigin(await headers())}/api/delivery/payments/return?c={checkoutId}&o=${encodeURIComponent(outlet)}`;
+    const callback = `${requestOrigin(await headers())}/api/delivery/payments/return?c={checkoutId}&o=${encodeURIComponent(outlet)}`;
     return startDeliveryPayment(outlet, who.token, who.deviceId, callback);
   });
 }

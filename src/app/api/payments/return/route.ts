@@ -1,3 +1,4 @@
+import { requestOrigin } from "@/server/request-host";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import * as s from "@/db/schema";
@@ -39,7 +40,7 @@ async function handle(request: Request) {
       // The bill page keeps checking; a slow gateway here must not strand the guest
     }
   }
-  const baseOrigin = url.origin.replace("0.0.0.0", "localhost");
+  const baseOrigin = requestOrigin(request.headers, url.host);
   return Response.redirect(new URL(`${back}${back === "/" ? "" : `?p=${encodeURIComponent(paymentId)}`}`, baseOrigin), 303);
 }
 

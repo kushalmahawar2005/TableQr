@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { requestHostname } from "./request-host";
+import { requestHostname, requestOrigin } from "./request-host";
 
 describe("requestHostname", () => {
   it("prefers the public host forwarded by the reverse proxy", () => {
@@ -22,5 +22,18 @@ describe("requestHostname", () => {
 
   it("returns an empty host for malformed forwarded hosts", () => {
     expect(requestHostname(new Headers({ "x-forwarded-host": "not a host" }), "internal-host")).toBe("");
+  });
+});
+
+describe("requestOrigin", () => {
+  it("returns the guest to the restaurant domain they are on, over https", () => {
+    expect(requestOrigin(new Headers({ host: "internal:3000", "x-forwarded-host": "menu.spiceroute.in", "x-forwarded-proto": "http" }))).toBe("https://menu.spiceroute.in");
+    expect(requestOrigin(new Headers({ host: "tableqr.craftoryinnovation.com" }))).toBe("https://tableqr.craftoryinnovation.com");
+  });
+
+  it("keeps plain http for a local server and turns 0.0.0.0 into localhost", () => {
+    expect(requestOrigin(new Headers({ host: "localhost:3000" }))).toBe("http://localhost:3000");
+    expect(requestOrigin(new Headers({ host: "0.0.0.0:3000" }))).toBe("http://localhost:3000");
+    expect(requestOrigin(new Headers())).toBe("http://localhost:3000");
   });
 });

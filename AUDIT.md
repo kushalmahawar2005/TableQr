@@ -35,6 +35,8 @@ Findings go under the part as `- [ ] finding` and are ticked when fixed with the
 
 - [ ] **A1. Guest bill and online payment** — `/r/[outlet]/t/[table]/bill`, `/paid`, `/paid/receipt`, split shares, tips, pay for others, return from Cashfree, stuck payment.
   - [x] Guest receipt print not yet rendered and checked (P4).
+  - [x] A guest on a restaurant's own domain who paid online came back to the main domain, where their device cookie is missing. Payment, delivery and booking returns now come back to the domain the guest is on; the booking advance no longer takes its return address from the browser.
+  - [x] The mock checkout got a return address with an unreplaced placeholder.
 - [ ] **A2. Counter billing (POS)** — `/pos`, `/console/billing`: discounts, add items after bill asked, cash change, card/UPI, takeaway, bill/receipt print, reopen bill.
 - [ ] **A3. Refunds** — staff refund flow, gateway refund webhooks, counter refunds, overpayment refunds.
 - [ ] **A4. Payment webhooks and reconciliation** — `/api/payments/*`, `/api/fees/*`, minute re-check, amount checks, replay safety. *(Cross-outlet forged webhook fixed in `3b60206`.)*
