@@ -1,0 +1,92 @@
+# TableQR full audit
+
+Started 25 October 2026. Goal: walk every part of the product the way a restaurant and its guests will use it, and fix what is wrong before clients find it, including mistakes that do not show at first glance. `TODO.md` tracks feature work; this file tracks quality.
+
+Work top to bottom, one part at a time. Money and guest-facing parts come first because a mistake there costs a restaurant money or a customer.
+
+## How each part is checked
+
+Every part gets the same pass before it is ticked:
+
+1. **Works end to end** — every button reaches the server and the database, and the result shows without a reload.
+2. **Wrong input and edge cases** — empty, very long, zero, negative, duplicate, double click, two staff at once, slow network, expired session, back button.
+3. **Access** — only the right role sees and does it; another restaurant or outlet can never see or change it (server-side, not just hidden in the UI).
+4. **Money and numbers** — totals, tax, rounding, discounts and refunds add up; no paisa is lost or counted twice.
+5. **Screen** — phone (360 px), tablet and desktop; light and dark; loading, empty, error and success states; no text cut off or overflowing; plain words a restaurant owner understands.
+6. **Print** where it prints — A4 and 80 mm thermal, rendered to PDF and checked.
+7. **Test** — an automated test for every bug fixed.
+
+Findings go under the part as `- [ ] finding` and are ticked when fixed with the commit hash.
+
+## Parts
+
+### A. Money (highest risk)
+
+- [ ] **A1. Guest bill and online payment** — `/r/[outlet]/t/[table]/bill`, `/paid`, `/paid/receipt`, split shares, tips, pay for others, return from Cashfree, stuck payment.
+- [ ] **A2. Counter billing (POS)** — `/pos`, `/console/billing`: discounts, add items after bill asked, cash change, card/UPI, takeaway, bill/receipt print, reopen bill.
+- [ ] **A3. Refunds** — staff refund flow, gateway refund webhooks, counter refunds, overpayment refunds.
+- [ ] **A4. Payment webhooks and reconciliation** — `/api/payments/*`, `/api/fees/*`, minute re-check, amount checks, replay safety. *(Cross-outlet forged webhook fixed in `3b60206`.)*
+- [ ] **A5. TableQR fees and plans** — `/console/plan`, admin Fees, Cashfree subscription, UPI-reference fees, trial, grace days, pause and unlock.
+- [ ] **A6. Invoices and GST** — invoice numbering per financial year, tax invoice vs receipt, GST report, Excel export.
+  - [ ] Receipt (POS bill/receipt print) has no GSTIN, FSSAI or invoice number; required for a GST-registered restaurant.
+- [ ] **A7. Day close** — `/console/reports/day-close`: totals match bills and payments; print.
+  - [ ] Restaurants open past midnight: orders after 12 am land on the next calendar day. Needs a business-day cutoff setting.
+
+### B. Guest side (what customers see)
+
+- [ ] **B1. Restaurant home and entry** — `/r/[outlet]`, language choice, closed state, announcements, custom domain.
+- [ ] **B2. Table QR scan and verify** — `/t/[table]`, `/verify`, OTP send/resend/expiry, join code, group at one table, table already busy.
+  - [ ] Remove `OTP_TEST_BYPASS` / `OTP_TEST_PHONE` from Hostinger before launch.
+- [ ] **B3. Menu, item sheet and cart** — `/menu`, `/menu/item/[id]`, `/cart`: categories, photos, modifiers, veg filter, sold-out, outlet prices, order note, Hindi.
+- [ ] **B4. Placing orders and order tracker** — `/orders`, `/table`: rounds, repeat order, cancellations, waiter call, realtime updates.
+- [ ] **B5. Table booking** — `/book`, `/book/details`, `/book/confirmed`, `/book/manage/[token]`, `/b/[token]`: slots, advance payment (gateway and restaurant QR), preorder, cancel, reschedule.
+- [ ] **B6. Delivery** — `/r/[outlet]/delivery`: area/pincode, COD, prepay (Cashfree and restaurant QR), rider tracking, closed hours.
+- [ ] **B7. Room guest** — `/room/[code]`: room requests, Wi-Fi, food to room, per-order billing.
+- [ ] **B8. Waitlist** — `/r/[outlet]/waitlist`.
+
+### C. Restaurant console (owner and manager)
+
+- [ ] **C1. Sign-in and roles** — `/console/login`, PIN, lockout, who lands where, sign out, session expiry.
+- [ ] **C2. First-run guide and onboarding** — welcome, tour, setup checklist.
+- [ ] **C3. Dashboard** — `/console/dashboard`: numbers match reports, sales chart, needs-attention.
+- [ ] **C4. Floor and tables** — `/console/floor`: table states, seat, move, merge, clear, take payment, print bill.
+- [ ] **C5. Floor plan editor and QR sheet** — `/floor/editor`, `/floor/editor/qr-sheet`, publish safety. *(QR sheets now print several per A4, `29453e5`.)*
+- [ ] **C6. Orders** — `/console/orders`, `/orders/delivery`: item list, print slip, delivery dispatch.
+- [ ] **C7. Menu manager** — `/console/menu`: categories, items, photos (R2 upload), modifiers, menu library, availability, import.
+- [ ] **C8. Outlet pricing** — `/console/pricing`.
+- [ ] **C9. Reservations and waitlist** — `/console/reservations`, `/console/waitlist`: calendar, holds, no-shows, preorders, advances.
+- [ ] **C10. Rooms** — `/console/rooms`, room QR sheet.
+- [ ] **C11. Kitchen (console)** — `/console/kitchen`.
+- [ ] **C12. Inventory** — `/console/inventory`: stock going down as dishes sell.
+- [ ] **C13. Customers** — `/console/customers`.
+- [ ] **C14. Team, shifts and invitations** — `/console/team`, `/staff/invite/[token]`: roles, shifts, duty, revoke, plan limits.
+- [ ] **C15. Reports** — `/console/reports`, `/reports/items`: numbers match bills; print. *(Header alignment fixed, `29453e5`.)*
+- [ ] **C16. Settings** — `/console/settings`: every section saves and reloads correctly; payment credentials; delivery setup; guest services; custom domain. *(Overnight hours allowed, `1012be5`.)*
+- [ ] **C17. Multi-outlet switch** — owner switching outlets sees only that outlet everywhere.
+
+### D. Staff apps
+
+- [ ] **D1. Waiter app** — `/waiter`, `/waiter/assign`: tasks, bell count, table assignment, take orders, settle at table.
+- [ ] **D2. Kitchen display (KDS)** — `/kds`: stations, recall, stock, sounds, KOT print and auto-print.
+- [ ] **D3. Staff PWA and notifications** — install, branded icon, push on Android and iOS, permission prompts.
+- [ ] **D4. Thermal printing** — KOT, bill, receipt, day close, order slip. *(Slips now fit their content, `29453e5`.)*
+  - [ ] Only 80 mm rolls are supported; 58 mm printers cut the right side. Add a paper-width setting.
+
+### E. Platform admin (TableQR team)
+
+- [ ] **E1. Admin sign-in and dashboard** — `/admin`.
+- [ ] **E2. Tenants and onboarding** — create restaurant, outlets, trial, status, custom package.
+- [ ] **E3. Plans and features** — plan limits really switch features on and off everywhere.
+- [ ] **E4. Fees, subscriptions, analytics, audit log, settings**.
+
+### F. Under the hood (mistakes that do not show)
+
+- [ ] **F1. Tenant and outlet isolation** — every server query scoped; no cross-restaurant read or write.
+- [ ] **F2. Security** — auth on every server action and API, rate limits, CSP, file uploads, secrets, OTP abuse.
+- [ ] **F3. Database and migrations** — migrations run cleanly on the live database at start; indexes for busy queries.
+- [ ] **F4. Realtime and polling** — screens update without reload; recover after network loss.
+- [ ] **F5. Time zones and dates** — outlet time zone everywhere; midnight, month end, financial year end.
+- [ ] **F6. Performance** — guest menu load on slow 4G, image sizes, big menus, many tables.
+- [ ] **F7. Errors and logging** — no raw error text shown to users; failures logged.
+- [ ] **F8. Tests** — `billing-flow` integration suite sometimes times out in `beforeAll` when the full suite runs.
+- [ ] **F9. Production setup** — Hostinger env complete, build, backups, domain and HTTPS.
