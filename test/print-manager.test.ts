@@ -216,6 +216,43 @@ describe("recording prints without losing any", () => {
   });
 });
 
+describe("nothing prints by itself", () => {
+  it("never prints when records are synced later, however many are waiting", async () => {
+    let up = false;
+    const { manager, browser } = rig({ report: async () => { if (!up) throw new Error("offline"); return null; } });
+    await manager.print(bill("s1"));
+    await manager.print(bill("s2"));
+    expect(browser.send).toHaveBeenCalledTimes(2);
+    up = true;
+    await manager.flush();
+    await manager.flush();
+    expect(manager.getSnapshot().unsent).toBe(0);
+    expect(browser.send).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not print a failed slip again until someone asks, and asking prints it once", async () => {
+    const send = vi.fn().mockResolvedValueOnce({ status: "failed", code: "browser_print_failed", message: "no", retryable: true }).mockResolvedValue({ status: "sent" });
+    const { manager, tick } = rig({ browser: fake({ send: send as never }) });
+    await manager.print(bill("t1", { kind: "kot", background: true }));
+    tick(60_000);
+    await manager.flush();
+    expect(send).toHaveBeenCalledOnce();
+    await manager.retry();
+    await manager.retry();
+    expect(send).toHaveBeenCalledTimes(2);
+  });
+
+  it("holds back a second ticket for the same slip only while the first is fresh or working", async () => {
+    const { manager, browser, tick } = rig();
+    const req = bill("t2", { kind: "kot", background: true });
+    await manager.print(req);
+    await manager.print(req);
+    tick(1000);
+    await manager.print(req);
+    expect(browser.send).toHaveBeenCalledOnce();
+  });
+});
+
 describe("job statuses", () => {
   it("moves forward only, and confirms only when the transport can", () => {
     expect(canMove("queued", "sent", false)).toBe(true);

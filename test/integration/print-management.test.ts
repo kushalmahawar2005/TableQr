@@ -4,7 +4,7 @@ import { db as appDb } from "@/db";
 import { uuidv7 } from "@/db/id";
 import * as s from "@/db/schema";
 import { AppError } from "@/server/errors";
-import { actorOf, prunePrintJobs, recentPrintJobs, recordPrintJob, type JobReport, type PrintActor } from "@/server/print/jobs";
+import { actorOf, MAX_NEW_JOBS_PER_MINUTE, prunePrintJobs, recentPrintJobs, recordPrintJob, type JobReport, type PrintActor } from "@/server/print/jobs";
 import { archivePrinter, assignPrinters, printSetup, savePrinter } from "@/server/print/printers";
 import { hashPin } from "@/server/staff/pin";
 import { resolveStaff, signInStaff, type StaffSession } from "@/server/staff/auth";
@@ -212,3 +212,21 @@ describe("print history", () => {
     expect((await jobs()).find((j) => j.id === old.jobId)).toBeUndefined();
   });
 });
+
+describe("a stuck screen cannot fill the table", () => {
+  it("refuses new records past the per-minute limit, but still answers one already recorded", async () => {
+    const known = await recordPrintJob(actorOf(manager), report({ subject: { type: "session", id: "flood-known" } }));
+    const rows = Array.from({ length: MAX_NEW_JOBS_PER_MINUTE }, (_, i) => ({ tenantId: env.demo.tenantId, outletId: env.demo.outletId, kind: "bill", subjectType: "flood", subjectId: `f-${i}`, requestId: `flood-request-${i}`, transport: "browser", paperMm: 80, status: "sent" as const }));
+    await env.db.insert(s.printJobs).values(rows);
+    try {
+      expect(await code(recordPrintJob(actorOf(manager), report()))).toBe("rate_limited");
+      expect(await recordPrintJob(actorOf(manager), { ...report({ kind: "bill" }), requestId: (await jobs()).find((j) => j.id === known.jobId)!.requestId, status: "sent" })).toMatchObject({ jobId: known.jobId });
+      // Another restaurant is not held back by this one
+      expect(await code(recordPrintJob(actorOf(otherManager), report()))).toBeNull();
+    } finally {
+      await env.db.delete(s.printJobs).where(eq(s.printJobs.subjectType, "flood"));
+    }
+    expect(await code(recordPrintJob(actorOf(manager), report()))).toBeNull();
+  });
+});
+

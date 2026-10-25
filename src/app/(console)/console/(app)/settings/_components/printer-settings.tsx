@@ -169,3 +169,14 @@ export function PrinterSettings({ initial, outletId, outletName, recent: initial
     </div>
   </section>;
 }
+
+/** Shown in place of the card when the printer tables cannot be read; printing itself is not affected */
+export function PrinterSettingsUnavailable() {
+  return <section className="mt-5 overflow-hidden rounded-2xl border border-line bg-surface" aria-labelledby="printers-heading">
+    <header className="flex items-start gap-3 border-b border-line px-5 py-4">
+      <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-ink/5 text-ink"><PrinterIcon className="size-4" aria-hidden="true" /></span>
+      <div><h2 id="printers-heading" className="font-display text-section font-bold text-ink">Printers</h2>
+        <p className="text-sm text-muted">Printer settings could not be loaded just now. Bills, receipts and kitchen tickets still print through this device&apos;s print window. Reload the page to try again.</p></div>
+    </header>
+  </section>;
+}

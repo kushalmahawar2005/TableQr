@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, lt, sql } from "drizzle-orm";
+import { and, count, desc, eq, gte, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { uuidv7 } from "@/db/id";
 import * as s from "@/db/schema";
@@ -12,6 +12,9 @@ import type { StaffSession } from "../staff/auth";
 // The record of each print. A screen reports what became of a print; this checks who may print what
 // here, refuses a status the transport cannot truthfully claim, and treats a repeated report (a double
 // tap, a retry after a timeout, an offline queue flushed late) as the same job.
+
+/** An outlet records at most this many new prints a minute: far above real use, so a stuck loop or abuse cannot fill the table */
+export const MAX_NEW_JOBS_PER_MINUTE = 120;
 
 /** Who is printing: a signed-in person, or a kitchen wall screen (kitchen tickets only) */
 export type PrintActor = { tenantId: string; outletId: string; roles: readonly StaffRole[]; userId: string | null; deviceId: string | null };
@@ -60,6 +63,11 @@ export async function recordPrintJob(actor: PrintActor, input: JobReport, now = 
     if (input.reprintOf) {
       const [orig] = await tx.select({ id: s.printJobs.id }).from(s.printJobs).where(and(eq(s.printJobs.tenantId, scope.tenantId), eq(s.printJobs.outletId, scope.outletId), eq(s.printJobs.id, String(input.reprintOf))));
       reprintOf = orig?.id ?? null;
+    }
+    const [{ recent }] = await tx.select({ recent: count() }).from(s.printJobs).where(and(eq(s.printJobs.tenantId, scope.tenantId), eq(s.printJobs.outletId, scope.outletId), gte(s.printJobs.createdAt, new Date(now.getTime() - 60_000))));
+    if (recent >= MAX_NEW_JOBS_PER_MINUTE) {
+      const [known] = await tx.select({ id: s.printJobs.id }).from(s.printJobs).where(and(eq(s.printJobs.tenantId, scope.tenantId), eq(s.printJobs.requestId, input.requestId)));
+      if (!known) throw new AppError("rate_limited", "Too many prints are being recorded at once. Printing is not affected.");
     }
     // Take the job's row with one statement that cannot deadlock when many reports of the same
     // request arrive together: insert it, or touch the one already there without changing it

@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { PrinterSettings } from "@/app/(console)/console/(app)/settings/_components/printer-settings";
+import { PrinterSettings, PrinterSettingsUnavailable } from "@/app/(console)/console/(app)/settings/_components/printer-settings";
 import { PrintToaster } from "@/components/print/print-toaster";
 import { PrintManager, type PrintRequest, type SetupData } from "@/lib/print/manager";
 import { getTransport, type PrintTransport } from "@/lib/print/transports";
@@ -52,6 +52,14 @@ describe("printer settings card", () => {
     expect(html).not.toContain(">Printed<");
     expect(html).toContain("A browser cannot tell whether paper came out");
     expect(html).toContain("Headers and footers off");
+  });
+});
+
+describe("printer settings when the printer tables cannot be read", () => {
+  it("says so and reassures that printing still works", () => {
+    const html = renderToStaticMarkup(createElement(PrinterSettingsUnavailable));
+    expect(html).toContain("could not be loaded");
+    expect(html).toContain("still print through this device");
   });
 });
 

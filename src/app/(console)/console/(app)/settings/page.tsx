@@ -7,7 +7,7 @@ import { SettingsScreen } from "./_components/settings-screen";
 import { CustomDomainSettings } from "./_components/custom-domain-settings";
 import { RestaurantPaymentSettings } from "./_components/restaurant-payment-settings";
 import { customDomainDnsTarget } from "@/server/staff/custom-domain";
-import { PrinterSettings } from "./_components/printer-settings";
+import { PrinterSettings, PrinterSettingsUnavailable } from "./_components/printer-settings";
 import { printSetup } from "@/server/print/printers";
 import { recentPrintJobs } from "@/server/print/jobs";
 
@@ -21,5 +21,8 @@ export default async function SettingsPage() {
   }
   const o = await getOutletSettings(staff);
   const canEdit = staff.roles.includes("owner");
-  return <><SettingsScreen o={o} canEdit={canEdit} /><div className="mx-auto w-full px-4 pb-40 sm:px-6 sm:pb-28"><RestaurantPaymentSettings initial={o.paymentGateway} canEdit={canEdit} /><PrinterSettings initial={await printSetup(staff)} outletId={staff.outletId} outletName={staff.outlet.name} recent={await recentPrintJobs(staff)} /><CustomDomainSettings domain={o.customDomain} token={canEdit ? o.customDomainToken : null} verifiedAt={o.customDomainVerifiedAt} live={o.customDomainLive} dnsTarget={customDomainDnsTarget()} canEdit={canEdit} /></div></>;
+  // Printer settings are not worth a broken Settings page: if they cannot be read, say so and carry on
+  const printers = await printSetup(staff).catch((err) => { console.error("[settings] printers could not be read", err); return null; });
+  const recent = printers ? await recentPrintJobs(staff).catch(() => []) : [];
+  return <><SettingsScreen o={o} canEdit={canEdit} /><div className="mx-auto w-full px-4 pb-40 sm:px-6 sm:pb-28"><RestaurantPaymentSettings initial={o.paymentGateway} canEdit={canEdit} />{printers ? <PrinterSettings initial={printers} outletId={staff.outletId} outletName={staff.outlet.name} recent={recent} /> : <PrinterSettingsUnavailable />}<CustomDomainSettings domain={o.customDomain} token={canEdit ? o.customDomainToken : null} verifiedAt={o.customDomainVerifiedAt} live={o.customDomainLive} dnsTarget={customDomainDnsTarget()} canEdit={canEdit} /></div></>;
 }
