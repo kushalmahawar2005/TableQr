@@ -97,33 +97,38 @@ export async function outletGatewayForWebhook(provider: string, rawBody: string)
     paymentId = String(body.data?.payment?.cf_payment_id ?? body.data?.refund?.cf_payment_id ?? "").slice(0, 100);
     refundId = String(body.data?.refund?.refund_id ?? body.data?.refund?.cf_refund_id ?? "").slice(0, 100);
   } catch { return null; }
-  let scope: { tenantId: string; outletId: string } | undefined;
-  const paymentMatch = [orderId ? eq(s.payments.gatewayRef, orderId) : undefined, paymentId ? eq(s.payments.gatewayPaymentId, paymentId) : undefined].filter((x): x is NonNullable<typeof x> => !!x);
+  // Every reference in the body must belong to one outlet. Otherwise a merchant could sign an event
+  // with its own secret that names another outlet's order and settle that outlet's bill.
+  const scopes = new Map<string, { tenantId: string; outletId: string }>();
+  const collect = (rows: { tenantId: string; outletId: string }[]) => { for (const row of rows) scopes.set(`${row.tenantId}:${row.outletId}`, row); };
+  const present = <T,>(conditions: (T | undefined)[]) => conditions.filter((x): x is T => !!x);
+  const paymentMatch = present([orderId ? eq(s.payments.gatewayRef, orderId) : undefined, paymentId ? eq(s.payments.gatewayPaymentId, paymentId) : undefined]);
   if (paymentMatch.length) {
     // isolation-exempt: signed payment gateway reference is needed to resolve its tenant and outlet.
-    const [payment] = await db.select({ tenantId: s.payments.tenantId, outletId: s.payments.outletId })
-      .from(s.payments).where(and(eq(s.payments.channel, "cashfree"), or(...paymentMatch))).limit(1);
-    if (payment) scope = payment;
+    collect(await db.select({ tenantId: s.payments.tenantId, outletId: s.payments.outletId })
+      .from(s.payments).where(and(eq(s.payments.channel, "cashfree"), or(...paymentMatch))).limit(10));
   }
-  if (!scope) {
-    const creditMatch = [orderId ? eq(s.reservationCredits.gatewayRef, orderId) : undefined, paymentId ? eq(s.reservationCredits.gatewayPaymentId, paymentId) : undefined, refundId ? eq(s.reservationCredits.refundGatewayRef, refundId) : undefined].filter((x): x is NonNullable<typeof x> => !!x);
-    if (creditMatch.length) {
-      // isolation-exempt: signed payment gateway reference is needed to resolve its tenant and outlet.
-      const [credit] = await db.select({ tenantId: s.reservationCredits.tenantId, outletId: s.reservationCredits.outletId })
-        .from(s.reservationCredits).where(and(eq(s.reservationCredits.provider, "cashfree"), or(...creditMatch))).limit(1);
-      if (credit) scope = credit;
-    }
+  if (refundId) {
+    // isolation-exempt: signed refund reference is needed to resolve its tenant and outlet.
+    collect(await db.select({ tenantId: s.payments.tenantId, outletId: s.payments.outletId })
+      .from(s.refunds)
+      .innerJoin(s.payments, and(eq(s.payments.tenantId, s.refunds.tenantId), eq(s.payments.id, s.refunds.paymentId)))
+      .where(and(eq(s.payments.channel, "cashfree"), eq(s.refunds.gatewayRef, refundId))).limit(10));
   }
-  if (!scope) {
-    const deliveryMatch = [orderId ? eq(s.deliveryCheckouts.gatewayRef, orderId) : undefined, paymentId ? eq(s.deliveryCheckouts.gatewayPaymentId, paymentId) : undefined, refundId ? eq(s.deliveryCheckouts.refundGatewayRef, refundId) : undefined].filter((x): x is NonNullable<typeof x> => !!x);
-    if (deliveryMatch.length) {
-      // isolation-exempt: signed payment gateway reference is needed to resolve its tenant and outlet.
-      const [checkout] = await db.select({ tenantId: s.deliveryCheckouts.tenantId, outletId: s.deliveryCheckouts.outletId })
-        .from(s.deliveryCheckouts).where(and(eq(s.deliveryCheckouts.paymentProvider, "cashfree"), or(...deliveryMatch))).limit(1);
-      if (checkout) scope = checkout;
-    }
+  const creditMatch = present([orderId ? eq(s.reservationCredits.gatewayRef, orderId) : undefined, paymentId ? eq(s.reservationCredits.gatewayPaymentId, paymentId) : undefined, refundId ? eq(s.reservationCredits.refundGatewayRef, refundId) : undefined]);
+  if (creditMatch.length) {
+    // isolation-exempt: signed payment gateway reference is needed to resolve its tenant and outlet.
+    collect(await db.select({ tenantId: s.reservationCredits.tenantId, outletId: s.reservationCredits.outletId })
+      .from(s.reservationCredits).where(and(eq(s.reservationCredits.provider, "cashfree"), or(...creditMatch))).limit(10));
   }
-  if (!scope) return null;
+  const deliveryMatch = present([orderId ? eq(s.deliveryCheckouts.gatewayRef, orderId) : undefined, paymentId ? eq(s.deliveryCheckouts.gatewayPaymentId, paymentId) : undefined, refundId ? eq(s.deliveryCheckouts.refundGatewayRef, refundId) : undefined]);
+  if (deliveryMatch.length) {
+    // isolation-exempt: signed payment gateway reference is needed to resolve its tenant and outlet.
+    collect(await db.select({ tenantId: s.deliveryCheckouts.tenantId, outletId: s.deliveryCheckouts.outletId })
+      .from(s.deliveryCheckouts).where(and(eq(s.deliveryCheckouts.paymentProvider, "cashfree"), or(...deliveryMatch))).limit(10));
+  }
+  if (scopes.size !== 1) return null;
+  const [scope] = scopes.values();
   const [outlet] = await db.select({ encrypted: s.outlets.paymentGatewayConfig }).from(s.outlets)
     .where(and(eq(s.outlets.tenantId, scope.tenantId), eq(s.outlets.id, scope.outletId)));
   return outlet?.encrypted ? makeGateway(decryptMerchantCredentials(outlet.encrypted)) : null;

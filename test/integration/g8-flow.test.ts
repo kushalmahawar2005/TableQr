@@ -367,6 +367,33 @@ describe("gateway webhooks", () => {
     expect((await view("B")).people.find((person) => person.isMe)?.paidPaise).toBe(start.totalPaise);
     expect((await env.db.select().from(s.payments).where(eq(s.payments.id, start.paymentId)))[0].status).toBe("success");
   });
+
+  it("refuses a webhook signed by another outlet's merchant that names this outlet's order", async () => {
+    const victimSecret = "victim_cashfree_secret_456";
+    const attackerSecret = "attacker_cashfree_secret_789";
+    vi.stubEnv("NODE_ENV", "test");
+    vi.stubEnv("PAYMENT_CREDENTIALS_KEY", "d".repeat(64));
+    await env.db.update(s.outlets).set({ paymentGatewayConfig: encryptMerchantCredentials({ mode: "sandbox", clientId: "victim_app_123", clientSecret: victimSecret }) })
+      .where(eq(s.outlets.id, g.A.outletId));
+    await env.db.update(s.outlets).set({ paymentGatewayConfig: encryptMerchantCredentials({ mode: "sandbox", clientId: "attacker_app_123", clientSecret: attackerSecret }) })
+      .where(eq(s.outlets.id, env.other.outletId));
+    // The attacker's own settled payment gives it a real cf_payment_id to point the lookup at
+    await env.conn.query("SET FOREIGN_KEY_CHECKS = 0");
+    await env.db.insert(s.payments).values({ id: rid(), tenantId: env.other.tenantId, outletId: env.other.outletId, billId: rid(), allocations: [], method: "upi", channel: "cashfree", gatewayRef: "attacker_order_001", gatewayPaymentId: "555000111", amountPaise: 100, status: "success" });
+    await env.conn.query("SET FOREIGN_KEY_CHECKS = 1");
+
+    await requestBill(scope());
+    vi.stubGlobal("fetch", async () => Response.json({ order_id: "victim_order_001" }));
+    const start = await startPayment(g.B, { method: "upi", requestId: rid(), callbackUrl: "https://restaurant.example/payment-return?p={paymentId}" });
+    const forged = JSON.stringify({
+      type: "PAYMENT_SUCCESS_WEBHOOK",
+      data: { order: { order_id: start.gatewayRef }, payment: { cf_payment_id: 555000111, payment_status: "SUCCESS", payment_amount: start.totalPaise / 100 } },
+    });
+
+    expect((await cashfreeHook(forged, attackerSecret)).status).toBe(404);
+    expect((await env.db.select().from(s.payments).where(eq(s.payments.id, start.paymentId)))[0].status).not.toBe("success");
+    expect((await view("B")).people.find((person) => person.isMe)?.status).toBe("paying");
+  });
 });
 
 describe("returning from the gateway", () => {
