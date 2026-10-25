@@ -43,11 +43,12 @@ Findings go under the part as `- [ ] finding` and are ticked when fixed with the
   - [x] A cashier could give up to 100% discount with only a reason. Now (owner's choice) up to 10% alone; more needs a manager's phone and PIN, recorded in the audit log.
 - [x] **A3. Refunds** — staff refund flow, gateway refund webhooks, counter refunds, overpayment refunds.
 - [x] **A4. Payment webhooks and reconciliation** — `/api/payments/*`, `/api/fees/*`, minute re-check, amount checks, replay safety. *(Cross-outlet forged webhook fixed in `3b60206`.)*
-- [ ] **A5. TableQR fees and plans** — `/console/plan`, admin Fees, Cashfree subscription, UPI-reference fees, trial, grace days, pause and unlock.
+- [x] **A5. TableQR fees and plans** — `/console/plan`, admin Fees, Cashfree subscription, UPI-reference fees, trial, grace days, pause and unlock.
   - [x] A plan fee paid on a retry of the same Cashfree order (after an earlier attempt failed) was ignored: money taken, plan not extended. A later full capture now confirms it.
-  - [ ] Trial, grace days, pause and unlock not yet reviewed.
+  - [x] Trial, grace days, pause and unlock reviewed: paying ends a trial or suspension and the paid period starts after the trial.
 - [ ] **A6. Invoices and GST** — invoice numbering per financial year, tax invoice vs receipt, GST report, Excel export.
   - [x] Receipt (POS bill/receipt print) has no GSTIN, FSSAI or invoice number; required for a GST-registered restaurant.
+  - [ ] Invoice numbers look like `SRJ01/26-27/000001` (18 characters); GST rules allow at most 16. Changing the format needs the owner's decision (from when, which shape).
   - [x] An outlet with no GSTIN still charged GST on its bills. Fixed (owner chose "no GSTIN, no GST"): dishes sell at 0% and open bills drop their tax until a GSTIN is set; Settings says so.
 - [ ] **A7. Day close** — `/console/reports/day-close`: totals match bills and payments; print.
   - [x] Restaurants open past midnight: orders after 12 am land on the next calendar day. Needs a business-day cutoff setting.
@@ -101,6 +102,11 @@ Findings go under the part as `- [ ] finding` and are ticked when fixed with the
 - [ ] **E2. Tenants and onboarding** — create restaurant, outlets, trial, status, custom package.
 - [ ] **E3. Plans and features** — plan limits really switch features on and off everywhere.
 - [ ] **E4. Fees, subscriptions, analytics, audit log, settings**.
+
+### G. Roles and permissions (asked 25 Oct)
+
+- [ ] **G1. Per-role screens** — manager, accountant, cashier and others each see what fits their job (dashboard, reports and money totals differ by role), not the same data.
+- [ ] **G2. Per-restaurant role control** — restaurants differ (some have an accountant, some a host): choose per restaurant which role may open which section and do which action, instead of one fixed list in code. Server must enforce it everywhere.
 
 ### F. Under the hood (mistakes that do not show)
 
