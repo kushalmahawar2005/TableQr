@@ -15,7 +15,14 @@ describe("financialYear", () => {
 
 describe("formatInvoiceNumber", () => {
   it("matches the spec format", () => {
-    expect(formatInvoiceNumber("MUM01", "25-26", 123)).toBe("MUM01/25-26/000123");
+    expect(formatInvoiceNumber("MUM01", "25-26", 123)).toBe("MUM01/25/000123");
+    expect(formatInvoiceNumber("JAIPUR", "26-27", 1)).toBe("JAIPUR/26/000001");
+  });
+
+  it("never passes the 16 characters GST allows, even for a long outlet code", () => {
+    expect(formatInvoiceNumber("JAIPURC", "26-27", 7)).toBe("JAIPURC26000007");
+    expect(formatInvoiceNumber("JAIPURCENTRAL", "26-27", 7)).toBe("JAIPURCE26000007");
+    for (const code of ["AB", "SRJ01", "JAIPUR", "JAIPURCENTRL"]) expect(formatInvoiceNumber(code, "26-27", 999999).length).toBeLessThanOrEqual(16);
   });
 });
 

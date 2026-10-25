@@ -379,9 +379,9 @@ describe("invoice numbering", () => {
   it("counts up per outlet per financial year in the spec format", async () => {
     const a = await appDb.transaction((tx) => nextInvoiceNumber(tx, outlet(), oct));
     const b = await appDb.transaction((tx) => nextInvoiceNumber(tx, outlet(), oct));
-    expect([a.number, b.number]).toEqual(["SRJ01/26-27/000001", "SRJ01/26-27/000002"]);
+    expect([a.number, b.number]).toEqual(["SRJ01/26/000001", "SRJ01/26/000002"]);
     const nextYear = await appDb.transaction((tx) => nextInvoiceNumber(tx, outlet(), new Date("2027-04-01T10:00:00Z")));
-    expect(nextYear.number).toBe("SRJ01/27-28/000001");
+    expect(nextYear.number).toBe("SRJ01/27/000001");
   });
 
   it("gives the number back when the invoice transaction fails, so the series has no gaps", async () => {

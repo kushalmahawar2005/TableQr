@@ -226,7 +226,7 @@ export const invoices = mysqlTable(
     shareId: ref("share_id"),
     financialYear: varchar("financial_year", { length: 5 }).notNull(),
     seq: int("seq").notNull(),
-    /** e.g. SRJ01/26-27/000123 */
+    /** e.g. SRJ01/26/000123 (FY 2026-27); at most 16 characters */
     number: varchar("number", { length: 30 }).notNull(),
     customerGstin: varchar("customer_gstin", { length: 15 }),
     customerName: varchar("customer_name", { length: 120 }),
