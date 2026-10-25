@@ -4,6 +4,17 @@ Started 25 October 2026. Goal: walk every part of the product the way a restaura
 
 Work top to bottom, one part at a time. Money and guest-facing parts come first because a mistake there costs a restaurant money or a customer.
 
+## Pinned: open items from the 25 October review (do these first)
+
+- [x] **P1.** POS bill/receipt print has no GSTIN, FSSAI or invoice number (A6). Fixed: paid GST bills print as a tax invoice with GSTIN, FSSAI, address, invoice number and CGST/SGST per rate.
+- [ ] **P2.** Business-day cutoff so orders after midnight count in the right Day close and reports (A7, F5).
+- [ ] **P3.** 58 mm thermal printer support: paper-width setting for every slip (D4).
+- [ ] **P4.** Render and check the guest receipt print `/r/[outlet]/t/[table]/paid/receipt` (A1).
+- [ ] **P5.** Line-by-line review of delivery and COD: checkout, OTP, payment, dispatch, rider, refunds (B6, C6).
+- [ ] **P6.** Fix the flaky `billing-flow` `beforeAll` timeout (F8).
+- [ ] **P7.** Before launch, the owner removes `OTP_TEST_BYPASS` and `OTP_TEST_PHONE` in Hostinger hPanel (B2, F9). *Owner action.*
+- [ ] **P8.** UI redesign: on hold until the owner names the screens. Broken or overflowing UI found during the audit is still fixed.
+
 ## How each part is checked
 
 Every part gets the same pass before it is ticked:
@@ -23,12 +34,13 @@ Findings go under the part as `- [ ] finding` and are ticked when fixed with the
 ### A. Money (highest risk)
 
 - [ ] **A1. Guest bill and online payment** — `/r/[outlet]/t/[table]/bill`, `/paid`, `/paid/receipt`, split shares, tips, pay for others, return from Cashfree, stuck payment.
+  - [ ] Guest receipt print not yet rendered and checked (P4).
 - [ ] **A2. Counter billing (POS)** — `/pos`, `/console/billing`: discounts, add items after bill asked, cash change, card/UPI, takeaway, bill/receipt print, reopen bill.
 - [ ] **A3. Refunds** — staff refund flow, gateway refund webhooks, counter refunds, overpayment refunds.
 - [ ] **A4. Payment webhooks and reconciliation** — `/api/payments/*`, `/api/fees/*`, minute re-check, amount checks, replay safety. *(Cross-outlet forged webhook fixed in `3b60206`.)*
 - [ ] **A5. TableQR fees and plans** — `/console/plan`, admin Fees, Cashfree subscription, UPI-reference fees, trial, grace days, pause and unlock.
 - [ ] **A6. Invoices and GST** — invoice numbering per financial year, tax invoice vs receipt, GST report, Excel export.
-  - [ ] Receipt (POS bill/receipt print) has no GSTIN, FSSAI or invoice number; required for a GST-registered restaurant.
+  - [x] Receipt (POS bill/receipt print) has no GSTIN, FSSAI or invoice number; required for a GST-registered restaurant.
 - [ ] **A7. Day close** — `/console/reports/day-close`: totals match bills and payments; print.
   - [ ] Restaurants open past midnight: orders after 12 am land on the next calendar day. Needs a business-day cutoff setting.
 
@@ -41,6 +53,7 @@ Findings go under the part as `- [ ] finding` and are ticked when fixed with the
 - [ ] **B4. Placing orders and order tracker** — `/orders`, `/table`: rounds, repeat order, cancellations, waiter call, realtime updates.
 - [ ] **B5. Table booking** — `/book`, `/book/details`, `/book/confirmed`, `/book/manage/[token]`, `/b/[token]`: slots, advance payment (gateway and restaurant QR), preorder, cancel, reschedule.
 - [ ] **B6. Delivery** — `/r/[outlet]/delivery`: area/pincode, COD, prepay (Cashfree and restaurant QR), rider tracking, closed hours.
+  - [ ] Delivery and COD server code not yet reviewed line by line (P5).
 - [ ] **B7. Room guest** — `/room/[code]`: room requests, Wi-Fi, food to room, per-order billing.
 - [ ] **B8. Waitlist** — `/r/[outlet]/waitlist`.
 
