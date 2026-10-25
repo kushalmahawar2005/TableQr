@@ -7,6 +7,8 @@ import { requestHostname } from "@/server/request-host";
 export async function proxy(request: NextRequest) {
   const nonce = randomBytes(18).toString("base64");
   const isDevelopment = process.env.NODE_ENV === "development";
+  const host = requestHostname(request.headers, request.nextUrl.hostname);
+  const isLocal = !host || host === "localhost" || host.endsWith(".localhost") || host === "127.0.0.1" || host === "0.0.0.0";
   const csp = [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' https://sdk.cashfree.com${isDevelopment ? " 'unsafe-eval'" : ""}`,
@@ -20,15 +22,14 @@ export async function proxy(request: NextRequest) {
     "base-uri 'self'",
     "frame-ancestors 'none'",
     "worker-src 'self' blob:",
-    ...(isDevelopment ? [] : ["upgrade-insecure-requests"]),
+    // A production build run on localhost has no HTTPS to upgrade to
+    ...(isDevelopment || isLocal ? [] : ["upgrade-insecure-requests"]),
   ].join("; ");
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-nonce", nonce);
   requestHeaders.set("Content-Security-Policy", csp);
 
   let response: NextResponse | undefined;
-  const host = requestHostname(request.headers, request.nextUrl.hostname);
-  const isLocal = !host || host === "localhost" || host.endsWith(".localhost") || host === "127.0.0.1";
 
   if (!isLocal) {
     const configuredHosts = [process.env.PUBLIC_APP_URL, process.env.NEXT_PUBLIC_APP_URL]
