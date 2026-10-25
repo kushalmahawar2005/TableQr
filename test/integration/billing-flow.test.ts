@@ -219,7 +219,7 @@ describe("paying", () => {
     expect(bill).toMatchObject({ status: "paid", totalPaise: 209000, tipPaise: 5000 });
 
     const [invoice] = await env.db.select().from(s.invoices).where(eq(s.invoices.billId, bill.id));
-    expect(invoice.number).toBe(`SRJ01/${financialYear(new Date())}/000001`);
+    expect(invoice.number).toBe(`SRJ01/${financialYear(new Date()).slice(0, 2)}/000001`);
     expect(invoice.snapshot).toMatchObject({
       table: "T12",
       totalPaise: 209000,
