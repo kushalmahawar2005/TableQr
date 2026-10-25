@@ -8,7 +8,7 @@ Work top to bottom, one part at a time. Money and guest-facing parts come first 
 
 - [x] **P1.** POS bill/receipt print has no GSTIN, FSSAI or invoice number (A6). Fixed: paid GST bills print as a tax invoice with GSTIN, FSSAI, address, invoice number and CGST/SGST per rate.
 - [x] **P2.** Business-day cutoff so orders after midnight count in the right Day close and reports (A7, F5). Fixed: the cutoff comes from opening hours (an hour after the latest past-midnight closing, max 6 am); Day close, dashboard, reports and items report use it. GST stays on calendar dates.
-- [ ] **P3.** 58 mm thermal printer support: paper-width setting for every slip (D4).
+- [x] **P3.** 58 mm thermal printer support: paper-width setting for every slip (D4). Fixed: per-device Paper 80 mm / 58 mm choice on Billing, Day close and the KDS bar; 58 mm scales the slip to fit. Also fixed: slips whose estimated height had decimals never got fitted.
 - [ ] **P4.** Render and check the guest receipt print `/r/[outlet]/t/[table]/paid/receipt` (A1).
 - [ ] **P5.** Line-by-line review of delivery and COD: checkout, OTP, payment, dispatch, rider, refunds (B6, C6).
 - [ ] **P6.** Fix the flaky `billing-flow` `beforeAll` timeout (F8).
@@ -83,7 +83,7 @@ Findings go under the part as `- [ ] finding` and are ticked when fixed with the
 - [ ] **D2. Kitchen display (KDS)** — `/kds`: stations, recall, stock, sounds, KOT print and auto-print.
 - [ ] **D3. Staff PWA and notifications** — install, branded icon, push on Android and iOS, permission prompts.
 - [ ] **D4. Thermal printing** — KOT, bill, receipt, day close, order slip. *(Slips now fit their content, `29453e5`.)*
-  - [ ] Only 80 mm rolls are supported; 58 mm printers cut the right side. Add a paper-width setting.
+  - [x] Only 80 mm rolls are supported; 58 mm printers cut the right side. Add a paper-width setting.
 
 ### E. Platform admin (TableQR team)
 

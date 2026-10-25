@@ -7,6 +7,7 @@ import type { OrderRow } from "@/server/staff/orders-read";
 import { VisitRecord } from "../../reservations/_components/visit-record";
 import { servedAction } from "../actions";
 import { placeEn } from "@/domain/rooms";
+import { forPaper, paperSaved } from "@/app/pos/_components/bill-print";
 
 type Status = OrderRow["status"];
 const STEPS: { key: Status; label: string }[] = [{ key: "placed", label: "Placed" }, { key: "accepted", label: "Accepted" }, { key: "preparing", label: "Cooking" }, { key: "ready", label: "Ready" }, { key: "served", label: "Served" }];
@@ -204,7 +205,7 @@ function printOrderSlip(order: OrderRow, outlet: string) {
   const paperHeight = Math.max(88, 72 + order.items.length * 8 + noteHeight);
   const pageRule = `@page{size:80mm ${paperHeight}mm;margin:0}`;
   const bodyRule = "body{width:80mm;margin:0;padding:4mm;font-size:12px;line-height:1.4}";
-  popup.document.write(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escape(kind)} ${escape(order.table)} · Order</title><style>
+  popup.document.write(forPaper(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escape(kind)} ${escape(order.table)} · Order</title><style>
     ${pageRule}
     *{box-sizing:border-box}html,body{margin:0;background:#fff;color:#111;font-family:Arial,Helvetica,sans-serif}
     ${bodyRule}
@@ -216,6 +217,6 @@ function printOrderSlip(order: OrderRow, outlet: string) {
     .note{margin-top:10px;padding:7px;border:1px solid #aaa;font-size:12px}.total{display:flex;justify-content:space-between;margin-top:10px;padding-top:9px;border-top:1px solid #111;font-size:16px;font-weight:700}
     footer{margin-top:12px;padding-top:8px;border-top:1px dashed #777;text-align:center;font-size:10px;color:#444}
     @media screen{body{margin:18px auto;padding:14px;border:1px solid #ddd;box-shadow:0 2px 12px #0002}}
-  </style></head><body><header><div class="brand">${escape(outlet)}</div><div class="kind">Order slip</div><h1>${escape(kind)} ${escape(order.table)}</h1><div class="meta">Round ${order.roundNo}</div><div class="date">${escape(placed)}</div><span class="status">${escape(status)}</span></header><ul>${items || "<li>No active items</li>"}</ul>${order.note ? `<p class="note"><b>Kitchen note:</b> ${escape(order.note)}</p>` : ""}<div class="total"><span>Order total</span><span>${escape(money(order.totalPaise))}</span></div><footer>Order summary · Not a tax invoice</footer><script>window.addEventListener('load',()=>{const s=document.createElement('style');s.textContent='@page{size:80mm '+(Math.ceil(document.body.getBoundingClientRect().height*25.4/96)+4)+'mm;margin:0}';document.head.appendChild(s);window.focus();setTimeout(()=>window.print(),150)});window.addEventListener('afterprint',()=>window.close());</script></body></html>`);
+  </style></head><body><header><div class="brand">${escape(outlet)}</div><div class="kind">Order slip</div><h1>${escape(kind)} ${escape(order.table)}</h1><div class="meta">Round ${order.roundNo}</div><div class="date">${escape(placed)}</div><span class="status">${escape(status)}</span></header><ul>${items || "<li>No active items</li>"}</ul>${order.note ? `<p class="note"><b>Kitchen note:</b> ${escape(order.note)}</p>` : ""}<div class="total"><span>Order total</span><span>${escape(money(order.totalPaise))}</span></div><footer>Order summary · Not a tax invoice</footer><script>window.addEventListener('load',()=>{const b=document.body.getBoundingClientRect(),k=Math.min(1,${paperSaved()}*96/25.4/b.width),s=document.createElement('style');s.textContent='@page{size:${paperSaved()}mm '+(Math.ceil(b.height*k*25.4/96)+4)+'mm;margin:0}';document.head.appendChild(s);window.focus();setTimeout(()=>window.print(),150)});window.addEventListener('afterprint',()=>window.close());</script></body></html>`));
   popup.document.close();
 }

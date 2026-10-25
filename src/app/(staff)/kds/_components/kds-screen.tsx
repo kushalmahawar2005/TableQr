@@ -20,7 +20,8 @@ import { KdsActionsProvider, useKdsActions, wallActions, type KdsActions } from 
 import { kdsCopy, type KdsCopy } from "../_copy";
 import { cookable, createAnnouncer, liveCard, sortCards, type Announcer, type Connection, type KdsCard } from "./kds-logic";
 import { autoKotSaved, kotHtml, saveAutoKot } from "./kot-print";
-import { printHtml } from "@/app/pos/_components/bill-print";
+import { printHtml, savePaper } from "@/app/pos/_components/bill-print";
+import { usePaper } from "@/app/pos/_components/paper-toggle";
 import { audioReady, playLate, playNewTicket, rememberedAnnouncements, saveAnnouncements, setSoundPref, soundPreference, subscribeSoundPref, unlockAudio } from "./sound";
 import { TicketCard, type CardAction } from "./ticket-card";
 import { useKdsSync } from "./use-kds-sync";
@@ -353,6 +354,7 @@ function Header(props: {
       <button type="button" onClick={props.onAutoKot} aria-pressed={props.autoKot} className={`flex h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-3 text-[18px] font-semibold sm:h-12 sm:px-4 ${props.autoKot ? "bg-kds-ok text-kds-bg" : "bg-kds-card"}`}>
         {props.autoKot ? c.autoKotOn : c.autoKotOff}
       </button>
+      <KotPaperButton label={c.paper} />
       <span role="status" aria-label={connLabel} className={`flex shrink-0 items-center gap-2 whitespace-nowrap text-[18px] font-semibold ${connTone}`}>
         <HugeiconsIcon icon={conn === "offline" ? WifiOff01Icon : Wifi01Icon} size={22} aria-hidden />
         <span className={`hidden ${props.embedded ? "xl:inline" : "sm:inline"}`}>{connLabel}</span>
@@ -681,5 +683,15 @@ export function StationPicker(props: { c: KdsCopy; stations: string[]; station: 
         <span className={`block text-[16px] ${expeditor ? "text-kds-bg/80" : "text-kds-muted"}`}>{c.expeditorBody}</span>
       </button>
     </fieldset>
+  );
+}
+
+/** KOT roll width for this kitchen device's printer: 80 mm or 58 mm */
+function KotPaperButton({ label }: { label: string }) {
+  const mm = usePaper();
+  return (
+    <button type="button" onClick={() => savePaper(mm === 80 ? 58 : 80)} className="flex h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-lg bg-kds-card px-3 text-[18px] font-semibold sm:h-12 sm:px-4">
+      <span className="hidden sm:inline">{label}</span>{mm} mm
+    </button>
   );
 }

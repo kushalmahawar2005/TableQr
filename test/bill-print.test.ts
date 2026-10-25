@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { billHtml } from "@/app/pos/_components/bill-print";
+import { billHtml, forPaper } from "@/app/pos/_components/bill-print";
 import type { PosBillDetail } from "@/server/staff/pos-read";
 
 // The counter bill and receipt: a GST-registered restaurant's paid receipt is a tax invoice.
@@ -40,5 +40,20 @@ describe("counter bill print", () => {
     const html = billHtml(detail({ invoice: null }), "Spice Route", "bill");
     expect(html).toContain("<b>BILL</b>");
     expect(html).not.toContain("No. ");
+  });
+});
+
+describe("58 mm receipt paper", () => {
+  it("narrows the page and scales the slip down so lines wrap as on 80 mm", () => {
+    const html = forPaper(billHtml(detail(), "Spice Route", "receipt"), 58);
+    expect(html).toMatch(/@page\{size:58mm [\d.]+mm;margin:0\}/);
+    expect(html).not.toContain("@page{size:80mm");
+    expect(html).toContain("body{zoom:0.725}");
+  });
+
+  it("leaves 80 mm slips and non-thermal pages alone", () => {
+    const slip = billHtml(detail(), "Spice Route", "bill");
+    expect(forPaper(slip, 80)).toBe(slip);
+    expect(forPaper("<style>@page{size:A4}</style>", 58)).toBe("<style>@page{size:A4}</style>");
   });
 });

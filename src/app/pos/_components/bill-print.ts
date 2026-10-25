@@ -62,16 +62,36 @@ ${kind === "receipt" && paid.length ? `<hr>${paid.map((p) => row(`Paid by ${METH
 </body></html>`;
 }
 
+export type PaperMm = 58 | 80;
+const PAPER_KEY = "tq_paper_mm";
+/** The receipt roll width of this device's printer; each printer is set up on the device it serves */
+export const paperSaved = (): PaperMm => { try { return localStorage.getItem(PAPER_KEY) === "58" ? 58 : 80; } catch { return 80; } };
+const paperListeners = new Set<() => void>();
+export const savePaper = (mm: PaperMm) => { try { localStorage.setItem(PAPER_KEY, String(mm)); } catch { /* private window */ } paperListeners.forEach((fn) => fn()); };
+export const subscribePaper = (fn: () => void) => { paperListeners.add(fn); return () => { paperListeners.delete(fn); }; };
+
+/**
+ * Thermal slips are written for an 80 mm roll. For a 58 mm roll the whole slip is scaled down to
+ * fit, so lines wrap exactly as they do on 80 mm and nothing runs off the right edge.
+ */
+export function forPaper(html: string, mm: PaperMm = paperSaved()) {
+  if (mm === 80 || !/@page\{size:80mm /.test(html)) return html;
+  return html.replace(/@page\{size:80mm /g, "@page{size:58mm ").replace("</style>", `body{zoom:${58 / 80}}</style>`);
+}
+
 /**
  * A thermal slip's page height is only an estimate when the html is built. Once laid out, set it
  * to the real content height so the roll neither feeds blank paper nor cuts the last lines.
  */
 export function fitThermalPage(doc: Document) {
-  const width = doc.head?.innerHTML.match(/@page\{size:(\d+)mm \d+mm;margin:0\}/)?.[1];
-  const height = doc.body?.getBoundingClientRect().height;
-  if (!width || !height) return;
+  const width = doc.head?.innerHTML.match(/@page\{size:(\d+)mm [\d.]+mm;margin:0\}/)?.[1];
+  const box = doc.body?.getBoundingClientRect();
+  if (!width || !box?.height || !box.width) return;
+  // A slip scaled down for a narrower roll may be measured before or after its zoom; the body
+  // spans the paper width once scaled, so the width ratio gives the printed height either way
+  const scale = Math.min(1, (Number(width) * 96) / 25.4 / box.width);
   const style = doc.createElement("style");
-  style.textContent = `@page{size:${width}mm ${Math.ceil((height * 25.4) / 96) + 4}mm;margin:0}`;
+  style.textContent = `@page{size:${width}mm ${Math.ceil((box.height * scale * 25.4) / 96) + 4}mm;margin:0}`;
   doc.head.appendChild(style);
 }
 
@@ -85,7 +105,7 @@ export function printHtml(html: string) {
   const doc = frame.contentDocument;
   if (!doc) { frame.remove(); return; }
   doc.open();
-  doc.write(html);
+  doc.write(forPaper(html));
   doc.close();
   let done = false;
   const go = () => { if (done) return; done = true; fitThermalPage(doc); frame.contentWindow?.focus(); frame.contentWindow?.print(); setTimeout(() => frame.remove(), 1500); };

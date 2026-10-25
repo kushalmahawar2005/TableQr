@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { signOutAction } from "@/app/(console)/console/login/actions";
 import { AddItemsDialog } from "./add-items-dialog";
 import { billHtml, printHtml } from "./bill-print";
+import { PaperToggle } from "./paper-toggle";
 import { RefundPanel } from "./refund-panel";
 import { billMessage, whatsappLink, whatsappNumber } from "@/domain/bill-message";
 import { isRoomCode } from "@/domain/rooms";
@@ -230,6 +231,7 @@ export function BillingScreen({ initial, realtimeUrl, embedded = false, openSess
                     <div className="flex flex-wrap gap-2">
                       {!isPaidBill && (detail.status === "open" || (detail.status === "bill_requested" && paidSoFar === 0 && !pendingOnline)) && <button type="button" className={quiet} disabled={offline} onClick={() => setAdding(true)}><PackagePlus className="size-4" aria-hidden="true" />{L("Add items", "आइटम जोड़ें")}</button>}
                       <button type="button" className={quiet} onClick={() => print(isPaidBill ? "receipt" : "bill")}><Printer className="size-4" aria-hidden="true" />{isPaidBill ? L("Print receipt", "रसीद प्रिंट") : L("Print bill", "बिल प्रिंट")}</button>
+                      <PaperToggle label={L("Paper", "पेपर")} />
                       <WhatsAppBill
                         key={detail.sessionId}
                         hi={hi}
