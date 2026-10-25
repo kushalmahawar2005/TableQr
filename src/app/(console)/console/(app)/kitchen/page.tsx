@@ -26,6 +26,7 @@ export default async function ConsoleKitchenPage() {
       realtimeUrl={process.env.REALTIME_URL?.replace(/^http/, "ws") ?? null}
       actions={{
         board: act.boardAction,
+        older: act.olderAction,
         token: act.tokenAction,
         accept: act.acceptAction,
         start: act.startAction,

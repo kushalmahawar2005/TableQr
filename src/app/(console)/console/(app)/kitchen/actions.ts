@@ -1,7 +1,7 @@
 "use server";
 
 import { AppError } from "@/server/errors";
-import { consoleKitchen, kdsAccept, kdsBoard, kdsBumpLine, kdsBumpTicket, kdsRealtimeToken, kdsRecall, kdsSearch, kdsStart, kdsStock } from "@/server/kitchen/kds";
+import { consoleKitchen, kdsAccept, kdsBoard, kdsOlder, kdsBumpLine, kdsBumpTicket, kdsRealtimeToken, kdsRecall, kdsSearch, kdsStart, kdsStock } from "@/server/kitchen/kds";
 import { kdsWorkRoles } from "@/lib/staff-permissions";
 import { staffFor } from "@/server/staff/request";
 import type { KdsResult } from "@/app/(staff)/kds/actions";
@@ -23,6 +23,9 @@ async function run<T>(work: () => Promise<T>): Promise<KdsResult<T>> {
 
 export async function boardAction(station: string | null) {
   return run(async () => kdsBoard(await kitchen(), station ? String(station) : null));
+}
+export async function olderAction(station: string | null, offset: number, limit: number) {
+  return run(async () => kdsOlder(await kitchen(), station ? String(station) : null, Number(offset) || 0, Number(limit) || 12));
 }
 export async function tokenAction() {
   try {

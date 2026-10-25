@@ -32,6 +32,8 @@ export function formatElapsed(ms: number): string {
   const m = Math.floor((total % 3600) / 60);
   const s = total % 60;
   const ss = String(s).padStart(2, "0");
+  // A ticket open for a day or more reads "2d 3h", not 51:12:09
+  if (h >= 24) return `${Math.floor(h / 24)}d ${h % 24}h`;
   return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${ss}` : `${m}:${ss}`;
 }
 

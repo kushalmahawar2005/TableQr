@@ -8,7 +8,7 @@ import type { StaffSession } from "../staff/auth";
 import type { StaffContext } from "../staff/context";
 import { acceptTicket, bumpLine, bumpTicket, recallTicket, setOutOfStock, startTicket } from "./actions";
 import { kitchenStations, type KdsDevice } from "./device";
-import { averageTicketMinutes, getKitchenDisplay, getUnavailableItems, searchKitchenItems } from "./display";
+import { averageTicketMinutes, getKitchenDisplay, getOlderPendingTickets, getUnavailableItems, searchKitchenItems } from "./display";
 
 // Everything a kitchen screen may do, decided from its device row on the server. The client never
 // says which station or role it is: a station screen sees and changes only its own station; the
@@ -91,6 +91,12 @@ export async function kdsBoard(device: KdsDevice, requested: string | null | und
 }
 
 export type KdsBoard = Awaited<ReturnType<typeof kdsBoard>>;
+
+/** One page of "Older pending tickets" for this screen's station (or every station on the expeditor screen) */
+export async function kdsOlder(device: KdsDevice, requested: string | null | undefined, offset: number, limit: number, now = new Date()) {
+  const station = viewStation(device, requested);
+  return getOlderPendingTickets(kdsActor(device), { station, offset, limit }, now);
+}
 
 export async function kdsAccept(device: KdsDevice, ticketId: string, now = new Date()) {
   await guardTicket(device, ticketId);

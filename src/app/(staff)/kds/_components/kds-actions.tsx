@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext } from "react";
+import type { OlderTickets } from "@/server/kitchen/display";
 import type { KdsBoard } from "@/server/kitchen/kds";
 import * as wall from "../actions";
 import type { KdsResult } from "../actions";
@@ -10,6 +11,8 @@ type SearchHits = Awaited<ReturnType<typeof wall.searchAction>>;
 /** What the kitchen board can ask the server. The wall screen and the console each supply their own. */
 export type KdsActions = {
   board: (station: string | null) => Promise<KdsResult<KdsBoard>>;
+  /** A page of open tickets older than the board's window */
+  older: (station: string | null, offset: number, limit: number) => Promise<KdsResult<OlderTickets>>;
   token: () => Promise<string | null>;
   accept: (ticketId: string) => Promise<KdsResult<unknown>>;
   start: (ticketId: string) => Promise<KdsResult<unknown>>;
@@ -23,6 +26,7 @@ export type KdsActions = {
 /** The wall screen: every call is checked against its device cookie */
 export const wallActions: KdsActions = {
   board: wall.boardAction,
+  older: wall.olderAction,
   token: wall.kdsTokenAction,
   accept: wall.acceptAction,
   start: wall.startAction,

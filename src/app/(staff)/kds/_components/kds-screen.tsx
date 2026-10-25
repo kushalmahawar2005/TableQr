@@ -24,6 +24,7 @@ import { printHtml, savePaper } from "@/app/pos/_components/bill-print";
 import { usePaper } from "@/app/pos/_components/paper-toggle";
 import { audioReady, playLate, playNewTicket, rememberedAnnouncements, saveAnnouncements, setSoundPref, soundPreference, subscribeSoundPref, unlockAudio } from "./sound";
 import { TicketCard, type CardAction } from "./ticket-card";
+import { OlderPendingTickets, useOlderTickets } from "./older-tickets";
 import { useKdsSync } from "./use-kds-sync";
 
 export type KdsDeviceView = {
@@ -84,6 +85,7 @@ function KdsBoardScreen(props: { initial: KdsBoard; device: KdsDeviceView; realt
   const [toast, setToast] = useState<string | null>(preview?.toast ?? null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
+  const older = useOlderTickets(board.station, board.staleOpen, !!preview);
   const cards = useMemo(() => sortCards((preview?.cards ?? board.cards).map((card) => liveCard(card, sync.now))), [preview?.cards, board.cards, sync.now]);
 
   // Sound: the preference lives on this screen; playing needs one tap after each page load
@@ -169,6 +171,7 @@ function KdsBoardScreen(props: { initial: KdsBoard; device: KdsDeviceView; realt
       say(c.bumped);
       setTimeout(() => void sync.refresh(), 450);
     } else await sync.refresh();
+    void older.reload();
     setBusy((b) => {
       const next = { ...b };
       delete next[card.ticketId];
@@ -181,6 +184,7 @@ function KdsBoardScreen(props: { initial: KdsBoard; device: KdsDeviceView; realt
     setBusyLines((s) => new Set(s).add(lineId));
     await guarded(() => actions.bumpLine(lineId));
     await sync.refresh();
+    void older.reload();
     setBusyLines((s) => {
       const next = new Set(s);
       next.delete(lineId);
@@ -193,6 +197,23 @@ function KdsBoardScreen(props: { initial: KdsBoard; device: KdsDeviceView; realt
     if (res?.ok) say(c.recalled);
     await sync.refresh();
   }
+
+  const renderCard = (card: KdsCard) => (
+    <TicketCard
+      key={card.ticketId}
+      card={card}
+      lang={lang}
+      c={c}
+      showStation={device.expeditor}
+      canAct={!offline && (device.expeditor || card.station === device.station)}
+      busy={busy[card.ticketId] ?? null}
+      busyLines={busyLines}
+      leaving={leaving.has(card.ticketId)}
+      onAction={onAction}
+      onBumpLine={onBumpLine}
+      onPrint={() => printHtml(kotHtml([card]))}
+    />
+  );
 
   const stations = device.expeditor ? [null, ...board.stations] : [device.station];
 
@@ -256,11 +277,7 @@ function KdsBoardScreen(props: { initial: KdsBoard; device: KdsDeviceView; realt
         </div>
       )}
 
-      {board.staleOpen > 0 && (
-        <div role="status" className="flex shrink-0 items-center gap-3 bg-kds-card px-4 py-2.5 text-[18px] font-semibold">
-          {c.staleOpen(board.staleOpen)}
-        </div>
-      )}
+      <OlderPendingTickets c={c} older={older} staleOpen={board.staleOpen} now={sync.now} renderCards={(list) => list.map(renderCard)} />
 
       <main className="min-h-0 flex-1 overflow-y-auto p-4 pb-10">
         {cards.length === 0 ? (
@@ -270,22 +287,7 @@ function KdsBoardScreen(props: { initial: KdsBoard; device: KdsDeviceView; realt
           </div>
         ) : (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(360px,1fr))] items-start gap-4">
-            {cards.map((card) => (
-              <TicketCard
-                key={card.ticketId}
-                card={card}
-                lang={lang}
-                c={c}
-                showStation={device.expeditor}
-                canAct={!offline && (device.expeditor || card.station === device.station)}
-                busy={busy[card.ticketId] ?? null}
-                busyLines={busyLines}
-                leaving={leaving.has(card.ticketId)}
-                onAction={onAction}
-                onBumpLine={onBumpLine}
-                onPrint={() => printHtml(kotHtml([card]))}
-              />
-            ))}
+            {cards.map(renderCard)}
           </div>
         )}
       </main>

@@ -5,13 +5,38 @@ import { CircleAlert, CircleCheck, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { getSettingsAction } from "./actions";
+import { checkRealtimeAction, getSettingsAction } from "./actions";
+import type { RealtimeCheck } from "@/server/realtime/check";
 import type { SettingsData } from "./admin-types";
 
 const ROLE = { super_admin: "Super admin", support: "Support" } as const;
 const ROLE_HELP = { super_admin: "Can change tenants, plans and settings", support: "Can view everything, cannot make changes" } as const;
 const when = (v: string | null) => v ? new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" }).format(new Date(v)) : "Never";
+const STEP = { settings: "Settings present", worker: "Live-updates service answers", connect: "A screen can connect", publish: "An update can be sent", delivery: "The screen receives it" } as const;
 const initials = (n: string) => n.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+
+/** Proves live updates work end to end; the settings being present proves nothing on its own */
+function RealtimeTest() {
+  const [state, setState] = useState<{ data: RealtimeCheck | null; error: string | null } | "running" | null>(null);
+  const run = () => { setState("running"); checkRealtimeAction().then(setState, () => setState({ data: null, error: "The check could not run." })); };
+  return <Card>
+    <CardHeader><CardTitle>Live updates</CardTitle><CardDescription>Sends a test update through the live-updates service and waits for a screen to receive it. Touches no restaurant.</CardDescription></CardHeader>
+    <CardContent className="space-y-3">
+      <button type="button" onClick={run} disabled={state === "running"} className="inline-flex h-9 items-center gap-2 rounded-md bg-[#5b42f5] px-4 text-sm font-medium text-white disabled:opacity-60">
+        {state === "running" && <Loader2 className="size-4 animate-spin" />}Run check
+      </button>
+      {state && state !== "running" && (state.error || !state.data
+        ? <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{state.error ?? "The check could not run."}</p>
+        : <div role="status" className="space-y-2">
+          <p className={state.data.ok ? "text-sm font-medium text-emerald-700" : "text-sm font-medium text-red-700"}>{state.data.ok ? "Live updates work end to end." : "Live updates are not working. Screens fall back to refreshing every few seconds."}</p>
+          <ul className="divide-y">{state.data.steps.map((x) => <li key={x.name} className="flex items-center gap-3 py-2 text-sm">
+            {x.ok ? <CircleCheck className="size-5 shrink-0 text-emerald-600" aria-label="OK" /> : <CircleAlert className="size-5 shrink-0 text-red-600" aria-label="Failed" />}
+            <span className="flex-1">{STEP[x.name]}</span><span className="text-muted-foreground">{x.ok && x.ms !== undefined ? `${x.ms} ms` : x.ok ? "" : "Failed"}</span>
+          </li>)}</ul>
+        </div>)}
+    </CardContent>
+  </Card>;
+}
 
 function Loaded({ data }: { data: SettingsData }) {
   const problems = data.system.filter((x) => !x.ok).length;
@@ -48,6 +73,8 @@ function Loaded({ data }: { data: SettingsData }) {
         <span className="flex-1 font-medium">{x.label}</span><span className={x.ok ? "text-muted-foreground" : "font-medium text-amber-700"}>{x.detail}</span>
       </li>)}</ul></CardContent>
     </Card>
+
+    <RealtimeTest />
   </>;
 }
 

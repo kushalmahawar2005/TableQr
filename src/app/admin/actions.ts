@@ -14,6 +14,7 @@ import { confirmFee, feesData, recordFee, rejectFee, type FeesData } from "@/ser
 import { getAnalyticsData } from "@/server/admin/analytics";
 import { getAuditData } from "@/server/admin/audit";
 import { getSettingsData } from "@/server/admin/settings";
+import { checkRealtime, type RealtimeCheck } from "@/server/realtime/check";
 import type { AnalyticsData, AnalyticsRange, AuditData, SettingsData, TenantDetail } from "./admin-types";
 import { requirePlatformAdmin, signInPlatformAdmin, signOutPlatformAdmin } from "@/server/admin/auth";
 import { randomInt } from "node:crypto";
@@ -528,5 +529,15 @@ export async function getSettingsAction(): Promise<{ data: SettingsData | null; 
     return { data: await getSettingsData(), error: null };
   } catch (error) {
     return { data: null, error: friendlyError(error, "Settings could not be loaded.") };
+  }
+}
+
+/** Runs a real publish-and-receive round trip through the realtime Worker; says which step broke */
+export async function checkRealtimeAction(): Promise<{ data: RealtimeCheck | null; error: string | null }> {
+  try {
+    await requirePlatformAdmin();
+    return { data: await checkRealtime(), error: null };
+  } catch (error) {
+    return { data: null, error: friendlyError(error, "The live-updates check could not run.") };
   }
 }

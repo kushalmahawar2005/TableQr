@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, count, desc, eq, gt, gte, inArray, isNotNull, isNull, like, lt, or } from "drizzle-orm";
+import { and, asc, count, desc, eq, exists, gt, gte, inArray, isNotNull, isNull, like, lt, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import * as s from "@/db/schema";
 import { localClock } from "@/domain/hours";
@@ -15,32 +15,11 @@ import { OPEN_TICKET_WINDOW_MS } from "./ticket-window";
 const OPEN: ("placed" | "accepted" | "preparing")[] = ["placed", "accepted", "preparing"];
 export type TicketStage = "placed" | "accepted" | "preparing";
 
-export async function getKitchenDisplay(ctx: StaffContext, opts: { station?: string | null } = {}, now = new Date()) {
-  const station = opts.station ?? null;
+/** Draws tickets as cards: their order, lines, tables and how long they have waited */
+async function buildCards(ctx: StaffContext, shown: (typeof s.tickets.$inferSelect)[], now: Date): Promise<KitchenCard[]> {
   const t = ctx.tenantId;
-
-  const since = new Date(now.getTime() - OPEN_TICKET_WINDOW_MS);
-  const [open, [stale]] = await Promise.all([
-    db
-      .select()
-      .from(s.tickets)
-      .where(and(eq(s.tickets.tenantId, t), eq(s.tickets.outletId, ctx.outletId), inArray(s.tickets.status, ["new", "in_progress"]), gte(s.tickets.createdAt, since))),
-    // Open tickets older than the window are not drawn, but never hidden silently: the board says how many
-    db
-      .select({ n: count() })
-      .from(s.tickets)
-      .where(and(eq(s.tickets.tenantId, t), eq(s.tickets.outletId, ctx.outletId), inArray(s.tickets.status, ["new", "in_progress"]), lt(s.tickets.createdAt, since))),
-  ]);
-  const staleOpen = Number(stale?.n ?? 0);
-
-  // Open-ticket counts per station tab; All counts every open ticket
-  const counts: Record<string, number> = { All: open.length };
-  for (const tk of open) counts[tk.station] = (counts[tk.station] ?? 0) + 1;
-
-  const lastBumped = await recallCandidate(ctx, station, now);
-  const shown = station ? open.filter((tk) => tk.station === station) : open;
   const orderIds = [...new Set(shown.map((tk) => tk.orderId))];
-  if (orderIds.length === 0) return { counts, cards: [] as KitchenCard[], lastBumped, staleOpen };
+  if (orderIds.length === 0) return [] as KitchenCard[];
 
   const [orders, lines] = await Promise.all([
     db
@@ -122,10 +101,86 @@ export async function getKitchenDisplay(ctx: StaffContext, opts: { station?: str
       })),
     };
   });
+  return cards;
+}
+
+/** Tickets still being cooked: a station line that is waiting, accepted or being prepared. Done and cancelled tickets have none. */
+const OPEN_STATUSES = ["new", "in_progress"] as const;
+const hasLiveLine = () =>
+  exists(
+    db
+      .select({ one: sql`1` })
+      .from(s.orderLines)
+      .where(and(eq(s.orderLines.tenantId, s.tickets.tenantId), eq(s.orderLines.orderId, s.tickets.orderId), eq(s.orderLines.station, s.tickets.station), inArray(s.orderLines.status, ["placed", "accepted", "preparing"]))),
+  );
+/** The older-tickets note counts up to this many; beyond it the board says "100+" */
+export const STALE_COUNT_CAP = 100;
+
+export async function getKitchenDisplay(ctx: StaffContext, opts: { station?: string | null } = {}, now = new Date()) {
+  const station = opts.station ?? null;
+  const t = ctx.tenantId;
+
+  const since = new Date(now.getTime() - OPEN_TICKET_WINDOW_MS);
+  const [open, [stale]] = await Promise.all([
+    db
+      .select()
+      .from(s.tickets)
+      .where(and(eq(s.tickets.tenantId, t), eq(s.tickets.outletId, ctx.outletId), inArray(s.tickets.status, [...OPEN_STATUSES]), gte(s.tickets.createdAt, since))),
+    // Open tickets older than the window are not drawn here but never hidden: they are counted (up to
+    // a cap, so this stays cheap on every refresh) and listed, page by page, in "Older pending tickets"
+    db
+      .select({ n: count() })
+      .from(
+        db
+          .select({ one: sql`1`.as("one") })
+          .from(s.tickets)
+          .where(and(eq(s.tickets.tenantId, t), eq(s.tickets.outletId, ctx.outletId), inArray(s.tickets.status, [...OPEN_STATUSES]), lt(s.tickets.createdAt, since), hasLiveLine()))
+          .limit(STALE_COUNT_CAP)
+          .as("stale"),
+      ),
+  ]);
+  const staleOpen = Number(stale?.n ?? 0);
+
+  // Open-ticket counts per station tab; All counts every open ticket
+  const counts: Record<string, number> = { All: open.length };
+  for (const tk of open) counts[tk.station] = (counts[tk.station] ?? 0) + 1;
+
+  const lastBumped = await recallCandidate(ctx, station, now);
+  const shown = station ? open.filter((tk) => tk.station === station) : open;
+  const cards = await buildCards(ctx, shown, now);
 
   // Most urgent first; within the same urgency, the ticket that has waited longest
   cards.sort((a, b) => urgencyRank(b.urgency) - urgencyRank(a.urgency) || a.placedAt - b.placedAt);
   return { counts, cards, lastBumped, staleOpen };
+}
+
+export type OlderTickets = { cards: KitchenCard[]; hasMore: boolean; nextOffset: number };
+
+/**
+ * Open tickets from before the board's window, newest first, a page at a time. Only tickets that
+ * are still being cooked appear (done and cancelled ones have no live line). Nothing here changes a
+ * ticket: its actions are the board's own, and no age ever completes or deletes an order.
+ */
+export async function getOlderPendingTickets(ctx: StaffContext, opts: { station?: string | null; offset?: number; limit?: number } = {}, now = new Date()): Promise<OlderTickets> {
+  const limit = Math.min(60, Math.max(1, Math.floor(Number(opts.limit) || 12)));
+  const offset = Math.min(10_000, Math.max(0, Math.floor(Number(opts.offset) || 0)));
+  const since = new Date(now.getTime() - OPEN_TICKET_WINDOW_MS);
+  const rows = await db
+    .select()
+    .from(s.tickets)
+    .where(and(
+      eq(s.tickets.tenantId, ctx.tenantId),
+      eq(s.tickets.outletId, ctx.outletId),
+      inArray(s.tickets.status, [...OPEN_STATUSES]),
+      lt(s.tickets.createdAt, since),
+      opts.station ? eq(s.tickets.station, opts.station) : undefined,
+      hasLiveLine(),
+    ))
+    .orderBy(desc(s.tickets.createdAt), desc(s.tickets.id))
+    .limit(limit + 1)
+    .offset(offset);
+  const page = rows.slice(0, limit);
+  return { cards: await buildCards(ctx, page, now), hasMore: rows.length > limit, nextOffset: offset + page.length };
 }
 
 export type KitchenCard = {

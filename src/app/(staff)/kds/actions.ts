@@ -2,7 +2,7 @@
 import { cookies } from "next/headers";
 import { AppError } from "@/server/errors";
 import { KDS_COOKIE, KDS_DEVICE_DAYS, kdsSetupOptions, requireKdsDevice, revokeKdsDevice, setupKdsDevice, updateKdsDevice } from "@/server/kitchen/device";
-import { kdsAccept, kdsBoard, kdsBumpLine, kdsBumpTicket, kdsRealtimeToken, kdsRecall, kdsSearch, kdsStart, kdsStock } from "@/server/kitchen/kds";
+import { kdsAccept, kdsBoard, kdsOlder, kdsBumpLine, kdsBumpTicket, kdsRealtimeToken, kdsRecall, kdsSearch, kdsStart, kdsStock } from "@/server/kitchen/kds";
 
 // S2 server actions. The screen, its outlet and its station come from the httpOnly device cookie;
 // the client sends only ids and values. Setup and settings need a manager or owner PIN.
@@ -53,6 +53,10 @@ export async function setupAction(outlet: string, phone: string, pin: string, st
 
 export async function boardAction(station: string | null) {
   return run(async () => kdsBoard(await device(), station ? String(station) : null));
+}
+
+export async function olderAction(station: string | null, offset: number, limit: number) {
+  return run(async () => kdsOlder(await device(), station ? String(station) : null, Number(offset) || 0, Number(limit) || 12));
 }
 
 export async function kdsTokenAction() {

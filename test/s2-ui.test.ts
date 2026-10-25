@@ -12,7 +12,7 @@ import { NOW, s2Cases } from "@/app/dev/s2/_fixtures";
 // S2 Kitchen Display rendered to HTML, plus the pure rules behind the timer and sound.
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push() {}, replace() {}, refresh() {} }) }));
-vi.mock("@/app/(staff)/kds/actions", () => ({ boardAction() {}, kdsTokenAction() {}, acceptAction() {}, startAction() {}, bumpTicketAction() {}, bumpLineAction() {}, recallAction() {}, stockAction() {}, searchAction() {}, settingsAction() {}, logoutAction() {} }));
+vi.mock("@/app/(staff)/kds/actions", () => ({ boardAction() {}, olderAction() {}, kdsTokenAction() {}, acceptAction() {}, startAction() {}, bumpTicketAction() {}, bumpLineAction() {}, recallAction() {}, stockAction() {}, searchAction() {}, settingsAction() {}, logoutAction() {} }));
 
 const caseOf = (id: string) => s2Cases().find((c) => c.id === id)!;
 const render = (id: string) => {
@@ -137,6 +137,9 @@ describe("timer rules", () => {
   it("formats elapsed time", () => {
     expect(formatElapsed(65_000)).toBe("1:05");
     expect(formatElapsed(3_725_000)).toBe("1:02:05");
+    // A ticket open for a day or more reads in days and hours
+    expect(formatElapsed(23 * 3_600_000 + 59 * 60_000)).toBe("23:59:00");
+    expect(formatElapsed(51 * 3_600_000 + 12 * 60_000)).toBe("2d 3h");
   });
 
   it("recomputes urgency locally at the exact thresholds and keeps urgent-oldest-first", () => {
@@ -227,3 +230,28 @@ describe("migration 0006", () => {
     expect(sql).not.toMatch(/UPDATE\s+`order_lines`/i);
   });
 });
+
+describe("older pending tickets (screen)", () => {
+  const read = (p: string) => readFileSync(path.join(process.cwd(), p), "utf8");
+  const screen = read("src/app/(staff)/kds/_components/kds-screen.tsx");
+  const older = read("src/app/(staff)/kds/_components/older-tickets.tsx");
+  const copy = read("src/app/(staff)/kds/_copy.ts");
+
+  it("is a collapsible section that loads only when opened, a page at a time, using the board's own cards and actions", () => {
+    expect(screen).toMatch(/<OlderPendingTickets[^>]*renderCards=\{\(list\) => list\.map\(renderCard\)\}/);
+    expect(screen).toMatch(/void older\.reload\(\)/);
+    expect(older).toMatch(/aria-expanded=\{older\.open\}/);
+    expect(older).toMatch(/if \(preview \|\| !state\.open\) return;/);
+    expect(older).toMatch(/older\.hasMore/);
+    // Reading never closes anything: this file has no way to change a ticket
+    expect(older).not.toMatch(/accept|bump|recall|stock/i);
+  });
+
+  it("says so in English and Hindi", () => {
+    for (const key of ["olderTitle", "olderShow", "olderHide", "olderHint", "olderEmpty", "olderFailed", "olderMore"]) {
+      expect(copy.match(new RegExp(`\\b${key}:`, "g"))).toHaveLength(2);
+    }
+    expect(copy).toMatch(/Nothing here is closed on its own/);
+  });
+});
+
