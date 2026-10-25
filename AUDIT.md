@@ -73,6 +73,8 @@ Checked 25 Oct: review boards g1-g7 and b1-b4 render at 360 px with no horizonta
 - [ ] **B4. Placing orders and order tracker** — `/orders`, `/table`: rounds, repeat order, cancellations, waiter call, realtime updates.
 - [ ] **B5. Table booking** — `/book`, `/book/details`, `/book/confirmed`, `/book/manage/[token]`, `/b/[token]`: slots, advance payment (gateway and restaurant QR), preorder, cancel, reschedule.
   - [x] A cancel link (`cancelled=1`) marked a booking advance as failed with no check, even a paid one. It now never touches a paid, used, returned or kept advance and closes one only when the gateway confirms no payment was attempted.
+  - [x] The open waitlist texted any number on every join with no limit (SMS bombing, SMS cost). One live entry per number, three joins a number a day, 30 joins per outlet per 10 minutes.
+  - [ ] Anyone can script online booking holds (no sign-in until the confirm step) and keep every table blocked for 5-minute stretches. Needs a per-device limit (store the device on the hold) or a bot check. Needs a decision: which one.
 - [ ] **B6. Delivery** — `/r/[outlet]/delivery`: area/pincode, COD, prepay (Cashfree and restaurant QR), rider tracking, closed hours.
   - [x] Delivery and COD server code not yet reviewed line by line (P5).
   - [x] No way to cancel a placed delivery order. Owner or manager can now Cancel order (with a reason) on Delivery orders: items stop, the counter closes, anything paid is refunded through the normal refund path, repeating is harmless.

@@ -40,6 +40,15 @@ export async function joinPublicWaitlist(outletCode: string, input: { name: stri
   const name = input.name.trim().slice(0, 80); const partySize = Number(input.partySize);
   const now = new Date();
   if (!name || !/^[0-9+ ()-]{7,20}$/.test(input.phone) || !Number.isInteger(partySize) || partySize < 1 || partySize > 12) throw new AppError("invalid_state", "Enter a name, phone and party size from 1 to 12.");
+  // Joining is open to anyone and the number is not verified, yet every join sends it an SMS: one
+  // live entry per number, a few joins per number a day, and a cap on how fast an outlet fills
+  const dayAgo = new Date(now.getTime() - 24 * 3600_000), tenMinutesAgo = new Date(now.getTime() - 10 * 60_000);
+  const onList = and(eq(s.waitlistEntries.tenantId, scope.tenantId), eq(s.waitlistEntries.outletId, scope.outletId));
+  const [live] = await db.select({ id: s.waitlistEntries.id }).from(s.waitlistEntries).where(and(onList, eq(s.waitlistEntries.phone, input.phone), inArray(s.waitlistEntries.status, ["waiting", "notified"]))).limit(1);
+  if (live) throw new AppError("conflict", "This number is already on the waitlist. Use the link we sent to see your place.", { reason: "already_waiting" });
+  const [today] = await db.select({ n: count() }).from(s.waitlistEntries).where(and(onList, eq(s.waitlistEntries.phone, input.phone), gte(s.waitlistEntries.joinedAt, dayAgo)));
+  const [burst] = await db.select({ n: count() }).from(s.waitlistEntries).where(and(onList, gte(s.waitlistEntries.joinedAt, tenMinutesAgo)));
+  if (Number(today.n) >= 3 || Number(burst.n) >= 30) throw new AppError("rate_limited", "Too many requests right now. Please ask the host to add you.", { reason: "rate_limited" });
   const [last] = await db.select({ sortOrder: s.waitlistEntries.sortOrder }).from(s.waitlistEntries).where(and(eq(s.waitlistEntries.tenantId, scope.tenantId), eq(s.waitlistEntries.outletId, scope.outletId), inArray(s.waitlistEntries.status, ["waiting", "notified"]))).orderBy(asc(s.waitlistEntries.sortOrder));
   const estimate = await estimateWait(db, scope, partySize, input.seatingPreference, now);
   const plain = token(); const id = uuidv7();

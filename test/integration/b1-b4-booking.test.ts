@@ -161,6 +161,16 @@ describe("B1-B4 booking domain", () => {
     expect((await publicWaitlistStatus("SRJ01", joined.token)).status).toBe("left");
   });
 
+  it("keeps the open waitlist from being used to text strangers: one live entry per number, three a day", async () => {
+    const phone = "+919811100001";
+    const first = await joinPublicWaitlist("SRJ01", { name: "One", phone, partySize: 2 });
+    await expect(joinPublicWaitlist("SRJ01", { name: "Again", phone, partySize: 2 })).rejects.toMatchObject({ code: "conflict" });
+    await leavePublicWaitlist("SRJ01", first.token);
+    await leavePublicWaitlist("SRJ01", (await joinPublicWaitlist("SRJ01", { name: "Two", phone, partySize: 2 })).token);
+    await leavePublicWaitlist("SRJ01", (await joinPublicWaitlist("SRJ01", { name: "Three", phone, partySize: 2 })).token);
+    await expect(joinPublicWaitlist("SRJ01", { name: "Four", phone, partySize: 2 })).rejects.toMatchObject({ code: "rate_limited" });
+  });
+
   it("uses historical wait time after thirty useful completed parties", async () => {
     const tableId = env.demo.tableIds.T1;
     for (let i = 0; i < 30; i++) {
