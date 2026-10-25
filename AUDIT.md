@@ -69,6 +69,8 @@ Checked 25 Oct: review boards g1-g7 and b1-b4 render at 360 px with no horizonta
 - [ ] **B1. Restaurant home and entry** — `/r/[outlet]`, language choice, closed state, announcements, custom domain.
 - [ ] **B2. Table QR scan and verify** — `/t/[table]`, `/verify`, OTP send/resend/expiry, join code, group at one table, table already busy.
   - [x] Remove `OTP_TEST_BYPASS` / `OTP_TEST_PHONE` from Hostinger before launch; bypass code removed too.
+  - [x] "Send receipt" texted a link that only opens with the guest's device cookie, so it failed in WhatsApp's own browser or on another domain. It now sends the signed bill link (works anywhere) on the domain the guest is on.
+  - [ ] Low: anyone with a table's QR address can open an empty session on it from afar (staff can clear it). Consider auto-closing sessions with no order after some idle time.
 - [ ] **B3. Menu, item sheet and cart** — `/menu`, `/menu/item/[id]`, `/cart`: categories, photos, modifiers, veg filter, sold-out, outlet prices, order note, Hindi.
 - [ ] **B4. Placing orders and order tracker** — `/orders`, `/table`: rounds, repeat order, cancellations, waiter call, realtime updates.
 - [ ] **B5. Table booking** — `/book`, `/book/details`, `/book/confirmed`, `/book/manage/[token]`, `/b/[token]`: slots, advance payment (gateway and restaurant QR), preorder, cancel, reschedule.

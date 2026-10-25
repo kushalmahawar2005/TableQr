@@ -3,7 +3,11 @@ import { cookies, headers } from "next/headers";
 import { formatRupees } from "@/domain/menu-price";
 import { DEVICE_COOKIE } from "@/lib/guest-device";
 import { getAfterVisit, requireVisit, submitFeedback } from "@/server/guest/after-visit";
-import { publicOrigin } from "@/server/guest/invite";
+import { requestOrigin } from "@/server/request-host";
+import { billToken } from "@/server/billing/bill-link";
+import { and, eq } from "drizzle-orm";
+import { db } from "@/db";
+import * as s from "@/db/schema";
 import { sendReceipt, type ReceiptChannel } from "@/server/receipts/channels";
 
 // G9 actions: read-only except one rating and sending your own receipt.
@@ -33,7 +37,11 @@ export async function sendReceiptAction(outlet: string, table: string, channel: 
   try {
     const visit = await requireVisit(outlet, table, await device());
     const data = await getAfterVisit(outlet, table, await device());
-    const link = `${publicOrigin(await headers())}/r/${encodeURIComponent(outlet)}/t/${encodeURIComponent(table)}/paid/receipt`;
+    // The link is texted to the guest's phone and may open in another browser (WhatsApp's own), which
+    // has no device cookie: the signed bill link opens anywhere, on the domain the guest is on
+    const [bill] = await db.select({ id: s.bills.id }).from(s.bills).where(and(eq(s.bills.tenantId, visit.tenantId), eq(s.bills.sessionId, visit.sessionId)));
+    const origin = requestOrigin(await headers());
+    const link = bill ? `${origin}/b/${billToken(bill.id)}` : `${origin}/r/${encodeURIComponent(outlet)}/t/${encodeURIComponent(table)}/paid/receipt`;
     const res = await sendReceipt(visit, channel, {
       outletName: data && !data.expired ? data.outlet.name : "",
       amountText: data && !data.expired ? formatRupees(data.paidPaise + data.tipPaise) : "",
