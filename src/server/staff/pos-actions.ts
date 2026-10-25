@@ -45,7 +45,7 @@ export async function requestBillAction(sessionId: string) {
   return run(s => waiterRequestBill(s, String(sessionId)));
 }
 /** Discount on the whole bill: percent (1-100) or whole rupees, with a reason */
-export async function discountAction(input: { sessionId: string; kind: "percent" | "flat"; value: number; reason: string }) { return run((s) => setBillDiscount(s, input)); }
+export async function discountAction(input: { sessionId: string; kind: "percent" | "flat"; value: number; reason: string; approval?: Approval }) { return run((s) => setBillDiscount(s, input)); }
 export async function clearDiscountAction(sessionId: string) { return run((s) => clearBillDiscount(s, sessionId)); }
 /** Save the number a bill was sent to on WhatsApp in the customer list */
 export async function addItemsAction(input: { sessionId: string; tableId: string; participantId: string; clientRequestId: string; lines: StaffDraftLine[] }) { return run((s) => addItemsAtBilling(s, input)); }

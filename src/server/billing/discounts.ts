@@ -9,15 +9,18 @@ import type { StaffSession } from "../staff/auth";
 import { announceBill } from "./payments";
 import { computeDraft, loadBillInputs, lockSession, syncBill, type BillScope } from "./bill";
 import { requireFeature } from "../plan";
+import { discountNeedsApproval } from "@/domain/discount-limit";
+import { managerApproval, type Approval } from "../staff/waiter-mutations";
 
 // A discount on the whole bill, given by billing staff: a percent or a rupee amount, always with a
-// reason, recorded in the audit log. One bill-level discount at a time (giving another replaces it),
-// and only before anyone has paid, so no share that was already settled changes under a guest.
+// reason, recorded in the audit log. Above 10% of the food total, staff other than a manager or
+// owner need a manager's PIN. One bill-level discount at a time (giving another replaces it), and
+// only before anyone has paid, so no share that was already settled changes under a guest.
 
 export const discountRoles = ["owner", "manager", "accountant", "cashier", "reception"] as const;
 
 type Staff = Pick<StaffSession, "tenantId" | "outletId" | "userId" | "name" | "roles">;
-type DiscountInput = { sessionId: string; kind: "percent" | "flat"; /** percent: 1-100; flat: rupees */ value: number; reason: string };
+type DiscountInput = { sessionId: string; kind: "percent" | "flat"; /** percent: 1-100; flat: rupees */ value: number; reason: string; /** A manager's PIN, needed above the free limit */ approval?: Approval };
 
 const guard = (staff: Staff) => {
   if (!staff.roles.some((r) => (discountRoles as readonly string[]).includes(r))) throw new AppError("forbidden", "Your role cannot give discounts.");
@@ -39,7 +42,7 @@ async function openBill(tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
   return billId;
 }
 
-export async function setBillDiscount(staff: Staff, input: DiscountInput, now = new Date()) {
+export async function setBillDiscount(staff: StaffSession, input: DiscountInput, now = new Date()) {
   guard(staff);
   await requireFeature(staff.tenantId, "discounts");
   const kind = input.kind === "flat" ? "flat" : "percent";
@@ -57,6 +60,8 @@ export async function setBillDiscount(staff: Staff, input: DiscountInput, now = 
     const base = computeDraft({ ...inputs, discounts: inputs.discounts.filter((d) => d.orderLineId) }).totals.subtotalPaise;
     if (base <= 0) throw new AppError("invalid_state", "There is nothing on this bill to discount.", { reason: "empty" });
     const amountPaise = kind === "percent" ? Math.round((base * Math.round(value * 100)) / 10000) : Math.min(base, Math.round(value * 100));
+    // Over the free limit a manager approves: the signed-in manager or owner, or one's PIN
+    const approverUserId = discountNeedsApproval(amountPaise, base) ? await managerApproval(staff, input.approval, discountRoles) : null;
     const before = inputs.discounts.filter((d) => !d.orderLineId).reduce((n, d) => n + d.amountPaise, 0);
     await tx.delete(s.discounts).where(and(eq(s.discounts.tenantId, scope.tenantId), eq(s.discounts.billId, billId), isNull(s.discounts.orderLineId)));
     await tx.insert(s.discounts).values({
@@ -70,7 +75,7 @@ export async function setBillDiscount(staff: Staff, input: DiscountInput, now = 
       appliedByUserId: staff.userId,
     });
     await syncBill(tx, scope, now);
-    await audit(tx, staff, { action: "bill.discount_set", entity: "bill", entityId: billId, before: { discountPaise: before }, after: { kind, value, amountPaise }, reason, now });
+    await audit(tx, staff, { action: "bill.discount_set", entity: "bill", entityId: billId, before: { discountPaise: before }, after: { kind, value, amountPaise, approverUserId }, reason, now });
     return { billId, amountPaise };
   }, LOCK_THEN_READ);
   announceBill(scope);

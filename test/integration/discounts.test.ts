@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db as appDb } from "@/db";
 import * as s from "@/db/schema";
@@ -59,6 +59,19 @@ describe("bill discount", () => {
     expect((await bill()).discountPaise).toBe(0);
     const logged = await env.db.select({ action: s.auditLog.action }).from(s.auditLog).where(eq(s.auditLog.entityId, b.id));
     expect(logged.map((l) => l.action)).toEqual(expect.arrayContaining(["bill.discount_set", "bill.discount_removed"]));
+  });
+
+  it("lets a cashier give up to 10% alone, and more only with a manager's PIN", async () => {
+    const cashier = (await resolveStaff((await signInStaff({ outletCode: "SRJ01", phone: "9000000003", pin: "3333" })).token))!;
+    await setBillDiscount(cashier, { sessionId: guest.sessionId, kind: "percent", value: 10, reason: "Regular guest" });
+    expect((await fails(setBillDiscount(cashier, { sessionId: guest.sessionId, kind: "percent", value: 15, reason: "Birthday" }))).code).toBe("forbidden");
+    expect((await fails(setBillDiscount(cashier, { sessionId: guest.sessionId, kind: "percent", value: 15, reason: "Birthday", approval: { phone: "9000000005", pin: "5555" } }))).code).toBe("forbidden");
+    await setBillDiscount(cashier, { sessionId: guest.sessionId, kind: "percent", value: 15, reason: "Birthday", approval: { phone: "9000000002", pin: "2222" } });
+    const b = await bill();
+    expect(b.discountPaise).toBe(Math.round(b.subtotalPaise * 0.15));
+    const [entry] = await env.db.select({ after: s.auditLog.after }).from(s.auditLog).where(and(eq(s.auditLog.entityId, b.id), eq(s.auditLog.action, "bill.discount_set"))).orderBy(desc(s.auditLog.createdAt)).limit(1);
+    expect((entry.after as { approverUserId: string | null }).approverUserId).toBeTruthy();
+    await clearBillDiscount(owner, guest.sessionId);
   });
 
   it("needs a reason and a billing role, and stops once money is taken", async () => {

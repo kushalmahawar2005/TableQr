@@ -13,6 +13,7 @@ import { signOutAction } from "@/app/(console)/console/login/actions";
 import { AddItemsDialog } from "./add-items-dialog";
 import { billHtml, printHtml } from "./bill-print";
 import { PaperToggle } from "./paper-toggle";
+import { DISCOUNT_FREE_LIMIT_PERCENT, discountNeedsApproval } from "@/domain/discount-limit";
 import { RefundPanel } from "./refund-panel";
 import { billMessage, whatsappLink, whatsappNumber } from "@/domain/bill-message";
 import { isRoomCode } from "@/domain/rooms";
@@ -322,7 +323,9 @@ export function BillingScreen({ initial, realtimeUrl, embedded = false, openSess
                         hi={hi}
                         current={detail.bill?.discount ?? null}
                         disabled={offline || busy}
-                        onApply={(kind, value, reason) => void run(() => actions.discountAction({ sessionId: detail.sessionId, kind, value, reason }), async () => { setMessage({ tone: "ok", text: L("Discount applied.", "छूट लग गई।") }); const d = await actions.detailAction(detail.sessionId); if (d.ok) setDetail(d.data); })}
+                        needsApproval={detail.needsApproval}
+                        subtotalPaise={detail.bill?.subtotalPaise ?? 0}
+                        onApply={(kind, value, reason, approval) => void run(() => actions.discountAction({ sessionId: detail.sessionId, kind, value, reason, approval }), async () => { setMessage({ tone: "ok", text: L("Discount applied.", "छूट लग गई।") }); const d = await actions.detailAction(detail.sessionId); if (d.ok) setDetail(d.data); })}
                         onClear={() => void run(() => actions.clearDiscountAction(detail.sessionId), async () => { setMessage({ tone: "ok", text: L("Discount removed.", "छूट हटा दी।") }); const d = await actions.detailAction(detail.sessionId); if (d.ok) setDetail(d.data); })}
                       />
                     )}
@@ -439,11 +442,14 @@ export function BillingScreen({ initial, realtimeUrl, embedded = false, openSess
 }
 
 /** Give, change or remove the bill's discount: a percent or rupees, always with a reason */
-function DiscountBox({ hi, current, disabled, onApply, onClear }: {
+function DiscountBox({ hi, current, disabled, needsApproval, subtotalPaise, onApply, onClear }: {
   hi: boolean;
   current: { kind: string; value: number; amountPaise: number; reason: string } | null;
   disabled: boolean;
-  onApply: (kind: "percent" | "flat", value: number, reason: string) => void;
+  /** This staff member is not a manager or owner */
+  needsApproval: boolean;
+  subtotalPaise: number;
+  onApply: (kind: "percent" | "flat", value: number, reason: string, approval?: { phone: string; pin: string }) => void;
   onClear: () => void;
 }) {
   const L = (en: string, hin: string) => (hi ? hin : en);
@@ -451,8 +457,13 @@ function DiscountBox({ hi, current, disabled, onApply, onClear }: {
   const [kind, setKind] = useState<"percent" | "flat">("percent");
   const [value, setValue] = useState("");
   const [reason, setReason] = useState("");
+  const [phone, setPhone] = useState("");
+  const [pin, setPin] = useState("");
   const n = Number(value);
-  const valid = reason.trim().length >= 2 && (kind === "percent" ? n > 0 && n <= 100 : Number.isInteger(n) && n > 0);
+  // Same rule as the server: above the free limit a manager approves with their PIN
+  const amountPaise = kind === "percent" ? Math.round((subtotalPaise * Math.round(n * 100)) / 10000) : Math.min(subtotalPaise, Math.round(n * 100));
+  const askManager = needsApproval && n > 0 && discountNeedsApproval(amountPaise, subtotalPaise);
+  const valid = reason.trim().length >= 2 && (kind === "percent" ? n > 0 && n <= 100 : Number.isInteger(n) && n > 0) && (!askManager || (phone.trim().length >= 10 && pin.length >= 4));
   if (!open) {
     return (
       <div className="flex flex-wrap items-center gap-2">
@@ -464,7 +475,7 @@ function DiscountBox({ hi, current, disabled, onApply, onClear }: {
   return (
     <form
       className="rounded-card border border-line bg-surface p-4 sm:p-5"
-      onSubmit={(e) => { e.preventDefault(); if (valid) { onApply(kind, n, reason.trim()); setOpen(false); } }}
+      onSubmit={(e) => { e.preventDefault(); if (valid) { onApply(kind, n, reason.trim(), askManager ? { phone: phone.trim(), pin } : undefined); setOpen(false); setPin(""); } }}
     >
       <h3 className="font-display text-section font-bold">{L("Discount on this bill", "इस बिल पर छूट")}</h3>
       <div className="mt-3 flex gap-2">
@@ -478,6 +489,17 @@ function DiscountBox({ hi, current, disabled, onApply, onClear }: {
       <label className="mt-3 block text-sm font-semibold">{L("Reason", "कारण")}
         <input className={field} value={reason} maxLength={200} onChange={(e) => setReason(e.target.value)} placeholder={L("e.g. Regular guest, birthday, late food", "जैसे रेगुलर ग्राहक, जन्मदिन, खाना देर से")} />
       </label>
+      {askManager && (
+        <div className="mt-3 rounded-input bg-paper p-3">
+          <p className="text-sm font-semibold">{L(`More than ${DISCOUNT_FREE_LIMIT_PERCENT}% off needs a manager's PIN`, `${DISCOUNT_FREE_LIMIT_PERCENT}% से ज़्यादा छूट के लिए मैनेजर का PIN चाहिए`)}</p>
+          <label className="mt-2 block text-sm font-semibold">{L("Manager's phone", "मैनेजर का फ़ोन")}
+            <input className={field} type="tel" inputMode="numeric" autoComplete="off" maxLength={13} value={phone} onChange={(e) => setPhone(e.target.value)} />
+          </label>
+          <label className="mt-2 block text-sm font-semibold">{L("Manager's PIN", "मैनेजर का PIN")}
+            <input className={field} type="password" inputMode="numeric" autoComplete="off" maxLength={6} value={pin} onChange={(e) => setPin(e.target.value)} />
+          </label>
+        </div>
+      )}
       <p className="mt-2 text-xs text-muted">{L("Replaces any earlier discount. Can only change before anyone pays.", "पहले वाली छूट की जगह लेगी। किसी के भुगतान से पहले ही बदल सकते हैं।")}</p>
       <div className="mt-3 flex gap-2">
         <button type="button" className={quiet} onClick={() => setOpen(false)}>{L("Cancel", "रद्द करें")}</button>
