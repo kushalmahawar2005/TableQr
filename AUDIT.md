@@ -66,7 +66,7 @@ Checked 25 Oct: review boards g1-g7 and b1-b4 render at 360 px with no horizonta
 - [ ] **B6. Delivery** — `/r/[outlet]/delivery`: area/pincode, COD, prepay (Cashfree and restaurant QR), rider tracking, closed hours.
   - [x] Delivery and COD server code not yet reviewed line by line (P5).
   - [x] No way to cancel a placed delivery order. Owner or manager can now Cancel order (with a reason) on Delivery orders: items stop, the counter closes, anything paid is refunded through the normal refund path, repeating is harmless.
-  - [ ] Every delivery order adds a hidden dining-table row that is never removed; the table list grows without limit.
+  - [x] Every delivery order adds a hidden dining-table row (tiny, stays); it was counted in Settings and the admin totals, now only active tables are counted. Pruning old rows is not worth the foreign-key risk.
 - [ ] **B7. Room guest** — `/room/[code]`: room requests, Wi-Fi, food to room, per-order billing.
 - [ ] **B8. Waitlist** — `/r/[outlet]/waitlist`.
 

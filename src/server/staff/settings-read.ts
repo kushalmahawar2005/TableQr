@@ -46,7 +46,7 @@ export async function getOutletSettings(staff: Staff): Promise<OutletSettings> {
   const [outlet] = await db.select().from(s.outlets).where(and(eq(s.outlets.tenantId, staff.tenantId), eq(s.outlets.id, staff.outletId)));
   if (!outlet) throw new AppError("not_found", "Outlet not found.");
   const [[tables], [team], [plan], [brand], features] = await Promise.all([
-    db.select({ n: count() }).from(s.diningTables).where(and(eq(s.diningTables.tenantId, staff.tenantId), eq(s.diningTables.outletId, staff.outletId))),
+    db.select({ n: count() }).from(s.diningTables).where(and(eq(s.diningTables.tenantId, staff.tenantId), eq(s.diningTables.outletId, staff.outletId), eq(s.diningTables.isActive, true))),
     db.select({ n: count() }).from(s.staffRoles).where(and(eq(s.staffRoles.tenantId, staff.tenantId))),
     db.select({ name: s.plans.name }).from(s.tenants).innerJoin(s.plans, eq(s.tenants.planCode, s.plans.code)).where(eq(s.tenants.id, staff.tenantId)),
     db.select({ logoUrl: s.brands.logoUrl }).from(s.brands).where(and(eq(s.brands.tenantId, staff.tenantId), eq(s.brands.id, outlet.brandId))),

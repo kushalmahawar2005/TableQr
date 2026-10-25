@@ -140,7 +140,7 @@ export async function getAdminData(): Promise<AdminData> {
       // isolation-exempt: authenticated platform admins rank tenants by paid sales, never reading bill details.
     }).from(s.bills).where(eq(s.bills.status, "paid")).groupBy(s.bills.tenantId),
     // isolation-exempt: authenticated platform admins read the platform-wide table count.
-    db.select({ total: count() }).from(s.diningTables),
+    db.select({ total: count() }).from(s.diningTables).where(eq(s.diningTables.isActive, true)),
   ]);
   const billsByTenant = new Map(tenantBillRows.map((row) => [row.tenantId, Number(row.recent)]));
   const ordersByTenant = new Map(tenantOrderRows.map((row) => [row.tenantId, { recent: Number(row.recent), last: row.last ? new Date(row.last).toISOString() : null }]));
