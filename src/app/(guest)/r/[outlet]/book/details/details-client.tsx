@@ -78,23 +78,7 @@ export function DetailsClient({ outletCode, token, timezone, freeCancellationMin
     return () => { active = false; window.clearInterval(timer); };
   }, [summary?.manualClaimedAt, summary?.manualConfirmedAt, outletCode, token]);
   const savePreorder = async () => { setBusy(true); const lines = Object.entries(qty).filter(([, count]) => count > 0).map(([itemId, count]) => ({ itemId, qty: count, modifierIds: modifierIds[itemId] ?? [] })); const r = await saveBookingPreorderAction(outletCode, token, lines); setBusy(false); if (!r.ok) { setMessage(r.message); return; } setPreorderSaved(true); await refresh(); setMessage(lines.length ? "Your preorder is saved. Pay the advance before confirming." : "Preorder removed."); };
-  const send = async () => {
-    setBusy(true);
-    const r = await sendBookingOtpAction(outletCode, token, phone);
-    if (!r.ok) { setBusy(false); setMessage(r.message); return; }
-    if (!r.data.skipOtp) { setChallenge(r.data.challengeId); setDevCode(r.data.devCode ?? ""); setBusy(false); setMessage("Code sent."); return; }
-    setMessage("Test mode · verifying the configured test number…");
-    const verified = await verifyBookingOtpAction(outletCode, token, { challengeId: r.data.challengeId, code: "0000", name, marketingConsent: marketing });
-    if (!verified.ok) { setBusy(false); setMessage(verified.message); return; }
-    const latest = await bookingSummaryAction(outletCode, token);
-    if (!latest.ok) { setBusy(false); setMessage(latest.message); return; }
-    setSummary(latest.data); setName(latest.data.name); setPhone(latest.data.phone ?? phone);
-    if (latest.data.creditPaidPaise < latest.data.creditRequiredPaise) { setBusy(false); setMessage("Test number verified. Complete the booking advance to continue."); return; }
-    const confirmed = await confirmBookingAction(outletCode, token, { name, phone });
-    setBusy(false);
-    if (confirmed.ok) router.push(`/r/${encodeURIComponent(outletCode)}/book/confirmed?token=${encodeURIComponent(token)}&lang=${lang}`);
-    else setMessage(confirmed.message);
-  };
+  const send = async () => { setBusy(true); const r = await sendBookingOtpAction(outletCode, token, phone); setBusy(false); if (r.ok) { setChallenge(r.data.challengeId); setDevCode(r.data.devCode ?? ""); setMessage("Code sent."); } else setMessage(r.message); };
   const confirm = async () => { setBusy(true); try { const result = await confirmBookingAction(outletCode, token, { name, phone }); if (result.ok) router.push(`/r/${encodeURIComponent(outletCode)}/book/confirmed?token=${encodeURIComponent(token)}&lang=${lang}`); else setMessage(result.message); } finally { setBusy(false); } };
   const verify = async () => { setBusy(true); const r = await verifyBookingOtpAction(outletCode, token, { challengeId: challenge, code, name, marketingConsent: marketing }); if (!r.ok) { setBusy(false); setMessage(r.message); return; } await refresh(); setBusy(false); if (summary && summary.creditRequiredPaise > summary.creditPaidPaise) { setMessage("Mobile number verified. Complete your advance payment to continue."); return; } await confirm(); };
   const payCredit = async () => { setBusy(true); const r = await startBookingCreditAction(outletCode, token, globalThis.crypto?.randomUUID?.() ?? `${Date.now()}`, window.location.origin); setBusy(false); if (r.ok && !r.data.paid) { try { await openCheckout(r.data.checkout); } catch { setMessage("Payment page could not open. Try again."); } } else if (!r.ok) setMessage(r.message); else await refresh(); };

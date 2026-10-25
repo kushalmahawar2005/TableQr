@@ -12,7 +12,7 @@ Work top to bottom, one part at a time. Money and guest-facing parts come first 
 - [x] **P4.** Render and check the guest receipt print `/r/[outlet]/t/[table]/paid/receipt` (A1). Done: prints on one A4 page. Fixed on all four bill documents (guest receipt, bill link, WhatsApp PDF, counter slip): city no longer repeated in the address, the same dish across rounds is one line, zero round-off hidden, GST-registered bills split CGST/SGST.
 - [x] **P5.** Line-by-line review of delivery and COD: checkout, OTP, payment, dispatch, rider, refunds (B6, C6). Done: payment/bill totals use the same rounding, guest OTP and UPI-reference rules hold, staff actions are role-checked, outlet-scoped and audited, and a paid order that cannot be placed is refunded. New findings listed under B6.
 - [x] **P6.** Fix the flaky `billing-flow` `beforeAll` timeout (F8). Fixed: hook timeout raised to 60 s; the reset runs every migration and seeds demo data.
-- [ ] **P7.** Before launch, the owner removes `OTP_TEST_BYPASS` and `OTP_TEST_PHONE` in Hostinger hPanel (B2, F9). *Owner action.*
+- [x] **P7.** Before launch, the owner removes `OTP_TEST_BYPASS` and `OTP_TEST_PHONE` in Hostinger hPanel (B2, F9). *Owner action.* Done 25 Oct: the owner removed both variables and the bypass code was removed (revert of `0c8c5b5`).
 - [ ] **P8.** UI redesign: on hold until the owner names the screens. Broken or overflowing UI found during the audit is still fixed.
 
 ## How each part is checked
@@ -49,7 +49,7 @@ Findings go under the part as `- [ ] finding` and are ticked when fixed with the
 
 - [ ] **B1. Restaurant home and entry** — `/r/[outlet]`, language choice, closed state, announcements, custom domain.
 - [ ] **B2. Table QR scan and verify** — `/t/[table]`, `/verify`, OTP send/resend/expiry, join code, group at one table, table already busy.
-  - [ ] Remove `OTP_TEST_BYPASS` / `OTP_TEST_PHONE` from Hostinger before launch.
+  - [x] Remove `OTP_TEST_BYPASS` / `OTP_TEST_PHONE` from Hostinger before launch; bypass code removed too.
 - [ ] **B3. Menu, item sheet and cart** — `/menu`, `/menu/item/[id]`, `/cart`: categories, photos, modifiers, veg filter, sold-out, outlet prices, order note, Hindi.
 - [ ] **B4. Placing orders and order tracker** — `/orders`, `/table`: rounds, repeat order, cancellations, waiter call, realtime updates.
 - [ ] **B5. Table booking** — `/book`, `/book/details`, `/book/confirmed`, `/book/manage/[token]`, `/b/[token]`: slots, advance payment (gateway and restaurant QR), preorder, cancel, reschedule.

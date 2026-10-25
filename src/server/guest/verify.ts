@@ -9,7 +9,6 @@ import { CONSENT_VERSION, isCompleteCode, normaliseCode, OTP } from "@/domain/ot
 import { countryByIso, isValidIndianMobile, normaliseIndianMobile, toE164 } from "@/domain/phone";
 import { LOCK_THEN_READ, type Runner } from "../db-types";
 import { smsMockEnabled, smsSender } from "../sms/sender";
-import { OTP_TEST_CODE, otpTestBypassEnabled } from "../sms/test-mode";
 import { assertCanSeat, findOpenSession, findTableByQr } from "./table";
 
 // G2: guests confirm their mobile with a 4-digit SMS code before placing an order. Codes are per
@@ -44,8 +43,6 @@ export type CodeSent = {
   resendIn: number;
   /** Development and tests only: the mock SMS code, so the flow can be tried without a phone */
   devCode?: string;
-  /** Production QA only: this allowlisted test number skips the code-entry screen */
-  skipOtp?: boolean;
 };
 
 export type SendOutcome =
@@ -72,7 +69,6 @@ export async function sendCode(input: {
   const digits = normaliseIndianMobile(input.phone);
   if (!isValidIndianMobile(digits)) return { ok: false, error: "invalid_phone" };
   const phone = toE164(country.dial, digits);
-  const skipOtp = otpTestBypassEnabled(phone);
 
   const t = await findTableByQr(db, input.outletCode, input.shortCode);
   const tenantId = t.outlet.tenantId;
@@ -124,7 +120,6 @@ export async function sendCode(input: {
         expiresIn: secondsUntil(live.expiresAt, now),
         resendIn: secondsUntil(live.resendAt, now),
         code: null,
-        skipOtp,
       };
     }
 
@@ -164,7 +159,7 @@ export async function sendCode(input: {
       );
 
     const id = uuidv7();
-    const code = skipOtp ? OTP_TEST_CODE : String(randomInt(0, 10 ** OTP.length)).padStart(OTP.length, "0");
+    const code = String(randomInt(0, 10 ** OTP.length)).padStart(OTP.length, "0");
     await tx.insert(s.otpChallenges).values({
       id,
       tenantId,
@@ -177,14 +172,12 @@ export async function sendCode(input: {
       resendAt: later(now, OTP.resendSeconds),
       createdAt: now,
     });
-    return { ok: true as const, challengeId: id, phone, expiresIn: OTP.validSeconds, resendIn: OTP.resendSeconds, code, skipOtp };
+    return { ok: true as const, challengeId: id, phone, expiresIn: OTP.validSeconds, resendIn: OTP.resendSeconds, code };
   }, LOCK_THEN_READ);
 
   if (!sent.ok) return sent;
   const { code, ...view } = sent;
   if (code === null) return view;
-
-  if (skipOtp) return { ...view, skipOtp: true };
 
   // Sent after commit, so a slow SMS provider never holds the table lock
   const sender = smsSender();

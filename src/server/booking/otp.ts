@@ -10,7 +10,6 @@ import { isValidIndianMobile, normaliseIndianMobile, toE164 } from "@/domain/pho
 import { LOCK_THEN_READ } from "../db-types";
 import { AppError } from "../errors";
 import { smsMockEnabled, smsSender } from "../sms/sender";
-import { OTP_TEST_CODE, otpTestBypassEnabled } from "../sms/test-mode";
 import { bookingByToken } from "./core";
 
 const secret = () => {
@@ -34,11 +33,10 @@ export async function sendBookingOtp(outletCode: string, token: string, deviceId
   const digits = normaliseIndianMobile(phoneInput);
   if (!isValidIndianMobile(digits)) throw new AppError("invalid_phone", "Enter a valid Indian mobile number.");
   const phone = toE164("+91", digits);
-  const skipOtp = otpTestBypassEnabled(phone);
   const [table] = await db.select({ tableId: s.reservationTables.tableId }).from(s.reservationTables).where(and(eq(s.reservationTables.tenantId, scope.tenantId), eq(s.reservationTables.reservationId, row.id))).limit(1);
   if (!table) throw new AppError("not_found", "This booking has no table hold.");
   const id = uuidv7();
-  const code = skipOtp ? OTP_TEST_CODE : String(randomInt(0, 10 ** OTP.length)).padStart(OTP.length, "0");
+  const code = String(randomInt(0, 10 ** OTP.length)).padStart(OTP.length, "0");
   const codeHash = hashCode(row.id, id, code);
   await db.transaction(async (tx) => {
     const [held] = await tx.select().from(s.reservations).where(and(eq(s.reservations.tenantId, scope.tenantId), eq(s.reservations.id, row.id))).for("update");
@@ -60,7 +58,6 @@ export async function sendBookingOtp(outletCode: string, token: string, deviceId
     if (Number(phoneCount.n) >= OTP.perPhonePerDay || Number(deviceCount.n) >= OTP.perDevicePer10Min || Number(tableCount.n) >= OTP.perTablePer10Min) throw new AppError("rate_limited", "Too many codes. Please try again later.");
     await tx.insert(s.otpChallenges).values({ id, tenantId: scope.tenantId, outletId: scope.outletId, tableId: table.tableId, deviceId, phone, codeHash, expiresAt: later(now, OTP.validSeconds), resendAt: later(now, OTP.resendSeconds), createdAt: now });
   }, LOCK_THEN_READ);
-  if (skipOtp) return { challengeId: id, phone, expiresIn: OTP.validSeconds, skipOtp: true };
   const sent = await smsSender().sendOtp({ phone, code, outletName: scope.name });
   if (!sent.ok) { await db.update(s.otpChallenges).set({ deadAt: now }).where(and(eq(s.otpChallenges.tenantId, scope.tenantId), eq(s.otpChallenges.id, id))); throw new AppError("sms_failed", "We could not send a code."); }
   return { challengeId: id, phone, expiresIn: OTP.validSeconds, devCode: smsSender().name === "mock" && (process.env.NODE_ENV !== "production" || smsMockEnabled()) ? code : undefined };

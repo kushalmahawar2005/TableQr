@@ -10,7 +10,6 @@ import { isValidIndianMobile, normaliseIndianMobile, toE164 } from "@/domain/pho
 import { LOCK_THEN_READ } from "../db-types";
 import { AppError } from "../errors";
 import { smsMockEnabled, smsSender } from "../sms/sender";
-import { OTP_TEST_CODE, otpTestBypassEnabled } from "../sms/test-mode";
 import { deliveryCheckout } from "./checkout";
 import { deliveryOutlet } from "./catalog";
 
@@ -24,15 +23,13 @@ const active = (row: typeof s.deliveryCheckouts.$inferSelect, now: Date) => {
   if (row.status !== "draft" || row.expiresAt <= now) throw new AppError("expired", "This checkout has expired or was already placed.");
 };
 
-export async function sendDeliveryOtp(code: string, token: string, deviceId: string, phoneInput: string, now = new Date()): Promise<{ challengeId: string; phone: string; resendIn: number; skipOtp: boolean; devCode?: string }> {
+export async function sendDeliveryOtp(code: string, token: string, deviceId: string, phoneInput: string, now = new Date()) {
   const { outlet, row } = await deliveryCheckout(code, token, deviceId, now);
   await deliveryOutlet(code, true, now);
   active(row, now);
   const digits = normaliseIndianMobile(phoneInput);
   if (!isValidIndianMobile(digits)) throw new AppError("invalid_phone", "Enter a valid Indian mobile number.");
-  const phone = toE164("+91", digits), id = uuidv7(), otp = String(randomInt(0, 10 ** OTP.length)).padStart(OTP.length, "0");
-  const skipOtp = otpTestBypassEnabled(phone);
-  const storedCode = skipOtp ? OTP_TEST_CODE : otp;
+  const phone = toE164("+91", digits), id = uuidv7(), otp = String(randomInt(0, 10 ** OTP.length)).padStart(OTP.length, "0"), codeHash = hash(row.id, id, otp);
   await db.transaction(async tx => {
     const [checkout] = await tx.select().from(s.deliveryCheckouts).where(and(eq(s.deliveryCheckouts.tenantId, outlet.tenantId), eq(s.deliveryCheckouts.id, row.id))).for("update");
     active(checkout, now);
@@ -49,16 +46,15 @@ export async function sendDeliveryOtp(code: string, token: string, deviceId: str
     if (Number(phoneCount.n) >= OTP.perPhonePerDay || Number(deviceCount.n) >= OTP.perDevicePer10Min) throw new AppError("rate_limited", "Too many codes requested. Try again later.");
     await tx.update(s.deliveryOtpChallenges).set({ deadAt: now }).where(and(eq(s.deliveryOtpChallenges.tenantId, outlet.tenantId), eq(s.deliveryOtpChallenges.checkoutId, row.id)));
     await tx.update(s.deliveryCheckouts).set({ guestId: null, verifiedAt: null, name: null, phone: null }).where(and(eq(s.deliveryCheckouts.tenantId, outlet.tenantId), eq(s.deliveryCheckouts.id, row.id)));
-    await tx.insert(s.deliveryOtpChallenges).values({ id, tenantId: outlet.tenantId, outletId: outlet.id, checkoutId: row.id, deviceId, phone, codeHash: hash(row.id, id, storedCode), expiresAt: later(now, OTP.validSeconds), resendAt: later(now, OTP.resendSeconds), createdAt: now });
+    await tx.insert(s.deliveryOtpChallenges).values({ id, tenantId: outlet.tenantId, outletId: outlet.id, checkoutId: row.id, deviceId, phone, codeHash, expiresAt: later(now, OTP.validSeconds), resendAt: later(now, OTP.resendSeconds), createdAt: now });
   }, LOCK_THEN_READ);
-  if (skipOtp) return { challengeId: id, phone, resendIn: OTP.resendSeconds, skipOtp: true };
   const sender = smsSender();
   const sent = await sender.sendOtp({ phone, code: otp, outletName: outlet.name }).catch(() => ({ ok: false }));
   if (!sent.ok) {
     await db.update(s.deliveryOtpChallenges).set({ deadAt: now }).where(and(eq(s.deliveryOtpChallenges.tenantId, outlet.tenantId), eq(s.deliveryOtpChallenges.id, id)));
     throw new AppError("sms_failed", "Could not send the code. Try again shortly.");
   }
-  return { challengeId: id, phone, resendIn: OTP.resendSeconds, skipOtp: false, devCode: sender.name === "mock" && (process.env.NODE_ENV !== "production" || smsMockEnabled()) ? otp : undefined };
+  return { challengeId: id, phone, resendIn: OTP.resendSeconds, devCode: sender.name === "mock" && (process.env.NODE_ENV !== "production" || smsMockEnabled()) ? otp : undefined };
 }
 
 export async function verifyDeliveryOtp(code: string, token: string, deviceId: string, challengeId: string, otpInput: string, nameInput: string, now = new Date()) {
