@@ -70,8 +70,11 @@ async function main() {
   const apiKey = process.env.FAST2SMS_API_KEY?.trim() ?? "";
   const templateId = process.env.FAST2SMS_OTP_TEMPLATE_ID?.trim() ?? "";
   const expiry = Number(process.env.FAST2SMS_OTP_EXPIRY_MINUTES || 5);
-  const smsReady = provider === "fast2sms" && !!apiKey && /^\d{4,20}$/.test(templateId) && Number.isInteger(expiry) && expiry >= 1 && expiry <= 10080;
-  add("OTP SMS provider", smsReady, smsReady ? "Fast2SMS OTP endpoint and approved template are configured." : "Set SMS_PROVIDER=fast2sms, the API key, and the approved OTP template ID after DLT approval.");
+  const fast2sms = provider === "fast2sms" && !!apiKey && /^\d{4,20}$/.test(templateId) && Number.isInteger(expiry) && expiry >= 1 && expiry <= 10080;
+  const msgExpiry = Number(process.env.MSG91_OTP_EXPIRY_MINUTES || 5);
+  const msg91 = provider === "msg91" && !!process.env.MSG91_AUTH_KEY?.trim() && /^[A-Za-z0-9]{8,64}$/.test(process.env.MSG91_OTP_TEMPLATE_ID?.trim() ?? "") && Number.isInteger(msgExpiry) && msgExpiry >= 1 && msgExpiry <= 10080;
+  const smsReady = fast2sms || msg91;
+  add("OTP SMS provider", smsReady, smsReady ? `${provider === "msg91" ? "MSG91" : "Fast2SMS"} OTP endpoint and approved template are configured.` : "Set SMS_PROVIDER=msg91 with MSG91_AUTH_KEY and MSG91_OTP_TEMPLATE_ID (or SMS_PROVIDER=fast2sms with its key and template) after DLT approval.");
 
   add("Production demo OTP", true, production ? "Disabled; production never returns a demo code." : "Development mode only; demo codes are never exposed from production.");
   await checkDatabaseMigration();

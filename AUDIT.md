@@ -22,7 +22,7 @@ Work top to bottom, one part at a time. Money and guest-facing parts come first 
 - **Times:** server code reads time only in UTC or the outlet's time zone; no machine-local date calls.
 - **HTML safety:** the only raw-HTML spots are our own QR SVGs and print templates that escape user text.
 - **Dependencies:** `npm audit` reports 0 vulnerabilities; all 53 migrations apply.
-- **Production setup (owner, Hostinger hPanel):** `OTP_SECRET` (32+ random characters), `SMS_PROVIDER=fast2sms` with the Fast2SMS key and approved DLT OTP template, `PAYMENT_CREDENTIALS_KEY`, `PUBLIC_APP_URL`, `CUSTOM_DOMAIN_CNAME_TARGET` if used. `npm run security:preflight` lists what is still missing.
+- **Production setup (owner, Hostinger hPanel):** `OTP_SECRET` (32+ random characters), `SMS_PROVIDER=msg91` with `MSG91_AUTH_KEY` and `MSG91_OTP_TEMPLATE_ID` (the code supports MSG91 since 25 Oct; before that only Fast2SMS), `PAYMENT_CREDENTIALS_KEY`, `PUBLIC_APP_URL`, `CUSTOM_DOMAIN_CNAME_TARGET` if used. `npm run security:preflight` lists what is still missing.
 
 ## How each part is checked
 

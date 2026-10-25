@@ -7,6 +7,19 @@
 - Production has an OTP signing secret configured, but no Fast2SMS provider variables are present. Therefore the production SMS sender correctly fails closed instead of generating or returning demo OTPs.
 - The local `.env.production` file is a separate deployment aid and does not mirror Hostinger's settings. Never commit it.
 
+## Configure MSG91 (the provider in use)
+
+In Hostinger hPanel, add these server-side variables to the Node.js app, then redeploy:
+
+```text
+SMS_PROVIDER=msg91
+MSG91_AUTH_KEY=<MSG91 auth key>
+MSG91_OTP_TEMPLATE_ID=<template ID from the MSG91 OTP section>
+MSG91_OTP_EXPIRY_MINUTES=5
+```
+
+In MSG91, create the OTP template with the `##OTP##` variable, map your DLT-approved template and sender ID to it, and copy its template ID. TableQR makes and hashes the code itself and sends it through MSG91's v5 OTP API with the `authkey` in a header, so it never appears in an address or log. Only Indian numbers (+91) are sent. `npm run security:preflight` reports the provider as ready when the three variables are valid.
+
 ## Configure SMS after DLT approval
 
 In Hostinger hPanel, add these server-side variables to the Node.js app:

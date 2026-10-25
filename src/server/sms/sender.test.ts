@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { Fast2SmsSender, smsMockEnabled, smsProviderReadiness, smsSender } from "./sender";
+import { Fast2SmsSender, Msg91Sender, smsMockEnabled, smsProviderReadiness, smsSender } from "./sender";
 
 const env = process.env as Record<string, string | undefined>;
-const keys = ["NODE_ENV", "SMS_MOCK", "SMS_PROVIDER", "FAST2SMS_API_KEY", "FAST2SMS_OTP_TEMPLATE_ID", "FAST2SMS_OTP_EXPIRY_MINUTES"] as const;
+const keys = ["NODE_ENV", "SMS_MOCK", "SMS_PROVIDER", "FAST2SMS_API_KEY", "FAST2SMS_OTP_TEMPLATE_ID", "FAST2SMS_OTP_EXPIRY_MINUTES", "MSG91_AUTH_KEY", "MSG91_OTP_TEMPLATE_ID", "MSG91_OTP_EXPIRY_MINUTES"] as const;
 const previous = Object.fromEntries(keys.map(key => [key, env[key]]));
 
 afterEach(() => {
@@ -67,5 +67,42 @@ describe("SMS mock mode", () => {
     await expect(failing.sendOtp({ phone: "+919876543210", code: "1234", outletName: "BMW" })).resolves.toEqual({ ok: false });
     await expect(malformed.sendOtp({ phone: "+919876543210", code: "1234", outletName: "BMW" })).resolves.toEqual({ ok: false });
     await expect(malformed.sendOtp({ phone: "+12025550123", code: "1234", outletName: "BMW" })).resolves.toEqual({ ok: false });
+  });
+});
+
+describe("MSG91", () => {
+  it("is selected only when its key and template are present", () => {
+    env.NODE_ENV = "production";
+    env.SMS_PROVIDER = "msg91";
+    env.MSG91_AUTH_KEY = "configured-key";
+    expect(smsSender().name).toBe("none");
+    env.MSG91_OTP_TEMPLATE_ID = "6a1b2c3d4e5f60718293a4b5";
+    expect(smsSender().name).toBe("msg91");
+    expect(smsProviderReadiness()).toEqual({ provider: "msg91", configured: true });
+    delete env.MSG91_AUTH_KEY;
+    expect(smsProviderReadiness()).toEqual({ provider: "msg91", configured: false });
+  });
+
+  it("sends the app's own code, keeps the key in a header and out of the address", async () => {
+    let call: { url: string; init: RequestInit } | undefined;
+    const sender = new Msg91Sender({ authKey: "private-auth-key", templateId: "6a1b2c3d4e5f60718293a4b5", otpExpiryMinutes: 5 }, async (url, init) => {
+      call = { url: String(url), init: init ?? {} };
+      return new Response(JSON.stringify({ type: "success", message: "3566" }), { status: 200 });
+    });
+    await expect(sender.sendOtp({ phone: "+919876543210", code: "0421", outletName: "BMW" })).resolves.toEqual({ ok: true });
+    const url = new URL(call!.url);
+    expect(url.origin + url.pathname).toBe("https://control.msg91.com/api/v5/otp");
+    expect(Object.fromEntries(url.searchParams)).toEqual({ template_id: "6a1b2c3d4e5f60718293a4b5", mobile: "919876543210", otp: "0421", otp_length: "4", otp_expiry: "5" });
+    expect(new Headers(call!.init.headers).get("authkey")).toBe("private-auth-key");
+    expect(call!.url).not.toContain("private-auth-key");
+  });
+
+  it("treats provider errors, an error type and non-Indian numbers as failed sends", async () => {
+    const config = { authKey: "k", templateId: "6a1b2c3d4e5f60718293a4b5", otpExpiryMinutes: 5 };
+    const down = new Msg91Sender(config, async () => new Response("{}", { status: 401 }));
+    const rejected = new Msg91Sender(config, async () => new Response(JSON.stringify({ type: "error", message: "Template not found" }), { status: 200 }));
+    await expect(down.sendOtp({ phone: "+919876543210", code: "1234", outletName: "BMW" })).resolves.toEqual({ ok: false });
+    await expect(rejected.sendOtp({ phone: "+919876543210", code: "1234", outletName: "BMW" })).resolves.toEqual({ ok: false });
+    await expect(rejected.sendOtp({ phone: "+12025550123", code: "1234", outletName: "BMW" })).resolves.toEqual({ ok: false });
   });
 });
