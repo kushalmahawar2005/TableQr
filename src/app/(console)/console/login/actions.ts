@@ -16,7 +16,7 @@ export async function signInAction(_prev: SignInState, form: FormData): Promise<
   try {
     const { token } = await signInStaff({ outletCode: outlet, phone, pin: String(form.get("pin") ?? "") });
     const staff = await resolveStaff(token);
-    if (staff) destination = homeFor(staff.roles);
+    if (staff) destination = homeFor(staff);
     const jar = await cookies();
     jar.set(STAFF_COOKIE, token, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: STAFF_SESSION_HOURS * 3600 });
     // Not secret: saves typing the outlet code on this tablet next time

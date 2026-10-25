@@ -14,7 +14,7 @@ export const metadata: Metadata = { title: "Reservations", robots: { index: fals
 export default async function ReservationsPage() {
   const staff = await currentStaff();
   if (!staff) redirect("/console/login");
-  if (!canSee(staff.roles, "reservations")) {
+  if (!canSee(staff, "reservations")) {
     return (
       <main className="p-8">
         <h1 className="font-display text-title font-bold text-ink">You don&apos;t have access to reservations.</h1>

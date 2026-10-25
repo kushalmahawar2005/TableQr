@@ -14,12 +14,13 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { addOutletAction, changeTenantPlanAction, markPlanRequestDoneAction, recordFeePaymentAction, setTenantPriceAction, extendTrialAction, getTenantDetailAction, resetOwnerPinAction, setCustomPackageAction, setTenantKitchenAction, setTenantStatusAction, setTenantTableLimitAction, updateTenantAction } from "./actions";
+import { addOutletAction, changeTenantPlanAction, markPlanRequestDoneAction, recordFeePaymentAction, setTenantPriceAction, extendTrialAction, getTenantDetailAction, resetOwnerPinAction, setCustomPackageAction, setRoleAccessAction, setTenantKitchenAction, setTenantStatusAction, setTenantTableLimitAction, updateTenantAction } from "./actions";
 import { CreateTenantDialog } from "./create-tenant-dialog";
 import { FeeForm } from "./subscriptions-view";
 import type { AdminData, AdminTenant, TenantDetail } from "./admin-types";
 import { FEATURE_KEYS, FEATURE_LABELS, type Features } from "@/lib/plan-features";
 import { takePendingTenant } from "./admin-nav";
+import { RoleAccessForm } from "./role-access-form";
 
 const detailChart = { orders: { label: "Orders", color: "#5b42f5" }, revenue: { label: "Revenue (₹)", color: "#a78bfa" } } satisfies ChartConfig;
 const shortDay = (v: string) => new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", timeZone: "UTC" }).format(new Date(v));
@@ -354,6 +355,7 @@ function TenantSheet({ tenant, plans, now, onClose }: { tenant: AdminTenant | nu
             {tenant.planCode !== "custom" && <PriceForm key={`${tenant.id}-${tenant.customPricePaise}`} tenant={tenant} planPricePaise={plans.find((p) => p.code === tenant.planCode)?.monthlyPricePaise ?? null} pending={pending}
               onSave={(rupees) => run(() => setTenantPriceAction(tenant.id, rupees), rupees === null ? "Back to the plan's price." : "Price saved.")} />}
             <CustomPackageForm key={tenant.id} tenant={tenant} pending={pending} onSave={(input) => run(() => setCustomPackageAction(tenant.id, input), "Custom package saved.")} />
+            <RoleAccessForm key={`roles-${tenant.id}`} roleAccess={tenant.roleAccess} pending={pending} onSave={(access) => run(() => setRoleAccessAction(tenant.id, access), "Roles saved.")} />
             {tenant.status !== "cancelled" && <section className="space-y-3">
               <div>
                 <h3 className="text-sm font-semibold">Trial and fees</h3>

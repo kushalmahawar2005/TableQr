@@ -13,6 +13,7 @@ import { at, createdAt, id, ref, sameTenant, tenantId, tenantKey, updatedAt } fr
 import { plans, platformAdmins, type PlanFeatures } from "./platform";
 import type { RoomRequestKind } from "../../domain/rooms";
 import type { DeliveryPolicy } from "../../domain/delivery";
+import type { RoleAccess } from "../../lib/staff-permissions";
 import type { GuestService } from "../../domain/guest-services";
 
 // Tenant > Brand > Outlet (PS 7.2), plus staff and their roles (PS 7.5).
@@ -49,6 +50,8 @@ export const tenants = mysqlTable(
     customFeatures: json("custom_features").$type<PlanFeatures>(),
     /** The price agreed with this restaurant per outlet per month, on any plan; null uses the plan's price */
     customPricePaise: int("custom_price_paise"),
+    /** Console sections the platform admin changed for this restaurant, role by role; null follows the defaults */
+    roleAccess: json("role_access").$type<RoleAccess>(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

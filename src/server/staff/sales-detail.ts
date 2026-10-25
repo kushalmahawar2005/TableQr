@@ -21,7 +21,7 @@ const isDate = (d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d);
 export type SalesDetail = Awaited<ReturnType<typeof getSalesDetail>>;
 
 export async function getSalesDetail(staff: Staff, input: { from?: string; to?: string }, now = new Date()) {
-  if (!canSee(staff.roles, "reports")) throw new AppError("forbidden", "Your role cannot view reports.");
+  if (!canSee(staff, "reports")) throw new AppError("forbidden", "Your role cannot view reports.");
   await requireFeature(staff.tenantId, "fullReports");
   const cutoff = await outletDayCutoff(staff.tenantId, staff.outletId);
   const startOf = (date: string) => istDayStart(date, cutoff);

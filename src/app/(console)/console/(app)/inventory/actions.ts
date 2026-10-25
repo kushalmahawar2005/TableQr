@@ -5,7 +5,7 @@ import { staffFor } from "@/server/staff/request";
 
 async function run<T>(work: (staff: Awaited<ReturnType<typeof staffFor>>) => Promise<T>) {
   try {
-    return { ok: true as const, data: await work(await staffFor(["owner", "manager"])) };
+    return { ok: true as const, data: await work(await staffFor(["owner", "manager"], "inventory")) };
   } catch (e) {
     return { ok: false as const, error: e instanceof AppError ? e.message : "Could not save. Try again." };
   }

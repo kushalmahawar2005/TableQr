@@ -13,7 +13,7 @@ export const metadata: Metadata = { title: "Settings", robots: { index: false, f
 export default async function SettingsPage() {
   const staff = await currentStaff();
   if (!staff) redirect("/console/login");
-  if (!canSee(staff.roles, "settings")) {
+  if (!canSee(staff, "settings")) {
     return <main className="p-8"><h1 className="font-display text-title font-bold text-ink">You don&apos;t have access to settings.</h1><p className="mt-2 text-body text-muted">Ask an owner if you need it.</p></main>;
   }
   const o = await getOutletSettings(staff);

@@ -37,7 +37,7 @@ type Staff = Pick<StaffSession, "tenantId" | "outletId" | "roles" | "outlet">;
 type Scope = { tenantId: string; outletId: string };
 
 function guard(staff: Staff) {
-  if (!canSee(staff.roles, "dashboard")) throw new AppError("forbidden", "Your role cannot view the dashboard.");
+  if (!canSee(staff, "dashboard")) throw new AppError("forbidden", "Your role cannot view the dashboard.");
 }
 
 const OPEN_TABLE_STATES = ["seated", "bill_requested"] as const;

@@ -13,7 +13,7 @@ export type SettingsResult = { ok: true } | { ok: false; message: string };
 
 export async function saveSettingsAction(input: SettingsPatch): Promise<SettingsResult> {
   try {
-    await updateOutletSettings(await staffFor(consoleSectionRoles.settings), input);
+    await updateOutletSettings(await staffFor(consoleSectionRoles.settings, "settings"), input);
     return { ok: true };
   } catch (err) {
     if (err instanceof AppError) return { ok: false, message: err.message };
@@ -24,7 +24,7 @@ export async function saveSettingsAction(input: SettingsPatch): Promise<Settings
 
 export async function saveCustomDomainAction(domain: string): Promise<SettingsResult & { domain?: string | null; token?: string | null; verified?: boolean }> {
   try {
-    const result = await saveCustomDomain(await staffFor(consoleSectionRoles.settings), domain);
+    const result = await saveCustomDomain(await staffFor(consoleSectionRoles.settings, "settings"), domain);
     return { ok: true, ...result };
   } catch (err) {
     if (err instanceof AppError) return { ok: false, message: err.message };
@@ -35,7 +35,7 @@ export async function saveCustomDomainAction(domain: string): Promise<SettingsRe
 
 export async function verifyCustomDomainAction(): Promise<{ ok: boolean; message: string }> {
   try {
-    const result = await verifyCustomDomain(await staffFor(consoleSectionRoles.settings));
+    const result = await verifyCustomDomain(await staffFor(consoleSectionRoles.settings, "settings"));
     return { ...result };
   } catch (err) {
     if (err instanceof AppError) return { ok: false, message: err.message };
@@ -46,7 +46,7 @@ export async function verifyCustomDomainAction(): Promise<{ ok: boolean; message
 
 export async function setCustomDomainLiveAction(live: boolean, confirmedHttps = false): Promise<{ ok: boolean; live: boolean; message: string }> {
   try {
-    const result = await setCustomDomainLive(await staffFor(consoleSectionRoles.settings), live, confirmedHttps);
+    const result = await setCustomDomainLive(await staffFor(consoleSectionRoles.settings, "settings"), live, confirmedHttps);
     return { ok: true, ...result, message: live ? "Custom domain is now used for guest links." : "Guest links now use your TableQR address." };
   } catch (err) {
     if (err instanceof AppError) return { ok: false, live: false, message: err.message };
@@ -57,7 +57,7 @@ export async function setCustomDomainLiveAction(live: boolean, confirmedHttps = 
 
 export async function saveRestaurantCashfreeAction(input: { mode: "sandbox" | "production"; clientId: string; clientSecret: string } | null) {
   try {
-    const status = await saveRestaurantCashfree(await staffFor(consoleSectionRoles.settings), input);
+    const status = await saveRestaurantCashfree(await staffFor(consoleSectionRoles.settings, "settings"), input);
     return { ok: true as const, status };
   } catch (err) {
     if (err instanceof AppError) return { ok: false as const, message: err.message };
@@ -68,7 +68,7 @@ export async function saveRestaurantCashfreeAction(input: { mode: "sandbox" | "p
 
 export async function uploadRestaurantLogoAction(filename: string, contentType: string, base64: string): Promise<SettingsResult & { url?: string }> {
   try {
-    const staff = await staffFor(consoleSectionRoles.settings);
+    const staff = await staffFor(consoleSectionRoles.settings, "settings");
     if (!staff.roles.includes("owner")) throw new AppError("forbidden", "Only the owner can change the restaurant logo.");
     if (typeof base64 !== "string" || base64.length > 2_800_000) throw new AppError("invalid_state", "This image is still too large after compression. Choose a smaller logo image.");
     const [outlet] = await db.select({ brandId: schema.outlets.brandId }).from(schema.outlets)
@@ -86,7 +86,7 @@ export async function uploadRestaurantLogoAction(filename: string, contentType: 
 
 export async function removeRestaurantLogoAction(): Promise<SettingsResult> {
   try {
-    await updateBrandLogo(await staffFor(consoleSectionRoles.settings), null);
+    await updateBrandLogo(await staffFor(consoleSectionRoles.settings, "settings"), null);
     return { ok: true };
   } catch (err) {
     if (err instanceof AppError) return { ok: false, message: err.message };
@@ -97,7 +97,7 @@ export async function removeRestaurantLogoAction(): Promise<SettingsResult> {
 
 export async function uploadBookingPaymentQrAction(filename: string, contentType: string, base64: string): Promise<SettingsResult & { url?: string }> {
   try {
-    const staff = await staffFor(consoleSectionRoles.settings);
+    const staff = await staffFor(consoleSectionRoles.settings, "settings");
     if (!staff.roles.includes("owner")) throw new AppError("forbidden", "Only the owner can change the payment QR.");
     if (typeof base64 !== "string" || base64.length > 2_800_000) throw new AppError("invalid_state", "Choose a payment QR image up to 2 MB.");
     const [outlet] = await db.select({ brandId: schema.outlets.brandId }).from(schema.outlets).where(and(eq(schema.outlets.tenantId, staff.tenantId), eq(schema.outlets.id, staff.outletId)));

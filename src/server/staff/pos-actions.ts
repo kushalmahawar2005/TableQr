@@ -15,12 +15,12 @@ import { changeWaiterLine, managerApproval, waiterRequestBill, type Approval } f
 import { staffRealtimeToken, topics } from "../realtime/token";
 
 async function run<T>(work: (staff: Awaited<ReturnType<typeof staffFor>>) => Promise<T>) {
-  try { return { ok: true as const, data: await work(await staffFor(posRoles)) }; }
+  try { return { ok: true as const, data: await work(await staffFor(posRoles, "billing")) }; }
   catch (e) { return { ok: false as const, error: e instanceof AppError ? e.message : "Could not complete this action. Try again.", code: e instanceof AppError ? e.code : "unknown" }; }
 }
 export async function queueAction() { return run(posQueue); }
 export async function detailAction(sessionId: string) { return run(s => posBillDetail(s, sessionId)); }
-export async function tokenAction() { const s = await staffFor(posRoles); return staffRealtimeToken(s, [topics.floor, topics.tasks, topics.kitchen]); }
+export async function tokenAction() { const s = await staffFor(posRoles, "billing"); return staffRealtimeToken(s, [topics.floor, topics.tasks, topics.kitchen]); }
 export async function settleAction(input: { sessionId: string; method: "cash" | "card"; forParticipantIds?: string[]; receivedPaise?: number; clientRequestId: string; externalReference?: string }) {
   return run(s => { if (!input.clientRequestId) throw new AppError("invalid_state", "A settlement request id is required."); return settleAtCounter(s, input, new Date(), posRoles); });
 }

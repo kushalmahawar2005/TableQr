@@ -70,6 +70,7 @@ export async function getAdminData(): Promise<AdminData> {
       tableLimit: s.tenants.tableLimit,
       customFeatures: s.tenants.customFeatures,
       customPricePaise: s.tenants.customPricePaise,
+      roleAccess: s.tenants.roleAccess,
     }).from(s.tenants).orderBy(desc(s.tenants.createdAt)),
     db.select({
       code: s.plans.code,
@@ -222,6 +223,7 @@ export async function getAdminData(): Promise<AdminData> {
           return { state: a.state, reason: a.reason, endsAt: a.endsAt === null ? null : new Date(a.endsAt).toISOString(), stopsAt: a.state === "grace" ? new Date(a.stopsAt).toISOString() : null };
         })(),
         createdAt: tenant.createdAt.toISOString(),
+        roleAccess: tenant.roleAccess ?? null,
         trialEndsAt: tenant.trialEndsAt?.toISOString() ?? null,
         outletCount: outlets?.count ?? 0,
         cities: outlets?.cities.sort((a, b) => a.localeCompare(b)) ?? [],

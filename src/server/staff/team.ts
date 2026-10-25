@@ -46,7 +46,7 @@ const bad = (message: string) => new AppError("invalid_state", message, { reason
 const ownerOnly = (staff: Staff) => { if (!staff.roles.includes("owner")) throw new AppError("forbidden", "Only the owner can change the team."); };
 
 export async function listTeam(staff: Staff): Promise<TeamMember[]> {
-  if (!canSee(staff.roles, "team")) throw new AppError("forbidden", "Your role cannot view the team.");
+  if (!canSee(staff, "team")) throw new AppError("forbidden", "Your role cannot view the team.");
   const rows = await db
     .select({ id: s.users.id, name: s.users.name, phone: s.users.phone, isActive: s.users.isActive, role: s.staffRoles.role, outletId: s.staffRoles.outletId })
     .from(s.staffRoles)

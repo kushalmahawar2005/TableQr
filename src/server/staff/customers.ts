@@ -35,7 +35,7 @@ const normal = (phone: string | null | undefined) => {
 };
 
 export async function getCustomers(staff: Staff): Promise<Customer[]> {
-  if (!canSee(staff.roles, "customers")) throw new AppError("forbidden", "Your role cannot see customers.");
+  if (!canSee(staff, "customers")) throw new AppError("forbidden", "Your role cannot see customers.");
   await requireFeature(staff.tenantId, "whatsappBills");
   const [guests, visits, reservations, waitlist] = await Promise.all([
     db.select().from(s.guests).where(eq(s.guests.tenantId, staff.tenantId)),

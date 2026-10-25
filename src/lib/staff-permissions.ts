@@ -31,6 +31,55 @@ export const consoleSectionRoles = {
 
 export type ConsoleSectionSlug = keyof typeof consoleSectionRoles;
 
+/**
+ * Per restaurant, the platform admin can take sections away from roles, and give the read-only
+ * sections below to more roles. The owner always keeps everything. Stored per tenant; a section
+ * that is not listed follows the defaults above.
+ */
+export type RoleAccess = Partial<Record<ConsoleSectionSlug, StaffRole[]>>;
+/** Sections a role can be added to: they only show information, so no action needs more roles */
+export const grantableSections = ["dashboard", "reports", "customers"] as const satisfies readonly ConsoleSectionSlug[];
+/** Roles the admin can tick for a section: its defaults, or every role for a read-only section */
+export const assignableRoles = (section: ConsoleSectionSlug): readonly StaffRole[] =>
+  ((grantableSections as readonly string[]).includes(section) ? (staffRoles as readonly StaffRole[]) : (consoleSectionRoles[section] as readonly StaffRole[])).filter((r) => r !== "owner");
+
+/** Who may open a section at this restaurant, after the admin's changes; the owner always may */
+export function sectionRoles(section: ConsoleSectionSlug, access?: RoleAccess | null): readonly StaffRole[] {
+  const chosen = access?.[section];
+  if (!chosen) return consoleSectionRoles[section];
+  const allowed = assignableRoles(section);
+  return ["owner", ...chosen.filter((r) => allowed.includes(r))];
+}
+
+/** Keeps only the changes the admin may make, so a saved value can never widen an action section */
+export function cleanRoleAccess(input: unknown): RoleAccess {
+  const out: RoleAccess = {};
+  if (!input || typeof input !== "object") return out;
+  for (const section of Object.keys(consoleSectionRoles) as ConsoleSectionSlug[]) {
+    const raw = (input as Record<string, unknown>)[section];
+    if (!Array.isArray(raw)) continue;
+    const allowed = assignableRoles(section);
+    const roles = [...new Set(raw.filter((r): r is StaffRole => typeof r === "string" && allowed.includes(r as StaffRole)))];
+    // Only store a section that differs from the defaults
+    const defaults: readonly StaffRole[] = consoleSectionRoles[section].filter((r) => r !== "owner");
+    if (roles.length !== defaults.length || roles.some((r) => !defaults.includes(r))) out[section] = roles;
+  }
+  return out;
+}
+
+/**
+ * Roles allowed to run one of a section's actions at this restaurant: the action's own roles less
+ * any the admin took off the section. Roles added to a read-only section get its general actions.
+ */
+export function actionRoles(allowed: readonly StaffRole[], section: ConsoleSectionSlug, access?: RoleAccess | null): StaffRole[] {
+  const defaults: readonly StaffRole[] = consoleSectionRoles[section];
+  const effective = sectionRoles(section, access);
+  const kept = allowed.filter((r) => effective.includes(r));
+  const general = defaults.every((r) => allowed.includes(r));
+  const added = general ? effective.filter((r) => !defaults.includes(r)) : [];
+  return [...new Set<StaffRole>([...kept, ...added])];
+}
+
 /** Floor actions (S1). Blocking a table takes it out of service, so it is a manager decision. */
 export const floorPermissions = {
   "floor.view": ["host", "manager", "owner"],
@@ -51,7 +100,9 @@ export const floorPermissions = {
 export type FloorPermission = keyof typeof floorPermissions;
 
 export const canUse = (roles: readonly StaffRole[], allowed: readonly StaffRole[]) => roles.some((r) => allowed.includes(r));
-export const canSee = (roles: readonly StaffRole[], section: ConsoleSectionSlug) => canUse(roles, consoleSectionRoles[section]);
+/** Whether these roles may open a section; pass the signed-in staff (with `access`) to apply the restaurant's changes */
+export const canSee = (who: readonly StaffRole[] | { roles: readonly StaffRole[]; access?: RoleAccess | null }, section: ConsoleSectionSlug) =>
+  Array.isArray(who) ? canUse(who, consoleSectionRoles[section]) : canUse((who as { roles: readonly StaffRole[] }).roles, sectionRoles(section, (who as { access?: RoleAccess | null }).access));
 export const can = (roles: readonly StaffRole[], permission: FloorPermission) => canUse(roles, floorPermissions[permission]);
 
 /** Outlet price overrides (O4). Brand prices stay with the Menu Manager (O3). */

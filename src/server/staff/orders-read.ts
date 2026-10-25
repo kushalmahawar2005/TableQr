@@ -34,7 +34,7 @@ export type OrderRow = {
 };
 
 export async function getRecentOrders(staff: Staff, now: Date): Promise<OrderRow[]> {
-  if (!canSee(staff.roles, "orders")) throw new AppError("forbidden", "Your role cannot view orders.");
+  if (!canSee(staff, "orders")) throw new AppError("forbidden", "Your role cannot view orders.");
   const since = new Date(now.getTime() - 24 * 3_600_000);
   const orders = await db
     .select({ id: s.orders.id, sessionId: s.orders.sessionId, roundNo: s.orders.roundNo, note: s.orders.note, placedAt: s.orders.placedAt, acceptedAt: s.orders.acceptedAt, readyAt: s.orders.readyAt, servedAt: s.orders.servedAt, status: s.orders.status, sessionStatus: s.tableSessions.status, tableCode: s.diningTables.code, tableClass: s.diningTables.tableClass })

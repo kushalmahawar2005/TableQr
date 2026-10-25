@@ -8,7 +8,7 @@ import { staffFor } from "@/server/staff/request";
 /** Marks a ready order's plates as served from the Orders board */
 export async function servedAction(lineIds: string[]): Promise<{ ok: true } | { ok: false; message: string }> {
   try {
-    await markServed(await staffFor(["waiter", "manager", "owner"]), lineIds.map(String).slice(0, 100));
+    await markServed(await staffFor(["waiter", "manager", "owner"], "orders"), lineIds.map(String).slice(0, 100));
     revalidatePath("/console/orders");
     return { ok: true };
   } catch (e) {

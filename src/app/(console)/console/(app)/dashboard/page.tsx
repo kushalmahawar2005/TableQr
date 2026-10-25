@@ -17,7 +17,7 @@ export const metadata: Metadata = { title: "Dashboard", robots: { index: false, 
 export default async function DashboardPage() {
   const staff = await currentStaff();
   if (!staff) redirect("/console/login");
-  if (!canSee(staff.roles, "dashboard")) {
+  if (!canSee(staff, "dashboard")) {
     return (
       <main className="p-8">
         <h1 className="font-display text-title font-bold text-ink">You don&apos;t have access to the dashboard.</h1>
@@ -26,7 +26,7 @@ export default async function DashboardPage() {
     );
   }
   const now = new Date();
-  const [data, trend, duty, setup] = await Promise.all([getDashboard(staff, now), getRevenueTrend(staff, now), canSee(staff.roles, "team") ? teamDuty(staff, now) : null, setupSteps(staff)]);
+  const [data, trend, duty, setup] = await Promise.all([getDashboard(staff, now), getRevenueTrend(staff, now), canSee(staff, "team") ? teamDuty(staff, now) : null, setupSteps(staff)]);
   const lang = parseLang((await cookies()).get(LANG_COOKIE)?.value);
   // Who is on duty, set right here by the manager or owner
   const canChange = staff.roles.some((r) => r === "owner" || r === "manager");

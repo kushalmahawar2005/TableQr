@@ -1,4 +1,5 @@
 import type { Features } from "@/lib/plan-features";
+import type { RoleAccess } from "@/lib/staff-permissions";
 export type AdminTenant = {
   id: string;
   name: string;
@@ -25,6 +26,8 @@ export type AdminTenant = {
   features: Features;
   /** Price agreed with this restaurant per outlet per month, on any plan; null uses the plan's price */
   customPricePaise: number | null;
+  /** Console sections the admin changed role by role; null follows the defaults */
+  roleAccess: RoleAccess | null;
   status: "trial" | "active" | "suspended" | "cancelled";
   createdAt: string;
   trialEndsAt: string | null;

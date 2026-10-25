@@ -13,7 +13,7 @@ import { PrintBar } from "../../floor/editor/qr-sheet/print-bar";
 export default async function RoomQrSheetPage(props: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const staff = await currentStaff();
   if (!staff) redirect("/console/login");
-  if (!canSee(staff.roles, "rooms")) return <main className="p-8">Permission denied</main>;
+  if (!canSee(staff, "rooms")) return <main className="p-8">Permission denied</main>;
   const q = await props.searchParams;
   const size = (QR_SIZES.find((x) => x.id === q.size)?.id ?? "a6") as QrSize;
   const { qrMm: mm, scale } = qrSize(size);

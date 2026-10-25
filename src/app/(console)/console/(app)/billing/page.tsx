@@ -12,7 +12,7 @@ export default async function BillingPage(props: { searchParams: Promise<{ sessi
   const { session } = await props.searchParams;
   const staff = await currentStaff();
   if (!staff) redirect("/console/login");
-  if (!canSee(staff.roles, "billing")) {
+  if (!canSee(staff, "billing")) {
     return (
       <main className="p-8">
         <h1 className="font-display text-title font-bold text-ink">You don&apos;t have access to billing.</h1>

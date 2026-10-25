@@ -11,7 +11,7 @@ export const metadata: Metadata = { title: "Orders", robots: { index: false, fol
 export default async function OrdersPage() {
   const staff = await currentStaff();
   if (!staff) redirect("/console/login");
-  if (!canSee(staff.roles, "orders")) {
+  if (!canSee(staff, "orders")) {
     return (
       <main className="p-8">
         <h1 className="font-display text-title font-bold text-ink">You don&apos;t have access to orders.</h1>

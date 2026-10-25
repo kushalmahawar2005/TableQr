@@ -25,7 +25,7 @@ const bad = (message: string) => new AppError("invalid_state", message);
 const MANAGE = ["owner", "manager"] as const;
 
 async function guard(staff: Staff, manage = false) {
-  if (!canSee(staff.roles, "rooms")) throw new AppError("forbidden", "Ask the owner, a manager or reception to open Rooms.");
+  if (!canSee(staff, "rooms")) throw new AppError("forbidden", "Ask the owner, a manager or reception to open Rooms.");
   if (manage && !staff.roles.some((r) => (MANAGE as readonly string[]).includes(r))) throw new AppError("forbidden", "Only the owner or a manager can add or change rooms.");
   await requireFeature(staff.tenantId, "rooms");
 }
@@ -135,7 +135,7 @@ export async function getRooms(staff: Staff) {
     rooms,
     maxRooms: features.maxRooms,
     canManage: staff.roles.some((r) => (MANAGE as readonly string[]).includes(r)),
-    canBill: canSee(staff.roles, "billing"),
+    canBill: canSee(staff, "billing"),
   };
 }
 export type RoomsData = Awaited<ReturnType<typeof getRooms>>;
@@ -319,7 +319,7 @@ export async function checkOut(staff: Staff, roomId: string, now = new Date()) {
  */
 export async function roomFoodTab(staff: Staff, roomId: string, now = new Date()) {
   await guard(staff);
-  if (!canSee(staff.roles, "billing")) throw new AppError("forbidden", "Ask someone with Billing to add food for a room.");
+  if (!canSee(staff, "billing")) throw new AppError("forbidden", "Ask someone with Billing to add food for a room.");
   const res = await db.transaction(async (tx) => {
     const room = await roomRow(tx, staff, roomId, true);
     const stay = await openStay(tx, staff.tenantId, room.id);

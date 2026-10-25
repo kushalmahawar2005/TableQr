@@ -40,7 +40,7 @@ export type Report = {
 };
 
 export async function getReport(staff: Staff, range: ReportRange, now: Date): Promise<Report> {
-  if (!canSee(staff.roles, "reports")) throw new AppError("forbidden", "Your role cannot view reports.");
+  if (!canSee(staff, "reports")) throw new AppError("forbidden", "Your role cannot view reports.");
   await requireFeature(staff.tenantId, "fullReports");
   if (![7, 30, 90].includes(range)) range = 30;
   // Shifting an instant by this gives its business date as a UTC calendar date

@@ -18,6 +18,7 @@ import { requirePlatformAdmin, signInPlatformAdmin, signOutPlatformAdmin } from 
 import { randomInt } from "node:crypto";
 import { effectiveFeatures, tenantFeatures } from "@/server/plan";
 import { FEATURE_KEYS, readFeatures, type Features } from "@/lib/plan-features";
+import { cleanRoleAccess } from "@/lib/staff-permissions";
 
 export type AdminLoginState = { error: string | null };
 export type TenantState = { error: string | null; success: string | null; outletCode?: string };
@@ -349,6 +350,23 @@ export async function setCustomPackageAction(tenantId: string, input: { features
     return { error: null };
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Custom package could not be saved." };
+  }
+}
+
+/** Which roles may open which console section at this restaurant; the owner always keeps everything */
+export async function setRoleAccessAction(tenantId: string, access: unknown): Promise<TenantActionState> {
+  try {
+    const admin = await requireSuperAdmin();
+    const [tenant] = await db.select({ roleAccess: s.tenants.roleAccess }).from(s.tenants).where(eq(s.tenants.id, tenantId));
+    if (!tenant) return { error: "Tenant not found." };
+    const cleaned = cleanRoleAccess(access);
+    const saved = Object.keys(cleaned).length ? cleaned : null;
+    await db.update(s.tenants).set({ roleAccess: saved }).where(eq(s.tenants.id, tenantId));
+    await logAdminAction(admin, tenantId, "admin.role_access_saved", tenant.roleAccess ?? null, saved);
+    revalidatePath("/admin");
+    return { error: null };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Role access could not be saved." };
   }
 }
 

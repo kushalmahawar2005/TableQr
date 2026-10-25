@@ -24,7 +24,7 @@ export async function generateViewport(): Promise<Viewport> {
 
 export default async function StaffSignInPage() {
   const staff = await currentStaff();
-  if (staff) redirect(homeFor(staff.roles));
+  if (staff) redirect(homeFor(staff));
   const outlet = (await cookies()).get("tq_staff_outlet")?.value ?? "";
   const brand = await staffAppBrandForOutletCode(outlet);
   return (

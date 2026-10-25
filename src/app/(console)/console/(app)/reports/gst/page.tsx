@@ -10,7 +10,7 @@ export const metadata: Metadata = { title: "GST report" };
 // GST report for a month, on every plan: filing GST is not optional.
 export default async function GstPage(props: PageProps<"/console/reports/gst">) {
   const staff = await currentStaff();
-  if (!staff || !canSee(staff.roles, "reports")) notFound();
+  if (!staff || !canSee(staff, "reports")) notFound();
   const { month } = await props.searchParams;
   const report = await getGstReport(staff, typeof month === "string" ? month : "");
   return <GstScreen report={report} />;

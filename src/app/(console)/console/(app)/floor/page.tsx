@@ -17,7 +17,7 @@ export default async function FloorPage() {
   const staff = await currentStaff();
   const lang = parseLang((await cookies()).get(LANG_COOKIE)?.value);
   const c = s1Copy[lang];
-  if (!staff || !canSee(staff.roles, "floor")) {
+  if (!staff || !canSee(staff, "floor")) {
     return (
       <main className="p-8">
         <h1 className="font-display text-title font-bold text-ink">{c.denied}</h1>

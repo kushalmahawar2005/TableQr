@@ -4,7 +4,7 @@ import { and, count, eq, gt, gte, isNull, or } from "drizzle-orm";
 import { db } from "@/db";
 import { uuidv7 } from "@/db/id";
 import * as s from "@/db/schema";
-import { can, canUse, type FloorPermission, type StaffRole } from "@/lib/staff-permissions";
+import { actionRoles, can, canUse, type ConsoleSectionSlug, type FloorPermission, type RoleAccess, type StaffRole } from "@/lib/staff-permissions";
 import { AppError } from "../errors";
 import type { StaffContext } from "./context";
 import { ACCESS_STOPPED, tenantAccess } from "../access";
@@ -25,6 +25,8 @@ export type StaffSession = StaffContext & {
   roles: StaffRole[];
   outlet: { code: string; name: string; timezone: string };
   expiresAt: number;
+  /** Console sections the platform admin changed for this restaurant; null follows the defaults */
+  access?: RoleAccess | null;
 };
 
 export const hashToken = (token: string) => createHash("sha256").update(token).digest("hex");
@@ -88,10 +90,11 @@ export async function resolveStaff(token: string | null | undefined, now = new D
   if (!token || token.length > 200) return null;
   // isolation-exempt: the token's hash is the lookup key; the row it finds carries the tenant
   const [row] = await db
-    .select({ session: s.staffSessions, user: s.users, outlet: { code: s.outlets.code, name: s.outlets.name, timezone: s.outlets.timezone } })
+    .select({ session: s.staffSessions, user: s.users, outlet: { code: s.outlets.code, name: s.outlets.name, timezone: s.outlets.timezone }, access: s.tenants.roleAccess })
     .from(s.staffSessions)
     .innerJoin(s.users, and(eq(s.users.tenantId, s.staffSessions.tenantId), eq(s.users.id, s.staffSessions.userId)))
     .innerJoin(s.outlets, and(eq(s.outlets.tenantId, s.staffSessions.tenantId), eq(s.outlets.id, s.staffSessions.outletId)))
+    .innerJoin(s.tenants, eq(s.tenants.id, s.staffSessions.tenantId))
     .where(and(eq(s.staffSessions.tokenHash, hashToken(token)), isNull(s.staffSessions.revokedAt), gt(s.staffSessions.expiresAt, now)));
   if (!row || !row.user.isActive) return null;
   const scope = { tenantId: row.session.tenantId, outletId: row.session.outletId };
@@ -105,6 +108,7 @@ export async function resolveStaff(token: string | null | undefined, now = new D
     roles,
     outlet: row.outlet,
     expiresAt: row.session.expiresAt.getTime(),
+    access: row.access ?? null,
   };
 }
 
@@ -138,11 +142,15 @@ export async function switchOutlet(token: string | null | undefined, outletId: s
   return { token: fresh, expiresAt, outletCode: target.code };
 }
 
-/** The staff member, who must hold one of `allowed` at this outlet */
-export async function requireStaff(token: string | null | undefined, allowed: readonly StaffRole[], now = new Date()): Promise<StaffSession> {
+/**
+ * The staff member, who must hold one of `allowed` at this outlet. With a console section, roles
+ * the platform admin took off that section at this restaurant are refused, and roles added to a
+ * read-only section are let in to its general actions.
+ */
+export async function requireStaff(token: string | null | undefined, allowed: readonly StaffRole[], now = new Date(), section?: ConsoleSectionSlug): Promise<StaffSession> {
   const staff = await resolveStaff(token, now);
   if (!staff) throw new AppError("staff_signed_out", "Please sign in again.");
-  if (!canUse(staff.roles, allowed)) throw new AppError("forbidden", "Your role can't do this. Ask a manager.");
+  if (!canUse(staff.roles, section ? actionRoles(allowed, section, staff.access) : allowed)) throw new AppError("forbidden", "Your role can't do this. Ask a manager.");
   if ((await tenantAccess(staff.tenantId, now)).state === "blocked") throw new AppError("forbidden", ACCESS_STOPPED, { reason: "paused" });
   return staff;
 }

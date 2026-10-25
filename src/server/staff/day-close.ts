@@ -25,7 +25,7 @@ export const istDayStart = (date: string, cutoffMinutes = 0) => new Date(Date.pa
 export type DayClose = Awaited<ReturnType<typeof getDayClose>>;
 
 export async function getDayClose(staff: Staff, date: string, now = new Date()) {
-  if (!canSee(staff.roles, "reports")) throw new AppError("forbidden", "Your role cannot see the day close.");
+  if (!canSee(staff, "reports")) throw new AppError("forbidden", "Your role cannot see the day close.");
   const cutoff = await outletDayCutoff(staff.tenantId, staff.outletId);
   const day = /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : istToday(now, cutoff);
   const from = istDayStart(day, cutoff);

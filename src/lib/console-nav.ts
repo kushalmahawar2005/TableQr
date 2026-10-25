@@ -30,9 +30,13 @@ export function isConsoleSection(slug: string): slug is ConsoleSection {
   return consoleSections.some((s) => s.slug === slug);
 }
 
+/** Roles alone, or the signed-in staff member with their restaurant's section changes */
+type Who = Parameters<typeof canSee>[0];
+const rolesOf = (who: Who): readonly StaffRole[] => (Array.isArray(who) ? who : (who as { roles: readonly StaffRole[] }).roles);
+
 /** Where /console sends this person: the first section their roles may open, or null */
-export function landingSection(roles: readonly StaffRole[]): ConsoleSection | null {
-  return visibleSections.find((s) => canSee(roles, s.slug))?.slug ?? null;
+export function landingSection(who: Who): ConsoleSection | null {
+  return visibleSections.find((s) => canSee(who, s.slug))?.slug ?? null;
 }
 
 /**
@@ -40,8 +44,9 @@ export function landingSection(roles: readonly StaffRole[]): ConsoleSection | nu
  * app for waiters, Rooms for the front desk, the POS for cashiers and accountants, the console kitchen board for kitchen staff, and
  * the floor for hosts. A person with several roles gets the first that applies, in that order.
  */
-export function homeFor(roles: readonly StaffRole[]): string {
-  if (landingSection(roles) === "dashboard") return "/console/dashboard";
+export function homeFor(who: Who): string {
+  if (landingSection(who) === "dashboard") return "/console/dashboard";
+  const roles = rolesOf(who);
   const has = (...r: StaffRole[]) => roles.some((x) => r.includes(x));
   if (has("host")) return "/console/floor";
   if (has("reception")) return "/console/rooms";

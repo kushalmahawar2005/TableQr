@@ -42,7 +42,7 @@ export async function outletLogoFor(staff: Pick<StaffSession, "tenantId" | "outl
 }
 
 export async function getOutletSettings(staff: Staff): Promise<OutletSettings> {
-  if (!canSee(staff.roles, "settings")) throw new AppError("forbidden", "Your role cannot view settings.");
+  if (!canSee(staff, "settings")) throw new AppError("forbidden", "Your role cannot view settings.");
   const [outlet] = await db.select().from(s.outlets).where(and(eq(s.outlets.tenantId, staff.tenantId), eq(s.outlets.id, staff.outletId)));
   if (!outlet) throw new AppError("not_found", "Outlet not found.");
   const [[tables], [team], [plan], [brand], features] = await Promise.all([

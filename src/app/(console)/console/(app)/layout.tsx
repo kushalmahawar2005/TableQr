@@ -45,14 +45,14 @@ export default async function ConsoleLayout({ children }: LayoutProps<"/console"
   const canAsk = staff.roles.some((r) => r === "owner" || r === "manager");
   if (access.state === "blocked") return <PausedScreen access={access} canAsk={canAsk} staff={staff} />;
   const sections = visibleSections
-    .filter((s) => s.slug !== "kitchen" && canSee(staff.roles, s.slug))
+    .filter((s) => s.slug !== "kitchen" && canSee(staff, s.slug))
     .map((s) => {
       const needs = SECTION_FEATURE[s.slug];
       return { slug: s.slug, label: lang === "hi" ? s.hi : s.label, inPlan: !needs || features[needs] };
     })
     .filter((s) => s.inPlan)
     .map(({ slug, label }) => ({ slug, label }));
-  const kitchen = canSee(staff.roles, "kitchen");
+  const kitchen = canSee(staff, "kitchen");
   return (
     <StaffShell theme={theme} sidebar={sidebar} lang={lang} sections={sections} kitchen={kitchen} plan={planName ? { name: planName, canManage: canAsk } : undefined} logoUrl={logoUrl} outlets={outlets.map((o) => ({ id: o.id, name: o.name, current: o.id === staff.outletId }))} staff={{ name: staff.name, roles: staff.roles, outlet: staff.outlet.name, shiftEnds: staff.expiresAt }}>
       <AccessBanner access={access} canAsk={canAsk} outlet={staff.outlet.name} />

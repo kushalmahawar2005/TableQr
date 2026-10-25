@@ -9,7 +9,7 @@ import type { KdsResult } from "@/app/(staff)/kds/actions";
 // The kitchen board inside the console: the same board and rules as the wall screen, acting as the
 // signed-in staff member (kitchen, manager or owner) instead of a device.
 
-const kitchen = async () => consoleKitchen(await staffFor(kdsWorkRoles));
+const kitchen = async () => consoleKitchen(await staffFor(kdsWorkRoles, "kitchen"));
 
 async function run<T>(work: () => Promise<T>): Promise<KdsResult<T>> {
   try {

@@ -21,7 +21,7 @@ export const thisMonth = (now = new Date()) => istToday(now).slice(0, 7);
 type Snapshot = Partial<Pick<GstInvoice, "subtotalPaise" | "discountPaise" | "serviceChargePaise" | "taxPaise" | "roundOffPaise" | "totalPaise" | "taxBreakup" | "paymentModes">>;
 
 export async function getGstReport(staff: Staff, month: string, now = new Date()) {
-  if (!canSee(staff.roles, "reports")) throw new AppError("forbidden", "Your role cannot see the GST report.");
+  if (!canSee(staff, "reports")) throw new AppError("forbidden", "Your role cannot see the GST report.");
   const m = /^\d{4}-(0[1-9]|1[0-2])$/.test(month) ? month : thisMonth(now);
   const [first, last] = monthDays(m);
   const from = new Date(Date.parse(`${first}T00:00:00Z`) - IST);

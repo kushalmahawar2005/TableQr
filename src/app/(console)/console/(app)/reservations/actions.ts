@@ -16,7 +16,7 @@ export type CalendarResult<T = null> = { ok: true; data: T } | { ok: false; code
 
 async function run<T>(work: (staff: StaffSession) => Promise<T>): Promise<CalendarResult<T>> {
   try {
-    return { ok: true, data: await work(await staffFor(consoleSectionRoles.reservations)) };
+    return { ok: true, data: await work(await staffFor(consoleSectionRoles.reservations, "reservations")) };
   } catch (err) {
     if (err instanceof AppError) return { ok: false, code: err.code, message: err.message };
     console.error("[reservations] action failed", err);
@@ -78,7 +78,7 @@ export async function reservationCancelAction(id: string) {
 
 export async function calendarTokenAction() {
   try {
-    return staffRealtimeToken(await staffFor(consoleSectionRoles.reservations), [topics.floor]);
+    return staffRealtimeToken(await staffFor(consoleSectionRoles.reservations, "reservations"), [topics.floor]);
   } catch {
     return null;
   }

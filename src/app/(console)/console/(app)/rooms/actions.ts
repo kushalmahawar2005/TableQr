@@ -8,7 +8,7 @@ const ROLES = ["owner", "manager", "reception"] as const;
 
 async function run<T>(work: (staff: Awaited<ReturnType<typeof staffFor>>) => Promise<T>) {
   try {
-    return { ok: true as const, data: await work(await staffFor(ROLES)) };
+    return { ok: true as const, data: await work(await staffFor(ROLES, "rooms")) };
   } catch (e) {
     return { ok: false as const, error: e instanceof AppError ? e.message : "Could not save. Try again." };
   }

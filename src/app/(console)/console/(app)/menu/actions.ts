@@ -7,7 +7,7 @@ import { storeMenuImage } from "@/server/menu-storage";
 import { addLibraryDishes, browseLibrary, ensureLibraryCategory, libraryCategoryDetail, searchLibrary, type LibraryPick } from "@/server/staff/menu-library";
 
 async function run<T>(work: (staff: Awaited<ReturnType<typeof staffFor>>) => Promise<T>) {
-  try { return { ok: true as const, data: await work(await staffFor(menuManagerRoles)) }; }
+  try { return { ok: true as const, data: await work(await staffFor(menuManagerRoles, "menu")) }; }
   catch (e) { return { ok: false as const, error: e instanceof AppError ? e.message : "Could not complete this menu action.", code: e instanceof AppError ? e.code : "unknown" }; }
 }
 export async function dataAction() { return run(menuManagerData); }

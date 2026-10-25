@@ -106,7 +106,7 @@ Findings go under the part as `- [ ] finding` and are ticked when fixed with the
 ### G. Roles and permissions (asked 25 Oct)
 
 - [ ] **G1. Per-role screens** — manager, accountant, cashier and others each see what fits their job (dashboard, reports and money totals differ by role), not the same data.
-- [ ] **G2. Per-restaurant role control** — restaurants differ (some have an accountant, some a host): choose per restaurant which role may open which section and do which action, instead of one fixed list in code. Server must enforce it everywhere.
+- [x] **G2.** Per-restaurant role control** — restaurants differ (some have an accountant, some a host): choose per restaurant which role may open which section and do which action, instead of one fixed list in code. Server must enforce it everywhere.
 
 ### F. Under the hood (mistakes that do not show)
 

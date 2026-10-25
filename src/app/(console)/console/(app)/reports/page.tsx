@@ -12,7 +12,7 @@ export const metadata: Metadata = { title: "Reports", robots: { index: false, fo
 export default async function ReportsPage(props: PageProps<"/console/reports">) {
   const staff = await currentStaff();
   if (!staff) redirect("/console/login");
-  if (!canSee(staff.roles, "reports")) {
+  if (!canSee(staff, "reports")) {
     return (
       <main className="p-8">
         <h1 className="font-display text-title font-bold text-ink">You don&apos;t have access to reports.</h1>

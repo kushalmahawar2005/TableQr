@@ -12,7 +12,7 @@ type TeamResult<T> = { ok: true; data: T } | { ok: false; message: string };
 
 async function run<T>(work: (s: Awaited<ReturnType<typeof staffFor>>) => Promise<T>): Promise<TeamResult<T>> {
   try {
-    return { ok: true, data: await work(await staffFor(consoleSectionRoles.team)) };
+    return { ok: true, data: await work(await staffFor(consoleSectionRoles.team, "team")) };
   } catch (err) {
     if (err instanceof AppError) return { ok: false, message: err.message };
     console.error("[team] action failed", err);

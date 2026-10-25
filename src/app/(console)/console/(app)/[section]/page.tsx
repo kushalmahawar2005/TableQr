@@ -8,7 +8,7 @@ export default async function ConsoleSectionPage(props: PageProps<"/console/[sec
   const { section } = await props.params;
   if (!isConsoleSection(section) || !isLiveSection(section)) notFound();
   const staff = await currentStaff();
-  if (!staff || !canSee(staff.roles, section)) notFound();
+  if (!staff || !canSee(staff, section)) notFound();
   const label = consoleSections.find((s) => s.slug === section)!.label;
   return (
     <main className="p-6">

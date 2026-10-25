@@ -1,0 +1,1 @@
+ALTER TABLE `tenants` ADD `role_access` json;

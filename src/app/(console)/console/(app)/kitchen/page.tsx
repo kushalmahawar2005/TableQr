@@ -14,7 +14,7 @@ export const metadata: Metadata = { title: "Kitchen" };
 // display can also run it full screen on a wall device at /kds.
 export default async function ConsoleKitchenPage() {
   const staff = await currentStaff();
-  if (!staff || !canSee(staff.roles, "kitchen")) notFound();
+  if (!staff || !canSee(staff, "kitchen")) notFound();
   const lang = parseLang((await cookies()).get(LANG_COOKIE)?.value);
   const kitchen = await consoleKitchen(staff);
   const board = await kdsBoard(kitchen, null);

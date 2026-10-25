@@ -4,7 +4,7 @@ import { AppError } from "@/server/errors";
 import { addDraftTable, addDraftZone, deleteDraftTable, getOrCreateDraft, publishDraft, revokeOrReissueQr, setCombination, updateDraftTable, updateDraftZone, floorEditorRoles } from "@/server/floor/editor";
 
 async function run<T>(work: (staff: Awaited<ReturnType<typeof staffFor>>) => Promise<T>) {
-  try { return { ok: true as const, data: await work(await staffFor(floorEditorRoles)) }; }
+  try { return { ok: true as const, data: await work(await staffFor(floorEditorRoles, "floor")) }; }
   catch (e) { return { ok: false as const, error: e instanceof AppError ? e.message : "Could not save the floor plan.", code: e instanceof AppError ? e.code : "unknown", reason: e instanceof AppError ? (e.details?.reason as string | undefined) : undefined }; }
 }
 export async function draftAction() { return run(getOrCreateDraft); }

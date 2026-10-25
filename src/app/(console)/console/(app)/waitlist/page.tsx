@@ -12,7 +12,7 @@ export const metadata: Metadata = { title: "Waitlist", robots: { index: false, f
 export default async function WaitlistPage() {
   const staff = await currentStaff();
   if (!staff) redirect("/console/login");
-  if (!canSee(staff.roles, "waitlist")) {
+  if (!canSee(staff, "waitlist")) {
     return (
       <main className="p-8">
         <h1 className="font-display text-title font-bold text-ink">You don&apos;t have access to the waitlist.</h1>

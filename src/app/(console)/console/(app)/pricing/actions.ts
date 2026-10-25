@@ -13,7 +13,7 @@ export type PricingResult<T = null> = { ok: true; data: T } | { ok: false; code:
 
 async function run<T>(work: (staff: StaffSession) => Promise<T>): Promise<PricingResult<T>> {
   try {
-    return { ok: true, data: await work(await staffFor(pricingPermissions["pricing.view"])) };
+    return { ok: true, data: await work(await staffFor(pricingPermissions["pricing.view"], "pricing")) };
   } catch (err) {
     if (err instanceof AppError) return { ok: false, code: err.code, message: err.message };
     console.error("[pricing] action failed", err);

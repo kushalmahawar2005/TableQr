@@ -14,7 +14,7 @@ export type DashboardResult<T> = { ok: true; data: T } | { ok: false; code: stri
 
 async function run<T>(work: (staff: StaffSession) => Promise<T>): Promise<DashboardResult<T>> {
   try {
-    return { ok: true, data: await work(await staffFor(consoleSectionRoles.dashboard)) };
+    return { ok: true, data: await work(await staffFor(consoleSectionRoles.dashboard, "dashboard")) };
   } catch (err) {
     if (err instanceof AppError) return { ok: false, code: err.code, message: err.message };
     console.error("[dashboard] read failed", err);
@@ -32,7 +32,7 @@ export async function revenueTrendAction() {
 
 export async function resolveServiceRequestAction(requestId: string) {
   try {
-    const staff = await staffFor(consoleSectionRoles.dashboard);
+    const staff = await staffFor(consoleSectionRoles.dashboard, "dashboard");
     const now = new Date();
     await db
       .update(s.serviceRequests)
@@ -53,7 +53,7 @@ export async function resolveServiceRequestAction(requestId: string) {
 
 export async function checkInReservationAction(reservationId: string) {
   try {
-    const staff = await staffFor(consoleSectionRoles.dashboard);
+    const staff = await staffFor(consoleSectionRoles.dashboard, "dashboard");
     const now = new Date();
     await db
       .update(s.reservations)

@@ -12,7 +12,7 @@ export const metadata: Metadata = { title: "My plan", robots: { index: false, fo
 export default async function PlanPage() {
   const staff = await currentStaff();
   if (!staff) redirect("/console/login");
-  if (!canSee(staff.roles, "plan")) {
+  if (!canSee(staff, "plan")) {
     return (
       <main className="p-8">
         <h1 className="font-display text-title font-bold text-ink">Only the owner or a manager can see the plan.</h1>

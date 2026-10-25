@@ -160,7 +160,7 @@ export async function getFloor(staff: Staff, now = new Date()) {
       pause: can(staff.roles, "booking.pause"),
       capacity: can(staff.roles, "booking.capacity"),
       waitlist: can(staff.roles, "waitlist.manage"),
-      billing: canSee(staff.roles, "billing"),
+      billing: canSee(staff, "billing"),
     },
     layout: { version: layout.version, zones: layout.zones },
     tables: tiles,

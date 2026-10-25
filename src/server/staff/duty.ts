@@ -56,7 +56,7 @@ export type DutyRow = { id: string; name: string; roles: string[]; status: DutyS
 
 /** The floor team with their shift status, people on duty first */
 export async function teamDuty(staff: Staff, now = new Date()): Promise<DutyRow[]> {
-  if (!canSee(staff.roles, "team")) throw new AppError("forbidden", "Your role cannot view the team.");
+  if (!canSee(staff, "team")) throw new AppError("forbidden", "Your role cannot view the team.");
   const rows = await db
     .select({ id: s.users.id, name: s.users.name, role: s.staffRoles.role, status: s.users.dutyStatus, since: s.users.dutyChangedAt, seen: s.users.lastSeenAt })
     .from(s.staffRoles)

@@ -53,12 +53,12 @@ export async function setupSteps(staff: StaffSession): Promise<SetupStep[] | nul
     db.select({ id: s.users.id }).from(s.users).where(and(eq(s.users.tenantId, t.tenantId), isNotNull(sql`JSON_EXTRACT(${s.users.guide}, '$.qrPrinted')`))).limit(1),
   ]);
   const steps: (SetupStep & { show: boolean })[] = [
-    { key: "details", done: !!outlet?.hours && Object.keys(outlet.hours).length > 0, href: "/console/settings#hours", show: canSee(staff.roles, "settings") },
-    { key: "menu", done: items.n > 0, href: "/console/menu", show: canSee(staff.roles, "menu") },
-    { key: "tables", done: tables.n > 0, href: "/console/floor/editor", show: features.dineIn && canSee(staff.roles, "floor") },
-    { key: "rooms", done: rooms.n > 0, href: "/console/rooms", show: features.rooms && canSee(staff.roles, "rooms") },
+    { key: "details", done: !!outlet?.hours && Object.keys(outlet.hours).length > 0, href: "/console/settings#hours", show: canSee(staff, "settings") },
+    { key: "menu", done: items.n > 0, href: "/console/menu", show: canSee(staff, "menu") },
+    { key: "tables", done: tables.n > 0, href: "/console/floor/editor", show: features.dineIn && canSee(staff, "floor") },
+    { key: "rooms", done: rooms.n > 0, href: "/console/rooms", show: features.rooms && canSee(staff, "rooms") },
     { key: "qr", done: !!printed || !!guide.qrPrinted, href: features.dineIn ? "/console/floor/editor/qr-sheet" : "/console/rooms/qr-sheet", show: features.dineIn || features.rooms },
-    { key: "team", done: team.n > 0, href: "/console/team", show: canSee(staff.roles, "team") },
+    { key: "team", done: team.n > 0, href: "/console/team", show: canSee(staff, "team") },
     { key: "order", done: !!order, href: features.dineIn ? "/console/floor" : "/console/rooms", show: true },
   ];
   return steps.filter((st) => st.show).map(({ key, done, href }) => ({ key, done, href }));

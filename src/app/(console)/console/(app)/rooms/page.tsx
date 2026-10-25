@@ -14,7 +14,7 @@ export const metadata: Metadata = { title: "Rooms", robots: { index: false, foll
 export default async function RoomsPage() {
   const staff = await currentStaff();
   if (!staff) redirect("/console/login");
-  if (!canSee(staff.roles, "rooms")) {
+  if (!canSee(staff, "rooms")) {
     return (
       <main className="p-8">
         <h1 className="font-display text-title font-bold text-ink">Only the owner, a manager or reception can open Rooms.</h1>

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { canPrice } from "@/lib/staff-permissions";
+import { canPrice, canSee } from "@/lib/staff-permissions";
 import { getPricingData } from "@/server/staff/pricing";
 import { tenantFeatures } from "@/server/plan";
 import { currentStaff } from "@/server/staff/request";
@@ -14,7 +14,7 @@ export const metadata: Metadata = { title: "Pricing", robots: { index: false, fo
 export default async function PricingPage() {
   const staff = await currentStaff();
   if (!staff) redirect("/console/login");
-  if (!canPrice(staff.roles, "pricing.view")) {
+  if (!canPrice(staff.roles, "pricing.view") || !canSee(staff, "pricing")) {
     return (
       <main className="p-8">
         <h1 className="font-display text-title font-bold text-ink">You don&apos;t have access to pricing.</h1>

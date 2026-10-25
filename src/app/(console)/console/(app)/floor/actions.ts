@@ -31,7 +31,7 @@ import type { BlockReason } from "@/db/schema";
 
 export type FloorResult = { ok: true } | { ok: false; code: string; message: string; details?: Record<string, unknown> };
 
-const staff = () => staffFor(consoleSectionRoles.floor);
+const staff = () => staffFor(consoleSectionRoles.floor, "floor");
 
 async function act(work: (s: StaffSession) => Promise<unknown>): Promise<FloorResult> {
   try {
