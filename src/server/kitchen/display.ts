@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, like, or } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, gte, inArray, isNotNull, isNull, like, lt, or } from "drizzle-orm";
 import { db } from "@/db";
 import * as s from "@/db/schema";
 import { localClock } from "@/domain/hours";
@@ -19,10 +19,19 @@ export async function getKitchenDisplay(ctx: StaffContext, opts: { station?: str
   const station = opts.station ?? null;
   const t = ctx.tenantId;
 
-  const open = await db
-    .select()
-    .from(s.tickets)
-    .where(and(eq(s.tickets.tenantId, t), eq(s.tickets.outletId, ctx.outletId), inArray(s.tickets.status, ["new", "in_progress"]), gte(s.tickets.createdAt, new Date(now.getTime() - OPEN_TICKET_WINDOW_MS))));
+  const since = new Date(now.getTime() - OPEN_TICKET_WINDOW_MS);
+  const [open, [stale]] = await Promise.all([
+    db
+      .select()
+      .from(s.tickets)
+      .where(and(eq(s.tickets.tenantId, t), eq(s.tickets.outletId, ctx.outletId), inArray(s.tickets.status, ["new", "in_progress"]), gte(s.tickets.createdAt, since))),
+    // Open tickets older than the window are not drawn, but never hidden silently: the board says how many
+    db
+      .select({ n: count() })
+      .from(s.tickets)
+      .where(and(eq(s.tickets.tenantId, t), eq(s.tickets.outletId, ctx.outletId), inArray(s.tickets.status, ["new", "in_progress"]), lt(s.tickets.createdAt, since))),
+  ]);
+  const staleOpen = Number(stale?.n ?? 0);
 
   // Open-ticket counts per station tab; All counts every open ticket
   const counts: Record<string, number> = { All: open.length };
@@ -31,7 +40,7 @@ export async function getKitchenDisplay(ctx: StaffContext, opts: { station?: str
   const lastBumped = await recallCandidate(ctx, station, now);
   const shown = station ? open.filter((tk) => tk.station === station) : open;
   const orderIds = [...new Set(shown.map((tk) => tk.orderId))];
-  if (orderIds.length === 0) return { counts, cards: [] as KitchenCard[], lastBumped };
+  if (orderIds.length === 0) return { counts, cards: [] as KitchenCard[], lastBumped, staleOpen };
 
   const [orders, lines] = await Promise.all([
     db
@@ -116,7 +125,7 @@ export async function getKitchenDisplay(ctx: StaffContext, opts: { station?: str
 
   // Most urgent first; within the same urgency, the ticket that has waited longest
   cards.sort((a, b) => urgencyRank(b.urgency) - urgencyRank(a.urgency) || a.placedAt - b.placedAt);
-  return { counts, cards, lastBumped };
+  return { counts, cards, lastBumped, staleOpen };
 }
 
 export type KitchenCard = {

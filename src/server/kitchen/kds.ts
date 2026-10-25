@@ -80,6 +80,8 @@ export async function kdsBoard(device: KdsDevice, requested: string | null | und
     station,
     stations,
     counts: display.counts,
+    /** Open tickets older than a day: not drawn, but the board says so */
+    staleOpen: display.staleOpen,
     cards: display.cards,
     lastBumped: display.lastBumped,
     unavailable: unavailable.map((u) => ({ ...u, until: u.until?.getTime() ?? null })),

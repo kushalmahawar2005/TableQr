@@ -81,6 +81,9 @@ describe("kitchen display (S2)", () => {
     const nextDay = await getKitchenDisplay(kitchen, {}, later(25 * 60));
     expect(nextDay.cards).toHaveLength(0);
     expect(nextDay.counts).toEqual({ All: 0 });
+    // Not drawn, but never silent: the board is told how many open tickets it is leaving out
+    expect(nextDay.staleOpen).toBe(3);
+    expect(stillThere.staleOpen).toBe(0);
   });
 });
 

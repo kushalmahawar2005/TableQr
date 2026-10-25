@@ -76,6 +76,7 @@ function board(cards: KdsCard[], over: Partial<KdsBoard> = {}): KdsBoard {
     station,
     stations: STATIONS,
     counts,
+    staleOpen: over.staleOpen ?? 0,
     cards,
     lastBumped: { ticketId: "tk-old", station: station ?? "Tandoor", tableCode: "T2", roundNo: 1, bumpedAt: NOW - 3 * MIN, recallUntil: NOW + 7 * MIN, blocked: null },
     unavailable: [{ id: "i-1", nameEn: "Mutton Rogan Josh", nameHi: "मटन रोगन जोश", station: "Main", until: NOW + 6 * 60 * MIN }],

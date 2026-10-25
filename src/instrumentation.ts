@@ -4,7 +4,8 @@
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
   try {
-    const [{ db }, { ensureSchema }] = await Promise.all([import("@/db"), import("@/server/ensure-schema")]);
+    const [{ db, poolSize }, { ensureSchema }] = await Promise.all([import("@/db"), import("@/server/ensure-schema")]);
+    console.log(`[db] connection pool size ${poolSize}`);
     await ensureSchema(db.$client);
   } catch (err) {
     console.error("[schema] could not update the database at startup", err);

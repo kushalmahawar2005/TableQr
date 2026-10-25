@@ -359,6 +359,26 @@ describe("alerts", () => {
     expect(d.kpis.revenue.today).toBe(50_000); // refunds never touch revenue
   });
 
+  it("recent payments: the six newest successful ones, newest first, each with its table; failed and pending are left out", async () => {
+    const t1 = await paidVisit("T1", 10_000);
+    const t2 = await paidVisit("T2", 20_000);
+    const future = (i: number) => new Date(Date.now() + (i + 1) * 3_600_000);
+    // Eight successful payments alternate between two tables, newest last inserted first on purpose scrambled
+    const order = [3, 0, 6, 1, 7, 2, 5, 4];
+    for (const i of order) {
+      await env.db.insert(s.payments).values({ id: uuidv7(), tenantId: env.demo.tenantId, outletId: env.demo.outletId, billId: i % 2 ? t2.billId : t1.billId, allocations: [], method: i % 2 ? "card" : "upi", channel: "mock", gatewayRef: `rp_ref_${i}`, amountPaise: 1_000 + i, status: "success", createdAt: future(i) });
+    }
+    for (const [i, status] of [[8, "failed"], [9, "pending"]] as const) {
+      await env.db.insert(s.payments).values({ id: uuidv7(), tenantId: env.demo.tenantId, outletId: env.demo.outletId, billId: t1.billId, allocations: [], method: "upi", channel: "mock", gatewayRef: `rp_ref_${i}`, amountPaise: 1_000 + i, status, createdAt: future(i) });
+    }
+    const recent = (await dash()).operations.recentPayments;
+    expect(recent.map((p) => p.amountPaise)).toEqual([1_007, 1_006, 1_005, 1_004, 1_003, 1_002]);
+    expect(recent.map((p) => p.tableCode)).toEqual(["T2", "T1", "T2", "T1", "T2", "T1"]);
+    expect(recent.map((p) => p.method)).toEqual(["card", "upi", "card", "upi", "card", "upi"]);
+    expect(recent.every((p) => p.status === "success")).toBe(true);
+    expect(recent.map((p) => p.createdAt)).toEqual([...recent.map((p) => p.createdAt)].sort((a, b) => b - a));
+  });
+
   it("AA/AB: blocked active tables are counted; a calm outlet has no alerts", async () => {
     await env.db.update(s.outletItemOverrides).set({ isAvailable: true }).where(eq(s.outletItemOverrides.itemId, item("Mutton Curry")));
     const calm = await dash();
