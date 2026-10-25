@@ -13,6 +13,9 @@ export default defineConfig({
     include: ["src/**/*.test.ts", "test/**/*.test.ts"],
     // Integration tests share one database, so run files one at a time
     fileParallelism: false,
+    // Resetting the test database (every migration, then demo data) in beforeAll can pass 10 s
+    // when the whole suite has warmed the machine up
+    hookTimeout: 60_000,
     // Local test database created by scripts/mysql-local.sh; never the dev database
     env: {
       DB_HOST: "127.0.0.1",
