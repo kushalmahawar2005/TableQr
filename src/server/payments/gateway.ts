@@ -22,7 +22,7 @@ export type CheckoutInput = {
 };
 
 export type WebhookEvent =
-  | { kind: "payment"; gatewayRef: string; gatewayPaymentId: string; status: "success" | "failed"; amountPaise: number; reason?: string }
+  | { kind: "payment"; gatewayRef: string; gatewayPaymentId: string; status: "success" | "failed"; amountPaise: number; currency?: string; reason?: string }
   | { kind: "refund"; gatewayRefundId: string; gatewayPaymentId: string; status: "success" | "failed"; amountPaise: number }
   | { kind: "ignored" };
 
@@ -37,7 +37,7 @@ export interface PaymentGateway {
     customer?: { id?: string; phone?: string | null; name?: string | null; email?: string | null };
   }): Promise<{ gatewayRef: string }>;
   checkout(input: CheckoutInput): Checkout | Promise<Checkout>;
-  fetchStatus(gatewayRef: string): Promise<{ status: GatewayStatus; amountPaise: number; gatewayPaymentId?: string; reason?: string }>;
+  fetchStatus(gatewayRef: string): Promise<{ status: GatewayStatus; amountPaise: number; currency?: string; gatewayPaymentId?: string; reason?: string }>;
   refund(input: { gatewayRef: string; gatewayPaymentId: string; amountPaise: number; refundId: string }): Promise<{ gatewayRefundId: string; status: "pending" | "success" | "failed" }>;
   /** Where a refund stands at the gateway; used to settle a refund whose webhook was missed */
   fetchRefund(input: { gatewayRef: string; gatewayRefundId: string }): Promise<{ status: "pending" | "success" | "failed" }>;
@@ -45,6 +45,11 @@ export interface PaymentGateway {
   verifyWebhook(rawBody: string, signature: string | null, timestamp?: string | null): boolean;
   parseWebhook(rawBody: string): WebhookEvent;
 }
+
+/** Every order TableQR creates is in rupees, so a success in any other currency is never taken as paid */
+export const PAYMENT_CURRENCY = "INR";
+/** A gateway that reports a currency must report rupees; one that reports none (the mock) is not asked */
+export const currencyAccepted = (currency?: string) => currency === undefined || currency.trim().toUpperCase() === PAYMENT_CURRENCY;
 
 const safeEqual = (a: string, b: string) => {
   const x = Buffer.from(a, "utf8");
@@ -182,11 +187,13 @@ export class CashfreeGateway implements PaymentGateway {
       cf_payment_id: string | number;
       payment_status: string;
       payment_amount: number;
+      payment_currency?: string;
       payment_message?: string;
       error_details?: { error_description?: string } | null;
     }>>(`/orders/${encodeURIComponent(gatewayRef)}/payments`, { method: "GET" });
     const success = payments.find((payment) => payment.payment_status === "SUCCESS");
-    if (success) return { status: "success" as const, amountPaise: paiseFromRupees(success.payment_amount), gatewayPaymentId: String(success.cf_payment_id) };
+    // A success without a stated currency is not trusted as rupees: "" fails the currency check
+    if (success) return { status: "success" as const, amountPaise: paiseFromRupees(success.payment_amount), currency: success.payment_currency ?? "", gatewayPaymentId: String(success.cf_payment_id) };
     if (payments.some((payment) => payment.payment_status === "PENDING")) return { status: "pending" as const, amountPaise: 0 };
     const attempted = payments.filter((payment) => payment.payment_status !== "NOT_ATTEMPTED");
     if (attempted.length === 0) return { status: "none" as const, amountPaise: 0 };
@@ -232,7 +239,7 @@ export class CashfreeGateway implements PaymentGateway {
       type?: string;
       data?: {
         order?: { order_id?: string };
-        payment?: { cf_payment_id?: string | number; payment_status?: string; payment_amount?: number; payment_message?: string };
+        payment?: { cf_payment_id?: string | number; payment_status?: string; payment_amount?: number; payment_currency?: string; payment_message?: string };
         error_details?: { error_description?: string } | null;
         refund?: {
           refund_id?: string;
@@ -252,6 +259,7 @@ export class CashfreeGateway implements PaymentGateway {
         gatewayPaymentId: String(payment.cf_payment_id),
         status: body.type === "PAYMENT_SUCCESS_WEBHOOK" && payment.payment_status === "SUCCESS" ? "success" : "failed",
         amountPaise: paiseFromRupees(payment.payment_amount ?? 0),
+        currency: payment.payment_currency ?? "",
         reason: body.data?.error_details?.error_description ?? payment.payment_message,
       };
     }

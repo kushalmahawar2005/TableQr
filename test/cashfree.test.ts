@@ -1,6 +1,6 @@
 import { createHmac } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CashfreeConfigError, CashfreeGateway, gatewayByName, gatewayFor, parseCashfreeConfig, platformGateway } from "@/server/payments/gateway";
+import { CashfreeConfigError, CashfreeGateway, currencyAccepted, gatewayByName, gatewayFor, parseCashfreeConfig, platformGateway } from "@/server/payments/gateway";
 
 const CLIENT_ID = "cashfree_client_123";
 const CLIENT_SECRET = "cashfree_secret_123";
@@ -48,8 +48,8 @@ describe("Cashfree platform gateway", () => {
   });
 
   it("maps Cashfree payment attempts without trusting a browser redirect", async () => {
-    stubFetch([{ cf_payment_id: 123, payment_status: "SUCCESS", payment_amount: 541 }]);
-    expect(await gw().fetchStatus("fee_1")).toEqual({ status: "success", amountPaise: 54100, gatewayPaymentId: "123" });
+    stubFetch([{ cf_payment_id: 123, payment_status: "SUCCESS", payment_amount: 541, payment_currency: "INR" }]);
+    expect(await gw().fetchStatus("fee_1")).toEqual({ status: "success", amountPaise: 54100, currency: "INR", gatewayPaymentId: "123" });
     stubFetch([{ cf_payment_id: 124, payment_status: "PENDING", payment_amount: 541 }]);
     expect((await gw().fetchStatus("fee_1")).status).toBe("pending");
     stubFetch([]);
@@ -61,14 +61,36 @@ describe("Cashfree platform gateway", () => {
   it("verifies Cashfree's timestamp-plus-raw-body signature and parses payment events", () => {
     const body = JSON.stringify({
       type: "PAYMENT_SUCCESS_WEBHOOK",
-      data: { order: { order_id: "fee_1" }, payment: { cf_payment_id: 123, payment_status: "SUCCESS", payment_amount: 541 } },
+      data: { order: { order_id: "fee_1" }, payment: { cf_payment_id: 123, payment_status: "SUCCESS", payment_amount: 541, payment_currency: "INR" } },
     });
     const timestamp = "1792588800";
     const signature = createHmac("sha256", CLIENT_SECRET).update(`${timestamp}${body}`).digest("base64");
     expect(gw().verifyWebhook(body, signature, timestamp)).toBe(true);
     expect(gw().verifyWebhook(`${body} `, signature, timestamp)).toBe(false);
     expect(gw().verifyWebhook(body, signature, null)).toBe(false);
-    expect(gw().parseWebhook(body)).toEqual({ kind: "payment", gatewayRef: "fee_1", gatewayPaymentId: "123", status: "success", amountPaise: 54100, reason: undefined });
+    expect(gw().parseWebhook(body)).toEqual({ kind: "payment", gatewayRef: "fee_1", gatewayPaymentId: "123", status: "success", amountPaise: 54100, currency: "INR", reason: undefined });
+  });
+
+  it("reports the currency of a success, and a success that names none is not taken for rupees", async () => {
+    stubFetch([{ cf_payment_id: 7, payment_status: "SUCCESS", payment_amount: 541, payment_currency: "USD" }]);
+    const usd = await gw().fetchStatus("fee_1");
+    expect(usd).toMatchObject({ status: "success", currency: "USD" });
+    expect(currencyAccepted(usd.currency)).toBe(false);
+    stubFetch([{ cf_payment_id: 8, payment_status: "SUCCESS", payment_amount: 541 }]);
+    const none = await gw().fetchStatus("fee_1");
+    expect(none.currency).toBe("");
+    expect(currencyAccepted(none.currency)).toBe(false);
+
+    const hook = (currency?: string) => gw().parseWebhook(JSON.stringify({
+      type: "PAYMENT_SUCCESS_WEBHOOK",
+      data: { order: { order_id: "fee_1" }, payment: { cf_payment_id: 9, payment_status: "SUCCESS", payment_amount: 541, ...(currency ? { payment_currency: currency } : {}) } },
+    }));
+    expect(hook("inr")).toMatchObject({ currency: "inr" });
+    expect(currencyAccepted((hook("inr") as { currency?: string }).currency)).toBe(true);
+    expect(currencyAccepted((hook("USD") as { currency?: string }).currency)).toBe(false);
+    expect(currencyAccepted((hook() as { currency?: string }).currency)).toBe(false);
+    // The mock gateway names no currency and is not asked for one
+    expect(currencyAccepted(undefined)).toBe(true);
   });
 
   it("keeps the TableQR Cashfree account out of restaurant guest payments", () => {

@@ -10,7 +10,7 @@ import { amountInWords } from "@/domain/words";
 import { LOCK_THEN_READ, type Tx } from "../db-types";
 import { AppError } from "../errors";
 import type { GuestContext } from "../guest/context";
-import { type GatewayStatus } from "../payments/gateway";
+import { currencyAccepted, PAYMENT_CURRENCY, type GatewayStatus } from "../payments/gateway";
 import { gatewayForOutletPayment } from "../payments/outlet-gateway";
 import { publish, type RealtimeEvent } from "../realtime/publish";
 import { topics } from "../realtime/token";
@@ -292,7 +292,7 @@ async function releaseOrBlockLiveAttempts(tx: Tx, ctx: GuestContext, billId: str
   }
 }
 
-type Verdict = { gatewayRef: string; status: "success" | "failed"; amountPaise: number; gatewayPaymentId?: string; reason?: string };
+type Verdict = { gatewayRef: string; status: "success" | "failed"; amountPaise: number; currency?: string; gatewayPaymentId?: string; reason?: string };
 
 /**
  * Records the gateway's verdict. Safe to call more than once for the same payment: only the
@@ -305,7 +305,7 @@ export async function confirmPayment(paymentId: string, verdict: Verdict, now = 
     announceBill(res.scope, res.closedTableIds ? { tableIds: res.closedTableIds, state: "paid" } : undefined, [
       { topic: topics.session(res.scope.sessionId), type: "payment.updated", data: { paymentId } },
       ...(res.closedTableIds ? [{ topic: topics.session(res.scope.sessionId), type: "session.closed" }] : []),
-      ...(res.mismatch ? [{ topic: topics.tasks, type: "payment.stuck", data: { paymentId, reason: "amount_mismatch" } }] : []),
+      ...(res.alert ? [{ topic: topics.tasks, type: "payment.stuck", data: { paymentId, reason: res.alert } }] : []),
     ]);
   }
   return { status: res.status, alreadyFinal: res.alreadyFinal, billPaid: res.billPaid, refundPaise: res.refundPaise };
@@ -329,8 +329,8 @@ type Confirmed = {
   refundPaise: number;
   scope?: BillScope;
   closedTableIds?: string[];
-  /** The gateway captured an amount different from the bill's: needs a person to reconcile */
-  mismatch?: boolean;
+  /** The gateway's report needs a person: an amount or currency other than the bill's, or a second capture on one order */
+  alert?: "amount_mismatch" | "duplicate_capture";
 };
 
 async function confirmPaymentTx(tx: Tx, paymentId: string, verdict: Verdict, now: Date): Promise<Confirmed> {
@@ -342,11 +342,31 @@ async function confirmPaymentTx(tx: Tx, paymentId: string, verdict: Verdict, now
   // Final states only change in one direction: an attempt we gave up on ("failed" by us, e.g.
   // replaced) can still succeed at the gateway, and captured money must always be recorded.
   const final = payment.status === "success" || payment.status === "refunded" || (payment.status === "failed" && verdict.status === "failed");
-  if (final) return { status: payment.status, alreadyFinal: true, billPaid: false, refundPaise: 0 };
+  if (final) {
+    // A second, different capture on an order that is already paid is money taken twice. It is not
+    // recorded as another payment (one order settles one bill share once), so staff must refund it
+    const other = verdict.status === "success" && payment.gatewayPaymentId && verdict.gatewayPaymentId && verdict.gatewayPaymentId !== payment.gatewayPaymentId && (payment.status === "success" || payment.status === "refunded");
+    if (other) {
+      const seen = await tx.select({ after: s.auditLog.after }).from(s.auditLog)
+        .where(and(eq(s.auditLog.tenantId, payment.tenantId), eq(s.auditLog.entityId, payment.id), eq(s.auditLog.action, "payment.duplicate_capture")));
+      if (!seen.some((row) => (row.after as { gatewayPaymentId?: string } | null)?.gatewayPaymentId === verdict.gatewayPaymentId)) {
+        await tx.insert(s.auditLog).values({
+          tenantId: payment.tenantId, outletId: payment.outletId, actorLabel: "gateway", action: "payment.duplicate_capture", entity: "payment", entityId: payment.id,
+          before: { gatewayPaymentId: payment.gatewayPaymentId }, after: { gatewayPaymentId: verdict.gatewayPaymentId, capturedPaise: verdict.amountPaise },
+          reason: "The gateway captured a second payment on an order that was already paid",
+        });
+        return { status: payment.status, alreadyFinal: true, billPaid: false, refundPaise: 0, scope, alert: "duplicate_capture" };
+      }
+    }
+    return { status: payment.status, alreadyFinal: true, billPaid: false, refundPaise: 0 };
+  }
 
   const expected = payment.amountPaise + payment.tipPaise;
-  if (verdict.status === "failed" || verdict.amountPaise !== expected) {
-    const reason = verdict.status === "failed" ? (verdict.reason ?? "Declined") : `Amount mismatch: expected ${expected}, got ${verdict.amountPaise}`;
+  const wrongCurrency = verdict.status === "success" && !currencyAccepted(verdict.currency);
+  if (verdict.status === "failed" || verdict.amountPaise !== expected || wrongCurrency) {
+    const reason = verdict.status === "failed" ? (verdict.reason ?? "Declined")
+      : wrongCurrency ? `Currency mismatch: expected ${PAYMENT_CURRENCY}, got ${(verdict.currency || "none").slice(0, 8)}`
+      : `Amount mismatch: expected ${expected}, got ${verdict.amountPaise}`;
     await tx
       .update(s.payments)
       .set({ status: "failed", failureReason: reason.slice(0, 200), gatewayPaymentId: verdict.gatewayPaymentId ?? payment.gatewayPaymentId, checkedAt: now })
@@ -356,9 +376,9 @@ async function confirmPaymentTx(tx: Tx, paymentId: string, verdict: Verdict, now
     if (verdict.status === "success") {
       await tx.insert(s.auditLog).values({
         tenantId: payment.tenantId, outletId: payment.outletId, actorLabel: "gateway", action: "payment.amount_mismatch", entity: "payment", entityId: payment.id,
-        before: { expectedPaise: expected }, after: { capturedPaise: verdict.amountPaise }, reason: "Gateway reported a different amount than the bill",
+        before: { expectedPaise: expected, currency: PAYMENT_CURRENCY }, after: { capturedPaise: verdict.amountPaise, currency: (verdict.currency || "none").slice(0, 8) }, reason: wrongCurrency ? "Gateway reported a different currency than the bill" : "Gateway reported a different amount than the bill",
       });
-      return { status: "failed" as const, alreadyFinal: false, billPaid: false, refundPaise: 0, scope, mismatch: true };
+      return { status: "failed" as const, alreadyFinal: false, billPaid: false, refundPaise: 0, scope, alert: "amount_mismatch" };
     }
     return { status: "failed" as const, alreadyFinal: false, billPaid: false, refundPaise: 0, scope };
   }
@@ -453,7 +473,7 @@ export async function reconcilePayment(scope: { tenantId: string }, paymentId: s
   if (payment.status === "failed" && payment.failureReason === "Cancelled before paying") return "cancelled";
   const gateway = await gatewayForOutletPayment(payment.tenantId, payment.outletId, payment.channel);
   if (!gateway || !payment.gatewayRef) return payment.status === "failed" ? "failed" : "unknown";
-  let status: { status: GatewayStatus; amountPaise: number; gatewayPaymentId?: string; reason?: string };
+  let status: { status: GatewayStatus; amountPaise: number; currency?: string; gatewayPaymentId?: string; reason?: string };
   try {
     status = await gateway.fetchStatus(payment.gatewayRef);
   } catch {
@@ -461,7 +481,7 @@ export async function reconcilePayment(scope: { tenantId: string }, paymentId: s
   }
   await db.update(s.payments).set({ checkedAt: now }).where(and(eq(s.payments.tenantId, payment.tenantId), eq(s.payments.id, payment.id)));
   if (status.status === "success" || status.status === "failed") {
-    const res = await confirmPayment(payment.id, { gatewayRef: payment.gatewayRef, status: status.status, amountPaise: status.amountPaise, gatewayPaymentId: status.gatewayPaymentId, reason: status.reason }, now);
+    const res = await confirmPayment(payment.id, { gatewayRef: payment.gatewayRef, status: status.status, amountPaise: status.amountPaise, currency: status.currency, gatewayPaymentId: status.gatewayPaymentId, reason: status.reason }, now);
     return res.status === "success" ? "success" : "failed";
   }
   return payment.status === "failed" ? "failed" : status.status === "none" ? "pending" : "unknown";
@@ -491,6 +511,7 @@ export async function cancelIfUnattempted(scope: { tenantId: string }, paymentId
 /** An attempt the gateway has seen no payment for is closed after this long, so it stops holding the bill */
 export const ABANDONED_ATTEMPT_MS = 30 * 60_000;
 const STALE_ATTEMPTS_PER_RUN = 20;
+const STALE_RECHECK_MS = 60 * 60_000;
 
 /**
  * Scheduled every minute (PS 6.4): re-check open payment attempts with the gateway. While one is
@@ -504,10 +525,12 @@ export async function reconcilePendingPayments(scope: { tenantId: string; outlet
   const recent = await db.select(columns).from(s.payments)
     .where(and(eq(s.payments.tenantId, scope.tenantId), eq(s.payments.outletId, scope.outletId), inArray(s.payments.status, ["initiated", "pending"]), sql`${s.payments.createdAt} >= ${since}`))
     .orderBy(s.payments.createdAt).limit(50);
-  // An attempt still open after a day keeps the table from being cleared, so it is checked too, a few
-  // per run and least recently checked first; a gateway that cannot answer must not starve the rest
+  // An attempt still open after a day keeps the table from being cleared, so it is checked too: at
+  // most STALE_ATTEMPTS_PER_RUN per outlet per run, each at most once an hour, least recently
+  // checked first, so a gateway that cannot answer neither starves the rest nor is asked in a loop
+  const recheckBefore = new Date(now.getTime() - STALE_RECHECK_MS);
   const stale = await db.select(columns).from(s.payments)
-    .where(and(eq(s.payments.tenantId, scope.tenantId), eq(s.payments.outletId, scope.outletId), inArray(s.payments.status, ["initiated", "pending"]), sql`${s.payments.createdAt} < ${since}`))
+    .where(and(eq(s.payments.tenantId, scope.tenantId), eq(s.payments.outletId, scope.outletId), inArray(s.payments.status, ["initiated", "pending"]), sql`${s.payments.createdAt} < ${since}`, sql`(${s.payments.checkedAt} IS NULL OR ${s.payments.checkedAt} < ${recheckBefore})`))
     .orderBy(s.payments.checkedAt, s.payments.createdAt).limit(STALE_ATTEMPTS_PER_RUN);
   const pending = [...recent, ...stale];
   const staleIds = new Set(stale.map((p) => p.id));

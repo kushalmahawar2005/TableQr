@@ -48,11 +48,15 @@ export async function releaseStuckPayment(staff: StaffSession, sessionId: string
     .update(s.payments)
     .set({ status: "failed", failureReason: "Released by staff: no answer from the gateway", checkedAt: now })
     .where(and(eq(s.payments.tenantId, staff.tenantId), eq(s.payments.id, row.payment.id), inArray(s.payments.status, ["initiated", "pending"])));
-  if (res.affectedRows) {
-    await audit(db, staff, { action: "payment.released", entity: "payment", entityId: row.payment.id, before: { status: row.payment.status }, after: { status: "failed" }, now });
-    announceBill({ tenantId: staff.tenantId, outletId: staff.outletId, sessionId: row.sessionId }, undefined, [
-      { topic: topics.session(row.sessionId), type: "payment.updated", data: { paymentId: row.payment.id } },
-    ]);
+  if (!res.affectedRows) {
+    // The gateway's answer landed between the last look and the release: that answer stands, and
+    // the manager is told so, not that the payment was released
+    const [now1] = await db.select({ status: s.payments.status }).from(s.payments).where(and(eq(s.payments.tenantId, staff.tenantId), eq(s.payments.id, row.payment.id)));
+    return { released: false, view: now1?.status === "success" || now1?.status === "refunded" ? ("success" as const) : ("failed" as const) };
   }
+  await audit(db, staff, { action: "payment.released", entity: "payment", entityId: row.payment.id, before: { status: row.payment.status }, after: { status: "failed" }, now });
+  announceBill({ tenantId: staff.tenantId, outletId: staff.outletId, sessionId: row.sessionId }, undefined, [
+    { topic: topics.session(row.sessionId), type: "payment.updated", data: { paymentId: row.payment.id } },
+  ]);
   return { released: true, view: "failed" as const };
 }

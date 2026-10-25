@@ -1,5 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { db as appDb } from "@/db";
 import * as s from "@/db/schema";
 import { serviceDate } from "@/domain/booking-policy";
@@ -111,5 +111,20 @@ describe("B1-B4 final credit and security evidence", () => {
     const sent = await sendBookingOtp("SRJ01", h.manageToken, "idempotent-device", "9876543218", now);
     await verifyBookingOtp("SRJ01", h.manageToken, "idempotent-device", sent.challengeId, sent.devCode!, "Idempotent", false, now);
     await confirmBooking("SRJ01", h.manageToken, { name: "Idempotent", phone: "9876543218" }, now); await confirmBooking("SRJ01", h.manageToken, { name: "Idempotent", phone: "9876543218" }, now); await cancelBookingPublic("SRJ01", h.manageToken, "guest_cancelled", new Date(now.getTime() - 3 * 3600_000)); await cancelBookingPublic("SRJ01", h.manageToken, "guest_cancelled", now); const joined = await joinPublicWaitlist("SRJ01", { name: "Tamper", phone: "9876543219", partySize: 2 }); await fails(publicWaitlistStatus("SRJ01", `${joined.token}bad`)); const s1 = await publicWaitlistStatus("SRJ01", joined.token); expect(s1.position).toBe(1); expect(s1.estimateMinutes).toBeGreaterThan(0);
+  });
+
+  it("a credit paid in another currency is not accepted as paid", async () => {
+    const [reservation] = await env.db.select().from(s.reservations).limit(1);
+    const { gatewayRef } = await mockGateway.createOrder({ paymentId: "currency-credit", amountPaise: 80_000 });
+    const creditId = uuidv7();
+    await env.db.insert(s.reservationCredits).values({ id: creditId, tenantId: reservation.tenantId, outletId: reservation.outletId, reservationId: reservation.id, clientRequestId: "currency-credit", provider: "mock", gatewayRef, amountPaise: 80_000, status: "pending" });
+    mockGateway.settle(gatewayRef, "success");
+    const real = await mockGateway.fetchStatus(gatewayRef);
+    vi.spyOn(mockGateway, "fetchStatus").mockResolvedValue({ ...real, currency: "USD" } as never);
+    await reconcileReservationCredit("mock", creditId);
+    expect((await env.db.select().from(s.reservationCredits).where(eq(s.reservationCredits.id, creditId)))[0].status).toBe("pending");
+    vi.restoreAllMocks();
+    await reconcileReservationCredit("mock", creditId);
+    expect((await env.db.select().from(s.reservationCredits).where(eq(s.reservationCredits.id, creditId)))[0]).toMatchObject({ status: "paid", paidPaise: 80_000 });
   });
 });

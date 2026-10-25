@@ -4,7 +4,7 @@ import { db as appDb } from "@/db";
 import * as s from "@/db/schema";
 import { AppError } from "@/server/errors";
 import { closeVisit } from "@/server/floor/table-actions";
-import { requestBill, settleAtCounter, startPayment } from "@/server/billing/payments";
+import { confirmPayment, requestBill, settleAtCounter, startPayment } from "@/server/billing/payments";
 import { recheckOnlinePayment, releaseStuckPayment } from "@/server/billing/stuck-payment";
 import { addCartLine } from "@/server/guest/cart";
 import { getGuestContext, type GuestContext } from "@/server/guest/context";
@@ -86,3 +86,66 @@ describe("stuck online payment", () => {
     await closeVisit(manager, input, new Date(Date.now() + 22 * 60 * MIN));
   });
 });
+
+describe("releasing a stuck payment never loses or doubles money", () => {
+  const later = () => new Date(Date.now() + 11 * MIN);
+
+  async function stuckAt(table: string, device: string) {
+    const qr = env.demo.tableQr[table];
+    const { participantId } = await startOrJoinTable({ outletCode: "SRJ01", shortCode: qr, deviceId: device, displayName: "Rae" });
+    const h = await attachVerifiedTestGuest(appDb, await getGuestContext("SRJ01", qr, participantId, device), "Rae");
+    await addCartLine(h, { itemId: env.demo.itemIds["Dal Makhani"], qty: 1 });
+    await placeOrder(h);
+    await requestBill({ tenantId: h.tenantId, outletId: h.outletId, sessionId: h.sessionId });
+    const start = await startPayment(h, { method: "upi", requestId: `rel-${device}` });
+    const [bill] = await env.db.select().from(s.bills).where(eq(s.bills.sessionId, h.sessionId));
+    return { h, start, bill };
+  }
+  const lateSuccess = (start: Awaited<ReturnType<typeof startPayment>>) => confirmPayment(start.paymentId, { gatewayRef: start.gatewayRef!, status: "success", amountPaise: start.totalPaise, gatewayPaymentId: `late-${start.paymentId}` });
+  const shares = (billId: string) => env.db.select().from(s.billShares).where(eq(s.billShares.billId, billId));
+
+  it("pays the bill, once, when the gateway's late success arrives after a release and nobody took cash", async () => {
+    const { h, start, bill } = await stuckAt("T5", "rel-a");
+    expect(await releaseStuckPayment(manager, h.sessionId, later())).toEqual({ released: true, view: "failed" });
+    expect((await env.db.select().from(s.payments).where(eq(s.payments.id, start.paymentId)))[0].status).toBe("failed");
+    expect(await lateSuccess(start)).toMatchObject({ status: "success", alreadyFinal: false });
+    expect((await env.db.select().from(s.bills).where(eq(s.bills.id, bill.id)))[0].status).toBe("paid");
+    expect((await shares(bill.id)).reduce((n, x) => n + x.paidPaise, 0)).toBe(bill.totalPaise);
+    expect(await env.db.select().from(s.refunds).where(eq(s.refunds.paymentId, start.paymentId))).toHaveLength(0);
+  });
+
+  it("refunds the late online payment in full when cash already settled the bill after a release, and never credits it twice", async () => {
+    const { h, start, bill } = await stuckAt("T6", "rel-b");
+    await releaseStuckPayment(manager, h.sessionId, later());
+    await settleAtCounter(manager, { sessionId: h.sessionId, method: "cash", receivedPaise: bill.totalPaise });
+    expect((await env.db.select().from(s.bills).where(eq(s.bills.id, bill.id)))[0].status).toBe("paid");
+    await lateSuccess(start);
+    expect((await shares(bill.id)).reduce((n, x) => n + x.paidPaise, 0)).toBe(bill.totalPaise);
+    const refunds = await env.db.select().from(s.refunds).where(eq(s.refunds.paymentId, start.paymentId));
+    expect(refunds.map((r) => r.amountPaise)).toEqual([start.totalPaise]);
+    expect((await env.db.select().from(s.payments).where(eq(s.payments.id, start.paymentId)))[0].status).toBe("success");
+    // The same gateway message arriving again changes nothing
+    await lateSuccess(start);
+    expect(await env.db.select().from(s.refunds).where(eq(s.refunds.paymentId, start.paymentId))).toHaveLength(1);
+  });
+
+  it("keeps a payment that succeeds at the very moment of the release: it ends as paid, never as released", async () => {
+    const { h, start, bill } = await stuckAt("T7", "rel-c");
+    const [released] = await Promise.all([releaseStuckPayment(manager, h.sessionId, later()), lateSuccess(start)]);
+    expect([true, false]).toContain(released.released);
+    expect((await env.db.select().from(s.payments).where(eq(s.payments.id, start.paymentId)))[0].status).toBe("success");
+    expect((await shares(bill.id)).reduce((n, x) => n + x.paidPaise, 0)).toBe(bill.totalPaise);
+    expect(await env.db.select().from(s.refunds).where(eq(s.refunds.paymentId, start.paymentId))).toHaveLength(0);
+  });
+
+  it("is refused to anyone below manager, and too early", async () => {
+    const { h } = await stuckAt("T8", "rel-d");
+    const cashier = (await resolveStaff((await signInStaff({ outletCode: "SRJ01", phone: "9000000003", pin: "3333" })).token))!;
+    const denied = await releaseStuckPayment(cashier, h.sessionId, later()).catch((e: unknown) => e);
+    expect(denied).toBeInstanceOf(AppError);
+    const early = await releaseStuckPayment(manager, h.sessionId).catch((e: unknown) => e);
+    expect((early as AppError).details?.reason).toBe("too_soon");
+    expect((await env.db.select().from(s.payments).where(eq(s.payments.billId, (await env.db.select().from(s.bills).where(eq(s.bills.sessionId, h.sessionId)))[0].id)))[0].status).toBe("pending");
+  });
+});
+

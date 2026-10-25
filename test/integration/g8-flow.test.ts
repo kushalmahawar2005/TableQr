@@ -9,6 +9,7 @@ import {
   confirmPayment,
   executeRefund,
   markPaidAndLeft,
+  reconcilePayment,
   reconcilePendingPayments,
   reopenBill,
   requestBill,
@@ -315,7 +316,7 @@ describe("gateway webhooks", () => {
       type: "PAYMENT_SUCCESS_WEBHOOK",
       data: {
         order: { order_id: start.gatewayRef },
-        payment: { cf_payment_id: 908172635, payment_status: "SUCCESS", payment_amount: start.totalPaise / 100 },
+        payment: { cf_payment_id: 908172635, payment_status: "SUCCESS", payment_amount: start.totalPaise / 100, payment_currency: "INR" },
       },
     });
     const wrongSecretResponse = await cashfreeHook(raw, "tableqr_platform_secret_456");
@@ -387,7 +388,7 @@ describe("gateway webhooks", () => {
     const start = await startPayment(g.B, { method: "upi", requestId: rid(), callbackUrl: "https://restaurant.example/payment-return?p={paymentId}" });
     const forged = JSON.stringify({
       type: "PAYMENT_SUCCESS_WEBHOOK",
-      data: { order: { order_id: start.gatewayRef }, payment: { cf_payment_id: 555000111, payment_status: "SUCCESS", payment_amount: start.totalPaise / 100 } },
+      data: { order: { order_id: start.gatewayRef }, payment: { cf_payment_id: 555000111, payment_status: "SUCCESS", payment_amount: start.totalPaise / 100, payment_currency: "INR" } },
     });
 
     expect((await cashfreeHook(forged, attackerSecret)).status).toBe(404);
@@ -468,6 +469,31 @@ describe("attempts left open for more than a day", () => {
     await env.db.update(s.payments).set({ createdAt: twoDaysAgo }).where(eq(s.payments.id, row.id));
     await reconcilePendingPayments({ tenantId: g.A.tenantId, outletId: g.A.outletId });
     expect((await env.db.select().from(s.payments).where(eq(s.payments.id, row.id)))[0]).toMatchObject({ status: "failed", failureReason: "Cancelled before paying" });
+  });
+
+  it("are checked a few per run and each at most once an hour, however many are stuck", async () => {
+    await requestBill(scope());
+    const base = await startPayment(g.B, { method: "upi", requestId: rid() });
+    const [row] = await env.db.select().from(s.payments).where(eq(s.payments.id, base.paymentId));
+    const old = new Date(Date.now() - 48 * 60 * 60_000);
+    // The gateway has never heard of these orders, so its answer is "unknown" and they stay open
+    await env.db.update(s.payments).set({ status: "failed" }).where(eq(s.payments.id, row.id));
+    await env.db.insert(s.payments).values(Array.from({ length: 25 }, (_, i) => ({
+      tenantId: row.tenantId, outletId: row.outletId, billId: row.billId, allocations: [], method: row.method, channel: "mock",
+      gatewayRef: `mock_ghost_${i}`, amountPaise: 100, status: "pending" as const, clientRequestId: `ghost-${i}`, createdAt: old,
+    })));
+    const checked = async () => (await env.db.select().from(s.payments).where(eq(s.payments.status, "pending"))).filter((p) => p.checkedAt !== null).length;
+    const scopeOf = { tenantId: g.A.tenantId, outletId: g.A.outletId };
+    await reconcilePendingPayments(scopeOf);
+    expect(await checked()).toBe(20);
+    await reconcilePendingPayments(scopeOf);
+    expect(await checked()).toBe(25);
+    const spy = vi.spyOn(mockGateway, "fetchStatus");
+    await reconcilePendingPayments(scopeOf);
+    expect(spy).not.toHaveBeenCalled();
+    // An hour later they are asked again, still no more than 20 at a time
+    await reconcilePendingPayments(scopeOf, new Date(Date.now() + 61 * 60_000));
+    expect(spy.mock.calls.length).toBe(20);
   });
 
   it("are recorded as paid when the gateway says the guest did pay", async () => {
@@ -553,6 +579,57 @@ describe("payment webhooks under stress (phase 3B)", () => {
     expect((await settled(start.paymentId)).status).toBe("pending");
     expect((await hook(event)).status).toBe(200);
     expect((await settled(start.paymentId)).status).toBe("success");
+  });
+
+  it("never mark a payment paid in another currency, or in none, and tell staff", async () => {
+    await requestBill(scope());
+    const start = await startPayment(g.B, { method: "upi", requestId: rid() });
+    for (const [currency, id] of [["USD", "pay_usd"], ["", "pay_blank"]] as const) {
+      events = [];
+      const res = await hook({ kind: "payment", gatewayRef: start.gatewayRef!, gatewayPaymentId: id, status: "success", amountPaise: 46700, currency });
+      expect(res.status).toBe(200);
+      expect((await settled(start.paymentId)).status).toBe("failed");
+      expect((await settled(start.paymentId)).failureReason).toMatch(/Currency mismatch/);
+      expect(events.some((e) => e.type === "payment.stuck" && (e.data as { reason?: string } | undefined)?.reason === "amount_mismatch")).toBe(true);
+      const [share] = await env.db.select().from(s.billShares).where(eq(s.billShares.participantId, g.B.participantId));
+      expect(share.paidPaise).toBe(0);
+    }
+    const audits = await env.db.select().from(s.auditLog).where(eq(s.auditLog.action, "payment.amount_mismatch"));
+    expect(audits.length).toBeGreaterThanOrEqual(2);
+    expect(JSON.stringify(audits[0].after)).toContain("USD");
+    // The same order later confirmed in rupees is still recorded: the guest did pay
+    await hook({ kind: "payment", gatewayRef: start.gatewayRef!, gatewayPaymentId: "pay_inr", status: "success", amountPaise: 46700, currency: "INR" });
+    expect(await settled(start.paymentId)).toMatchObject({ status: "success", gatewayPaymentId: "pay_inr" });
+  });
+
+  it("applies the same currency check to the server-to-server status check", async () => {
+    await requestBill(scope());
+    const start = await startPayment(g.B, { method: "upi", requestId: rid() });
+    vi.spyOn(mockGateway, "fetchStatus").mockResolvedValueOnce({ status: "success", amountPaise: 46700, currency: "EUR", gatewayPaymentId: "pay_eur" } as never);
+    expect(await reconcilePayment({ tenantId: g.A.tenantId }, start.paymentId)).toBe("failed");
+    expect((await settled(start.paymentId)).status).toBe("failed");
+    const [share] = await env.db.select().from(s.billShares).where(eq(s.billShares.participantId, g.B.participantId));
+    expect(share.paidPaise).toBe(0);
+  });
+
+  it("record one capture and flag the other when the gateway reports two different payments on one order at once", async () => {
+    await requestBill(scope());
+    const start = await startPayment(g.B, { method: "upi", requestId: rid() });
+    const hit = (id: string): WebhookEvent => ({ kind: "payment", gatewayRef: start.gatewayRef!, gatewayPaymentId: id, status: "success", amountPaise: 46700 });
+    events = [];
+    await Promise.all([...Array.from({ length: 10 }, () => hook(hit("pay_A"))), ...Array.from({ length: 10 }, () => hook(hit("pay_B")))]);
+    const row = await settled(start.paymentId);
+    expect(row.status).toBe("success");
+    expect(["pay_A", "pay_B"]).toContain(row.gatewayPaymentId);
+    const [share] = await env.db.select().from(s.billShares).where(eq(s.billShares.participantId, g.B.participantId));
+    expect(share.paidPaise).toBe(46700);
+    const dup = await env.db.select().from(s.auditLog).where(eq(s.auditLog.action, "payment.duplicate_capture"));
+    expect(dup).toHaveLength(1);
+    expect((dup[0].after as { gatewayPaymentId: string }).gatewayPaymentId).not.toBe(row.gatewayPaymentId);
+    expect(events.filter((e) => e.type === "payment.stuck" && (e.data as { reason?: string } | undefined)?.reason === "duplicate_capture")).toHaveLength(1);
+    // The same duplicate delivered again is not flagged a second time
+    await hook(hit(dup[0].after ? (dup[0].after as { gatewayPaymentId: string }).gatewayPaymentId : "pay_A"));
+    expect(await env.db.select().from(s.auditLog).where(eq(s.auditLog.action, "payment.duplicate_capture"))).toHaveLength(1);
   });
 
   it("answer a webhook for an order it has never seen without changing anything", async () => {

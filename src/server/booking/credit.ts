@@ -3,6 +3,7 @@ import { and, eq, ne } from "drizzle-orm";
 import { db } from "@/db";
 import * as s from "@/db/schema";
 import { AppError } from "../errors";
+import { currencyAccepted } from "../payments/gateway";
 import { gatewayForOutletPayment } from "../payments/outlet-gateway";
 import { bookingByToken } from "./core";
 
@@ -34,7 +35,7 @@ export async function reconcileReservationCredit(provider: string, creditId: str
     await db.update(s.reservationCredits).set({ status: "failed", failureReason: "Cancelled", updatedAt: new Date() }).where(and(eq(s.reservationCredits.tenantId, credit.tenantId), eq(s.reservationCredits.id, creditId), ne(s.reservationCredits.status, "paid")));
     return true;
   }
-  if (status.status === "success" && status.amountPaise === credit.amountPaise) {
+  if (status.status === "success" && status.amountPaise === credit.amountPaise && currencyAccepted(status.currency)) {
     await db.transaction(async (tx) => { await tx.update(s.reservationCredits).set({ status: "paid", paidPaise: credit.amountPaise, gatewayPaymentId: status.gatewayPaymentId ?? null, updatedAt: new Date() }).where(and(eq(s.reservationCredits.tenantId, credit.tenantId), eq(s.reservationCredits.id, credit.id))); await tx.update(s.reservations).set({ creditPaidPaise: credit.amountPaise, creditStatus: "paid", updatedAt: new Date() }).where(and(eq(s.reservations.tenantId, credit.tenantId), eq(s.reservations.id, credit.reservationId))); });
   } else if (status.status === "failed") await db.update(s.reservationCredits).set({ status: "failed", failureReason: status.reason ?? "Payment failed", updatedAt: new Date() }).where(and(eq(s.reservationCredits.tenantId, credit.tenantId), eq(s.reservationCredits.id, credit.id)));
   return true;

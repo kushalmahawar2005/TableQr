@@ -4,6 +4,7 @@ import { db } from "@/db";
 import * as s from "@/db/schema";
 import { LOCK_THEN_READ } from "../db-types";
 import { AppError } from "../errors";
+import { currencyAccepted } from "../payments/gateway";
 import { gatewayForOutletPayment } from "../payments/outlet-gateway";
 import { deliveryCheckout, placePaidDeliveryOrder } from "./checkout";
 import { deliveryOutlet, priceDeliveryCart } from "./catalog";
@@ -12,7 +13,7 @@ function noPayment(message: string) {
   return new AppError("invalid_state", message, { reason: "delivery_payment" });
 }
 
-type DeliveryVerdict = { gatewayRef: string; status: "success" | "failed"; amountPaise: number; gatewayPaymentId?: string; reason?: string };
+type DeliveryVerdict = { gatewayRef: string; status: "success" | "failed"; amountPaise: number; currency?: string; gatewayPaymentId?: string; reason?: string };
 
 /** Creates or resumes a hosted checkout using only the restaurant's own merchant account. */
 export async function startDeliveryPayment(code: string, token: string, deviceId: string, callbackTemplate: string) {
@@ -66,7 +67,7 @@ export async function confirmDeliveryGatewayPayment(provider: string, verdict: D
 
   // Check current availability and price before creating a kitchen ticket. If either changed
   // while the guest was on the payment page, return the captured amount through the same merchant.
-  let canFulfil = verdict.amountPaise === row.totalPaise && !!verdict.gatewayPaymentId && row.status === "draft" && row.paymentMode === "gateway" && row.expiresAt > now;
+  let canFulfil = verdict.amountPaise === row.totalPaise && currencyAccepted(verdict.currency) && !!verdict.gatewayPaymentId && row.status === "draft" && row.paymentMode === "gateway" && row.expiresAt > now;
   if (canFulfil) {
     try {
       const [outletRow] = await db.select({ code: s.outlets.code }).from(s.outlets).where(and(eq(s.outlets.tenantId, row.tenantId), eq(s.outlets.id, row.outletId)));
@@ -152,7 +153,7 @@ async function reconcileRowPayment(row: typeof s.deliveryCheckouts.$inferSelect,
     if (!gateway) return row.paymentStatus;
     try {
       const result = await gateway.fetchStatus(row.gatewayRef);
-      if (result.status === "success" || result.status === "failed") await confirmDeliveryGatewayPayment(row.paymentProvider, { gatewayRef: row.gatewayRef, gatewayPaymentId: result.gatewayPaymentId, amountPaise: result.amountPaise, status: result.status, reason: result.reason }, now);
+      if (result.status === "success" || result.status === "failed") await confirmDeliveryGatewayPayment(row.paymentProvider, { gatewayRef: row.gatewayRef, gatewayPaymentId: result.gatewayPaymentId, amountPaise: result.amountPaise, currency: result.currency, status: result.status, reason: result.reason }, now);
     } catch { /* keep pending; a slow gateway never turns a payment into a failure */ }
   }
   const [fresh] = await db.select({ paymentStatus: s.deliveryCheckouts.paymentStatus }).from(s.deliveryCheckouts).where(and(eq(s.deliveryCheckouts.tenantId, row.tenantId), eq(s.deliveryCheckouts.id, row.id)));

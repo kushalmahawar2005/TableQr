@@ -33,6 +33,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ provider: 
         gatewayRef: event.gatewayRef,
         status: event.status,
         amountPaise: event.amountPaise,
+        currency: event.currency,
         gatewayPaymentId: event.gatewayPaymentId,
         reason: event.reason,
       });
@@ -40,6 +41,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ provider: 
         gatewayRef: event.gatewayRef,
         status: event.status,
         amountPaise: event.amountPaise,
+        currency: event.currency,
         gatewayPaymentId: event.gatewayPaymentId,
         reason: event.reason,
       });

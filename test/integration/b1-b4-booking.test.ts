@@ -14,8 +14,10 @@ import { estimateWait, joinPublicWaitlist, leavePublicWaitlist, publicWaitlistSt
 import { resetTestDb } from "./setup-db";
 
 let env: Awaited<ReturnType<typeof resetTestDb>>;
-const now = new Date(Date.now() + 24 * 3600_000);
-const date = serviceDate(now, "Asia/Kolkata");
+// Always midday in Jaipur tomorrow, whatever the clock says when the test runs: some tests ask
+// for slots at "now", and late in the evening there would be none left that day
+const date = serviceDate(new Date(Date.now() + 24 * 3600_000), "Asia/Kolkata");
+const now = new Date(`${date}T12:00:00+05:30`);
 
 beforeAll(async () => { env = await resetTestDb(); });
 afterAll(async () => { await env.conn.end(); await appDb.$client.end(); });

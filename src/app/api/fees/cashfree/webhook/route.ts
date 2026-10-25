@@ -23,6 +23,7 @@ export async function POST(request: Request) {
     const result = await settleCashfreeFeeByGatewayRef(event.gatewayRef, {
       status: event.status,
       amountPaise: event.amountPaise,
+      currency: event.currency,
       gatewayPaymentId: event.gatewayPaymentId,
       reason: event.reason,
     });

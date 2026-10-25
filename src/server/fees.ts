@@ -9,7 +9,7 @@ import { AppError } from "./errors";
 import { tenantFeatures } from "./plan";
 import type { StaffSession } from "./staff/auth";
 import { emailAdmin } from "./admin-alerts";
-import { platformGateway } from "./payments/gateway";
+import { currencyAccepted, PAYMENT_CURRENCY, platformGateway } from "./payments/gateway";
 import type { Checkout } from "@/lib/payments/checkout";
 
 // TableQR's own fees. Cashfree confirms online payments; an admin can still record an offline
@@ -207,7 +207,7 @@ export async function startFeePayment(
   return { id: payment.id, amountPaise: payment.amountPaise, checkout, replayed };
 }
 
-type FeeVerdict = { status: "success" | "failed"; amountPaise: number; gatewayPaymentId?: string; reason?: string };
+type FeeVerdict = { status: "success" | "failed"; amountPaise: number; currency?: string; gatewayPaymentId?: string; reason?: string };
 
 /** Applies a verified Cashfree result once. Success immediately activates/extends the plan. */
 async function settleCashfreeFee(id: string, verdict: FeeVerdict, now = new Date()) {
@@ -217,10 +217,11 @@ async function settleCashfreeFee(id: string, verdict: FeeVerdict, now = new Date
     if (!payment || payment.method !== "cashfree") return null;
     // One Cashfree order can take several attempts: an earlier failed or dropped attempt rejected
     // this payment, but a later capture of the full amount on the same order still counts
-    const lateCapture = payment.status === "rejected" && verdict.status === "success" && verdict.amountPaise === payment.amountPaise;
+    const lateCapture = payment.status === "rejected" && verdict.status === "success" && verdict.amountPaise === payment.amountPaise && currencyAccepted(verdict.currency);
     if (payment.status !== "claimed" && !lateCapture) return { status: payment.status, alreadyFinal: true } as const;
-    if (verdict.status === "failed" || verdict.amountPaise !== payment.amountPaise) {
-      const failureReason = verdict.status === "failed" ? verdict.reason ?? "Payment failed" : `Amount mismatch: expected ${payment.amountPaise}, got ${verdict.amountPaise}`;
+    const wrongCurrency = verdict.status === "success" && !currencyAccepted(verdict.currency);
+    if (verdict.status === "failed" || verdict.amountPaise !== payment.amountPaise || wrongCurrency) {
+      const failureReason = verdict.status === "failed" ? verdict.reason ?? "Payment failed" : wrongCurrency ? `Currency mismatch: expected ${PAYMENT_CURRENCY}` : `Amount mismatch: expected ${payment.amountPaise}, got ${verdict.amountPaise}`;
       await tx.update(s.feePayments).set({
         status: "rejected",
         gatewayPaymentId: verdict.gatewayPaymentId ?? null,
@@ -269,6 +270,7 @@ export async function reconcileCashfreeFee(id: string, now = new Date()) {
     return (await settleCashfreeFee(payment.id, {
       status: verdict.status,
       amountPaise: verdict.amountPaise,
+      currency: verdict.currency,
       gatewayPaymentId: verdict.gatewayPaymentId,
       reason: verdict.reason,
     }, now))?.status ?? null;

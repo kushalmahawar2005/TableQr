@@ -101,6 +101,18 @@ describe("fees paid by hand", () => {
     expect(payment).toEqual({ status: "confirmed", gatewayPaymentId: "cfpay_1", reference: "cfpay_1" });
   });
 
+  it("never activates a plan on a success in another currency, but a later success in rupees still does", async () => {
+    const amountPaise = (await monthlyFee(appDb, env.demo.tenantId)).totalPaise;
+    const id = uuidv7();
+    const gatewayRef = `cf_currency_${id}`;
+    await env.db.insert(s.feePayments).values({ id, tenantId: env.demo.tenantId, months: 1, amountPaise, method: "cashfree", clientRequestId: `req_${id}`, gatewayRef, status: "claimed", claimedBy: "Rohan Sharma" });
+    expect(await settleCashfreeFeeByGatewayRef(gatewayRef, { status: "success", amountPaise, currency: "USD", gatewayPaymentId: "cfpay_usd" })).toMatchObject({ status: "rejected" });
+    const [rejected] = await env.db.select({ reason: s.feePayments.failureReason }).from(s.feePayments).where(eq(s.feePayments.id, id));
+    expect(rejected.reason).toMatch(/Currency mismatch/);
+    expect(await settleCashfreeFeeByGatewayRef(gatewayRef, { status: "success", amountPaise, currency: "", gatewayPaymentId: "cfpay_none" })).toMatchObject({ status: "rejected", alreadyFinal: true });
+    expect(await settleCashfreeFeeByGatewayRef(gatewayRef, { status: "success", amountPaise, currency: "INR", gatewayPaymentId: "cfpay_inr" })).toMatchObject({ status: "confirmed", alreadyFinal: false });
+  });
+
   it("a success on a retry of the same Cashfree order still activates after an earlier attempt failed", async () => {
     const amountPaise = (await monthlyFee(appDb, env.demo.tenantId)).totalPaise;
     const id = uuidv7();
@@ -142,7 +154,7 @@ describe("fees paid by hand", () => {
           return new Response(JSON.stringify({ order_id: body.order_id }), { status: 200 });
         }
         if (String(url).includes("/payments")) {
-          return new Response(JSON.stringify([{ cf_payment_id: 99, payment_status: "SUCCESS", payment_amount: amountPaise / 100 }]), { status: 200 });
+          return new Response(JSON.stringify([{ cf_payment_id: 99, payment_status: "SUCCESS", payment_amount: amountPaise / 100, payment_currency: "INR" }]), { status: 200 });
         }
         return new Response(JSON.stringify({ payment_session_id: "session_1" }), { status: 200 });
       });

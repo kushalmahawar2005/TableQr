@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { vi, afterAll, beforeAll, describe, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { db as appDb } from "@/db";
 import * as s from "@/db/schema";
@@ -102,6 +102,25 @@ describe("verified delivery checkout", () => {
     expect(bill.totalPaise).toBe(created.quote.totalPaise);
     expect(payment).toMatchObject({ status: "success", channel: "mock", gatewayRef, amountPaise: created.quote.totalPaise });
     expect((await deliveryStatus("SRJ01", created.token, gatewayDevice)).paid).toBe(true);
+  });
+
+  it("never places a prepaid delivery on a payment the gateway reports in another currency, and gives the money back", async () => {
+    const device = "delivery-currency-device";
+    await env.db.update(s.outlets).set({ deliveryPolicy: { ...DEFAULT_DELIVERY_POLICY, acceptingOrders: true, pincodes: ["302001"], deliveryFeePaise: 3000, paymentMode: "gateway" } }).where(eq(s.outlets.id, env.demo.outletId));
+    const created = await createDeliveryCheckout("SRJ01", device, { lines: [{ itemId: env.demo.itemIds["Dal Makhani"], qty: 1, modifierIds: [] }], address });
+    const otp = await sendDeliveryOtp("SRJ01", created.token, device, "9876543299");
+    await verifyDeliveryOtp("SRJ01", created.token, device, otp.challengeId, otp.devCode!, "Mira");
+    const started = await startDeliveryPayment("SRJ01", created.token, device, "https://tableqr.test/api/delivery/payments/return?c={checkoutId}");
+    const gatewayRef = started.checkout.kind === "form" ? started.checkout.fields.ref : "";
+    mockGateway.settle(gatewayRef, "success");
+    const real = await mockGateway.fetchStatus(gatewayRef);
+    vi.spyOn(mockGateway, "fetchStatus").mockResolvedValue({ ...real, currency: "USD" } as never);
+    const result = await reconcileDeliveryPayment("SRJ01", created.token, device);
+    vi.restoreAllMocks();
+    expect(result).not.toBe("paid");
+    const after = await deliveryCheckout("SRJ01", created.token, device);
+    expect(after.row.sessionId).toBeNull();
+    expect(after.row.paymentStatus).toMatch(/refund/);
   });
 
   it("holds restaurant QR delivery until staff verifies the UPI reference, then records payment and releases one kitchen order", async () => {
