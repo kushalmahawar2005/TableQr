@@ -62,6 +62,28 @@ describe("B1-B4 final credit and security evidence", () => {
     expect((await env.db.select().from(s.bills).where(eq(s.bills.bookingCreditReservationId, r.id)))).toHaveLength(0);
   });
 
+  it("a cancel link cannot undo a paid advance, and only closes one the gateway never saw paid", async () => {
+    const cb = "http://localhost:3000/api/booking-credit/return?provider=mock&p=PLACEHOLDER";
+    const paid = await hold("cancel-paid", 26, true);
+    const a = await startReservationCredit("SRJ01", paid.manageToken, "cancel-paid-req", cb);
+    mockGateway.settle(a.gatewayRef!, "success");
+    await reconcileReservationCredit("mock", a.creditId!);
+    await reconcileReservationCredit("mock", a.creditId!, true);
+    expect((await env.db.select().from(s.reservationCredits).where(eq(s.reservationCredits.id, a.creditId!)))[0].status).toBe("paid");
+
+    // The guest tapped Cancel after the bank had already taken the money: the payment still counts
+    const raced = await hold("cancel-raced", 30, true);
+    const b = await startReservationCredit("SRJ01", raced.manageToken, "cancel-raced-req", cb);
+    mockGateway.settle(b.gatewayRef!, "success");
+    await reconcileReservationCredit("mock", b.creditId!, true);
+    expect((await env.db.select().from(s.reservationCredits).where(eq(s.reservationCredits.id, b.creditId!)))[0].status).toBe("paid");
+
+    const never = await hold("cancel-never", 34, true);
+    const c = await startReservationCredit("SRJ01", never.manageToken, "cancel-never-req", cb);
+    await reconcileReservationCredit("mock", c.creditId!, true);
+    expect((await env.db.select().from(s.reservationCredits).where(eq(s.reservationCredits.id, c.creditId!)))[0].status).toBe("failed");
+  });
+
   it("ignores a client-forged credit amount", async () => {
     const h = await hold("forged", 6, true); const forgedStart = startReservationCredit as unknown as (outlet: string, token: string, request: string, callback: string, extra: { amountPaise: number }) => Promise<{ paid: false; creditId: string; checkout: { fields: Record<string, string> } }>; const checkout = await forgedStart("SRJ01", h.manageToken, "forged-payment", "http://localhost:3000/api/booking-credit/return?provider=mock&p=PLACEHOLDER", { amountPaise: 1 });
     const [c] = await env.db.select().from(s.reservationCredits).where(eq(s.reservationCredits.id, checkout.creditId!));

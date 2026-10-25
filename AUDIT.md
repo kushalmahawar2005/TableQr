@@ -50,7 +50,7 @@ Findings go under the part as `- [ ] finding` and are ticked when fixed with the
   - [x] Receipt (POS bill/receipt print) has no GSTIN, FSSAI or invoice number; required for a GST-registered restaurant.
   - [x] Invoice numbers looked like `SRJ01/26-27/000001` (18 characters); GST allows 16. New invoices (owner chose: from now) are `SRJ01/26/000001`; a long outlet code drops separators, then shortens. The serial continues.
   - [x] An outlet with no GSTIN still charged GST on its bills. Fixed (owner chose "no GSTIN, no GST"): dishes sell at 0% and open bills drop their tax until a GSTIN is set; Settings says so.
-- [ ] **A7. Day close** — `/console/reports/day-close`: totals match bills and payments; print.
+- [x] **A7. Day close** — `/console/reports/day-close`: totals match bills and payments; print.
   - [x] Restaurants open past midnight: orders after 12 am land on the next calendar day. Needs a business-day cutoff setting.
 
 ### B. Guest side (what customers see)
@@ -63,6 +63,7 @@ Checked 25 Oct: review boards g1-g7 and b1-b4 render at 360 px with no horizonta
 - [ ] **B3. Menu, item sheet and cart** — `/menu`, `/menu/item/[id]`, `/cart`: categories, photos, modifiers, veg filter, sold-out, outlet prices, order note, Hindi.
 - [ ] **B4. Placing orders and order tracker** — `/orders`, `/table`: rounds, repeat order, cancellations, waiter call, realtime updates.
 - [ ] **B5. Table booking** — `/book`, `/book/details`, `/book/confirmed`, `/book/manage/[token]`, `/b/[token]`: slots, advance payment (gateway and restaurant QR), preorder, cancel, reschedule.
+  - [x] A cancel link (`cancelled=1`) marked a booking advance as failed with no check, even a paid one. It now never touches a paid, used, returned or kept advance and closes one only when the gateway confirms no payment was attempted.
 - [ ] **B6. Delivery** — `/r/[outlet]/delivery`: area/pincode, COD, prepay (Cashfree and restaurant QR), rider tracking, closed hours.
   - [x] Delivery and COD server code not yet reviewed line by line (P5).
   - [x] No way to cancel a placed delivery order. Owner or manager can now Cancel order (with a reason) on Delivery orders: items stop, the counter closes, anything paid is refunded through the normal refund path, repeating is harmless.

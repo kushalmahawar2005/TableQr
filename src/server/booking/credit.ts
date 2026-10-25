@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import { db } from "@/db";
 import * as s from "@/db/schema";
 import { AppError } from "../errors";
@@ -26,8 +26,14 @@ export async function reconcileReservationCredit(provider: string, creditId: str
   const [credit] = await db.select().from(s.reservationCredits).where(eq(s.reservationCredits.id, creditId));
   if (!credit) return false;
   const gateway = await gatewayForOutletPayment(credit.tenantId, credit.outletId, provider); if (!gateway) return false;
-  if (cancelled) { await db.update(s.reservationCredits).set({ status: "failed", failureReason: "Cancelled", updatedAt: new Date() }).where(and(eq(s.reservationCredits.tenantId, credit.tenantId), eq(s.reservationCredits.id, creditId))); return true; }
+  // A credit that was paid, used, returned or kept is final; a browser link cannot change it
+  if (["paid", "applied", "refunded", "forfeited"].includes(credit.status)) return true;
   const status = await gateway.fetchStatus(credit.gatewayRef ?? "");
+  // The guest came back saying cancel: close it only when the gateway confirms nothing was attempted
+  if (cancelled && status.status === "none") {
+    await db.update(s.reservationCredits).set({ status: "failed", failureReason: "Cancelled", updatedAt: new Date() }).where(and(eq(s.reservationCredits.tenantId, credit.tenantId), eq(s.reservationCredits.id, creditId), ne(s.reservationCredits.status, "paid")));
+    return true;
+  }
   if (status.status === "success" && status.amountPaise === credit.amountPaise) {
     await db.transaction(async (tx) => { await tx.update(s.reservationCredits).set({ status: "paid", paidPaise: credit.amountPaise, gatewayPaymentId: status.gatewayPaymentId ?? null, updatedAt: new Date() }).where(and(eq(s.reservationCredits.tenantId, credit.tenantId), eq(s.reservationCredits.id, credit.id))); await tx.update(s.reservations).set({ creditPaidPaise: credit.amountPaise, creditStatus: "paid", updatedAt: new Date() }).where(and(eq(s.reservations.tenantId, credit.tenantId), eq(s.reservations.id, credit.reservationId))); });
   } else if (status.status === "failed") await db.update(s.reservationCredits).set({ status: "failed", failureReason: status.reason ?? "Payment failed", updatedAt: new Date() }).where(and(eq(s.reservationCredits.tenantId, credit.tenantId), eq(s.reservationCredits.id, credit.id)));
