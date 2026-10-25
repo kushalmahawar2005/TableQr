@@ -215,7 +215,10 @@ async function settleCashfreeFee(id: string, verdict: FeeVerdict, now = new Date
     // isolation-exempt: the signed Cashfree webhook or authenticated owner return supplies the opaque payment id.
     const [payment] = await tx.select().from(s.feePayments).where(eq(s.feePayments.id, id)).for("update");
     if (!payment || payment.method !== "cashfree") return null;
-    if (payment.status !== "claimed") return { status: payment.status, alreadyFinal: true } as const;
+    // One Cashfree order can take several attempts: an earlier failed or dropped attempt rejected
+    // this payment, but a later capture of the full amount on the same order still counts
+    const lateCapture = payment.status === "rejected" && verdict.status === "success" && verdict.amountPaise === payment.amountPaise;
+    if (payment.status !== "claimed" && !lateCapture) return { status: payment.status, alreadyFinal: true } as const;
     if (verdict.status === "failed" || verdict.amountPaise !== payment.amountPaise) {
       const failureReason = verdict.status === "failed" ? verdict.reason ?? "Payment failed" : `Amount mismatch: expected ${payment.amountPaise}, got ${verdict.amountPaise}`;
       await tx.update(s.feePayments).set({
@@ -256,7 +259,8 @@ export async function reconcileCashfreeFee(id: string, now = new Date()) {
   // isolation-exempt: the return URL contains the opaque payment id created for this checkout.
   const [payment] = await db.select().from(s.feePayments).where(eq(s.feePayments.id, id));
   if (!payment || payment.method !== "cashfree") return null;
-  if (payment.status !== "claimed" || !payment.gatewayRef) return payment.status;
+  // A rejected attempt is asked again too: the owner may have paid on a retry of the same order
+  if (!["claimed", "rejected"].includes(payment.status) || !payment.gatewayRef) return payment.status;
   const gateway = platformGateway();
   if (!gateway) return payment.status;
   const verdict = await gateway.fetchStatus(payment.gatewayRef);
@@ -269,7 +273,7 @@ export async function reconcileCashfreeFee(id: string, now = new Date()) {
       reason: verdict.reason,
     }, now))?.status ?? null;
   }
-  return "claimed" as const;
+  return payment.status === "rejected" ? ("rejected" as const) : ("claimed" as const);
 }
 
 /** The admin found the money in the bank: the claim adds its months */

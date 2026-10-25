@@ -101,6 +101,19 @@ describe("fees paid by hand", () => {
     expect(payment).toEqual({ status: "confirmed", gatewayPaymentId: "cfpay_1", reference: "cfpay_1" });
   });
 
+  it("a success on a retry of the same Cashfree order still activates after an earlier attempt failed", async () => {
+    const amountPaise = (await monthlyFee(appDb, env.demo.tenantId)).totalPaise;
+    const id = uuidv7();
+    const gatewayRef = `cf_retry_${id}`;
+    await env.db.insert(s.feePayments).values({ id, tenantId: env.demo.tenantId, months: 1, amountPaise, method: "cashfree", clientRequestId: `req_${id}`, gatewayRef, status: "claimed", claimedBy: "Rohan Sharma" });
+    expect(await settleCashfreeFeeByGatewayRef(gatewayRef, { status: "failed", amountPaise: 0, gatewayPaymentId: "cfpay_a", reason: "Card declined" })).toMatchObject({ status: "rejected" });
+    // A short payment is never a late capture
+    expect(await settleCashfreeFeeByGatewayRef(gatewayRef, { status: "success", amountPaise: amountPaise - 100, gatewayPaymentId: "cfpay_x" })).toMatchObject({ status: "rejected", alreadyFinal: true });
+    expect(await settleCashfreeFeeByGatewayRef(gatewayRef, { status: "success", amountPaise, gatewayPaymentId: "cfpay_b" })).toMatchObject({ status: "confirmed", alreadyFinal: false });
+    const [payment] = await env.db.select({ status: s.feePayments.status, gatewayPaymentId: s.feePayments.gatewayPaymentId, failureReason: s.feePayments.failureReason }).from(s.feePayments).where(eq(s.feePayments.id, id));
+    expect(payment).toEqual({ status: "confirmed", gatewayPaymentId: "cfpay_b", failureReason: null });
+  });
+
   describe("Cashfree checkout", () => {
     afterEach(() => {
       vi.unstubAllGlobals();

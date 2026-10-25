@@ -39,9 +39,13 @@ Findings go under the part as `- [ ] finding` and are ticked when fixed with the
   - [x] The mock checkout got a return address with an unreplaced placeholder.
   - [x] An online attempt nobody paid (webhook lost, guest never came back) stayed open after the minute re-check's 1-hour window, blocking reopen and paid-and-left until a manager released it. The re-check now looks back 24 hours and closes attempts the gateway has no payment for after 30 minutes, and ones that never reached the gateway after 10.
 - [ ] **A2. Counter billing (POS)** — `/pos`, `/console/billing`: discounts, add items after bill asked, cash change, card/UPI, takeaway, bill/receipt print, reopen bill.
-- [ ] **A3. Refunds** — staff refund flow, gateway refund webhooks, counter refunds, overpayment refunds.
-- [ ] **A4. Payment webhooks and reconciliation** — `/api/payments/*`, `/api/fees/*`, minute re-check, amount checks, replay safety. *(Cross-outlet forged webhook fixed in `3b60206`.)*
+  - [x] Server checked: roles, request ids, cash change, add-items-after-bill-asked, discounts locked once money moves.
+  - [ ] A cashier can give up to 100% discount with only a reason, no manager approval. Needs the owner's decision (approval above a limit?).
+- [x] **A3. Refunds** — staff refund flow, gateway refund webhooks, counter refunds, overpayment refunds.
+- [x] **A4. Payment webhooks and reconciliation** — `/api/payments/*`, `/api/fees/*`, minute re-check, amount checks, replay safety. *(Cross-outlet forged webhook fixed in `3b60206`.)*
 - [ ] **A5. TableQR fees and plans** — `/console/plan`, admin Fees, Cashfree subscription, UPI-reference fees, trial, grace days, pause and unlock.
+  - [x] A plan fee paid on a retry of the same Cashfree order (after an earlier attempt failed) was ignored: money taken, plan not extended. A later full capture now confirms it.
+  - [ ] Trial, grace days, pause and unlock not yet reviewed.
 - [ ] **A6. Invoices and GST** — invoice numbering per financial year, tax invoice vs receipt, GST report, Excel export.
   - [x] Receipt (POS bill/receipt print) has no GSTIN, FSSAI or invoice number; required for a GST-registered restaurant.
   - [x] An outlet with no GSTIN still charged GST on its bills. Fixed (owner chose "no GSTIN, no GST"): dishes sell at 0% and open bills drop their tax until a GSTIN is set; Settings says so.
