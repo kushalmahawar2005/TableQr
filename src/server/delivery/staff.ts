@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, notInArray } from "drizzle-orm";
 import { db } from "@/db";
 import * as s from "@/db/schema";
 import { LOCK_THEN_READ } from "../db-types";
@@ -7,6 +7,10 @@ import { AppError } from "../errors";
 import { audit } from "../staff/audit";
 import type { StaffSession } from "../staff/auth";
 import { requireStaffRole } from "../staff/waiter";
+import { requestRefund } from "../billing/refunds";
+import { publish } from "../realtime/publish";
+import { topics } from "../realtime/token";
+import { releaseVisitTables } from "../floor/assignments";
 
 export const deliveryStaffRoles = ["owner", "manager", "cashier"] as const;
 export async function deliveryQueue(staff: StaffSession) {
@@ -76,4 +80,51 @@ export async function advanceDelivery(staff: StaffSession, id: string, next: "di
     await tx.update(s.deliveryCheckouts).set({ status: next }).where(and(eq(s.deliveryCheckouts.tenantId, staff.tenantId), eq(s.deliveryCheckouts.id, row.id)));
     await audit(tx, staff, { action: `delivery.${next}`, entity: "delivery", entityId: row.id, before: { status: row.status }, after: { status: next }, now });
   }, LOCK_THEN_READ);
+}
+
+/**
+ * The restaurant cannot deliver (customer unreachable, kitchen out of stock): cancels the order,
+ * stops its kitchen items, closes its hidden counter, and sends back whatever was already paid
+ * through the normal refund path. Owner or manager only; safe to repeat.
+ */
+export async function cancelDeliveryOrder(staff: StaffSession, id: string, rawReason: unknown, now = new Date()) {
+  await requireStaffRole(staff, ["owner", "manager"]);
+  const reason = String(rawReason ?? "").trim().slice(0, 200);
+  if (reason.length < 3) throw new AppError("invalid_state", "Write why this delivery is cancelled.", { reason: "reason" });
+  const scope = { tenantId: staff.tenantId, outletId: staff.outletId };
+  const found = await db.transaction(async tx => {
+    const [row] = await tx.select().from(s.deliveryCheckouts)
+      .where(and(eq(s.deliveryCheckouts.tenantId, scope.tenantId), eq(s.deliveryCheckouts.outletId, scope.outletId), eq(s.deliveryCheckouts.id, String(id)))).for("update");
+    if (!row?.sessionId) throw new AppError("not_found", "Delivery order not found.");
+    if (row.status === "cancelled") return { sessionId: row.sessionId, tableId: null as string | null, replayed: true };
+    if (row.status === "delivered") throw new AppError("invalid_state", "This order was already delivered. Refund it from Billing instead.", { reason: "delivered" });
+    if (row.status !== "placed" && row.status !== "dispatched") throw new AppError("invalid_state", "This delivery order cannot be cancelled.");
+    const [session] = await tx.select({ tableId: s.tableSessions.tableId }).from(s.tableSessions)
+      .where(and(eq(s.tableSessions.tenantId, scope.tenantId), eq(s.tableSessions.id, row.sessionId))).for("update");
+    await tx.update(s.orderLines).set({ status: "cancelled" })
+      .where(and(eq(s.orderLines.tenantId, scope.tenantId), eq(s.orderLines.sessionId, row.sessionId), notInArray(s.orderLines.status, ["cancelled", "voided"])));
+    await tx.update(s.deliveryCheckouts).set({ status: "cancelled" })
+      .where(and(eq(s.deliveryCheckouts.tenantId, scope.tenantId), eq(s.deliveryCheckouts.id, row.id)));
+    if (session) {
+      await tx.update(s.tableSessions).set({ status: "closed", openKey: null, closedAt: now })
+        .where(and(eq(s.tableSessions.tenantId, scope.tenantId), eq(s.tableSessions.id, row.sessionId)));
+      await releaseVisitTables(tx, scope.tenantId, row.sessionId, now);
+      await tx.update(s.diningTables).set({ state: "available", stateChangedAt: now })
+        .where(and(eq(s.diningTables.tenantId, scope.tenantId), eq(s.diningTables.id, session.tableId)));
+    }
+    await audit(tx, staff, { action: "delivery.cancelled", entity: "delivery", entityId: row.id, before: { status: row.status }, after: { status: "cancelled" }, reason, now });
+    return { sessionId: row.sessionId, tableId: session?.tableId ?? null, replayed: false };
+  }, LOCK_THEN_READ);
+
+  // Everything paid goes back through the ordinary refund flow: one refund per payment, repeatable
+  const payments = await db.select({ id: s.payments.id, amountPaise: s.payments.amountPaise, tipPaise: s.payments.tipPaise })
+    .from(s.payments).innerJoin(s.bills, and(eq(s.bills.tenantId, s.payments.tenantId), eq(s.bills.id, s.payments.billId)))
+    .where(and(eq(s.payments.tenantId, scope.tenantId), eq(s.bills.sessionId, found.sessionId), eq(s.payments.status, "success")));
+  const refunds: { paymentId: string; status: string }[] = [];
+  for (const p of payments) {
+    const r = await requestRefund(staff, { paymentId: p.id, amountPaise: p.amountPaise + p.tipPaise, reason: `Delivery cancelled: ${reason}`, requestId: `dc-${p.id}` }, now);
+    refunds.push({ paymentId: p.id, status: r.status });
+  }
+  await publish(scope, [{ topic: topics.floor, type: "delivery.cancelled", data: { sessionId: found.sessionId } }, { topic: topics.kitchen, type: "ticket.updated", data: { sessionId: found.sessionId } }]);
+  return { sessionId: found.sessionId, refunds, replayed: found.replayed };
 }

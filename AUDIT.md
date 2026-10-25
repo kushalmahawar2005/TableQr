@@ -65,7 +65,7 @@ Checked 25 Oct: review boards g1-g7 and b1-b4 render at 360 px with no horizonta
 - [ ] **B5. Table booking** — `/book`, `/book/details`, `/book/confirmed`, `/book/manage/[token]`, `/b/[token]`: slots, advance payment (gateway and restaurant QR), preorder, cancel, reschedule.
 - [ ] **B6. Delivery** — `/r/[outlet]/delivery`: area/pincode, COD, prepay (Cashfree and restaurant QR), rider tracking, closed hours.
   - [x] Delivery and COD server code not yet reviewed line by line (P5).
-  - [ ] No way to cancel a placed delivery order (customer unreachable, cannot deliver); a paid one then needs a manual refund from Billing. Add Cancel with automatic refund.
+  - [x] No way to cancel a placed delivery order. Owner or manager can now Cancel order (with a reason) on Delivery orders: items stop, the counter closes, anything paid is refunded through the normal refund path, repeating is harmless.
   - [ ] Every delivery order adds a hidden dining-table row that is never removed; the table list grows without limit.
 - [ ] **B7. Room guest** — `/room/[code]`: room requests, Wi-Fi, food to room, per-order billing.
 - [ ] **B8. Waitlist** — `/r/[outlet]/waitlist`.
