@@ -33,7 +33,7 @@ describe("counter bill print", () => {
     expect(html).toContain("<b>RECEIPT</b>");
     expect(html).not.toContain("GSTIN");
     expect(html).not.toContain("CGST");
-    expect(html).toContain("<span>Tax</span>");
+    expect(html).toContain("<span>GST 5%</span>");
   });
 
   it("calls an unpaid bill a bill, without an invoice number", () => {

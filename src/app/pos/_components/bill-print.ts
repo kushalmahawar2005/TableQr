@@ -1,4 +1,4 @@
-import { splitTax } from "@/domain/gst";
+import { addressLine, mergeLines, taxRows } from "@/domain/invoice-view";
 import type { PosBillDetail } from "@/server/staff/pos-read";
 
 const esc = (v: string) => v.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
@@ -8,7 +8,11 @@ const when = (ms: number) => new Intl.DateTimeFormat("en-IN", { day: "numeric", 
 
 /** A bill or a receipt that fits an 80 mm thermal roll and still prints fine on A4. */
 export function billHtml(d: PosBillDetail, outlet: string, kind: "bill" | "receipt") {
-  const lines = d.lines.filter((l) => l.status !== "voided" && l.status !== "cancelled");
+  const lines = mergeLines(
+    d.lines.filter((l) => l.status !== "voided" && l.status !== "cancelled")
+      .map((l) => ({ name: l.name, qty: l.qty, unitPricePaise: l.unitPricePaise, amountPaise: l.qty * l.unitPricePaise, note: l.note, parcel: !!l.note && /parcel|pack/i.test(l.note) })),
+    (l) => `${l.name}|${l.unitPricePaise}|${l.parcel}`,
+  );
   const paid = d.payments.filter((p) => p.status === "success");
   const paidTotal = paid.reduce((n, p) => n + p.amountPaise + p.tipPaise, 0);
   const b = d.bill;
@@ -23,15 +27,8 @@ export function billHtml(d: PosBillDetail, outlet: string, kind: "bill" | "recei
   const gstin = seller?.gstin?.trim() || null;
   // A paid bill with an invoice is a tax invoice when the restaurant is GST registered, else a receipt
   const title = kind === "bill" ? "BILL" : d.invoice && gstin ? "TAX INVOICE" : d.invoice ? "RECEIPT" : "PAYMENT RECEIPT";
-  const half = (bp: number) => `${(bp / 200).toFixed(2).replace(/\.?0+$/, "")}%`;
-  // GST-registered bills show CGST and SGST per rate; the halves always add up to the tax
-  const taxRows = (bill: NonNullable<typeof b>) => {
-    if (!gstin) return row("Tax", rs(bill.taxPaise));
-    const rates = Object.entries(bill.taxBreakup ?? {}).map(([bp, tax]) => [Number(bp), tax] as const).filter(([bp, tax]) => bp > 0 && tax > 0).sort((x, y) => x[0] - y[0]);
-    if (!rates.length) return bill.taxPaise ? row("CGST", rs(splitTax(bill.taxPaise).cgst)) + row("SGST", rs(splitTax(bill.taxPaise).sgst)) : "";
-    return rates.map(([bp, tax]) => { const { cgst, sgst } = splitTax(tax); return row(`CGST ${half(bp)}`, rs(cgst)) + row(`SGST ${half(bp)}`, rs(sgst)); }).join("");
-  };
-  const address = [seller?.address, seller?.city].map((x) => x?.trim()).filter(Boolean).join(", ");
+  const tax = (bill: NonNullable<typeof b>) => taxRows(bill.taxBreakup, gstin, bill.taxPaise).map((t) => row(t.label, rs(t.paise))).join("");
+  const address = addressLine(seller?.address, seller?.city);
   return `<!doctype html><html><head><meta charset="utf-8"><title>${kind === "bill" ? "Bill" : "Receipt"} · Table ${esc(d.tableCode)}</title><style>
 @page{size:80mm ${paperHeight}mm;margin:0}
 *{box-sizing:border-box}
@@ -52,9 +49,9 @@ ${seller?.fssai?.trim() ? `<div class="c m">FSSAI: ${esc(seller.fssai.trim())}</
 ${kind === "receipt" && d.invoice ? `<div class="c m">No. ${esc(d.invoice.number)}</div>` : ""}
 <div class="c m">${d.takeaway ? "Takeaway" : "Table"} ${esc(d.tableCode)} · ${when(kind === "receipt" && d.invoice ? d.invoice.issuedAt : Date.now())}</div>
 <hr>
-${lines.map((l) => `<div class="it"><span class="q">${l.qty}×</span><span class="n">${esc(l.name)}${l.note && /parcel|pack/i.test(l.note) ? " (PARCEL)" : ""}</span><span class="p">${rs(l.qty * l.unitPricePaise)}</span></div>`).join("")}
+${lines.map((l) => `<div class="it"><span class="q">${l.qty}×</span><span class="n">${esc(l.name)}${l.parcel ? " (PARCEL)" : ""}</span><span class="p">${rs(l.amountPaise)}</span></div>`).join("")}
 <hr>
-${b ? row("Items", rs(b.subtotalPaise)) + (b.discountPaise ? row("Discount", "− " + rs(b.discountPaise)) : "") + (b.serviceChargePaise ? row("Service charge", rs(b.serviceChargePaise)) : "") + (b.deliveryFeePaise ? row("Delivery charge", rs(b.deliveryFeePaise)) : "") + taxRows(b) + (b.roundOffPaise ? row("Round off", rs(b.roundOffPaise)) : "") + row("TOTAL", rs(b.totalPaise), true) : ""}
+${b ? row("Items", rs(b.subtotalPaise)) + (b.discountPaise ? row("Discount", "− " + rs(b.discountPaise)) : "") + (b.serviceChargePaise ? row("Service charge", rs(b.serviceChargePaise)) : "") + (b.deliveryFeePaise ? row("Delivery charge", rs(b.deliveryFeePaise)) : "") + tax(b) +(b.roundOffPaise ? row("Round off", rs(b.roundOffPaise)) : "") + row("TOTAL", rs(b.totalPaise), true) : ""}
 ${kind === "receipt" && paid.length ? `<hr>${paid.map((p) => row(`Paid by ${METHOD[p.method] ?? p.method}`, rs(p.amountPaise + p.tipPaise))).join("")}${row("Total paid", rs(paidTotal), true)}` : ""}
 <hr>
 <div class="c m">Thank you for dining with us!</div>

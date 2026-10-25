@@ -1,5 +1,6 @@
 import "server-only";
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
+import { addressLine, dishKey, mergeLines, taxRows } from "@/domain/invoice-view";
 import type { SharedBill } from "./bill-link";
 
 // The bill as a small PDF on an 80 mm wide page, the way a thermal printer prints it. Built with
@@ -77,21 +78,21 @@ export async function billPdf(b: SharedBill): Promise<Uint8Array> {
   const gap = (h: number) => ops.push({ h, draw: () => h });
 
   text(b.outlet.name, { size: 12, f: bold, center: true });
-  text(`${b.outlet.address}, ${b.outlet.city}`, { size: 7.5, center: true, gray: true });
+  text(addressLine(b.outlet.address, b.outlet.city), { size: 7.5, center: true, gray: true });
   if (b.outlet.gstin) text(`GSTIN ${b.outlet.gstin}`, { size: 7.5, center: true, gray: true });
   if (b.outlet.fssai) text(`FSSAI ${b.outlet.fssai}`, { size: 7.5, center: true, gray: true });
   gap(3);
   text(TITLE[b.docType], { size: 9, f: bold, center: true });
   text([`Table ${b.table}`, b.number ? `No. ${b.number}` : "", when].filter(Boolean).join("  |  "), { size: 7.5, center: true, gray: true });
   rule();
-  for (const l of b.snap.lines) row(l.nameEn, rs(l.amountPaise), { qty: `${l.qty}x` });
+  for (const l of mergeLines(b.snap.lines, dishKey)) row(l.nameEn, rs(l.amountPaise), { qty: `${l.qty}x` });
   rule();
   const s = b.snap;
   row("Subtotal", rs(s.subtotalPaise));
   if (s.discountPaise > 0) row("Discount", rs(-s.discountPaise));
   if (s.deliveryFeePaise) row("Delivery charge", rs(s.deliveryFeePaise));
   if (s.serviceChargePaise > 0) row("Service charge", rs(s.serviceChargePaise));
-  for (const [bp, paise] of Object.entries(s.taxBreakup ?? {})) row(bp ? `GST ${Number(bp) / 100}%` : "GST", rs(paise));
+  for (const t of taxRows(s.taxBreakup, b.outlet.gstin)) row(t.label, rs(t.paise));
   if (s.roundOffPaise) row("Round off", rs(s.roundOffPaise));
   gap(2);
   row("TOTAL", rs(s.totalPaise), { size: 11, f: bold });

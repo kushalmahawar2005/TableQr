@@ -8,6 +8,7 @@ import { LANG_COOKIE, parseLang } from "@/lib/i18n";
 import { AppError } from "@/server/errors";
 import { getReceipt } from "@/server/guest/after-visit";
 import { billMessage } from "@/domain/bill-message";
+import { addressLine, dishKey, mergeLines, taxRows } from "@/domain/invoice-view";
 import { PrintButton, ShareButton } from "./print-button";
 
 export const metadata: Metadata = { title: "Receipt", robots: { index: false, follow: false } };
@@ -50,7 +51,7 @@ export default async function ReceiptPage(props: { params: Promise<{ outlet: str
       <article className="mt-2 rounded-guest border border-line bg-surface p-5">
         <p className="text-caption font-semibold tracking-wide text-muted uppercase">{inv ? w[inv.docType] : w.payment}</p>
         <h1 className="mt-1 font-display text-title font-bold">{r.outlet.name}</h1>
-        <p className="mt-1 text-caption text-muted">{r.outlet.address}, {r.outlet.city}</p>
+        <p className="mt-1 text-caption text-muted">{addressLine(r.outlet.address, r.outlet.city)}</p>
         {r.outlet.gstin && <p className="text-caption text-muted">{w.gstin} {r.outlet.gstin}</p>}
         {r.outlet.fssai && <p className="text-caption text-muted">{w.fssai} {r.outlet.fssai}</p>}
         <p className="mt-2 text-caption text-muted">
@@ -69,7 +70,7 @@ export default async function ReceiptPage(props: { params: Promise<{ outlet: str
                 </tr>
               </thead>
               <tbody>
-                {snap.lines.map((l, i) => (
+                {mergeLines(snap.lines, dishKey).map((l, i) => (
                   <tr key={i} className="align-top">
                     <td className="py-1 pr-2 break-words">{l.nameEn}</td>
                     <td className="py-1 text-right tabular">{l.qty}</td>
@@ -82,10 +83,10 @@ export default async function ReceiptPage(props: { params: Promise<{ outlet: str
               <div className={row}><dt className="text-muted">{w.subtotal}</dt><dd className="tabular">{rupees(snap.subtotalPaise)}</dd></div>
               {snap.discountPaise > 0 && <div className={row}><dt className="text-muted">{w.discount}</dt><dd className="tabular">−{rupees(snap.discountPaise)}</dd></div>}
               {snap.serviceChargePaise > 0 && <div className={row}><dt className="text-muted">{w.service}</dt><dd className="tabular">{rupees(snap.serviceChargePaise)}</dd></div>}
-              {Object.entries(snap.taxBreakup ?? {}).map(([bp, paise]) => (
-                <div key={bp} className={row}><dt className="text-muted">{w.gst(String(Number(bp) / 100))}</dt><dd className="tabular">{rupees(paise)}</dd></div>
+              {taxRows(snap.taxBreakup, r.outlet.gstin).map((t) => (
+                <div key={t.label} className={row}><dt className="text-muted">{t.label}</dt><dd className="tabular">{rupees(t.paise)}</dd></div>
               ))}
-              <div className={row}><dt className="text-muted">{w.roundOff}</dt><dd className="tabular">{snap.roundOffPaise < 0 ? "−" : ""}{rupees(snap.roundOffPaise)}</dd></div>
+              {snap.roundOffPaise !== 0 && <div className={row}><dt className="text-muted">{w.roundOff}</dt><dd className="tabular">{snap.roundOffPaise < 0 ? "−" : ""}{rupees(snap.roundOffPaise)}</dd></div>}
               <div className={`${row} border-t border-line pt-2 font-semibold`}><dt>{w.total}</dt><dd className="font-display text-section font-bold tabular">{rupees(snap.totalPaise)}</dd></div>
             </dl>
             <p className="mt-1 text-caption text-muted">{snap.totalInWords}</p>

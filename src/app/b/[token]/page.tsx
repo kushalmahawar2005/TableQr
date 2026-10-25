@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { addressLine, dishKey, mergeLines, taxRows } from "@/domain/invoice-view";
 import { formatINR } from "@/domain/money";
 import { sharedBill } from "@/server/billing/bill-link";
 
@@ -25,7 +26,7 @@ export default async function SharedBillPage(props: { params: Promise<{ token: s
       <article className="rounded-guest border border-line bg-surface p-5 print:border-0 print:p-0">
         <p className="text-caption font-semibold tracking-wide text-muted uppercase">{TITLE[b.docType]}</p>
         <h1 className="mt-1 font-display text-title font-bold">{b.outlet.name}</h1>
-        <p className="mt-1 text-caption text-muted">{b.outlet.address}, {b.outlet.city}</p>
+        <p className="mt-1 text-caption text-muted">{addressLine(b.outlet.address, b.outlet.city)}</p>
         {b.outlet.gstin && <p className="text-caption text-muted">GSTIN {b.outlet.gstin}</p>}
         {b.outlet.fssai && <p className="text-caption text-muted">FSSAI {b.outlet.fssai}</p>}
         <p className="mt-2 text-caption text-muted">
@@ -43,7 +44,7 @@ export default async function SharedBillPage(props: { params: Promise<{ token: s
             </tr>
           </thead>
           <tbody>
-            {snap.lines.map((l, i) => (
+            {mergeLines(snap.lines, dishKey).map((l, i) => (
               <tr key={i} className="align-top">
                 <td className="py-1 pr-2 break-words">{l.nameEn}</td>
                 <td className="py-1 text-right tabular">{l.qty}</td>
@@ -57,8 +58,8 @@ export default async function SharedBillPage(props: { params: Promise<{ token: s
           {snap.discountPaise > 0 && <div className={row}><dt className="text-muted">Discount</dt><dd className="tabular">−{rupees(snap.discountPaise)}</dd></div>}
           {!!snap.deliveryFeePaise && <div className={row}><dt className="text-muted">Delivery charge</dt><dd className="tabular">{rupees(snap.deliveryFeePaise)}</dd></div>}
           {snap.serviceChargePaise > 0 && <div className={row}><dt className="text-muted">Service charge</dt><dd className="tabular">{rupees(snap.serviceChargePaise)}</dd></div>}
-          {Object.entries(snap.taxBreakup ?? {}).map(([bp, paise]) => (
-            <div key={bp} className={row}><dt className="text-muted">{bp ? `GST ${Number(bp) / 100}%` : "GST"}</dt><dd className="tabular">{rupees(paise)}</dd></div>
+          {taxRows(snap.taxBreakup, b.outlet.gstin).map((t) => (
+            <div key={t.label} className={row}><dt className="text-muted">{t.label}</dt><dd className="tabular">{rupees(t.paise)}</dd></div>
           ))}
           {snap.roundOffPaise !== 0 && <div className={row}><dt className="text-muted">Round off</dt><dd className="tabular">{snap.roundOffPaise < 0 ? "−" : ""}{rupees(snap.roundOffPaise)}</dd></div>}
           <div className={`${row} border-t border-line pt-2 font-semibold`}><dt>Total</dt><dd className="font-display text-section font-bold tabular">{rupees(snap.totalPaise)}</dd></div>

@@ -9,7 +9,7 @@ Work top to bottom, one part at a time. Money and guest-facing parts come first 
 - [x] **P1.** POS bill/receipt print has no GSTIN, FSSAI or invoice number (A6). Fixed: paid GST bills print as a tax invoice with GSTIN, FSSAI, address, invoice number and CGST/SGST per rate.
 - [x] **P2.** Business-day cutoff so orders after midnight count in the right Day close and reports (A7, F5). Fixed: the cutoff comes from opening hours (an hour after the latest past-midnight closing, max 6 am); Day close, dashboard, reports and items report use it. GST stays on calendar dates.
 - [x] **P3.** 58 mm thermal printer support: paper-width setting for every slip (D4). Fixed: per-device Paper 80 mm / 58 mm choice on Billing, Day close and the KDS bar; 58 mm scales the slip to fit. Also fixed: slips whose estimated height had decimals never got fitted.
-- [ ] **P4.** Render and check the guest receipt print `/r/[outlet]/t/[table]/paid/receipt` (A1).
+- [x] **P4.** Render and check the guest receipt print `/r/[outlet]/t/[table]/paid/receipt` (A1). Done: prints on one A4 page. Fixed on all four bill documents (guest receipt, bill link, WhatsApp PDF, counter slip): city no longer repeated in the address, the same dish across rounds is one line, zero round-off hidden, GST-registered bills split CGST/SGST.
 - [ ] **P5.** Line-by-line review of delivery and COD: checkout, OTP, payment, dispatch, rider, refunds (B6, C6).
 - [ ] **P6.** Fix the flaky `billing-flow` `beforeAll` timeout (F8).
 - [ ] **P7.** Before launch, the owner removes `OTP_TEST_BYPASS` and `OTP_TEST_PHONE` in Hostinger hPanel (B2, F9). *Owner action.*
@@ -34,13 +34,14 @@ Findings go under the part as `- [ ] finding` and are ticked when fixed with the
 ### A. Money (highest risk)
 
 - [ ] **A1. Guest bill and online payment** — `/r/[outlet]/t/[table]/bill`, `/paid`, `/paid/receipt`, split shares, tips, pay for others, return from Cashfree, stuck payment.
-  - [ ] Guest receipt print not yet rendered and checked (P4).
+  - [x] Guest receipt print not yet rendered and checked (P4).
 - [ ] **A2. Counter billing (POS)** — `/pos`, `/console/billing`: discounts, add items after bill asked, cash change, card/UPI, takeaway, bill/receipt print, reopen bill.
 - [ ] **A3. Refunds** — staff refund flow, gateway refund webhooks, counter refunds, overpayment refunds.
 - [ ] **A4. Payment webhooks and reconciliation** — `/api/payments/*`, `/api/fees/*`, minute re-check, amount checks, replay safety. *(Cross-outlet forged webhook fixed in `3b60206`.)*
 - [ ] **A5. TableQR fees and plans** — `/console/plan`, admin Fees, Cashfree subscription, UPI-reference fees, trial, grace days, pause and unlock.
 - [ ] **A6. Invoices and GST** — invoice numbering per financial year, tax invoice vs receipt, GST report, Excel export.
   - [x] Receipt (POS bill/receipt print) has no GSTIN, FSSAI or invoice number; required for a GST-registered restaurant.
+  - [ ] An outlet with no GSTIN still charges GST on its bills (seen on a local outlet). A business without GST registration cannot collect GST: warn in Settings, or charge no tax until a GSTIN is set. Needs the owner's decision.
 - [ ] **A7. Day close** — `/console/reports/day-close`: totals match bills and payments; print.
   - [x] Restaurants open past midnight: orders after 12 am land on the next calendar day. Needs a business-day cutoff setting.
 
