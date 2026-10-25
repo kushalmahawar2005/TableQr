@@ -1,4 +1,5 @@
 "use server";
+import { friendlyError } from "@/server/friendly-error";
 
 import { currentStaff } from "@/server/staff/request";
 import { removeStaffPushSubscription, saveStaffPushSubscription, staffPushConfig, type PushSubscriptionInput } from "@/server/staff/web-push";
@@ -16,7 +17,7 @@ export async function savePushSubscriptionAction(subscription: PushSubscriptionI
     await saveStaffPushSubscription(staff, subscription);
     return { ok: true as const };
   } catch (error) {
-    return { ok: false as const, error: error instanceof Error ? error.message : "Could not enable notifications." };
+    return { ok: false as const, error: friendlyError(error, "Could not enable notifications.") };
   }
 }
 

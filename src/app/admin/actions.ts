@@ -1,4 +1,5 @@
 "use server";
+import { friendlyError } from "@/server/friendly-error";
 
 import { insertRoom } from "@/server/staff/rooms";
 import { and, eq } from "drizzle-orm";
@@ -139,7 +140,7 @@ export async function createTenantAction(_prev: TenantState, form: FormData): Pr
     await logAdminAction(admin, result.tenantId, "admin.tenant_created", null, { name: tenantName, planCode, outlet: result.outletCode });
     return { error: null, success: `Restaurant created. Owner can sign in at /console/login using outlet ${result.outletCode}.`, outletCode: result.outletCode };
   } catch (error) {
-    return { error: error instanceof Error ? error.message : "Restaurant could not be created.", success: null };
+    return { error: friendlyError(error, "Restaurant could not be created."), success: null };
   }
 }
 
@@ -167,7 +168,7 @@ export async function setTenantStatusAction(tenantId: string, status: "active" |
     revalidatePath("/admin");
     return { error: null };
   } catch (error) {
-    return { error: error instanceof Error ? error.message : "Tenant could not be updated." };
+    return { error: friendlyError(error, "Tenant could not be updated.") };
   }
 }
 
@@ -185,7 +186,7 @@ export async function extendTrialAction(tenantId: string, days: number): Promise
     revalidatePath("/admin");
     return { error: null };
   } catch (error) {
-    return { error: error instanceof Error ? error.message : "Trial could not be extended." };
+    return { error: friendlyError(error, "Trial could not be extended.") };
   }
 }
 
@@ -202,7 +203,7 @@ export async function recordFeePaymentAction(tenantId: string, input: { months: 
     revalidatePath("/admin");
     return { error: null };
   } catch (error) {
-    return { error: error instanceof Error ? error.message : "Payment could not be saved." };
+    return { error: friendlyError(error, "Payment could not be saved.") };
   }
 }
 
@@ -222,7 +223,7 @@ export async function confirmFeeAction(id: string): Promise<TenantActionState> {
     revalidatePath("/admin");
     return { error: null };
   } catch (error) {
-    return { error: error instanceof Error ? error.message : "Payment could not be confirmed." };
+    return { error: friendlyError(error, "Payment could not be confirmed.") };
   }
 }
 
@@ -235,7 +236,7 @@ export async function rejectFeeAction(id: string): Promise<TenantActionState> {
     revalidatePath("/admin");
     return { error: null };
   } catch (error) {
-    return { error: error instanceof Error ? error.message : "Payment could not be updated." };
+    return { error: friendlyError(error, "Payment could not be updated.") };
   }
 }
 
@@ -244,7 +245,7 @@ export async function getFeesAction(): Promise<{ data: FeesData | null; error: s
     await requirePlatformAdmin();
     return { data: await feesData(), error: null };
   } catch (error) {
-    return { data: null, error: error instanceof Error ? error.message : "Fees could not be loaded." };
+    return { data: null, error: friendlyError(error, "Fees could not be loaded.") };
   }
 }
 
@@ -264,7 +265,7 @@ export async function updateTenantAction(tenantId: string, form: { name: string;
     revalidatePath("/admin");
     return { error: null };
   } catch (error) {
-    return { error: error instanceof Error ? error.message : "Tenant could not be updated." };
+    return { error: friendlyError(error, "Tenant could not be updated.") };
   }
 }
 
@@ -285,7 +286,7 @@ export async function changeTenantPlanAction(tenantId: string, planCode: string)
     revalidatePath("/admin");
     return { error: null };
   } catch (error) {
-    return { error: error instanceof Error ? error.message : "Plan could not be changed." };
+    return { error: friendlyError(error, "Plan could not be changed.") };
   }
 }
 
@@ -328,7 +329,7 @@ export async function addOutletAction(tenantId: string, input: { name: string; c
     revalidatePath("/admin");
     return { error: null, outletCode };
   } catch (error) {
-    return { error: error instanceof Error ? error.message : "Outlet could not be added." };
+    return { error: friendlyError(error, "Outlet could not be added.") };
   }
 }
 
@@ -349,7 +350,7 @@ export async function setCustomPackageAction(tenantId: string, input: { features
     revalidatePath("/admin");
     return { error: null };
   } catch (error) {
-    return { error: error instanceof Error ? error.message : "Custom package could not be saved." };
+    return { error: friendlyError(error, "Custom package could not be saved.") };
   }
 }
 
@@ -366,7 +367,7 @@ export async function setRoleAccessAction(tenantId: string, access: unknown): Pr
     revalidatePath("/admin");
     return { error: null };
   } catch (error) {
-    return { error: error instanceof Error ? error.message : "Role access could not be saved." };
+    return { error: friendlyError(error, "Role access could not be saved.") };
   }
 }
 
@@ -381,7 +382,7 @@ export async function markPlanRequestDoneAction(requestId: string): Promise<Tena
     revalidatePath("/admin");
     return { error: null };
   } catch (error) {
-    return { error: error instanceof Error ? error.message : "Request could not be updated." };
+    return { error: friendlyError(error, "Request could not be updated.") };
   }
 }
 
@@ -398,7 +399,7 @@ export async function setTenantPriceAction(tenantId: string, rupees: number | nu
     revalidatePath("/admin");
     return { error: null };
   } catch (error) {
-    return { error: error instanceof Error ? error.message : "Price could not be saved." };
+    return { error: friendlyError(error, "Price could not be saved.") };
   }
 }
 
@@ -416,7 +417,7 @@ export async function setTenantTableLimitAction(tenantId: string, limit: number 
     revalidatePath("/admin");
     return { error: null };
   } catch (error) {
-    return { error: error instanceof Error ? error.message : "Table limit could not be saved." };
+    return { error: friendlyError(error, "Table limit could not be saved.") };
   }
 }
 
@@ -432,7 +433,7 @@ export async function setTenantKitchenAction(tenantId: string, on: boolean | nul
     revalidatePath("/admin");
     return { error: null };
   } catch (error) {
-    return { error: error instanceof Error ? error.message : "Kitchen setting could not be saved." };
+    return { error: friendlyError(error, "Kitchen setting could not be saved.") };
   }
 }
 
@@ -447,7 +448,7 @@ export async function resetOwnerPinAction(tenantId: string, pin: string): Promis
     await logAdminAction(admin, tenantId, "admin.owner_pin_reset", null, { owners: owners.length });
     return { error: null };
   } catch (error) {
-    return { error: error instanceof Error ? error.message : "PIN could not be reset." };
+    return { error: friendlyError(error, "PIN could not be reset.") };
   }
 }
 
@@ -455,7 +456,7 @@ export async function getTenantDetailAction(tenantId: string): Promise<{ detail:
   try {
     return { detail: await getTenantDetail(tenantId), error: null };
   } catch (error) {
-    return { detail: null, error: error instanceof Error ? error.message : "Tenant details could not be loaded." };
+    return { detail: null, error: friendlyError(error, "Tenant details could not be loaded.") };
   }
 }
 
@@ -502,7 +503,7 @@ export async function savePlanAction(input: PlanInput, mode: "create" | "edit"):
     revalidatePath("/admin");
     return { error: null };
   } catch (error) {
-    return { error: error instanceof Error ? error.message : "Plan could not be saved." };
+    return { error: friendlyError(error, "Plan could not be saved.") };
   }
 }
 
@@ -510,7 +511,7 @@ export async function getAnalyticsAction(range: AnalyticsRange): Promise<{ data:
   try {
     return { data: await getAnalyticsData(range), error: null };
   } catch (error) {
-    return { data: null, error: error instanceof Error ? error.message : "Analytics could not be loaded." };
+    return { data: null, error: friendlyError(error, "Analytics could not be loaded.") };
   }
 }
 
@@ -518,7 +519,7 @@ export async function getAuditAction(): Promise<{ data: AuditData | null; error:
   try {
     return { data: await getAuditData(), error: null };
   } catch (error) {
-    return { data: null, error: error instanceof Error ? error.message : "Audit log could not be loaded." };
+    return { data: null, error: friendlyError(error, "Audit log could not be loaded.") };
   }
 }
 
@@ -526,6 +527,6 @@ export async function getSettingsAction(): Promise<{ data: SettingsData | null; 
   try {
     return { data: await getSettingsData(), error: null };
   } catch (error) {
-    return { data: null, error: error instanceof Error ? error.message : "Settings could not be loaded." };
+    return { data: null, error: friendlyError(error, "Settings could not be loaded.") };
   }
 }

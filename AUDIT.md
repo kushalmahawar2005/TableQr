@@ -120,6 +120,7 @@ Checked 25 Oct: review boards g1-g7 and b1-b4 render at 360 px with no horizonta
 - [ ] **F5. Time zones and dates** — outlet time zone everywhere; midnight, month end, financial year end.
 - [ ] **F6. Performance** — guest menu load on slow 4G, image sizes, big menus, many tables.
 - [ ] **F7. Errors and logging** — no raw error text shown to users; failures logged.
+  - [x] Admin and notification actions sent raw Error text to the screen, including database messages with SQL and bound parameters (e.g. a hashed PIN). They now go through friendlyError: our own and short plain messages pass, system text is logged and replaced.
 - [x] **F8. Tests** — `billing-flow` integration suite sometimes times out in `beforeAll` when the full suite runs.
   - [ ] `g6-flow` "isolates table sessions" failed once in a full run and passed alone; watch for a repeat.
 - [ ] **F9. Production setup** — Hostinger env complete, build, backups, domain and HTTPS.
