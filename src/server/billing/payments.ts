@@ -305,6 +305,7 @@ export async function confirmPayment(paymentId: string, verdict: Verdict, now = 
     announceBill(res.scope, res.closedTableIds ? { tableIds: res.closedTableIds, state: "paid" } : undefined, [
       { topic: topics.session(res.scope.sessionId), type: "payment.updated", data: { paymentId } },
       ...(res.closedTableIds ? [{ topic: topics.session(res.scope.sessionId), type: "session.closed" }] : []),
+      ...(res.mismatch ? [{ topic: topics.tasks, type: "payment.stuck", data: { paymentId, reason: "amount_mismatch" } }] : []),
     ]);
   }
   return { status: res.status, alreadyFinal: res.alreadyFinal, billPaid: res.billPaid, refundPaise: res.refundPaise };
@@ -328,6 +329,8 @@ type Confirmed = {
   refundPaise: number;
   scope?: BillScope;
   closedTableIds?: string[];
+  /** The gateway captured an amount different from the bill's: needs a person to reconcile */
+  mismatch?: boolean;
 };
 
 async function confirmPaymentTx(tx: Tx, paymentId: string, verdict: Verdict, now: Date): Promise<Confirmed> {
@@ -348,6 +351,15 @@ async function confirmPaymentTx(tx: Tx, paymentId: string, verdict: Verdict, now
       .update(s.payments)
       .set({ status: "failed", failureReason: reason.slice(0, 200), gatewayPaymentId: verdict.gatewayPaymentId ?? payment.gatewayPaymentId, checkedAt: now })
       .where(and(eq(s.payments.tenantId, payment.tenantId), eq(s.payments.id, payment.id)));
+    // The gateway says it took money, but not the amount asked for. Not recorded as a payment,
+    // so staff are told: the difference needs a manual look or refund at the gateway
+    if (verdict.status === "success") {
+      await tx.insert(s.auditLog).values({
+        tenantId: payment.tenantId, outletId: payment.outletId, actorLabel: "gateway", action: "payment.amount_mismatch", entity: "payment", entityId: payment.id,
+        before: { expectedPaise: expected }, after: { capturedPaise: verdict.amountPaise }, reason: "Gateway reported a different amount than the bill",
+      });
+      return { status: "failed" as const, alreadyFinal: false, billPaid: false, refundPaise: 0, scope, mismatch: true };
+    }
     return { status: "failed" as const, alreadyFinal: false, billPaid: false, refundPaise: 0, scope };
   }
 
@@ -478,6 +490,7 @@ export async function cancelIfUnattempted(scope: { tenantId: string }, paymentId
 
 /** An attempt the gateway has seen no payment for is closed after this long, so it stops holding the bill */
 export const ABANDONED_ATTEMPT_MS = 30 * 60_000;
+const STALE_ATTEMPTS_PER_RUN = 20;
 
 /**
  * Scheduled every minute (PS 6.4): re-check open payment attempts with the gateway. While one is
@@ -487,12 +500,17 @@ export const ABANDONED_ATTEMPT_MS = 30 * 60_000;
  */
 export async function reconcilePendingPayments(scope: { tenantId: string; outletId: string }, now = new Date()) {
   const since = new Date(now.getTime() - 24 * 60 * 60_000);
-  const pending = await db
-    .select({ id: s.payments.id, createdAt: s.payments.createdAt, status: s.payments.status, gatewayRef: s.payments.gatewayRef, billId: s.payments.billId })
-    .from(s.payments)
+  const columns = { id: s.payments.id, createdAt: s.payments.createdAt, status: s.payments.status, gatewayRef: s.payments.gatewayRef, billId: s.payments.billId };
+  const recent = await db.select(columns).from(s.payments)
     .where(and(eq(s.payments.tenantId, scope.tenantId), eq(s.payments.outletId, scope.outletId), inArray(s.payments.status, ["initiated", "pending"]), sql`${s.payments.createdAt} >= ${since}`))
-    .orderBy(s.payments.createdAt)
-    .limit(50);
+    .orderBy(s.payments.createdAt).limit(50);
+  // An attempt still open after a day keeps the table from being cleared, so it is checked too, a few
+  // per run and least recently checked first; a gateway that cannot answer must not starve the rest
+  const stale = await db.select(columns).from(s.payments)
+    .where(and(eq(s.payments.tenantId, scope.tenantId), eq(s.payments.outletId, scope.outletId), inArray(s.payments.status, ["initiated", "pending"]), sql`${s.payments.createdAt} < ${since}`))
+    .orderBy(s.payments.checkedAt, s.payments.createdAt).limit(STALE_ATTEMPTS_PER_RUN);
+  const pending = [...recent, ...stale];
+  const staleIds = new Set(stale.map((p) => p.id));
   let settled = 0;
   for (const p of pending) {
     const age = now.getTime() - p.createdAt.getTime();
@@ -507,6 +525,9 @@ export async function reconcilePendingPayments(scope: { tenantId: string; outlet
       continue;
     }
     const view = await reconcilePayment(scope, p.id, now).catch(() => "unknown" as const);
+    if (staleIds.has(p.id)) {
+      await db.update(s.payments).set({ checkedAt: now }).where(and(eq(s.payments.tenantId, scope.tenantId), eq(s.payments.id, p.id), inArray(s.payments.status, ["initiated", "pending"])));
+    }
     if (view === "success" || view === "failed") settled++;
     else if (view === "pending" && age > ABANDONED_ATTEMPT_MS) {
       await cancelIfUnattempted(scope, p.id, now).catch(() => undefined);

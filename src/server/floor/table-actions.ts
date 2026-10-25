@@ -10,7 +10,7 @@ import { publish, type RealtimeEvent } from "../realtime/publish";
 import { assertMay, type StaffSession } from "../staff/auth";
 import { audit } from "../staff/audit";
 import { assignTable, releaseVisitTables, tableStateEvents, visitChanged } from "./assignments";
-import { lockSession, syncBill } from "../billing/bill";
+import { ATTEMPT_WINDOW_MS, lockSession, syncBill } from "../billing/bill";
 import { syncOrderStatus, syncTickets } from "../kitchen/order-state";
 import { topics } from "../realtime/token";
 import { can } from "@/lib/staff-permissions";
@@ -372,11 +372,17 @@ export async function closeVisit(staff: FloorActor, input: { tableId: string; re
     const { billId } = await syncBill(tx, billScope, now);
     const shares = await tx.select({ amountPaise: s.billShares.amountPaise, paidPaise: s.billShares.paidPaise }).from(s.billShares).where(and(eq(s.billShares.tenantId, scope.tenantId), eq(s.billShares.billId, billId)));
     const [moving] = await tx
-      .select({ id: s.payments.id })
+      .select({ id: s.payments.id, createdAt: s.payments.createdAt })
       .from(s.payments)
       .where(and(eq(s.payments.tenantId, scope.tenantId), eq(s.payments.billId, billId), inArray(s.payments.status, ["initiated", "pending"])))
       .limit(1);
-    if (moving) throw new AppError("conflict", "An online payment is still being checked. Wait a moment, then try again.", { reason: "payment_in_flight" });
+    if (moving) {
+      // Within the first minutes the guest may still be paying. After that nobody is: say where the way out is
+      const stuck = now.getTime() - moving.createdAt.getTime() >= ATTEMPT_WINDOW_MS;
+      throw new AppError("conflict", stuck
+        ? "An online payment has had no answer from the payment gateway for a while. Open Billing for this table, tap Check again, or ask a manager to release it as not paid, then clear the table."
+        : "An online payment is still being checked. Wait a moment, then try again.", { reason: "payment_in_flight", stuck });
+    }
     const duePaise = shares.reduce((n, sh) => n + Math.max(0, sh.amountPaise - sh.paidPaise), 0);
     const reason = String(input.reason ?? "").trim().slice(0, 200);
     if (duePaise > 0) {

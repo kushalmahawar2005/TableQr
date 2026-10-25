@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db as appDb } from "@/db";
 import * as s from "@/db/schema";
 import { AppError } from "@/server/errors";
+import { closeVisit } from "@/server/floor/table-actions";
 import { requestBill, settleAtCounter, startPayment } from "@/server/billing/payments";
 import { recheckOnlinePayment, releaseStuckPayment } from "@/server/billing/stuck-payment";
 import { addCartLine } from "@/server/guest/cart";
@@ -64,5 +65,24 @@ describe("stuck online payment", () => {
     const start = await startPayment(h, { method: "upi", requestId: "stuck-req-2" });
     mockGateway.settle(start.gatewayRef!, "success");
     expect(await releaseStuckPayment(manager, h.sessionId, new Date(Date.now() + 11 * MIN))).toEqual({ released: false, view: "success" });
+  });
+
+  it("tells whoever clears the table where the way out is, once nobody can still be paying", async () => {
+    const qr = env.demo.tableQr.T4;
+    const { participantId } = await startOrJoinTable({ outletCode: "SRJ01", shortCode: qr, deviceId: "stuck-c", displayName: "Pia" });
+    const h = await attachVerifiedTestGuest(appDb, await getGuestContext("SRJ01", qr, participantId, "stuck-c"), "Pia");
+    await addCartLine(h, { itemId: env.demo.itemIds["Dal Makhani"], qty: 1 });
+    await placeOrder(h);
+    await requestBill({ tenantId: h.tenantId, outletId: h.outletId, sessionId: h.sessionId });
+    await startPayment(h, { method: "upi", requestId: "stuck-req-3" });
+    const input = { tableId: env.demo.tableIds.T4, reason: "Left without paying" };
+    const soon = await closeVisit(manager, input).catch((e: unknown) => e);
+    expect((soon as AppError).details).toMatchObject({ reason: "payment_in_flight", stuck: false });
+    const later = await closeVisit(manager, input, new Date(Date.now() + 22 * 60 * MIN)).catch((e: unknown) => e);
+    expect((later as AppError).details).toMatchObject({ reason: "payment_in_flight", stuck: true });
+    expect((later as AppError).message).toMatch(/Billing/);
+    // A manager releases it, and the table can then be cleared
+    await releaseStuckPayment(manager, h.sessionId, new Date(Date.now() + 22 * 60 * MIN));
+    await closeVisit(manager, input, new Date(Date.now() + 22 * 60 * MIN));
   });
 });

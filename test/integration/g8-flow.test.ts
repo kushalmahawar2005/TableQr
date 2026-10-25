@@ -459,6 +459,119 @@ describe("returning from the gateway", () => {
   });
 });
 
+describe("attempts left open for more than a day", () => {
+  it("are still checked with the gateway, so they cannot hold a table for ever", async () => {
+    await requestBill(scope());
+    const old = await startPayment(g.B, { method: "upi", requestId: rid() });
+    const [row] = await env.db.select().from(s.payments).where(eq(s.payments.id, old.paymentId));
+    const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60_000);
+    await env.db.update(s.payments).set({ createdAt: twoDaysAgo }).where(eq(s.payments.id, row.id));
+    await reconcilePendingPayments({ tenantId: g.A.tenantId, outletId: g.A.outletId });
+    expect((await env.db.select().from(s.payments).where(eq(s.payments.id, row.id)))[0]).toMatchObject({ status: "failed", failureReason: "Cancelled before paying" });
+  });
+
+  it("are recorded as paid when the gateway says the guest did pay", async () => {
+    await requestBill(scope());
+    const old = await startPayment(g.B, { method: "upi", requestId: rid() });
+    await env.db.update(s.payments).set({ createdAt: new Date(Date.now() - 48 * 60 * 60_000) }).where(eq(s.payments.id, old.paymentId));
+    mockGateway.settle(old.gatewayRef!, "success");
+    expect(await reconcilePendingPayments({ tenantId: g.A.tenantId, outletId: g.A.outletId })).toBe(1);
+    expect((await env.db.select().from(s.payments).where(eq(s.payments.id, old.paymentId)))[0].status).toBe("success");
+  });
+});
+
+describe("payment webhooks under stress (phase 3B)", () => {
+  const settled = async (paymentId: string) => (await env.db.select().from(s.payments).where(eq(s.payments.id, paymentId)))[0];
+
+  it("count one payment once when the gateway delivers the same webhook 20 times at once", async () => {
+    await requestBill(scope());
+    const start = await startPayment(g.B, { method: "upi", requestId: rid() });
+    const event: WebhookEvent = { kind: "payment", gatewayRef: start.gatewayRef!, gatewayPaymentId: "pay_burst", status: "success", amountPaise: 46700 };
+    const statuses = (await Promise.all(Array.from({ length: 20 }, () => hook(event)))).map((r) => r.status);
+    expect(statuses.every((c) => c === 200)).toBe(true);
+    expect(await settled(start.paymentId)).toMatchObject({ status: "success", gatewayPaymentId: "pay_burst" });
+    const [share] = await env.db.select().from(s.billShares).where(eq(s.billShares.participantId, g.B.participantId));
+    expect(share.paidPaise).toBe(46700);
+    expect(await env.db.select().from(s.refunds)).toHaveLength(0);
+    expect((await env.db.select().from(s.payments).where(eq(s.payments.billId, (await settled(start.paymentId)).billId))).filter((p) => p.status === "success")).toHaveLength(1);
+  });
+
+  it("keep a captured payment captured when a late 'failed' webhook arrives for it", async () => {
+    await requestBill(scope());
+    const start = await startPayment(g.B, { method: "upi", requestId: rid() });
+    await hook({ kind: "payment", gatewayRef: start.gatewayRef!, gatewayPaymentId: "pay_ord", status: "success", amountPaise: 46700 });
+    await hook({ kind: "payment", gatewayRef: start.gatewayRef!, gatewayPaymentId: "pay_ord0", status: "failed", amountPaise: 46700, reason: "Earlier attempt declined" });
+    expect(await settled(start.paymentId)).toMatchObject({ status: "success", gatewayPaymentId: "pay_ord" });
+  });
+
+  it("record the money when 'success' arrives after a 'failed' for an earlier attempt on the same order", async () => {
+    await requestBill(scope());
+    const start = await startPayment(g.B, { method: "upi", requestId: rid() });
+    await hook({ kind: "payment", gatewayRef: start.gatewayRef!, gatewayPaymentId: "pay_try1", status: "failed", amountPaise: 46700, reason: "Declined" });
+    expect((await settled(start.paymentId)).status).toBe("failed");
+    await hook({ kind: "payment", gatewayRef: start.gatewayRef!, gatewayPaymentId: "pay_try2", status: "success", amountPaise: 46700 });
+    expect(await settled(start.paymentId)).toMatchObject({ status: "success", gatewayPaymentId: "pay_try2" });
+  });
+
+  it("never mark a payment paid for the wrong amount, and tell staff the gateway took something else", async () => {
+    await requestBill(scope());
+    const start = await startPayment(g.B, { method: "upi", requestId: rid() });
+    events = [];
+    const res = await hook({ kind: "payment", gatewayRef: start.gatewayRef!, gatewayPaymentId: "pay_short", status: "success", amountPaise: 100 });
+    expect(res.status).toBe(200);
+    expect((await settled(start.paymentId)).status).toBe("failed");
+    const [share] = await env.db.select().from(s.billShares).where(eq(s.billShares.participantId, g.B.participantId));
+    expect(share.paidPaise).toBe(0);
+    expect(events.some((e) => e.type === "payment.stuck" && (e.data as { reason?: string } | undefined)?.reason === "amount_mismatch")).toBe(true);
+    const audits = await env.db.select().from(s.auditLog).where(eq(s.auditLog.action, "payment.amount_mismatch"));
+    expect(audits).toHaveLength(1);
+    expect(audits[0]).toMatchObject({ entityId: start.paymentId, tenantId: g.B.tenantId });
+  });
+
+  it("leave nothing holding the bill when the gateway is down at checkout, and the guest can try again at once", async () => {
+    await requestBill(scope());
+    vi.spyOn(mockGateway, "createOrder").mockRejectedValueOnce(new Error("ETIMEDOUT"));
+    const down = await failsWith(startPayment(g.B, { method: "upi", requestId: rid() }), "invalid_state", "gateway_down");
+    expect(down.message).toMatch(/No money was taken/);
+    const rows = await env.db.select().from(s.payments);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ status: "failed", failureReason: "Could not reach the payment gateway", gatewayRef: null });
+    const retry = await startPayment(g.B, { method: "upi", requestId: rid() });
+    expect(retry.gatewayRef).toBeTruthy();
+    expect((await env.db.select().from(s.payments).where(eq(s.payments.id, retry.paymentId)))[0].status).toBe("pending");
+  });
+
+  it("report a webhook that could not be saved as retryable, so the gateway sends it again, and then settle it once", async () => {
+    await requestBill(scope());
+    const start = await startPayment(g.B, { method: "upi", requestId: rid() });
+    const event: WebhookEvent = { kind: "payment", gatewayRef: start.gatewayRef!, gatewayPaymentId: "pay_retry", status: "success", amountPaise: 46700 };
+    const spy = vi.spyOn(appDb, "transaction").mockRejectedValueOnce(new Error("Connection lost: The server closed the connection."));
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const first = await hook(event);
+    spy.mockRestore();
+    expect(first.status).toBe(500);
+    expect((await settled(start.paymentId)).status).toBe("pending");
+    expect((await hook(event)).status).toBe(200);
+    expect((await settled(start.paymentId)).status).toBe("success");
+  });
+
+  it("answer a webhook for an order it has never seen without changing anything", async () => {
+    const before = await env.db.select().from(s.payments);
+    const res = await hook({ kind: "payment", gatewayRef: "mock_does_not_exist", gatewayPaymentId: "pay_x", status: "success", amountPaise: 100 });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ known: false });
+    expect(await env.db.select().from(s.payments)).toHaveLength(before.length);
+  });
+
+  it("refuse a webhook whose reference belongs to another payment's order", async () => {
+    await requestBill(scope());
+    const one = await startPayment(g.B, { method: "upi", requestId: rid() });
+    const res = await hook({ kind: "payment", gatewayRef: one.gatewayRef! + "x", gatewayPaymentId: "pay_wrong_ref", status: "success", amountPaise: 46700 });
+    expect(await res.json()).toMatchObject({ known: false });
+    expect((await settled(one.paymentId)).status).toBe("pending");
+  });
+});
+
 describe("paying for others", () => {
   it("records exactly who was covered and blocks an overlapping attempt", async () => {
     await requestBill(scope());
