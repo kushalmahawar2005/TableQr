@@ -8,20 +8,19 @@ import { qrSvg } from "@/server/floor/qr-svg";
 import { tenantFeatures } from "@/server/plan";
 import { currentStaff } from "@/server/staff/request";
 import { FeatureLocked } from "../../../_components/feature-locked";
+import { QR_SIZES, qrPages, qrSheetCss, qrSize, type QrSize } from "../../_components/qr-print";
 import { PrintBar } from "./print-bar";
 
-const SIZES = { a6: { mm: 70, scale: 1 }, a5: { mm: 100, scale: 1.15 }, a4: { mm: 150, scale: 1.5 } } as const;
-
-// Every table's QR as a printable poster, one per page. ?size=a6|a5|a4, ?table=<id> for just one.
+// Every table's QR as a printable poster, several per A4 sheet. ?size=a6|a5|a4, ?table=<id> for just one.
 export default async function QrSheetPage(props: PageProps<"/console/floor/editor/qr-sheet">) {
   const staff = await currentStaff();
   if (!staff) redirect("/console/login");
   if (!staff.roles.some((r) => floorEditorRoles.includes(r as never))) return <main className="p-8">Permission denied</main>;
   if (!(await tenantFeatures(staff.tenantId)).dineIn) return <FeatureLocked feature="dineIn" />;
   const q = await props.searchParams;
-  const size = (typeof q.size === "string" && q.size in SIZES ? q.size : "a6") as keyof typeof SIZES;
+  const size = (QR_SIZES.find((x) => x.id === q.size)?.id ?? "a6") as QrSize;
   const only = typeof q.table === "string" ? q.table : null;
-  const { mm, scale } = SIZES[size];
+  const { qrMm: mm, scale } = qrSize(size);
   const base = await publicBaseUrl(staff);
   const rows = await db
     .select({ id: s.diningTables.id, code: s.diningTables.code, joinCode: s.diningTables.joinCode, shortCode: s.qrCodes.shortCode })
@@ -32,13 +31,13 @@ export default async function QrSheetPage(props: PageProps<"/console/floor/edito
 
   return (
     <main className="min-h-dvh bg-neutral-100 text-neutral-900">
-      <style>{`@page{size:${size.toUpperCase()};margin:0}@media print{.no-print{display:none!important}body{background:#fff}.poster{break-after:page;break-inside:avoid;border:0!important;box-shadow:none!important;margin:0!important;padding:8mm!important;min-height:0!important}.poster:last-child{break-after:auto}}`}</style>
-      <PrintBar count={tables.length} size={size} outlet={staff.outlet.name} single={!!only} />
+      <style>{qrSheetCss(size)}</style>
+      <PrintBar count={tables.length} size={size} outlet={staff.outlet.name} />
       {tables.length === 0 ? (
         <p className="no-print mx-auto max-w-md p-10 text-center text-neutral-600">No tables with a live QR yet. Publish your floor plan first, then come back to print.</p>
       ) : (
-        <div className="mx-auto grid max-w-5xl gap-6 p-4 print:block print:max-w-none print:p-0 sm:grid-cols-2 lg:grid-cols-3">
-          {tables.map((t) => (
+        <div className="qr-sheet mx-auto grid max-w-5xl gap-6 p-4 sm:grid-cols-2 lg:grid-cols-3">
+          {qrPages(tables, size).map((page, i) => <div key={i} className="qr-page contents">{page.map((t) => (
             <section key={t.id} className="poster flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-neutral-300 bg-white p-6 text-center shadow-sm" style={{ minHeight: `${mm * 1.9}px` }}>
               <h1 className="text-xl font-extrabold" style={{ fontSize: `${1.25 * scale}rem` }}>{staff.outlet.name}</h1>
               <p className="text-sm text-neutral-600" style={{ fontSize: `${0.8 * scale}rem` }}>Scan to see the menu, order and pay from your phone</p>
@@ -47,7 +46,7 @@ export default async function QrSheetPage(props: PageProps<"/console/floor/edito
               {t.joinCode && <p className="text-sm text-neutral-600" style={{ fontSize: `${0.8 * scale}rem` }}>Joining friends? Use code <b className="tracking-[0.2em] text-neutral-900">{t.joinCode}</b></p>}
               <p className="text-xs text-neutral-400">Powered by TableQR</p>
             </section>
-          ))}
+          ))}</div>)}
         </div>
       )}
     </main>

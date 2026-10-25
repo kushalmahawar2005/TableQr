@@ -127,7 +127,7 @@ export function ItemsScreen({ report: r, outletName }: { report: SalesDetail; ou
             <ul className="mt-3 grid gap-2">
               {r.staff.map((p) => (
                 <li key={p.name} className="flex items-center justify-between gap-3 rounded-xl bg-paper px-4 py-3">
-                  <span className="min-w-0"><span className={`block truncate font-semibold ${p.guests ? "text-muted" : ""}`}>{p.name}</span><span className="text-caption text-muted tabular-nums">{p.orders} {p.orders === 1 ? "order" : "orders"} · {p.qty} items</span></span>
+                  <span className="min-w-0"><span className={`block truncate font-semibold ${p.guests ? "text-muted" : ""}`}>{p.name}</span><span className="text-caption text-muted tabular-nums">{p.orders} {p.orders === 1 ? "order" : "orders"} · {p.qty} {p.qty === 1 ? "item" : "items"}</span></span>
                   <span className="font-display font-bold tabular-nums">{rs(p.grossPaise)}</span>
                 </li>
               ))}
@@ -154,7 +154,7 @@ export function ItemsScreen({ report: r, outletName }: { report: SalesDetail; ou
             <ul className="mt-2 grid gap-2">
               {r.voids.map((v) => (
                 <li key={v.name} className="flex justify-between gap-3 rounded-xl bg-paper px-4 py-3">
-                  <span><span className="font-semibold">{v.name}</span><span className="block text-caption text-muted">{v.qty} items cancelled</span></span>
+                  <span><span className="font-semibold">{v.name}</span><span className="block text-caption text-muted">{v.qty} {v.qty === 1 ? "item" : "items"} cancelled</span></span>
                   <span className="font-bold tabular-nums">{rs(v.grossPaise)}</span>
                 </li>
               ))}

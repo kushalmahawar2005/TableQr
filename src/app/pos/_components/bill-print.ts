@@ -1,7 +1,7 @@
 import type { PosBillDetail } from "@/server/staff/pos-read";
 
 const esc = (v: string) => v.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
-const rs = (paise: number) => `₹${(paise / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const rs = (paise: number) => `${paise < 0 ? "− " : ""}₹${(Math.abs(paise) / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const METHOD: Record<string, string> = { upi: "UPI", card: "Card", wallet: "Wallet", cash: "Cash" };
 const when = (ms: number) => new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" }).format(ms);
 
@@ -43,11 +43,25 @@ ${kind === "receipt" && paid.length ? `<hr>${paid.map((p) => row(`Paid by ${METH
 </body></html>`;
 }
 
+/**
+ * A thermal slip's page height is only an estimate when the html is built. Once laid out, set it
+ * to the real content height so the roll neither feeds blank paper nor cuts the last lines.
+ */
+export function fitThermalPage(doc: Document) {
+  const width = doc.head?.innerHTML.match(/@page\{size:(\d+)mm \d+mm;margin:0\}/)?.[1];
+  const height = doc.body?.getBoundingClientRect().height;
+  if (!width || !height) return;
+  const style = doc.createElement("style");
+  style.textContent = `@page{size:${width}mm ${Math.ceil((height * 25.4) / 96) + 4}mm;margin:0}`;
+  doc.head.appendChild(style);
+}
+
 /** Prints through a hidden frame so no pop-up gets blocked. */
 export function printHtml(html: string) {
   const frame = document.createElement("iframe");
   frame.setAttribute("aria-hidden", "true");
-  frame.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0";
+  // Off screen but with a real width, so the slip lays out at paper width and can be measured
+  frame.style.cssText = "position:fixed;left:-10000px;top:0;width:400px;height:10px;border:0";
   document.body.appendChild(frame);
   const doc = frame.contentDocument;
   if (!doc) { frame.remove(); return; }
@@ -55,7 +69,7 @@ export function printHtml(html: string) {
   doc.write(html);
   doc.close();
   let done = false;
-  const go = () => { if (done) return; done = true; frame.contentWindow?.focus(); frame.contentWindow?.print(); setTimeout(() => frame.remove(), 1500); };
+  const go = () => { if (done) return; done = true; fitThermalPage(doc); frame.contentWindow?.focus(); frame.contentWindow?.print(); setTimeout(() => frame.remove(), 1500); };
   frame.onload = go;
   setTimeout(go, 400);
 }

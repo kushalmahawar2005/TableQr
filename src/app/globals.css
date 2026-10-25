@@ -553,7 +553,8 @@ body {
   #reports-print .report-paper-table th,
   #reports-print .report-paper-table td { border-bottom: 1px solid #c9c9c9; padding: 4pt 5pt; text-align: left; vertical-align: top; }
   #reports-print .report-paper-table th { font-weight: 700; }
-  #reports-print .report-paper-table td:not(:first-child) { text-align: right; }
+  #reports-print .report-paper-table td:not(:first-child),
+  #reports-print .report-paper-table thead th:not(:first-child) { text-align: right; }
   #reports-print .report-paper-table th, #reports-print .report-paper-table td { padding-top: 2.5pt; padding-bottom: 2.5pt; }
   #reports-print > :last-child { margin-bottom: 0 !important; }
   .receipt-print-page { box-sizing: border-box; width: 100%; padding: 0 !important; }
