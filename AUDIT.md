@@ -33,7 +33,7 @@ Findings go under the part as `- [ ] finding` and are ticked when fixed with the
 
 ### A. Money (highest risk)
 
-- [ ] **A1. Guest bill and online payment** — `/r/[outlet]/t/[table]/bill`, `/paid`, `/paid/receipt`, split shares, tips, pay for others, return from Cashfree, stuck payment.
+- [x] **A1. Guest bill and online payment** — `/r/[outlet]/t/[table]/bill`, `/paid`, `/paid/receipt`, split shares, tips, pay for others, return from Cashfree, stuck payment.
   - [x] Guest receipt print not yet rendered and checked (P4).
   - [x] A guest on a restaurant's own domain who paid online came back to the main domain, where their device cookie is missing. Payment, delivery and booking returns now come back to the domain the guest is on; the booking advance no longer takes its return address from the browser.
   - [x] The mock checkout got a return address with an unreplaced placeholder.
