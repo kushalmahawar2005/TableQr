@@ -338,7 +338,7 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
           </Section>
 
           <Section id="tax" icon={Receipt} title="Tax and licences" desc="Printed on every bill.">
-            <Row label="GST number (GSTIN)" htmlFor="gstin" hint="15 characters. Leave empty if you don't have GST."><Input id="gstin" className={`${fieldCls} font-mono uppercase`} maxLength={15} placeholder="08ABCDE1234F1Z5" value={gstin} onChange={(e) => setGstin(e.target.value.toUpperCase())} disabled={!canEdit} /></Row>
+            <Row label="GST number (GSTIN)" htmlFor="gstin" hint="15 characters. Leave empty if you are not GST registered: bills then carry no GST, whatever tax rate a dish has."><Input id="gstin" className={`${fieldCls} font-mono uppercase`} maxLength={15} placeholder="08ABCDE1234F1Z5" value={gstin} onChange={(e) => setGstin(e.target.value.toUpperCase())} disabled={!canEdit} /></Row>
             <Row label="FSSAI licence number" htmlFor="fssai" hint="14 digits from your food licence."><Input id="fssai" className={`${fieldCls} font-mono`} inputMode="numeric" maxLength={14} placeholder="14 digits" value={fssai} onChange={(e) => setFssai(e.target.value.replace(/\D/g, ""))} disabled={!canEdit} /></Row>
           </Section>
 

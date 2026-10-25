@@ -2,6 +2,7 @@ import "server-only";
 import { and, eq, inArray, notInArray } from "drizzle-orm";
 import { uuidv7 } from "@/db/id";
 import * as s from "@/db/schema";
+import { hasGstin } from "@/domain/gst";
 import { splitBill, type BillTotals, type PersonShare, type ShareBasis, type SplitLine, type SplitMode } from "@/domain/split";
 import type { Runner, Tx } from "../db-types";
 import { AppError } from "../errors";
@@ -54,7 +55,7 @@ export async function loadBillInputs(run: Runner, scope: BillScope) {
       .orderBy(s.orderLines.id),
     run.select().from(s.bills).where(and(eq(s.bills.tenantId, scope.tenantId), eq(s.bills.sessionId, scope.sessionId))),
     run
-      .select({ serviceChargeBp: s.outlets.serviceChargeBp, tipPresetsBp: s.outlets.tipPresetsBp, guestOnlinePayments: s.outlets.guestOnlinePayments })
+      .select({ serviceChargeBp: s.outlets.serviceChargeBp, tipPresetsBp: s.outlets.tipPresetsBp, guestOnlinePayments: s.outlets.guestOnlinePayments, gstin: s.outlets.gstin })
       .from(s.outlets)
       .where(and(eq(s.outlets.tenantId, scope.tenantId), eq(s.outlets.id, scope.outletId))),
   ]);
@@ -80,7 +81,7 @@ export async function loadBillInputs(run: Runner, scope: BillScope) {
       ])
     : [[], [], []];
 
-  return { session, people, lines, bill: bill ?? null, shares, discounts, payments, outlet: outlet ?? { serviceChargeBp: 0, tipPresetsBp: null, guestOnlinePayments: true } };
+  return { session, people, lines, bill: bill ?? null, shares, discounts, payments, outlet: outlet ?? { serviceChargeBp: 0, tipPresetsBp: null, guestOnlinePayments: true, gstin: null } };
 }
 
 export type BillInputs = Awaited<ReturnType<typeof loadBillInputs>>;
@@ -105,6 +106,7 @@ export function computeDraft(inputs: BillInputs, opts: { mode?: SplitMode; custo
   const active = people.filter((p) => !p.removedAt && !frozenAmount.has(p.id));
   const hostId = session.hostParticipantId && known.has(session.hostParticipantId) ? session.hostParticipantId : (active[0]?.id ?? people[0]?.id ?? null);
 
+  const chargesGst = hasGstin(inputs.outlet.gstin);
   const itemDiscount = new Map<string, number>();
   let billDiscountPaise = 0;
   for (const d of discounts) {
@@ -119,7 +121,8 @@ export function computeDraft(inputs: BillInputs, opts: { mode?: SplitMode; custo
       // A line nobody owns (added by staff for the table) belongs to the host, as it always has
       ownerId: l.participantId && known.has(l.participantId) ? l.participantId : (hostId ?? ""),
       amountPaise: Math.max(0, l.unitPricePaise * l.qty - (itemDiscount.get(l.id) ?? 0)),
-      taxRateBp: l.taxRateBp,
+      // Lines ordered before the outlet's GSTIN was removed carry no GST either
+      taxRateBp: chargesGst ? l.taxRateBp : 0,
       sharedWith: sharers.length > 1 ? sharers : null,
       personal: l.atCounter || l.personalForPickup,
     };

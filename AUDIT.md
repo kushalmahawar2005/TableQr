@@ -41,7 +41,7 @@ Findings go under the part as `- [ ] finding` and are ticked when fixed with the
 - [ ] **A5. TableQR fees and plans** — `/console/plan`, admin Fees, Cashfree subscription, UPI-reference fees, trial, grace days, pause and unlock.
 - [ ] **A6. Invoices and GST** — invoice numbering per financial year, tax invoice vs receipt, GST report, Excel export.
   - [x] Receipt (POS bill/receipt print) has no GSTIN, FSSAI or invoice number; required for a GST-registered restaurant.
-  - [ ] An outlet with no GSTIN still charges GST on its bills (seen on a local outlet). A business without GST registration cannot collect GST: warn in Settings, or charge no tax until a GSTIN is set. Needs the owner's decision.
+  - [x] An outlet with no GSTIN still charged GST on its bills. Fixed (owner chose "no GSTIN, no GST"): dishes sell at 0% and open bills drop their tax until a GSTIN is set; Settings says so.
 - [ ] **A7. Day close** — `/console/reports/day-close`: totals match bills and payments; print.
   - [x] Restaurants open past midnight: orders after 12 am land on the next calendar day. Needs a business-day cutoff setting.
 
@@ -105,4 +105,5 @@ Findings go under the part as `- [ ] finding` and are ticked when fixed with the
 - [ ] **F6. Performance** — guest menu load on slow 4G, image sizes, big menus, many tables.
 - [ ] **F7. Errors and logging** — no raw error text shown to users; failures logged.
 - [x] **F8. Tests** — `billing-flow` integration suite sometimes times out in `beforeAll` when the full suite runs.
+  - [ ] `g6-flow` "isolates table sessions" failed once in a full run and passed alone; watch for a repeat.
 - [ ] **F9. Production setup** — Hostinger env complete, build, backups, domain and HTTPS.

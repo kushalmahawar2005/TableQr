@@ -22,6 +22,9 @@ export type GstInvoice = {
 export type GstRateRow = { rateBp: number; taxablePaise: number; cgstPaise: number; sgstPaise: number; taxPaise: number; invoices: number };
 export type GstRow = GstInvoice & { taxablePaise: number; cgstPaise: number; sgstPaise: number; rates: GstRateRow[] };
 
+/** Only a GST-registered seller (one with a GSTIN) may charge GST on its bills */
+export const hasGstin = (gstin: string | null | undefined) => !!gstin?.trim();
+
 /** Half to CGST (rounded down), the rest to SGST, so the two always add up to the tax */
 export const splitTax = (tax: number) => {
   const cgst = Math.floor(tax / 2);

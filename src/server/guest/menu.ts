@@ -5,6 +5,7 @@ import * as s from "@/db/schema";
 import { parseAllergens, parseSpice } from "@/domain/allergens";
 import { canSatisfy } from "@/domain/item-sheet";
 import { inWindow, localClock } from "@/domain/hours";
+import { hasGstin } from "@/domain/gst";
 import { resolveItemPrice, type PricingItem } from "@/domain/pricing";
 import type { Runner } from "../db-types";
 
@@ -49,7 +50,7 @@ export async function loadItems(
   if (items.length === 0) return [];
   const ids = items.map((i) => i.id);
 
-  const [overrides, groups, windows] = await Promise.all([
+  const [overrides, groups, windows, [seller]] = await Promise.all([
     run
       .select()
       .from(s.outletItemOverrides)
@@ -75,7 +76,10 @@ export async function loadItems(
           inArray(s.menuCategories.id, [...new Set(items.map((i) => i.categoryId))]),
         ),
       ),
+    run.select({ gstin: s.outlets.gstin }).from(s.outlets).where(and(eq(s.outlets.tenantId, ctx.tenantId), eq(s.outlets.id, ctx.outletId))),
   ]);
+  // Only a GST-registered outlet may charge GST: without a GSTIN every dish sells at 0% tax
+  const chargesGst = hasGstin(seller?.gstin);
   const mods = groups.length
     ? await run
         .select()
@@ -109,7 +113,7 @@ export async function loadItems(
       groups: itemGroups,
     };
     return {
-      item,
+      item: chargesGst ? item : { ...item, taxRateBp: 0 },
       override,
       pricing,
       /** Why this price applies: the outlet's own override, or the brand price */
