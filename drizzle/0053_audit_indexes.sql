@@ -1,0 +1,2 @@
+CREATE INDEX `tickets_outlet_open_idx` ON `tickets` (`tenant_id`,`outlet_id`,`status`,`created_at`);--> statement-breakpoint
+CREATE INDEX `bills_outlet_closed_idx` ON `bills` (`outlet_id`,`closed_at`);

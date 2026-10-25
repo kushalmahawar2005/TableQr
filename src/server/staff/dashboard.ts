@@ -298,21 +298,26 @@ export async function getDashboard(staff: Staff, now = new Date()) {
       )
       .orderBy(desc(s.orders.placedAt))
       .limit(8),
-    db
-      .select({
-        amountPaise: s.payments.amountPaise,
-        method: s.payments.method,
-        status: s.payments.status,
-        createdAt: s.payments.createdAt,
-        tableCode: s.diningTables.code,
-      })
-      .from(s.payments)
-      .innerJoin(s.bills, and(eq(s.bills.tenantId, s.payments.tenantId), eq(s.bills.id, s.payments.billId)))
-      .innerJoin(s.tableSessions, and(eq(s.tableSessions.tenantId, s.bills.tenantId), eq(s.tableSessions.id, s.bills.sessionId)))
-      .innerJoin(s.diningTables, and(eq(s.diningTables.tenantId, s.tableSessions.tenantId), eq(s.diningTables.id, s.tableSessions.tableId)))
-      .where(and(eq(s.payments.tenantId, scope.tenantId), eq(s.payments.outletId, scope.outletId), eq(s.payments.status, "success")))
-      .orderBy(desc(s.payments.createdAt))
-      .limit(6),
+    // The six latest payments first, then only their tables. Joining everything first and sorting
+    // after read the whole outlet's payments on every dashboard refresh.
+    (async () => {
+      const latest = await db
+        .select({ billId: s.payments.billId, amountPaise: s.payments.amountPaise, method: s.payments.method, status: s.payments.status, createdAt: s.payments.createdAt })
+        .from(s.payments)
+        .where(and(eq(s.payments.tenantId, scope.tenantId), eq(s.payments.outletId, scope.outletId), eq(s.payments.status, "success")))
+        .orderBy(desc(s.payments.createdAt))
+        .limit(6);
+      if (!latest.length) return [];
+      const tables = await db
+        .select({ billId: s.bills.id, tableCode: s.diningTables.code })
+        .from(s.bills)
+        .innerJoin(s.tableSessions, and(eq(s.tableSessions.tenantId, s.bills.tenantId), eq(s.tableSessions.id, s.bills.sessionId)))
+        .innerJoin(s.diningTables, and(eq(s.diningTables.tenantId, s.tableSessions.tenantId), eq(s.diningTables.id, s.tableSessions.tableId)))
+        .where(and(eq(s.bills.tenantId, scope.tenantId), inArray(s.bills.id, latest.map((p) => p.billId))));
+      const code = new Map(tables.map((x) => [x.billId, x.tableCode]));
+      // A payment whose table is gone is left out, as the inner joins did
+      return latest.filter((p) => code.has(p.billId)).map(({ billId, ...p }) => ({ ...p, tableCode: code.get(billId)! }));
+    })(),
   ]);
 
   const [soldOut, bookingTables, low, rawTables, openSessions] = await Promise.all([

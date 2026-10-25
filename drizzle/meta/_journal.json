@@ -372,6 +372,13 @@
       "when": 1792917412657,
       "tag": "0052_role_access",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "5",
+      "when": 1792936581643,
+      "tag": "0053_audit_indexes",
+      "breakpoints": true
     }
   ]
 }

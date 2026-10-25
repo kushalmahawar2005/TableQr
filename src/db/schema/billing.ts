@@ -62,6 +62,8 @@ export const bills = mysqlTable(
   (t) => [
     uniqueIndex("bills_session_uq").on(t.sessionId),
     index("bills_outlet_created_idx").on(t.outletId, t.createdAt),
+    // Paid bills by when they closed: the bell, dashboard, day close and reports all ask for a time range
+    index("bills_outlet_closed_idx").on(t.outletId, t.closedAt),
     tenantKey("bills", t),
     sameTenant("fk_bills_outlet", t, t.outletId, outlets),
     sameTenant("fk_bills_session", t, t.sessionId, tableSessions),

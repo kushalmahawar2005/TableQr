@@ -6,6 +6,7 @@ import { localClock } from "@/domain/hours";
 import { RECALL_WINDOW_MS, ticketUrgency, urgencyRank, type Urgency } from "@/domain/kitchen";
 import { isPlaceholderName } from "@/domain/guest-name";
 import type { StaffContext } from "../staff/context";
+import { OPEN_TICKET_WINDOW_MS } from "./ticket-window";
 
 // Data for the kitchen display (S2). One card per station ticket. A station screen sees its own
 // tickets with other stations' lines on the same order dimmed for context; the expeditor sees
@@ -21,7 +22,7 @@ export async function getKitchenDisplay(ctx: StaffContext, opts: { station?: str
   const open = await db
     .select()
     .from(s.tickets)
-    .where(and(eq(s.tickets.tenantId, t), eq(s.tickets.outletId, ctx.outletId), inArray(s.tickets.status, ["new", "in_progress"])));
+    .where(and(eq(s.tickets.tenantId, t), eq(s.tickets.outletId, ctx.outletId), inArray(s.tickets.status, ["new", "in_progress"]), gte(s.tickets.createdAt, new Date(now.getTime() - OPEN_TICKET_WINDOW_MS))));
 
   // Open-ticket counts per station tab; All counts every open ticket
   const counts: Record<string, number> = { All: open.length };

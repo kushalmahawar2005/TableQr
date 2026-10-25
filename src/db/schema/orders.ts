@@ -134,6 +134,8 @@ export const tickets = mysqlTable(
   },
   (t) => [
     index("tickets_outlet_station_idx").on(t.outletId, t.station, t.status),
+    // The kitchen board reads the open tickets of the last day, not the outlet's whole history
+    index("tickets_outlet_open_idx").on(t.tenantId, t.outletId, t.status, t.createdAt),
     // One ticket per station per order; adding this fails loudly if duplicates exist
     uniqueIndex("tickets_order_station_uq").on(t.orderId, t.station),
     sameTenant("fk_tickets_outlet", t, t.outletId, outlets),

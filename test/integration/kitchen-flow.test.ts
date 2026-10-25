@@ -74,6 +74,14 @@ describe("kitchen display (S2)", () => {
     expect(await main(18)).toBe("getting_late");
     expect(await main(27)).toBe("late");
   });
+
+  it("leaves tickets nobody bumped off the board after a day, so an unused screen cannot grow without limit", async () => {
+    const stillThere = await getKitchenDisplay(kitchen, {}, later(23 * 60));
+    expect(stillThere.cards).toHaveLength(3);
+    const nextDay = await getKitchenDisplay(kitchen, {}, later(25 * 60));
+    expect(nextDay.cards).toHaveLength(0);
+    expect(nextDay.counts).toEqual({ All: 0 });
+  });
 });
 
 describe("guest cancels before the kitchen accepts", () => {

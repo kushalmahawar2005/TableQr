@@ -1,6 +1,6 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
-import { and, eq, gt, isNull } from "drizzle-orm";
+import { and, eq, gt, gte, inArray, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { uuidv7 } from "@/db/id";
 import * as s from "@/db/schema";
@@ -10,6 +10,7 @@ import { hashToken, verifyStaffPin } from "../staff/auth";
 import { audit } from "../staff/audit";
 import { KITCHEN_NOT_IN_PLAN, tenantHasKitchen } from "../plan";
 import { tenantAccess } from "../access";
+import { OPEN_TICKET_WINDOW_MS } from "./ticket-window";
 
 // Trusted kitchen screens (S2). A manager or owner sets the screen up once with their phone and
 // PIN; it then holds its own 30-day credential, pinned to one station or to the expeditor's All
@@ -42,7 +43,8 @@ export async function kitchenStations(scope: Scope): Promise<string[]> {
       .selectDistinct({ station: s.menuItems.station })
       .from(s.menuItems)
       .where(and(eq(s.menuItems.tenantId, scope.tenantId), eq(s.menuItems.brandId, outlet?.brandId ?? "-"), eq(s.menuItems.isActive, true))),
-    db.selectDistinct({ station: s.tickets.station }).from(s.tickets).where(and(eq(s.tickets.tenantId, scope.tenantId), eq(s.tickets.outletId, scope.outletId))),
+    // Stations with a ticket still open on the board; all history would be read on every board refresh
+    db.selectDistinct({ station: s.tickets.station }).from(s.tickets).where(and(eq(s.tickets.tenantId, scope.tenantId), eq(s.tickets.outletId, scope.outletId), inArray(s.tickets.status, ["new", "in_progress"]), gte(s.tickets.createdAt, new Date(Date.now() - OPEN_TICKET_WINDOW_MS)))),
   ]);
   return [...new Set([...menu, ...sent].map((r) => r.station.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
 }
