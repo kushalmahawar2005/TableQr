@@ -82,5 +82,17 @@ what was printed (kind and a subject id such as a table session), never the slip
 
 ## Migration `0054_printer_management`
 
-Additive: three new tables, no change to existing ones. Rollback: `DROP TABLE print_jobs, print_settings, printers;`
-(in that order), after reverting the code that uses them. Nothing else depends on them.
+Additive: three new tables (`printers`, `print_settings`, `print_jobs`), no change to any existing table, no existing row touched.
+
+**Rolling back the code never drops these tables.** Reverting the commits leaves them in place, empty of consequence: the
+previous code ignores them (checked: the live build runs normally against a database that has them), and running
+`drizzle-kit migrate` with the reverted journal, which no longer lists 0054, is a no-op (checked). Dropping them is an
+optional manual clean-up, only after the feature has been off for a while and nobody needs the print history, and never part
+of an automatic rollback:
+
+```sql
+-- optional, manual, later; this order
+DROP TABLE print_jobs, print_settings, printers;
+```
+
+See [printer-management-deployment.md](printer-management-deployment.md) for the deploy and rollback steps.
