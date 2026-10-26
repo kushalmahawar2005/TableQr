@@ -1,3 +1,4 @@
+import { restaurantApp, restaurantAppMetadata } from "@/server/guest/restaurant-app";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -7,7 +8,10 @@ import { cookies } from "next/headers";
 import { AppError } from "@/server/errors";
 import { DeliveryScreen } from "./screen";
 
-export const metadata: Metadata = { title: "Delivery", robots: { index: false, follow: false } };
+// The restaurant's own app (plans with delivery or reservations) is installable from here
+export async function generateMetadata(props: PageProps<"/r/[outlet]/delivery">): Promise<Metadata> {
+  return { title: "Delivery", robots: { index: false, follow: false }, ...restaurantAppMetadata(await restaurantApp((await props.params).outlet)) };
+}
 export default async function DeliveryPage({ params, searchParams }: { params: Promise<{ outlet: string }>; searchParams: Promise<{ lang?: string; new?: string }> }) {
   const { outlet } = await params;
   const query = await searchParams;

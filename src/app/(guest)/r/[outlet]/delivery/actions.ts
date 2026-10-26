@@ -7,6 +7,8 @@ import { claimManualQrDeliveryPayment, createDeliveryCheckout, deliveryRealtimeT
 import { priceDeliveryCart, deliveryOutlet } from "@/server/delivery/catalog";
 import { sendDeliveryOtp, verifyDeliveryOtp } from "@/server/delivery/otp";
 import { lookupPincode } from "@/server/delivery/pincode";
+import { saveDeliveryPush } from "@/server/guest/push";
+import { staffPushConfig, type PushSubscriptionInput } from "@/server/staff/web-push";
 import { db } from "@/db";
 import { AppError } from "@/server/errors";
 import { requestOrigin } from "@/server/request-host";
@@ -70,3 +72,10 @@ export async function deliveryTokenAction(outlet: string) {
   const { deviceId, token } = await identity(outlet);
   return result(async () => (token ? deliveryRealtimeToken(outlet, token, deviceId) : null));
 }
+
+/** Updates on this phone for the customer's own delivery */
+export async function deliveryPushAction(outlet: string, subscription: PushSubscriptionInput) {
+  const { deviceId, token } = await identity(outlet);
+  return result(async () => saveDeliveryPush(outlet, token, deviceId, subscription));
+}
+export async function pushKeyAction() { const c = staffPushConfig(); return c.enabled ? c.publicKey : null; }

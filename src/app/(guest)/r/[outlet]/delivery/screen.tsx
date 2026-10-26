@@ -18,7 +18,8 @@ import { CategoryBar } from "../t/[table]/menu/_components/category-bar";
 import { FilterBar } from "../t/[table]/menu/_components/filter-bar";
 import { Thumb, VegMark } from "../t/[table]/menu/_components/menu-row";
 import { connectRealtime } from "@/lib/realtime-client";
-import { claimManualQrDeliveryAction, deliveryStatusAction, deliveryTokenAction, pincodeAction, placeDeliveryAction, quoteDeliveryAction, resendDeliveryAction, startDeliveryAction, startDeliveryPaymentAction, verifyDeliveryAction } from "./actions";
+import { enableGuestPush, guestPushSupported } from "@/lib/guest-push-client";
+import { claimManualQrDeliveryAction, deliveryPushAction, deliveryStatusAction, deliveryTokenAction, pushKeyAction, pincodeAction, placeDeliveryAction, quoteDeliveryAction, resendDeliveryAction, startDeliveryAction, startDeliveryPaymentAction, verifyDeliveryAction } from "./actions";
 
 type Menu = Awaited<ReturnType<typeof deliveryMenu>>;
 type Quote = Awaited<ReturnType<typeof priceDeliveryCart>>;
@@ -178,7 +179,7 @@ export function DeliveryScreen({ outletCode, data, initialStatus, hindi: initial
       </button>}
     </header>
     {error && <p role="alert" className="mt-4 rounded-2xl border border-danger/20 bg-[var(--state-seated-soft)] p-4 text-caption font-semibold text-danger">{error}</p>}
-    {status ? <StatusView status={status} hindi={hindi} pending={pending} statusMessage={statusMessage} onPay={() => run(payDelivery)} onRefresh={() => run(loadStatus)} newOrderHref={`/r/${encodeURIComponent(outletCode)}/delivery?new=1&lang=${hindi ? "hi" : "en"}`} /> : <>
+    {status ? <StatusView outletCode={outletCode} status={status} hindi={hindi} pending={pending} statusMessage={statusMessage} onPay={() => run(payDelivery)} onRefresh={() => run(loadStatus)} newOrderHref={`/r/${encodeURIComponent(outletCode)}/delivery?new=1&lang=${hindi ? "hi" : "en"}`} /> : <>
     {step === "menu" && data && <>
       <div className="mt-5">
         <h1 className="font-display text-[1.625rem] leading-tight font-bold tracking-tight">{t("What are you craving?", "आज क्या खाने का मन है?")}</h1>
@@ -326,7 +327,7 @@ function FormCard({ icon, title, aside, children }: { icon: typeof UserIcon; tit
 }
 
 /** After ordering: where the food is, who is bringing it, and what is left to pay */
-function StatusView({ status, hindi, pending, statusMessage, onPay, onRefresh, newOrderHref }: { status: Status; hindi: boolean; pending: boolean; statusMessage: string; onPay: () => void; onRefresh: () => void; newOrderHref: string }) {
+function StatusView({ status, hindi, pending, statusMessage, onPay, onRefresh, newOrderHref, outletCode }: { status: Status; hindi: boolean; outletCode: string; pending: boolean; statusMessage: string; onPay: () => void; onRefresh: () => void; newOrderHref: string }) {
   const t = (en: string, hi: string) => (hindi ? hi : en);
   const placed = status.status !== "draft" && status.status !== "cancelled";
   const stage = status.status === "delivered" ? 4 : status.status === "dispatched" ? 3 : status.kitchenStatus === "ready" || status.kitchenStatus === "served" ? 2 : status.kitchenStatus === "accepted" || status.kitchenStatus === "preparing" ? 1 : 0;
@@ -344,6 +345,8 @@ function StatusView({ status, hindi, pending, statusMessage, onPay, onRefresh, n
       <h1 className="font-display text-[1.625rem] leading-tight font-bold tracking-tight">{status.status === "draft" ? t("Delivery payment", "डिलीवरी पेमेंट") : status.status === "cancelled" ? t("Order cancelled", "ऑर्डर रद्द") : steps[stage].title}</h1>
       <p className="mt-1 text-body text-muted">{statusMessage}</p>
     </div>
+
+    {placed && status.status !== "delivered" && <PushOffer hindi={hindi} outletCode={outletCode} />}
 
     {placed && <section className={card} aria-label={t("Order progress", "ऑर्डर की स्थिति")}>
       <ol className="grid gap-0">
@@ -442,4 +445,20 @@ function ExactPin({ hindi, address, onPin }: { hindi: boolean; address: Delivery
       <p className="text-caption text-muted">{t("Drag the pin or tap the map to mark your exact door. The rider sees this spot.", "पिन खिसकाकर या नक्शे पर टैप करके अपना सही दरवाज़ा चुनें। राइडर को यही जगह दिखेगी।")}</p>
     </>}
   </div>;
+}
+
+/** "Get updates on this phone": a push when the order is confirmed, leaves and arrives */
+function PushOffer({ hindi, outletCode }: { hindi: boolean; outletCode: string }) {
+  const t = (en: string, hi: string) => (hindi ? hi : en);
+  const [state, setState] = useState<"idle" | "busy" | "on" | "blocked" | "hidden">("hidden");
+  // Decided after the page loads, since the server cannot know what this browser supports
+  useEffect(() => { queueMicrotask(() => setState(!guestPushSupported() ? "hidden" : Notification.permission === "denied" ? "blocked" : "idle")); }, []);
+  if (state === "hidden") return null;
+  if (state === "on") return <p className="rounded-2xl bg-[var(--state-available-soft)] px-4 py-3 text-caption font-semibold text-[var(--state-available-text)]">🔔 {t("Updates are on for this phone.", "इस फ़ोन पर अपडेट चालू हैं।")}</p>;
+  if (state === "blocked") return <p className="rounded-2xl bg-ink/5 px-4 py-3 text-caption text-muted">{t("Notifications are blocked for this site. Allow them in your browser settings to get updates.", "इस साइट की सूचनाएँ बंद हैं। अपडेट पाने के लिए ब्राउज़र सेटिंग में अनुमति दें।")}</p>;
+  return <button type="button" disabled={state === "busy"} onClick={() => { setState("busy"); void enableGuestPush(pushKeyAction, (sub) => deliveryPushAction(outletCode, sub)).then((r) => setState(r.ok ? "on" : r.error === "blocked" ? "blocked" : r.error === "off" || r.error === "unsupported" ? "hidden" : "idle")); }}
+    className="flex w-full items-center gap-3 rounded-[22px] border border-brand/30 bg-brand-soft/50 p-4 text-left disabled:opacity-60">
+    <span className="grid size-10 shrink-0 place-items-center rounded-full bg-brand text-lg text-brand-on" aria-hidden>🔔</span>
+    <span className="min-w-0 flex-1"><span className="block text-body font-bold">{state === "busy" ? t("Turning on…", "चालू कर रहे हैं…") : t("Get updates on this phone", "इस फ़ोन पर अपडेट पाएँ")}</span><span className="block text-caption text-muted">{t("We will tell you when your food leaves and arrives.", "खाना निकलने और पहुँचने पर हम बताएँगे।")}</span></span>
+  </button>;
 }

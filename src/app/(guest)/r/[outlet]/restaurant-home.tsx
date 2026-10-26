@@ -7,6 +7,7 @@ import { useState, type CSSProperties, type ReactNode } from "react";
 import { brandStyle, deriveBrandTokens } from "@/domain/brand";
 import { LANG_COOKIE, type Lang } from "@/lib/i18n";
 import type { getRestaurantHome } from "@/server/guest/restaurant-home";
+import { InstallApp } from "@/components/install-app";
 import { OutletLogo } from "./t/[table]/_components/outlet-logo";
 
 type HomeData = Awaited<ReturnType<typeof getRestaurantHome>>;
@@ -24,7 +25,7 @@ function rememberLanguage(lang: Lang) {
 }
 
 /** The restaurant's own page (no table): a welcome, the language, then booking or delivery. */
-export function RestaurantHome({ data, initialLang = "en" }: { data: HomeData; initialLang?: Lang }) {
+export function RestaurantHome({ data, initialLang = "en", installable = null }: { data: HomeData; initialLang?: Lang; installable?: { name: string; logoUrl: string | null } | null }) {
   const [step, setStep] = useState<Step>("welcome");
   const [hindi, setHindi] = useState(initialLang === "hi");
   const { outlet, services } = data;
@@ -144,6 +145,7 @@ export function RestaurantHome({ data, initialLang = "en" }: { data: HomeData; i
           )}
         </div>
       </section>
+      {installable && <div className="mt-4"><InstallApp name={installable.name} logoUrl={installable.logoUrl} /></div>}
       <p className="mt-5 flex items-center justify-center gap-1.5 text-label text-muted">
         <HugeiconsIcon icon={QrCodeIcon} size={14} aria-hidden />
         {t.poweredBy}

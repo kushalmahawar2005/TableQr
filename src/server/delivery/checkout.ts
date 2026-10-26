@@ -14,6 +14,7 @@ import { announceBill, settleExternalGatewayInTransaction, settleManualQrInTrans
 import { publish } from "../realtime/publish";
 import { signRealtimeToken, topics } from "../realtime/token";
 import { DELIVERY_TABLE_PREFIX, freshLocation } from "@/domain/delivery";
+import { notifyDeliveryCustomer } from "../guest/push";
 import { verifiedRiders } from "./rider-docs";
 import { TAKEAWAY_CLASS } from "../floor/takeaway-class";
 import { deliveryOutlet, cleanDeliveryCart, priceDeliveryCart } from "./catalog";
@@ -147,6 +148,7 @@ async function placeKnownDeliveryOrder(code: string, found: Awaited<ReturnType<t
   }, LOCK_THEN_READ);
   if (!placed.replayed) {
     await publish(deliveryScope(found), [{ topic: topics.kitchen, type: "ticket.created", data: { orderId: placed.order!.orderId, stations: placed.order!.stations } }, { topic: topics.floor, type: "delivery.placed", data: { sessionId: placed.sessionId } }, { topic: topics.session(placed.sessionId), type: "delivery.placed" }]);
+    void notifyDeliveryCustomer(deliveryScope(found), placed.sessionId, "placed");
     if (placed.billPayment) announceBill(placed.billPayment.scope, placed.billPayment.closedTableIds ? { tableIds: placed.billPayment.closedTableIds, state: "paid" } : undefined, [{ topic: topics.session(placed.sessionId), type: "payment.updated", data: { paymentId: placed.billPayment.paymentId } }, { topic: topics.session(placed.sessionId), type: "session.closed" }]);
   }
   return { sessionId: placed.sessionId, replayed: placed.replayed };
@@ -181,3 +183,4 @@ export async function deliveryRealtimeToken(code: string, token: string, deviceI
   if (!row.sessionId) return null;
   return signRealtimeToken({ tenantId: outlet.tenantId, outletId: outlet.id, topics: [topics.session(row.sessionId)], sub: deviceId }, 6 * 60 * 60);
 }
+

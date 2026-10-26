@@ -164,7 +164,7 @@ export async function riderPickUp(staff: StaffSession, id: string, now = new Dat
     await audit(tx, staff, { action: "delivery.dispatched", entity: "delivery", entityId: row.id, before: { status: row.status }, after: { status: "dispatched", by: "rider" }, now });
     return row.sessionId;
   }, LOCK_THEN_READ);
-  await announceDelivery(staff, sessionId);
+  await announceDelivery(staff, sessionId, "delivery.updated", [], "dispatched");
 }
 
 /** Cash taken at the door: recorded on the bill in the rider's name */
@@ -195,7 +195,7 @@ export async function riderDelivered(staff: StaffSession, id: string, now = new 
     await audit(tx, staff, { action: "delivery.delivered", entity: "delivery", entityId: row.id, before: { status: row.status }, after: { status: "delivered", by: "rider" }, now });
     return row.sessionId;
   }, LOCK_THEN_READ);
-  await announceDelivery(staff, sessionId);
+  await announceDelivery(staff, sessionId, "delivery.updated", [], "delivered");
 }
 
 /** The rider goes online (ready for deliveries) or offline, from their own phone */

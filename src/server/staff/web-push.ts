@@ -17,7 +17,7 @@ export function staffPushConfig() {
   return { enabled: !!(publicKey && privateKey && subject), publicKey };
 }
 
-function validateSubscription(value: PushSubscriptionInput): PushSubscriptionInput {
+export function validateSubscription(value: PushSubscriptionInput): PushSubscriptionInput {
   if (!value || typeof value !== "object" || typeof value.endpoint !== "string" || value.endpoint.length > 2048) throw new Error("Invalid push subscription.");
   let endpoint: URL;
   try { endpoint = new URL(value.endpoint); } catch { throw new Error("Invalid push endpoint."); }

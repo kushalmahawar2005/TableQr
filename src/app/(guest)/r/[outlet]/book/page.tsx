@@ -1,3 +1,4 @@
+import { restaurantApp, restaurantAppMetadata } from "@/server/guest/restaurant-app";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -5,7 +6,10 @@ import { BookingClient } from "./booking-client";
 import { getBookingPageConfig } from "@/server/booking/core";
 import { AppError } from "@/server/errors";
 
-export const metadata: Metadata = { title: "Book a table" };
+// The restaurant's own app (plans with delivery or reservations) is installable from here
+export async function generateMetadata(props: PageProps<"/r/[outlet]/book">): Promise<Metadata> {
+  return { title: "Book a table", ...restaurantAppMetadata(await restaurantApp((await props.params).outlet)) };
+}
 
 // B1 Guests, date and time. Reached from the entrance QR or the booking link.
 export default async function BookPage(props: PageProps<"/r/[outlet]/book">) {

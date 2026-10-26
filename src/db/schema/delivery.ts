@@ -46,3 +46,11 @@ export const riderDocuments = mysqlTable("rider_documents", {
   reviewedAt: at("reviewed_at"), reviewedByUserId: ref("reviewed_by_user_id"), note: varchar("note", { length: 200 }),
   createdAt: createdAt(),
 }, t => [uniqueIndex("rider_documents_user_uq").on(t.tenantId, t.userId), tenantKey("rider_documents", t), sameTenant("fk_rider_documents_user", t, t.userId, users)]);
+
+/** A customer's phone that asked for updates on their delivery (only the latest order it follows) */
+export const guestPushSubscriptions = mysqlTable("guest_push_subscriptions", {
+  id: id(), tenantId: tenantId(), outletId: ref("outlet_id").notNull(),
+  endpointHash: char("endpoint_hash", { length: 64 }).notNull(), endpoint: varchar("endpoint", { length: 2048 }).notNull(),
+  p256dh: varchar("p256dh", { length: 256 }).notNull(), auth: varchar("auth", { length: 256 }).notNull(),
+  deliveryCheckoutId: ref("delivery_checkout_id"), createdAt: createdAt(),
+}, t => [uniqueIndex("guest_push_endpoint_uq").on(t.tenantId, t.endpointHash), index("guest_push_checkout_idx").on(t.tenantId, t.deliveryCheckoutId), tenantKey("guest_push_subscriptions", t), sameTenant("fk_guest_push_outlet", t, t.outletId, outlets)]);

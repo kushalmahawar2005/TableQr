@@ -12,6 +12,7 @@ import { publish } from "../realtime/publish";
 import { topics } from "../realtime/token";
 import { releaseVisitTables } from "../floor/assignments";
 import { announceDelivery } from "./events";
+import { notifyDeliveryCustomer } from "../guest/push";
 
 export const deliveryStaffRoles = ["owner", "manager", "cashier"] as const;
 export async function deliveryQueue(staff: StaffSession) {
@@ -102,7 +103,7 @@ export async function advanceDelivery(staff: StaffSession, id: string, next: "di
     changed = row.sessionId;
     rider = row.courierUserId;
   }, LOCK_THEN_READ);
-  if (changed) await announceDelivery(staff, changed, "delivery.updated", [rider]);
+  if (changed) await announceDelivery(staff, changed, "delivery.updated", [rider], next);
 }
 
 /**
@@ -149,5 +150,6 @@ export async function cancelDeliveryOrder(staff: StaffSession, id: string, rawRe
     refunds.push({ paymentId: p.id, status: r.status });
   }
   await publish(scope, [{ topic: topics.floor, type: "delivery.cancelled", data: { sessionId: found.sessionId } }, { topic: topics.kitchen, type: "ticket.updated", data: { sessionId: found.sessionId } }, ...(found.sessionId ? [{ topic: topics.session(found.sessionId), type: "delivery.cancelled" }] : [])]);
+  if (found.sessionId) void notifyDeliveryCustomer(scope, found.sessionId, "cancelled");
   return { sessionId: found.sessionId, refunds, replayed: found.replayed };
 }
