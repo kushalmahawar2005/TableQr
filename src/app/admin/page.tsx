@@ -13,13 +13,15 @@ import { PlansView } from "./plans-view";
 import { SubscriptionsView } from "./subscriptions-view";
 import { TenantsView } from "./tenants-view";
 import { adminLogoutAction } from "./actions";
+import { AppsView } from "./apps-view";
+import { appReleases } from "@/server/admin/app-releases";
 
 export const metadata: Metadata = { title: "Platform admin", robots: { index: false, follow: false } };
 
 export default async function AdminPage() {
   const admin = await currentPlatformAdmin();
   if (!admin) return <main className="grid min-h-dvh place-items-center bg-[#f7f8fc] px-4"><AdminLogin /></main>;
-  const data = await getAdminData();
+  const [data, releases] = await Promise.all([getAdminData(), appReleases("rider")]);
   const theme = (await cookies()).get("tq_theme")?.value === "dark" ? "dark" : "light";
   const name = admin.name.trim().split(/\s+/)[0] || admin.email.split("@")[0];
   const rupees = (paise: number) => `₹${Math.round(paise / 100).toLocaleString("en-IN")}`;
@@ -39,6 +41,7 @@ export default async function AdminPage() {
       "Plans & Pricing": <PlansView data={data} />,
       Fees: <FeesView data={data} />,
       Analytics: <AnalyticsView data={data} />,
+      Apps: <AppsView initial={releases} />,
       "Audit Logs": <AuditView />,
       Settings: <SettingsView />,
     }}

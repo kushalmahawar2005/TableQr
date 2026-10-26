@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { BarChart3, Bell, Command, CreditCard, LayoutGrid, Repeat, ScrollText, LogOut, Moon, Settings, Store, Sun, Tag, type LucideIcon } from "lucide-react";
+import { Smartphone, BarChart3, Bell, Command, CreditCard, LayoutGrid, Repeat, ScrollText, LogOut, Moon, Settings, Store, Sun, Tag, type LucideIcon } from "lucide-react";
 import { Sidebar, SidebarBody, SidebarLabel, SidebarLink } from "@/components/ui/sidebar";
 import { saveTheme } from "@/components/theme-toggle";
 import { adminLoginAction, type AdminLoginState } from "./actions";
@@ -27,7 +27,7 @@ const navGroups: { title: string; items: { label: string; icon: LucideIcon }[] }
   { title: "Overview", items: [{ label: "Dashboard", icon: LayoutGrid }] },
   { title: "Tenants", items: [{ label: "Tenants", icon: Store }, { label: "Subscriptions", icon: Repeat }] },
   { title: "Business", items: [{ label: "Plans & Pricing", icon: Tag }, { label: "Fees", icon: CreditCard }, { label: "Analytics", icon: BarChart3 }] },
-  { title: "System", items: [{ label: "Audit Logs", icon: ScrollText }, { label: "Settings", icon: Settings }] },
+  { title: "System", items: [{ label: "Apps", icon: Smartphone }, { label: "Audit Logs", icon: ScrollText }, { label: "Settings", icon: Settings }] },
 ];
 
 export function AdminSidebar({ active, onSelect, email, logout, dark, onTheme }: { active: string; onSelect: (item: string) => void; email: string; logout: () => Promise<void>; dark: boolean; onTheme: (dark: boolean) => void }) {

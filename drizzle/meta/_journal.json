@@ -435,6 +435,13 @@
       "when": 1793020331886,
       "tag": "0061_restaurant_upi",
       "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "5",
+      "when": 1793028188541,
+      "tag": "0062_app_releases",
+      "breakpoints": true
     }
   ]
 }

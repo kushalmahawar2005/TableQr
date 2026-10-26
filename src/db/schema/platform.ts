@@ -61,3 +61,14 @@ export const platformAdminLoginBuckets = mysqlTable("platform_admin_login_bucket
   windowStartedAt: at("window_started_at").notNull(),
   lockedUntil: at("locked_until"),
 });
+
+/** Versions of TableQR's own apps (the rider app) that the platform admin uploads; the newest is downloaded */
+export const appReleases = mysqlTable("app_releases", {
+  id: id(),
+  app: mysqlEnum("app", ["rider"]).notNull(),
+  version: varchar("version", { length: 20 }).notNull(),
+  url: varchar("url", { length: 500 }).notNull(),
+  sizeBytes: int("size_bytes").notNull(),
+  notes: varchar("notes", { length: 300 }),
+  createdAt: createdAt(),
+}, (t) => [uniqueIndex("app_releases_app_version_uq").on(t.app, t.version)]);
