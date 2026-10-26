@@ -36,7 +36,7 @@ export function AdminSidebar({ active, onSelect, email, logout, dark, onTheme }:
       <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-[#5b42f5] text-white"><Command aria-hidden="true" className="size-4" /></span>
       <SidebarLabel><span className="block font-display text-sm font-bold leading-tight text-foreground">TableQR</span><span className="block text-[11px] font-normal text-muted-foreground">Platform Admin</span></SidebarLabel>
     </div>
-    <nav aria-label="Platform admin" className="mt-6 flex-1 space-y-5 overflow-y-auto overflow-x-hidden">
+    <nav aria-label="Platform admin" className="mt-6 no-scrollbar flex-1 space-y-5 overflow-y-auto overflow-x-hidden">
       {navGroups.map((group) => <div key={group.title}>
         <p className="mb-1 h-4 px-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70"><SidebarLabel>{group.title}</SidebarLabel></p>
         <div className="space-y-0.5">{group.items.map(({ label, icon: Icon }) => <SidebarLink key={label} label={label} active={active === label} icon={<Icon className="size-[18px]" />} onClick={() => onSelect(label)} />)}</div>

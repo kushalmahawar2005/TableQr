@@ -26,7 +26,9 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
+    // Extensions such as Dark Reader add attributes to <html> before React loads
     <html
+      suppressHydrationWarning
       lang="en"
       className={`h-full antialiased ${fontVariables}`}
     >
