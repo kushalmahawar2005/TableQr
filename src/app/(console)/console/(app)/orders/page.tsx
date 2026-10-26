@@ -53,6 +53,7 @@ export default async function OrdersPage(props: PageProps<"/console/orders">) {
       outlet={staff.outlet.name}
       tabs={tabs}
       riders={riders}
+      realtimeUrl={process.env.REALTIME_URL?.replace(/^http/, "ws") ?? null}
       canAssignCourier={staff.roles.some(role => role === "owner" || role === "manager")}
       rows={deliveries.map(row => ({ ...row, placedAt: row.placedAt?.toISOString() ?? null }))}
       pendingPayments={pendingPayments.map(row => ({ ...row, claimedAt: row.claimedAt?.toISOString() ?? null }))}

@@ -2,6 +2,7 @@
 import { assignTeamRider, riderReportLocation, riderCollectCash, riderDelivered, riderJobs, riderPickUp, riderProfile, riderSetOnline, saveRiderProfile } from "@/server/delivery/riders";
 import { AppError } from "@/server/errors";
 import { staffFor } from "@/server/staff/request";
+import { staffRealtimeToken, topics } from "@/server/realtime/token";
 import { deliveryStaffRoles } from "@/server/delivery/staff";
 
 async function run<T>(roles: Parameters<typeof staffFor>[0], work: (staff: Awaited<ReturnType<typeof staffFor>>) => Promise<T>) {
@@ -26,3 +27,8 @@ export async function riderSaveProfileAction(form: FormData) {
 /** Console: give a delivery to a team rider */
 export async function assignTeamRiderAction(deliveryId: string, riderId: string) { return run(deliveryStaffRoles, (s) => assignTeamRider(s, deliveryId, riderId)); }
 export async function riderLocationAction(lat: number, lng: number) { return run(["rider"], (s) => riderReportLocation(s, { lat, lng })); }
+/** Live updates for the rider's phone: their own jobs, and the kitchen (food ready to pick up) */
+export async function riderTokenAction() {
+  try { const s = await staffFor(["rider"]); return staffRealtimeToken(s, [topics.rider(s.userId), topics.kitchen]); }
+  catch { return null; }
+}

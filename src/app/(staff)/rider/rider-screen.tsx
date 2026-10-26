@@ -2,7 +2,8 @@
 import { Banknote, Bike, Camera, Check, ChefHat, CircleCheck, MapPin, Navigation, Package, Phone, Store, UserRound } from "lucide-react";
 import { useEffect, useState, useTransition } from "react";
 import type { riderJobs, riderProfile } from "@/server/delivery/riders";
-import { riderCashAction, riderDeliveredAction, riderJobsAction, riderLocationAction, riderOnlineAction, riderPickUpAction, riderSaveProfileAction } from "./actions";
+import { connectRealtime } from "@/lib/realtime-client";
+import { riderCashAction, riderDeliveredAction, riderJobsAction, riderLocationAction, riderOnlineAction, riderPickUpAction, riderSaveProfileAction, riderTokenAction } from "./actions";
 import { LiveMap } from "@/components/live-map";
 import { distanceKm, etaMinutes } from "@/domain/delivery";
 
@@ -13,18 +14,27 @@ const money = (p: number) => `₹${(p / 100).toLocaleString("en-IN", { maximumFr
 const clock = (ms: number | null) => (ms ? new Date(ms).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" }) : "");
 const directions = (q: string) => `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(q)}&travelmode=driving`;
 
-export function RiderScreen({ initialJobs, initialProfile }: { initialJobs: Jobs; initialProfile: Profile }) {
+export function RiderScreen({ initialJobs, initialProfile, realtimeUrl = null }: { initialJobs: Jobs; initialProfile: Profile; realtimeUrl?: string | null }) {
   const [jobs, setJobs] = useState(initialJobs);
   const [profile, setProfile] = useState(initialProfile);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const [editing, setEditing] = useState(!initialProfile.photoUrl || !initialProfile.vehicleNo);
 
-  // New jobs and kitchen progress arrive by themselves
+  // New jobs and kitchen progress arrive live; a burst of events is one reload. Without a live
+  // connection the list is checked every 20 s.
   useEffect(() => {
-    const t = setInterval(async () => { if (document.hidden) return; const r = await riderJobsAction(); if (r.ok) setJobs(r.data); }, 15000);
-    return () => clearInterval(t);
-  }, []);
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const reload = async () => { const r = await riderJobsAction(); if (r.ok) setJobs(r.data); };
+    const stop = connectRealtime({
+      url: realtimeUrl,
+      getToken: riderTokenAction,
+      pollMs: 20_000,
+      onResync: () => { if (!document.hidden) void reload(); },
+      onEvents: () => { if (!timer) timer = setTimeout(() => { timer = null; void reload(); }, 1000); },
+    });
+    return () => { stop(); if (timer) clearTimeout(timer); };
+  }, [realtimeUrl]);
 
   const here = useLiveLocation(profile.online);
 

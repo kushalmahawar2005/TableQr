@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { headers } from "next/headers";
 import { uuidv7 } from "@/db/id";
 import type { DeliveryAddress, DeliveryCartLine } from "@/db/schema/delivery";
-import { claimManualQrDeliveryPayment, createDeliveryCheckout, deliveryStatus, placeDeliveryOrder } from "@/server/delivery/checkout";
+import { claimManualQrDeliveryPayment, createDeliveryCheckout, deliveryRealtimeToken, deliveryStatus, placeDeliveryOrder } from "@/server/delivery/checkout";
 import { priceDeliveryCart, deliveryOutlet } from "@/server/delivery/catalog";
 import { sendDeliveryOtp, verifyDeliveryOtp } from "@/server/delivery/otp";
 import { lookupPincode } from "@/server/delivery/pincode";
@@ -63,4 +63,10 @@ export async function deliveryStatusAction(outlet: string) {
 /** City and areas for the address form; null when the pincode is unknown or the lookup is down */
 export async function pincodeAction(pincode: string) {
   return lookupPincode(String(pincode ?? "").trim());
+}
+
+/** Live updates for the customer's own delivery; null when realtime is off (the page polls) */
+export async function deliveryTokenAction(outlet: string) {
+  const { deviceId, token } = await identity(outlet);
+  return result(async () => (token ? deliveryRealtimeToken(outlet, token, deviceId) : null));
 }

@@ -7,7 +7,8 @@ import type { RiderCard } from "@/server/delivery/riders";
 import { LiveMap, type MapPoint } from "@/components/live-map";
 import type { deliveryQueue, pendingManualDeliveryPayments } from "@/server/delivery/staff";
 import { assignTeamRiderAction } from "../../../../../(staff)/rider/actions";
-import { advanceDeliveryAction, assignDeliveryCourierAction, cancelDeliveryOrderAction, confirmManualQrDeliveryPaymentAction } from "./actions";
+import { connectRealtime } from "@/lib/realtime-client";
+import { advanceDeliveryAction, assignDeliveryCourierAction, cancelDeliveryOrderAction, confirmManualQrDeliveryPaymentAction, deliveryDeskTokenAction } from "./actions";
 
 type Row = Omit<Awaited<ReturnType<typeof deliveryQueue>>[number], "placedAt"> & { placedAt: string | null };
 type PendingPayment = Omit<Awaited<ReturnType<typeof pendingManualDeliveryPayments>>[number], "claimedAt"> & { claimedAt: string | null };
@@ -39,12 +40,37 @@ const STAGE_TONE = [
   "bg-[var(--state-available-soft)] text-[var(--state-available-text)]",
 ];
 
-export function DeliveryQueueScreen({ rows, pendingPayments, canAssignCourier, outlet, tabs, riders = [] }: { rows: Row[]; pendingPayments: PendingPayment[]; canAssignCourier: boolean; outlet: string; tabs?: ReactNode; riders?: RiderCard[] }) {
+export function DeliveryQueueScreen({ rows, pendingPayments, canAssignCourier, outlet, tabs, riders = [], realtimeUrl = null }: { rows: Row[]; pendingPayments: PendingPayment[]; canAssignCourier: boolean; outlet: string; tabs?: ReactNode; riders?: RiderCard[]; realtimeUrl?: string | null }) {
   const router = useRouter();
   const [pending, start] = useTransition(), [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<"active" | "delivered">("active");
   const [now, setNow] = useState(() => Date.now());
-  useEffect(() => { const timer = setInterval(() => { setNow(Date.now()); if (!document.hidden) router.refresh(); }, 12000); return () => clearInterval(timer); }, [router]);
+  // Rider dots move from live events without reloading the page
+  const [moved, setMoved] = useState<Record<string, { lat: number; lng: number; at: number }>>({});
+  useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(timer); }, []);
+  // Any delivery or kitchen change reloads this screen's data once, a moment later, so a burst of
+  // events is one reload. With the live connection down it falls back to checking every 12 s.
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const reload = () => { if (timer) return; timer = setTimeout(() => { timer = null; router.refresh(); }, 800); };
+    const stop = connectRealtime({
+      url: realtimeUrl,
+      getToken: deliveryDeskTokenAction,
+      pollMs: 12_000,
+      onResync: () => { if (!document.hidden) router.refresh(); },
+      onEvents: (events) => {
+        let other = false;
+        for (const e of events) {
+          if (e.type === "rider.location" && e.data && typeof e.data.riderId === "string") {
+            const d = e.data as { riderId: string; lat: number; lng: number; at: number };
+            setMoved((m) => ({ ...m, [d.riderId]: { lat: d.lat, lng: d.lng, at: d.at } }));
+          } else other = true;
+        }
+        if (other) reload();
+      },
+    });
+    return () => { stop(); if (timer) clearTimeout(timer); };
+  }, [router, realtimeUrl]);
 
   const active = rows.filter(row => row.status !== "delivered"), done = rows.filter(row => row.status === "delivered");
   const shown = view === "active" ? active : done;
@@ -80,7 +106,7 @@ export function DeliveryQueueScreen({ rows, pendingPayments, canAssignCourier, o
     {(() => {
       // Riders sharing their location, and the doors of live orders that have a pin
       const points: MapPoint[] = [
-        ...riders.filter((r) => r.location).map((r) => ({ id: `r-${r.id}`, kind: "rider" as const, lat: r.location!.lat, lng: r.location!.lng, photoUrl: r.photoUrl, label: r.name })),
+        ...riders.map((r) => ({ r, at: moved[r.id] && (!r.location || moved[r.id].at > r.location.at) ? moved[r.id] : r.location })).filter(({ r, at }) => at && r.availability !== "offline").map(({ r, at }) => ({ id: `r-${r.id}`, kind: "rider" as const, lat: at!.lat, lng: at!.lng, photoUrl: r.photoUrl, label: r.name })),
         ...active.filter((r) => r.address.lat !== undefined && r.address.lng !== undefined).map((r) => ({ id: `h-${r.id}`, kind: "home" as const, lat: r.address.lat!, lng: r.address.lng!, label: r.name ?? "Customer" })),
       ];
       return points.length ? <section className="mt-5">

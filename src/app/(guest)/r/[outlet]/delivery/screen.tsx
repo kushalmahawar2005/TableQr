@@ -17,7 +17,8 @@ import { g3Copy } from "../t/[table]/menu/_copy";
 import { CategoryBar } from "../t/[table]/menu/_components/category-bar";
 import { FilterBar } from "../t/[table]/menu/_components/filter-bar";
 import { Thumb, VegMark } from "../t/[table]/menu/_components/menu-row";
-import { claimManualQrDeliveryAction, deliveryStatusAction, pincodeAction, placeDeliveryAction, quoteDeliveryAction, resendDeliveryAction, startDeliveryAction, startDeliveryPaymentAction, verifyDeliveryAction } from "./actions";
+import { connectRealtime } from "@/lib/realtime-client";
+import { claimManualQrDeliveryAction, deliveryStatusAction, deliveryTokenAction, pincodeAction, placeDeliveryAction, quoteDeliveryAction, resendDeliveryAction, startDeliveryAction, startDeliveryPaymentAction, verifyDeliveryAction } from "./actions";
 
 type Menu = Awaited<ReturnType<typeof deliveryMenu>>;
 type Quote = Awaited<ReturnType<typeof priceDeliveryCart>>;
@@ -37,7 +38,7 @@ const money = (paise: number) => `₹${(paise / 100).toLocaleString("en-IN", { m
 const control = "min-h-12 w-full rounded-2xl border border-line/70 bg-surface px-4 text-ink outline-none focus:border-brand focus:shadow-[0_0_0_3px_var(--brand-soft)]";
 const button = "min-h-13 w-full rounded-2xl bg-brand px-4 font-bold text-brand-on shadow-[0_8px_20px_-6px_var(--brand-border)] disabled:opacity-50 disabled:shadow-none";
 
-export function DeliveryScreen({ outletCode, data, initialStatus, hindi: initialHindi = false }: { outletCode: string; data?: Menu; initialStatus?: Status; hindi?: boolean }) {
+export function DeliveryScreen({ outletCode, data, initialStatus, hindi: initialHindi = false, realtimeUrl = null }: { outletCode: string; data?: Menu; initialStatus?: Status; hindi?: boolean; realtimeUrl?: string | null }) {
   const [hindi, setHindi] = useState(initialHindi);
   const t = (en: string, hi: string) => hindi ? hi : en;
   const [cart, setCart] = useState<DeliveryCartLine[]>([]);
@@ -56,12 +57,32 @@ export function DeliveryScreen({ outletCode, data, initialStatus, hindi: initial
   const [pin, setPin] = useState<{ code: string; info: PinInfo; busy: boolean } | null>(null);
   const [remember, setRemember] = useState(true);
   const statusCode = status?.status;
+  // Live updates for this order; with no live connection the page checks every 10 s instead
+  const finished = !statusCode || ["delivered", "cancelled"].includes(statusCode);
   useEffect(() => {
-    if (!statusCode || ["delivered", "cancelled"].includes(statusCode)) return;
-    let busy = false;
-    const timer = setInterval(async () => { if (document.hidden || busy) return; busy = true; try { const response = await deliveryStatusAction(outletCode); if (response.ok) setStatus(response.data); } finally { busy = false; } }, 10000);
-    return () => clearInterval(timer);
-  }, [outletCode, statusCode]);
+    if (finished) return;
+    let busy = false, timer: ReturnType<typeof setTimeout> | null = null;
+    const refresh = async () => { if (busy) return; busy = true; try { const response = await deliveryStatusAction(outletCode); if (response.ok) setStatus(response.data); } finally { busy = false; } };
+    const later = () => { if (!timer) timer = setTimeout(() => { timer = null; void refresh(); }, 600); };
+    const stop = connectRealtime({
+      url: realtimeUrl,
+      getToken: async () => { const r = await deliveryTokenAction(outletCode); return r.ok ? r.data : null; },
+      pollMs: 10_000,
+      onResync: () => { if (!document.hidden) void refresh(); },
+      onEvents: (events) => {
+        let other = false;
+        for (const e of events) {
+          // The rider's bike moves on the map straight from the event, no reload
+          if (e.type === "rider.location" && e.data) {
+            const d = e.data as { lat: number; lng: number; at: number };
+            setStatus((current) => (current && current.status === "dispatched" ? { ...current, riderLocation: { lat: d.lat, lng: d.lng, at: d.at } } : current));
+          } else other = true;
+        }
+        if (other) later();
+      },
+    });
+    return () => { stop(); if (timer) clearTimeout(timer); };
+  }, [outletCode, finished, realtimeUrl]);
   // The browser may close after order placement; the server cookie restores tracking on refresh.
   async function loadStatus() { const response = await deliveryStatusAction(outletCode); if (response.ok) setStatus(response.data); else setError(response.message); }
   async function payDelivery() {

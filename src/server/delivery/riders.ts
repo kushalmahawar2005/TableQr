@@ -12,6 +12,7 @@ import { audit } from "../staff/audit";
 import type { StaffSession } from "../staff/auth";
 import { requireStaffRole } from "../staff/waiter";
 import { freshLocation } from "@/domain/delivery";
+import { announceDelivery } from "./events";
 import { deliveryStaffRoles } from "./staff";
 
 // The restaurant's own riders: who can take a delivery right now, giving one to a rider, and
@@ -74,6 +75,7 @@ export async function assignTeamRider(staff: StaffSession, deliveryId: string, r
     .where(and(eq(s.users.tenantId, staff.tenantId), eq(s.users.id, String(riderId)), eq(s.users.isActive, true), eq(s.staffRoles.role, "rider"), or(isNull(s.staffRoles.outletId), eq(s.staffRoles.outletId, staff.outletId))))
     .limit(1);
   if (!rider) throw new AppError("not_found", "That rider is not on your team or is switched off.");
+  let previous: string | null = null;
   const sessionId = await db.transaction(async (tx) => {
     const [row] = await tx.select().from(s.deliveryCheckouts)
       .where(and(eq(s.deliveryCheckouts.tenantId, staff.tenantId), eq(s.deliveryCheckouts.outletId, staff.outletId), eq(s.deliveryCheckouts.id, String(deliveryId))))
@@ -81,12 +83,13 @@ export async function assignTeamRider(staff: StaffSession, deliveryId: string, r
     if (!row?.sessionId) throw new AppError("not_found", "Delivery order not found.");
     if (!(LIVE as readonly string[]).includes(row.status)) throw new AppError("invalid_state", "This delivery is already finished.");
     if (row.courierUserId === rider.id) return row.sessionId;
+    previous = row.courierUserId;
     await tx.update(s.deliveryCheckouts).set({ courierUserId: rider.id, courierName: rider.name, courierPhone: rider.phone, courierAssignedAt: now })
       .where(and(eq(s.deliveryCheckouts.tenantId, staff.tenantId), eq(s.deliveryCheckouts.id, row.id)));
     await audit(tx, staff, { action: "delivery.rider_assigned", entity: "delivery", entityId: row.id, before: { riderId: row.courierUserId, name: row.courierName }, after: { riderId: rider.id, name: rider.name }, now });
     return row.sessionId;
   }, LOCK_THEN_READ);
-  await publish({ tenantId: staff.tenantId, outletId: staff.outletId }, [{ topic: topics.floor, type: "delivery.updated", data: { sessionId } }]);
+  await announceDelivery(staff, sessionId, "delivery.updated", [rider.id, previous]);
 }
 
 /** A rider's jobs: everything given to them that is still out, and what they delivered today */
@@ -157,7 +160,7 @@ export async function riderPickUp(staff: StaffSession, id: string, now = new Dat
     await audit(tx, staff, { action: "delivery.dispatched", entity: "delivery", entityId: row.id, before: { status: row.status }, after: { status: "dispatched", by: "rider" }, now });
     return row.sessionId;
   }, LOCK_THEN_READ);
-  await publish({ tenantId: staff.tenantId, outletId: staff.outletId }, [{ topic: topics.floor, type: "delivery.updated", data: { sessionId } }]);
+  await announceDelivery(staff, sessionId);
 }
 
 /** Cash taken at the door: recorded on the bill in the rider's name */
@@ -171,6 +174,7 @@ export async function riderCollectCash(staff: StaffSession, id: string, requestI
   if (!bill) throw new AppError("not_found", "The bill for this delivery is missing. Ask the restaurant.");
   if (bill.status === "paid") return { alreadyPaid: true };
   await settleAtCounter({ ...staff, outletId: row.outletId }, { sessionId: row.sessionId, method: "cash", receivedPaise: bill.totalPaise, clientRequestId: requestId }, now, ["rider"]);
+  await announceDelivery({ tenantId: staff.tenantId, outletId: row.outletId }, row.sessionId);
   return { alreadyPaid: false };
 }
 
@@ -187,7 +191,7 @@ export async function riderDelivered(staff: StaffSession, id: string, now = new 
     await audit(tx, staff, { action: "delivery.delivered", entity: "delivery", entityId: row.id, before: { status: row.status }, after: { status: "delivered", by: "rider" }, now });
     return row.sessionId;
   }, LOCK_THEN_READ);
-  await publish({ tenantId: staff.tenantId, outletId: staff.outletId }, [{ topic: topics.floor, type: "delivery.updated", data: { sessionId } }]);
+  await announceDelivery(staff, sessionId);
 }
 
 /** The rider goes online (ready for deliveries) or offline, from their own phone */
@@ -224,7 +228,16 @@ export async function riderReportLocation(staff: StaffSession, input: { lat: num
   await requireStaffRole(staff, ["rider"]);
   const lat = Number(input?.lat), lng = Number(input?.lng);
   if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) throw new AppError("invalid_state", "Location not understood.");
-  await db.update(s.users).set({ lastLat: Math.round(lat * 1e6) / 1e6, lastLng: Math.round(lng * 1e6) / 1e6, lastLocAt: now })
+  const point = { lat: Math.round(lat * 1e6) / 1e6, lng: Math.round(lng * 1e6) / 1e6 };
+  await db.update(s.users).set({ lastLat: point.lat, lastLng: point.lng, lastLocAt: now })
     .where(and(eq(s.users.tenantId, staff.tenantId), eq(s.users.id, staff.userId), eq(s.users.dutyStatus, "on")));
+  // The desk moves the rider's dot without reloading; customers whose food is on this bike see it move
+  const onTheWay = await db.select({ sessionId: s.deliveryCheckouts.sessionId }).from(s.deliveryCheckouts)
+    .where(and(eq(s.deliveryCheckouts.tenantId, staff.tenantId), eq(s.deliveryCheckouts.courierUserId, staff.userId), eq(s.deliveryCheckouts.status, "dispatched")));
+  const data = { riderId: staff.userId, ...point, at: now.getTime() };
+  await publish({ tenantId: staff.tenantId, outletId: staff.outletId }, [
+    { topic: topics.floor, type: "rider.location", data },
+    ...onTheWay.filter((r) => r.sessionId).map((r) => ({ topic: topics.session(r.sessionId!), type: "rider.location", data })),
+  ]);
   return { ok: true };
 }

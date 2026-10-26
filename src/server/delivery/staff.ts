@@ -11,6 +11,7 @@ import { requestRefund } from "../billing/refunds";
 import { publish } from "../realtime/publish";
 import { topics } from "../realtime/token";
 import { releaseVisitTables } from "../floor/assignments";
+import { announceDelivery } from "./events";
 
 export const deliveryStaffRoles = ["owner", "manager", "cashier"] as const;
 export async function deliveryQueue(staff: StaffSession) {
@@ -52,15 +53,19 @@ function cleanCourier(input: { name?: unknown; phone?: unknown }) {
 export async function assignDeliveryCourier(staff: StaffSession, id: string, input: { name?: unknown; phone?: unknown }, now = new Date()) {
   await requireStaffRole(staff, ["owner", "manager"]);
   const courier = cleanCourier(input);
+  let sessionId: string | null = null;
   await db.transaction(async tx => {
-    const [row] = await tx.select({ id: s.deliveryCheckouts.id, status: s.deliveryCheckouts.status, courierName: s.deliveryCheckouts.courierName, courierPhone: s.deliveryCheckouts.courierPhone }).from(s.deliveryCheckouts)
+    const [row] = await tx.select({ id: s.deliveryCheckouts.id, status: s.deliveryCheckouts.status, sessionId: s.deliveryCheckouts.sessionId, courierName: s.deliveryCheckouts.courierName, courierPhone: s.deliveryCheckouts.courierPhone }).from(s.deliveryCheckouts)
       .where(and(eq(s.deliveryCheckouts.tenantId, staff.tenantId), eq(s.deliveryCheckouts.outletId, staff.outletId), eq(s.deliveryCheckouts.id, String(id)))).for("update");
     if (!row || !["placed", "dispatched"].includes(row.status)) throw new AppError("not_found", "This delivery order can no longer be assigned.");
     if (row.courierName === courier.name && row.courierPhone === courier.phone) return;
-    await tx.update(s.deliveryCheckouts).set({ courierName: courier.name, courierPhone: courier.phone, courierAssignedAt: courier.name ? now : null })
+    sessionId = row.sessionId;
+    // A typed-in rider replaces any team rider on this order
+    await tx.update(s.deliveryCheckouts).set({ courierName: courier.name, courierPhone: courier.phone, courierUserId: null, courierAssignedAt: courier.name ? now : null })
       .where(and(eq(s.deliveryCheckouts.tenantId, staff.tenantId), eq(s.deliveryCheckouts.outletId, staff.outletId), eq(s.deliveryCheckouts.id, row.id)));
     await audit(tx, staff, { action: courier.name ? "delivery.courier_assigned" : "delivery.courier_unassigned", entity: "delivery", entityId: row.id, before: { name: row.courierName, phone: row.courierPhone }, after: courier, now });
   }, LOCK_THEN_READ);
+  if (sessionId) await announceDelivery(staff, sessionId);
 }
 
 export async function pendingManualDeliveryPayments(staff: StaffSession) {
@@ -77,6 +82,7 @@ export async function pendingManualDeliveryPayments(staff: StaffSession) {
 export async function advanceDelivery(staff: StaffSession, id: string, next: "dispatched" | "delivered", now = new Date()) {
   await requireStaffRole(staff, deliveryStaffRoles);
   if (!["dispatched", "delivered"].includes(next)) throw new AppError("invalid_state", "Choose a valid delivery status.");
+  let changed: string | null = null, rider: string | null = null;
   await db.transaction(async tx => {
     const [row] = await tx.select().from(s.deliveryCheckouts).where(and(eq(s.deliveryCheckouts.tenantId, staff.tenantId), eq(s.deliveryCheckouts.outletId, staff.outletId), eq(s.deliveryCheckouts.id, String(id)))).for("update");
     if (!row?.sessionId) throw new AppError("not_found", "Delivery order not found.");
@@ -91,9 +97,12 @@ export async function advanceDelivery(staff: StaffSession, id: string, next: "di
       const [bill] = await tx.select({ status: s.bills.status }).from(s.bills).where(and(eq(s.bills.tenantId, staff.tenantId), eq(s.bills.sessionId, row.sessionId)));
       if (bill?.status !== "paid") throw new AppError("invalid_state", "Record the payment in Billing before completing delivery.");
     }
-    await tx.update(s.deliveryCheckouts).set({ status: next }).where(and(eq(s.deliveryCheckouts.tenantId, staff.tenantId), eq(s.deliveryCheckouts.id, row.id)));
+    await tx.update(s.deliveryCheckouts).set({ status: next, ...(next === "dispatched" ? { pickedUpAt: now } : { deliveredAt: now }) }).where(and(eq(s.deliveryCheckouts.tenantId, staff.tenantId), eq(s.deliveryCheckouts.id, row.id)));
     await audit(tx, staff, { action: `delivery.${next}`, entity: "delivery", entityId: row.id, before: { status: row.status }, after: { status: next }, now });
+    changed = row.sessionId;
+    rider = row.courierUserId;
   }, LOCK_THEN_READ);
+  if (changed) await announceDelivery(staff, changed, "delivery.updated", [rider]);
 }
 
 /**
@@ -139,6 +148,6 @@ export async function cancelDeliveryOrder(staff: StaffSession, id: string, rawRe
     const r = await requestRefund(staff, { paymentId: p.id, amountPaise: p.amountPaise + p.tipPaise, reason: `Delivery cancelled: ${reason}`, requestId: `dc-${p.id}` }, now);
     refunds.push({ paymentId: p.id, status: r.status });
   }
-  await publish(scope, [{ topic: topics.floor, type: "delivery.cancelled", data: { sessionId: found.sessionId } }, { topic: topics.kitchen, type: "ticket.updated", data: { sessionId: found.sessionId } }]);
+  await publish(scope, [{ topic: topics.floor, type: "delivery.cancelled", data: { sessionId: found.sessionId } }, { topic: topics.kitchen, type: "ticket.updated", data: { sessionId: found.sessionId } }, ...(found.sessionId ? [{ topic: topics.session(found.sessionId), type: "delivery.cancelled" }] : [])]);
   return { sessionId: found.sessionId, refunds, replayed: found.replayed };
 }

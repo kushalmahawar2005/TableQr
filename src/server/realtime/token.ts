@@ -11,6 +11,8 @@ export const topics = {
   menu: "menu",
   session: (sessionId: string) => `session:${sessionId}`,
   waitlist: (tokenHash: string) => `waitlist:${tokenHash}`,
+  /** One rider's phone: a delivery given to them, changed or taken away */
+  rider: (userId: string) => `rider:${userId}`,
 };
 
 export function signRealtimeToken(

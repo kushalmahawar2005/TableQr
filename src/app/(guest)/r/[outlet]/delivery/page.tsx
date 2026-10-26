@@ -22,7 +22,7 @@ export default async function DeliveryPage({ params, searchParams }: { params: P
       if (status.status !== "draft" || status.paymentStatus !== "none") initialStatus = status;
     } catch (error) { if (!(error instanceof AppError)) throw error; }
   }
-  if (initialStatus) return <DeliveryScreen outletCode={outlet} initialStatus={initialStatus} hindi={lang === "hi"} />;
+  if (initialStatus) return <DeliveryScreen outletCode={outlet} initialStatus={initialStatus} hindi={lang === "hi"} realtimeUrl={process.env.REALTIME_URL?.replace(/^http/, "ws") ?? null} />;
   let data: Awaited<ReturnType<typeof deliveryMenu>> | undefined;
   let menuError: string | undefined;
   try {
@@ -34,5 +34,5 @@ export default async function DeliveryPage({ params, searchParams }: { params: P
     menuError = error.message;
   }
   if (menuError) return <main className="py-10"><Link href={`/r/${encodeURIComponent(outlet)}`} className="text-brand-strong">← Restaurant</Link><h1 className="mt-6 text-2xl font-bold">Delivery</h1><p className="mt-3 text-muted">{menuError}</p></main>;
-  return <DeliveryScreen outletCode={outlet} data={data} hindi={lang === "hi"} />;
+  return <DeliveryScreen outletCode={outlet} data={data} hindi={lang === "hi"} realtimeUrl={process.env.REALTIME_URL?.replace(/^http/, "ws") ?? null} />;
 }
