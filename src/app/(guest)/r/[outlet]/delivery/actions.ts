@@ -6,6 +6,7 @@ import type { DeliveryAddress, DeliveryCartLine } from "@/db/schema/delivery";
 import { claimManualQrDeliveryPayment, createDeliveryCheckout, deliveryStatus, placeDeliveryOrder } from "@/server/delivery/checkout";
 import { priceDeliveryCart, deliveryOutlet } from "@/server/delivery/catalog";
 import { sendDeliveryOtp, verifyDeliveryOtp } from "@/server/delivery/otp";
+import { lookupPincode } from "@/server/delivery/pincode";
 import { db } from "@/db";
 import { AppError } from "@/server/errors";
 import { requestOrigin } from "@/server/request-host";
@@ -57,4 +58,9 @@ export async function startDeliveryPaymentAction(outlet: string) {
 }
 export async function deliveryStatusAction(outlet: string) {
   return result(async () => { const who = await identity(outlet); await reconcileDeliveryPayment(outlet, who.token, who.deviceId); return deliveryStatus(outlet, who.token, who.deviceId); });
+}
+
+/** City and areas for the address form; null when the pincode is unknown or the lookup is down */
+export async function pincodeAction(pincode: string) {
+  return lookupPincode(String(pincode ?? "").trim());
 }
