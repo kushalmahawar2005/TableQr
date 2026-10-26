@@ -20,5 +20,5 @@ export default async function WaiterPage() {
   const canAsk = staff.roles.some((r) => r === "owner" || r === "manager");
   if (access.state === "blocked") return <PausedScreen access={access} canAsk={canAsk} staff={staff} />;
   const theme = (await cookies()).get("tq_theme")?.value === "dark" ? "dark" : "light";
-  return <><AccessBanner access={access} canAsk={canAsk} outlet={staff.outlet.name} /><WaiterScreen initial={await waiterBoard(staff)} realtimeUrl={process.env.NEXT_PUBLIC_REALTIME_URL ?? null} theme={theme} /></>;
+  return <><AccessBanner access={access} canAsk={canAsk} outlet={staff.outlet.name} /><WaiterScreen initial={await waiterBoard(staff)} realtimeUrl={process.env.REALTIME_URL?.replace(/^http/, "ws") ?? null} theme={theme} /></>;
 }

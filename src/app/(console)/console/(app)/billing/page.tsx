@@ -20,5 +20,5 @@ export default async function BillingPage(props: { searchParams: Promise<{ sessi
       </main>
     );
   }
-  return <BillingScreen embedded openSession={typeof session === "string" ? session : null} initial={await posQueue(staff)} realtimeUrl={process.env.NEXT_PUBLIC_REALTIME_URL ?? null} />;
+  return <BillingScreen embedded openSession={typeof session === "string" ? session : null} initial={await posQueue(staff)} realtimeUrl={process.env.REALTIME_URL?.replace(/^http/, "ws") ?? null} />;
 }

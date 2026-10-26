@@ -16,5 +16,5 @@ export default async function PosPage() {
   const access = await tenantAccess(staff.tenantId);
   const canAsk = staff.roles.some((r) => r === "owner" || r === "manager");
   if (access.state === "blocked") return <PausedScreen access={access} canAsk={canAsk} staff={staff} />;
-  return <StaffPrintProvider outletId={staff.outletId}><AccessBanner access={access} canAsk={canAsk} outlet={staff.outlet.name} /><BillingScreen initial={await posQueue(staff)} realtimeUrl={process.env.NEXT_PUBLIC_REALTIME_URL ?? null} /></StaffPrintProvider>;
+  return <StaffPrintProvider outletId={staff.outletId}><AccessBanner access={access} canAsk={canAsk} outlet={staff.outlet.name} /><BillingScreen initial={await posQueue(staff)} realtimeUrl={process.env.REALTIME_URL?.replace(/^http/, "ws") ?? null} /></StaffPrintProvider>;
 }
