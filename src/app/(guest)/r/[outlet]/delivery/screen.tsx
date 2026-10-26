@@ -367,7 +367,7 @@ function StatusView({ status, hindi, pending, statusMessage, onPay, onRefresh, n
     </section>}
 
     {status.status === "dispatched" && status.riderLocation && <section className={card}>
-      <LiveMap className="h-60" points={[
+      <LiveMap className="h-72" route overlay={status.address.lat !== undefined && status.address.lng !== undefined ? <p className="text-body font-bold">🛵 {etaMinutes(distanceKm(status.riderLocation, { lat: status.address.lat, lng: status.address.lng }))} {t("min", "मिनट")} <span className="text-caption font-medium text-muted">· {distanceKm(status.riderLocation, { lat: status.address.lat, lng: status.address.lng }).toFixed(1)} km</span></p> : undefined} points={[
         { id: "rider", kind: "rider", lat: status.riderLocation.lat, lng: status.riderLocation.lng, photoUrl: status.courierPhotoUrl, label: status.courierName ?? "Rider" },
         ...(status.address.lat !== undefined && status.address.lng !== undefined ? [{ id: "home", kind: "home" as const, lat: status.address.lat, lng: status.address.lng, label: t("Your door", "आपका घर") }] : []),
       ]} />
