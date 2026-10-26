@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import * as s from "@/db/schema";
 import {
@@ -12,7 +12,10 @@ import {
   type LibraryCategory,
   type LibraryItem,
 } from "@/domain/menu-library";
+import { libraryPhotoKey } from "@/domain/menu-library/photos";
 import { AppError } from "../errors";
+import { photoBucket } from "../menu-storage";
+import { audit } from "./audit";
 import type { StaffSession } from "./auth";
 import { saveMenuCategory, saveMenuItem, saveModifierGroup } from "./menu-manager";
 
@@ -38,13 +41,21 @@ async function menuNow(staff: Staff) {
 }
 
 export type LibraryCategoryView = LibraryCategory & { onMenu: boolean };
-export type LibraryItemView = LibraryItem & { onMenu: boolean; categoryName: string };
+export type LibraryItemView = LibraryItem & { onMenu: boolean; categoryName: string; imageUrl: string | null };
+
+/** The library photo's public address, when the dish has one and photos live in a bucket */
+function libraryPhotoUrl(nameEn: string) {
+  const key = libraryPhotoKey(nameEn);
+  const bucket = key ? photoBucket() : null;
+  return key && bucket ? `${bucket.publicBase}/${key}` : null;
+}
 
 const viewCategory = (c: LibraryCategory, menu: Awaited<ReturnType<typeof menuNow>>): LibraryCategoryView => ({ ...c, onMenu: menu.categoryByName.has(key(c.nameEn)) });
 const viewItem = (i: LibraryItem, menu: Awaited<ReturnType<typeof menuNow>>): LibraryItemView => ({
   ...i,
   onMenu: menu.dishNames.has(key(i.nameEn)),
   categoryName: libraryCategory(i.categoryKey)?.nameEn ?? "",
+  imageUrl: libraryPhotoUrl(i.nameEn),
 });
 
 /** Every library category, marked when the restaurant already has it */
@@ -125,6 +136,8 @@ export async function addLibraryDishes(staff: Staff, picks: LibraryPick[]) {
       searchTerms: item.searchTerms,
       prepMinutes: item.prepMinutes,
       station: item.station,
+      // The library photo comes along; the owner can replace it with their own any time
+      imageUrl: libraryPhotoUrl(item.nameEn),
     });
     if (useSizes) {
       await saveModifierGroup(staff, {
@@ -140,4 +153,26 @@ export async function addLibraryDishes(staff: Staff, picks: LibraryPick[]) {
     added++;
   }
   return { added, skipped };
+}
+
+/**
+ * Gives every dish on this brand's menu that has no photo the library photo of the same name.
+ * Owner only; a dish with its own photo is never touched.
+ */
+export async function fillLibraryPhotos(staff: Staff) {
+  if (!staff.roles.includes("owner")) throw new AppError("forbidden", "Only the owner can change dish photos.");
+  const [outlet] = await db.select({ brandId: s.outlets.brandId }).from(s.outlets).where(and(eq(s.outlets.tenantId, staff.tenantId), eq(s.outlets.id, staff.outletId)));
+  if (!outlet) throw new AppError("not_found", "Outlet not found.");
+  const items = await db.select({ id: s.menuItems.id, nameEn: s.menuItems.nameEn }).from(s.menuItems)
+    .where(and(eq(s.menuItems.tenantId, staff.tenantId), eq(s.menuItems.brandId, outlet.brandId), isNull(s.menuItems.imageUrl)));
+  let filled = 0;
+  for (const item of items) {
+    const url = libraryPhotoUrl(item.nameEn);
+    if (!url) continue;
+    await db.update(s.menuItems).set({ imageUrl: url })
+      .where(and(eq(s.menuItems.tenantId, staff.tenantId), eq(s.menuItems.id, item.id), isNull(s.menuItems.imageUrl)));
+    filled++;
+  }
+  if (filled) await audit(db, staff, { action: "menu.library_photos_filled", entity: "menu", entityId: null, after: { filled }, now: new Date() });
+  return { filled, withoutPhoto: items.length - filled };
 }

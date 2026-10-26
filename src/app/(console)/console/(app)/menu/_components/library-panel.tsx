@@ -42,6 +42,7 @@ function useLibrarySearch(query: string) {
 }
 
 export function LibraryPanel({ canEdit, onDone }: { canEdit: boolean; onDone: (message: string) => void }) {
+  const [filling, setFilling] = useState(false);
   const [query, setQuery] = useState("");
   const [all, setAll] = useState<LibraryCategoryView[] | null>(null);
   const [open, setOpen] = useState<{ category: LibraryCategoryView; items: LibraryItemView[] } | null>(null);
@@ -104,6 +105,7 @@ export function LibraryPanel({ canEdit, onDone }: { canEdit: boolean; onDone: (m
         <label className={`flex items-center gap-3 ${item.onMenu || !canEdit ? "" : "cursor-pointer"}`}>
           <input type="checkbox" className="size-4 shrink-0 accent-[#c9482b]" checked={!!p} disabled={item.onMenu || !canEdit} onChange={() => toggle(item)} />
           <VegMark veg={item.isVeg} />
+          <LibraryThumb src={item.imageUrl} />
           <span className="min-w-0 flex-1">
             <b className="block truncate text-sm">{item.nameEn}</b>
             <span className="block truncate text-xs text-muted">{item.nameHi}{item.categoryName && !open ? ` · ${item.categoryName}` : ""}</span>
@@ -164,6 +166,25 @@ export function LibraryPanel({ canEdit, onDone }: { canEdit: boolean; onDone: (m
     <div className="space-y-4">
       <p className="text-xs text-muted">Pick dishes from the TableQR list and type your price. Each dish goes into its own category; a category you don&apos;t have yet is made for you.</p>
       {!canEdit && <p className="rounded-xl bg-[var(--state-held-soft)] p-3 text-sm text-[var(--state-held-text)]">Only the owner can add dishes. You can still look through the list.</p>}
+      {canEdit && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-paper p-3">
+          <p className="text-sm text-ink"><b>Ready-made dish photos.</b> <span className="text-muted">Dishes on your menu without a photo get the library photo of the same name. Your own photos are never replaced.</span></p>
+          <button
+            type="button"
+            disabled={filling}
+            onClick={() => {
+              setFilling(true);
+              void actions.libraryFillPhotosAction().then((r) => {
+                setFilling(false);
+                onDone(!r.ok ? r.error : r.data.filled ? `Added photos to ${r.data.filled} ${r.data.filled === 1 ? "dish" : "dishes"}.${r.data.withoutPhoto ? ` ${r.data.withoutPhoto} still have no photo in the library yet.` : ""}` : "No matching library photos for your dishes without a photo yet.");
+              });
+            }}
+            className="min-h-10 shrink-0 rounded-lg bg-brand px-3.5 text-sm font-semibold text-brand-on disabled:opacity-60"
+          >
+            {filling ? "Adding photos…" : "Add photos to my dishes"}
+          </button>
+        </div>
+      )}
 
       <div className="relative">
         <span aria-hidden className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted">⌕</span>
@@ -268,4 +289,12 @@ export function LibraryQuickPick({ onPick }: { onPick: (item: LibraryItemView) =
       )}
     </section>
   );
+}
+
+/** The library photo's small copy, or nothing when the dish has no photo yet */
+function LibraryThumb({ src }: { src: string | null }) {
+  if (!src) return null;
+  // Library photos live in the photo bucket, so this stays a plain lazy image
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={src.replace(/\.webp$/, "-sm.webp")} alt="" loading="lazy" decoding="async" className="size-11 shrink-0 rounded-lg bg-line/40 object-cover" />;
 }

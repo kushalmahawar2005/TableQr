@@ -5,6 +5,7 @@ import path from "node:path";
 import sharp from "sharp";
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { AppError } from "./errors";
+import { FULL, MIN_SIDE, SMALL, fitWebp } from "@/lib/photo-fit";
 
 // Menu photos. MENU_STORAGE_DRIVER=local keeps them under public/uploads (fine on one machine, but
 // a redeploy can wipe them); anything else puts them in an S3-compatible bucket such as
@@ -15,26 +16,6 @@ export type MenuImageUpload = { tenantId: string; brandId: string; filename: str
 
 const CACHE = "public,max-age=31536000,immutable";
 const smallKeyOf = (key: string) => key.replace(/\.webp$/, "-sm.webp");
-
-/** Whatever the owner uploads, the full photo ends up near 100 KB and the list copy near 30 KB */
-const FULL = { sizes: [1400, 1200, 1000, 800], maxBytes: 100 * 1024 };
-const SMALL = { sizes: [480, 400], maxBytes: 30 * 1024 };
-const QUALITIES = [80, 72, 64, 56];
-/** Shortest side a menu photo needs to look sharp on a phone */
-const MIN_SIDE = 300;
-
-/** The largest, sharpest WebP within the byte budget: lower quality first, then fewer pixels */
-async function fitWebp(bytes: Buffer, target: { sizes: number[]; maxBytes: number }) {
-  let out: Buffer | null = null;
-  for (const size of target.sizes) {
-    const resized = await sharp(bytes).rotate().resize({ width: size, height: size, fit: "inside", withoutEnlargement: true }).toBuffer();
-    for (const quality of QUALITIES) {
-      out = await sharp(resized).webp({ quality, effort: 5 }).toBuffer();
-      if (out.byteLength <= target.maxBytes) return out;
-    }
-  }
-  return out!;
-}
 
 type Bucket = { client: S3Client; name: string; publicBase: string };
 

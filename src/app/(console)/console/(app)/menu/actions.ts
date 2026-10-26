@@ -4,7 +4,7 @@ import { AppError } from "@/server/errors";
 import { menuManagerRoles, menuManagerData, saveMenuItem, archiveMenuItem, setMenuAvailability, adjustMenuPortions, saveMenuCategory, reorderCategories, archiveCategory, deleteCategory, bulkPrice, savePairings, saveModifierGroup, setModifierGroupActive, reorderModifierGroups } from "@/server/staff/menu-manager";
 import { parseMenuFile, commitMenuCsv } from "@/server/staff/menu-import";
 import { storeMenuImage } from "@/server/menu-storage";
-import { addLibraryDishes, browseLibrary, ensureLibraryCategory, libraryCategoryDetail, searchLibrary, type LibraryPick } from "@/server/staff/menu-library";
+import { addLibraryDishes, browseLibrary, ensureLibraryCategory, fillLibraryPhotos, libraryCategoryDetail, searchLibrary, type LibraryPick } from "@/server/staff/menu-library";
 
 async function run<T>(work: (staff: Awaited<ReturnType<typeof staffFor>>) => Promise<T>) {
   try { return { ok: true as const, data: await work(await staffFor(menuManagerRoles, "menu")) }; }
@@ -37,3 +37,4 @@ export async function librarySearchAction(query: string) { return run((s) => sea
 export async function libraryCategoryAction(categoryKey: string) { return run((s) => libraryCategoryDetail(s, categoryKey)); }
 export async function libraryEnsureCategoryAction(categoryKey: string) { return run((s) => ensureLibraryCategory(s, categoryKey)); }
 export async function libraryAddAction(picks: LibraryPick[]) { return run((s) => addLibraryDishes(s, picks)); }
+export async function libraryFillPhotosAction() { return run((s) => fillLibraryPhotos(s)); }
