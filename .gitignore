@@ -51,3 +51,4 @@ graphify-out/
 
 # Encrypted rider documents in local development
 /.private-uploads
+/.next-load

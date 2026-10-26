@@ -2,6 +2,8 @@ import path from "node:path";
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // A separate build folder for local load tests, so a running dev server is not disturbed
+  ...(process.env.NEXT_DIST_DIR ? { distDir: process.env.NEXT_DIST_DIR } : {}),
   poweredByHeader: false,
   // This folder is the project root, even though a stray lockfile sits in the home folder
   turbopack: { root: path.resolve(import.meta.dirname) },
