@@ -421,6 +421,13 @@
       "when": 1793017772633,
       "tag": "0059_guest_push",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "5",
+      "when": 1793019976968,
+      "tag": "0060_guest_push_bookings",
+      "breakpoints": true
     }
   ]
 }

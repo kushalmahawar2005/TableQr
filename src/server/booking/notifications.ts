@@ -1,8 +1,9 @@
 import "server-only";
-import { and, eq, inArray, lte } from "drizzle-orm";
+import { and, eq, inArray, lt, lte } from "drizzle-orm";
 import { db } from "@/db";
 import * as s from "@/db/schema";
 import { LOCK_THEN_READ } from "../db-types";
+import { sendBookingPush } from "../guest/push";
 import { publish } from "../realtime/publish";
 import { topics } from "../realtime/token";
 
@@ -22,10 +23,20 @@ export async function queueReservationConfirmation(scope: { tenantId: string; ou
 
 export async function processBookingNotifications(now = new Date()) {
   // isolation-exempt: the authenticated service task intentionally drains due rows across tenants.
-  const rows = await db.transaction(async (tx) => tx.select().from(s.bookingNotifications).where(and(inArray(s.bookingNotifications.status, ["pending", "failed"]), lte(s.bookingNotifications.scheduledAt, now))).orderBy(s.bookingNotifications.scheduledAt).limit(100).for("update"), LOCK_THEN_READ);
+  // A message that failed three times is left alone, so the queue does not retry it every minute forever
+  const rows = await db.transaction(async (tx) => tx.select().from(s.bookingNotifications).where(and(inArray(s.bookingNotifications.status, ["pending", "failed"]), lte(s.bookingNotifications.scheduledAt, now), lt(s.bookingNotifications.attempts, 3))).orderBy(s.bookingNotifications.scheduledAt).limit(100).for("update"), LOCK_THEN_READ);
   let sent = 0;
   for (const row of rows) {
-    // No real message provider exists yet, so production must never report a booking message as sent
+    // Push to the guest's phone when they turned updates on for this booking
+    if (row.reservationId && (row.type === "booking_confirmation" || row.type === "booking_reminder_24h" || row.type === "booking_reminder_2h")) {
+      const delivered = await sendBookingPush(row.tenantId, row.reservationId, row.type).catch(() => 0);
+      if (delivered > 0) {
+        await db.update(s.bookingNotifications).set({ status: "sent", attempts: row.attempts + 1, providerRef: "push", sentAt: now, updatedAt: now }).where(and(eq(s.bookingNotifications.tenantId, row.tenantId), eq(s.bookingNotifications.id, row.id)));
+        sent++;
+        continue;
+      }
+    }
+    // No other message provider exists yet, so production must never report a booking message as sent
     if (process.env.NODE_ENV === "production") { await db.update(s.bookingNotifications).set({ status: "failed", attempts: row.attempts + 1, lastError: "No booking message provider is implemented yet", updatedAt: now }).where(and(eq(s.bookingNotifications.tenantId, row.tenantId), eq(s.bookingNotifications.id, row.id))); continue; }
     await db.update(s.bookingNotifications).set({ status: "sent", attempts: row.attempts + 1, providerRef: `mock_${row.id}`, sentAt: now, updatedAt: now }).where(and(eq(s.bookingNotifications.tenantId, row.tenantId), eq(s.bookingNotifications.id, row.id))); sent++;
   }

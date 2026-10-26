@@ -5,6 +5,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import * as s from "@/db/schema";
 import { staffAppIconUrl } from "@/lib/staff-app";
+import { bookingByToken } from "../booking/core";
 import { deliveryCheckout } from "../delivery/checkout";
 import { staffPushConfig, validateSubscription, type PushSubscriptionInput } from "../staff/web-push";
 
@@ -57,4 +58,51 @@ export async function notifyDeliveryCustomer(scope: { tenantId: string; outletId
   } catch (error) {
     console.warn("[guest-push]", error instanceof Error ? error.message : error);
   }
+}
+
+/** Saves this phone for reminders about the booking its manage link belongs to */
+export async function saveBookingPush(code: string, token: string, raw: PushSubscriptionInput) {
+  const { row, scope } = await bookingByToken(code, token);
+  const sub = validateSubscription(raw);
+  const endpointHash = createHash("sha256").update(sub.endpoint).digest("hex");
+  await db.insert(s.guestPushSubscriptions)
+    .values({ tenantId: scope.tenantId, outletId: scope.outletId, endpointHash, endpoint: sub.endpoint, p256dh: sub.keys.p256dh, auth: sub.keys.auth, reservationId: row.id })
+    .onDuplicateKeyUpdate({ set: { endpoint: sub.endpoint, p256dh: sub.keys.p256dh, auth: sub.keys.auth, reservationId: row.id, outletId: scope.outletId } });
+  return { saved: true };
+}
+
+export type BookingNotice = "booking_confirmation" | "booking_reminder_24h" | "booking_reminder_2h";
+
+/**
+ * A booking message by push, to the phones that asked for it. Returns how many phones got it,
+ * so the caller can record the message as sent or not.
+ */
+export async function sendBookingPush(tenantId: string, reservationId: string, type: BookingNotice) {
+  const config = staffPushConfig();
+  const privateKey = process.env.VAPID_PRIVATE_KEY?.trim(), subject = process.env.VAPID_SUBJECT?.trim();
+  if (!config.enabled || !privateKey || !subject) return 0;
+  const subs = await db.select().from(s.guestPushSubscriptions).where(and(eq(s.guestPushSubscriptions.tenantId, tenantId), eq(s.guestPushSubscriptions.reservationId, reservationId)));
+  if (!subs.length) return 0;
+  const [row] = await db.select({ startAt: s.reservations.startAt, partySize: s.reservations.partySize, status: s.reservations.status, code: s.outlets.code, name: s.outlets.name, timezone: s.outlets.timezone })
+    .from(s.reservations).innerJoin(s.outlets, and(eq(s.outlets.tenantId, s.reservations.tenantId), eq(s.outlets.id, s.reservations.outletId)))
+    .where(and(eq(s.reservations.tenantId, tenantId), eq(s.reservations.id, reservationId)));
+  if (!row || row.status === "cancelled") return 0;
+  const when = new Intl.DateTimeFormat("en-IN", { timeZone: row.timezone, weekday: "short", hour: "numeric", minute: "2-digit" }).format(row.startAt);
+  const text = type === "booking_confirmation"
+    ? { title: `${row.name}: table booked`, body: `${when} for ${row.partySize}. See you soon!` }
+    : type === "booking_reminder_24h"
+    ? { title: `${row.name}: see you tomorrow`, body: `Your table for ${row.partySize} is at ${when}.` }
+    : { title: `${row.name}: in 2 hours`, body: `Your table for ${row.partySize} is at ${when}. Running late? Tell the restaurant from your booking.` };
+  const payload = JSON.stringify({ ...text, url: `/r/${encodeURIComponent(row.code)}`, tag: `booking-${reservationId.slice(0, 8)}`, icon: staffAppIconUrl(192, row.code), badge: staffAppIconUrl(180, row.code) });
+  let delivered = 0;
+  await Promise.allSettled(subs.map(async (sub) => {
+    try {
+      await webpush.sendNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, payload, { vapidDetails: { subject, publicKey: config.publicKey, privateKey }, TTL: 3600, urgency: "normal", timeout: 4_000 });
+      delivered++;
+    } catch (error) {
+      const status = (error as { statusCode?: number }).statusCode;
+      if (status === 404 || status === 410) await db.delete(s.guestPushSubscriptions).where(and(eq(s.guestPushSubscriptions.tenantId, tenantId), eq(s.guestPushSubscriptions.id, sub.id)));
+    }
+  }));
+  return delivered;
 }

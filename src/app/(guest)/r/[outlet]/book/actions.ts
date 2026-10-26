@@ -1,5 +1,7 @@
 "use server";
 
+import { saveBookingPush } from "@/server/guest/push";
+import { staffPushConfig, type PushSubscriptionInput } from "@/server/staff/web-push";
 import { cookies, headers } from "next/headers";
 import { requestOrigin } from "@/server/request-host";
 import { DEVICE_COOKIE } from "@/lib/guest-device";
@@ -78,3 +80,10 @@ export async function startBookingCreditAction(outletCode: string, token: string
   const origin = requestOrigin(await headers());
   try { return { ok: true as const, data: await startReservationCredit(outletCode, token, requestId, `${origin}/api/booking-credit/return?provider={provider}&p={creditId}&to=${encodeURIComponent(`/r/${outletCode}/book/details?token=${token}`)}`) }; } catch (e) { return fail(e); }
 }
+
+/** Reminders on this phone for the booking behind this manage link */
+export async function bookingPushAction(outlet: string, token: string, subscription: PushSubscriptionInput) {
+  try { await saveBookingPush(outlet, token, subscription); return { ok: true as const }; }
+  catch { return { ok: false as const }; }
+}
+export async function bookingPushKeyAction() { const c = staffPushConfig(); return c.enabled ? c.publicKey : null; }
