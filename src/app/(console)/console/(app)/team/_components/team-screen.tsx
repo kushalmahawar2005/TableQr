@@ -11,7 +11,7 @@ import type { TeamMember } from "@/server/staff/team";
 import type { PendingStaffInvitation } from "@/server/staff/invitations";
 import type { DutyRow } from "@/server/staff/duty";
 import { WhoIsWorking } from "./who-is-working";
-import { changeRoleAction, createInvitationAction, resetPinAction, revokeInvitationAction, setActiveAction } from "../actions";
+import { changeRoleAction, createInvitationAction, resetPinAction, revokeInvitationAction, setActiveAction, setPhotoAction } from "../actions";
 
 const ALL_ROLES = [
   { id: "manager", label: "Manager", does: "Runs the outlet: floor, menu, billing, reports, approvals", opens: "Dashboard", path: "/console/dashboard" },
@@ -33,11 +33,13 @@ const DUTY = {
   off: ["Off duty", "bg-ink/10 text-muted"],
 } as const;
 
-function Avatar({ name, role, online = false }: { name: string; role: string; online?: boolean }) {
+function Avatar({ name, role, online = false, photoUrl = null }: { name: string; role: string; online?: boolean; photoUrl?: string | null }) {
   const c = TONE[role] ?? "#64748b";
   return (
     <span className="relative grid size-10 shrink-0 place-items-center rounded-full font-display text-base font-bold" style={{ background: `color-mix(in srgb, ${c} 16%, var(--surface))`, color: c }}>
-      {name.trim().slice(0, 1).toUpperCase() || "?"}
+      {/* Staff photos live in the photo bucket, so this stays a plain image */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      {photoUrl ? <img src={photoUrl} alt="" className="size-10 rounded-full object-cover" /> : name.trim().slice(0, 1).toUpperCase() || "?"}
       {online && <span className="absolute -right-0.5 -bottom-0.5 size-3 rounded-full border-2 border-surface bg-[var(--state-available)]" title="App open" />}
     </span>
   );
@@ -152,11 +154,11 @@ export function TeamScreen({ initial, invitations: initialInvitations = [], canE
                     <div className="flex items-center gap-3">
                       {canEdit && !m.locked && !m.isMe ? (
                         <button type="button" onClick={() => openManage(m.id)} aria-label={`Manage ${m.name}`} className="group/person flex min-w-0 items-center gap-3 rounded-xl text-left outline-none focus-visible:ring-2 focus-visible:ring-brand">
-                          <Avatar name={m.name} role={m.roles[0]} online={d?.online} />
+                          <Avatar name={m.name} role={m.roles[0]} online={d?.online} photoUrl={m.photoUrl} />
                           <span className="min-w-0"><span className="block truncate font-semibold text-ink group-hover/person:text-brand">{m.name}<span className="ml-1.5 text-xs font-normal text-muted">(Manage)</span></span><span className="flex items-center gap-1 truncate text-caption text-muted"><Phone className="size-3" aria-hidden="true" />{m.phone}</span><span className="mt-1 flex flex-wrap gap-1.5 sm:hidden">{m.roles.map((r) => <RoleBadge key={r} role={r} />)}<StatusBadge member={m} duty={d} /></span></span>
                         </button>
                       ) : (
-                        <div className="flex min-w-0 items-center gap-3"><Avatar name={m.name} role={m.roles[0]} online={d?.online} /><div className="min-w-0"><p className="truncate font-semibold text-ink">{m.name}{m.isMe && <span className="ml-1.5 text-xs font-normal text-muted">(you)</span>}</p><p className="flex items-center gap-1 truncate text-caption text-muted"><Phone className="size-3" aria-hidden="true" />{m.phone}</p><p className="mt-1 flex flex-wrap gap-1.5 sm:hidden">{m.roles.map((r) => <RoleBadge key={r} role={r} />)}<StatusBadge member={m} duty={d} /></p></div></div>
+                        <div className="flex min-w-0 items-center gap-3"><Avatar name={m.name} role={m.roles[0]} online={d?.online} photoUrl={m.photoUrl} /><div className="min-w-0"><p className="truncate font-semibold text-ink">{m.name}{m.isMe && <span className="ml-1.5 text-xs font-normal text-muted">(you)</span>}</p><p className="flex items-center gap-1 truncate text-caption text-muted"><Phone className="size-3" aria-hidden="true" />{m.phone}</p><p className="mt-1 flex flex-wrap gap-1.5 sm:hidden">{m.roles.map((r) => <RoleBadge key={r} role={r} />)}<StatusBadge member={m} duty={d} /></p></div></div>
                       )}
                     </div>
                   </TableCell>
@@ -234,6 +236,13 @@ export function TeamScreen({ initial, invitations: initialInvitations = [], canE
               <div className="space-y-6 px-4 pb-8">
                 <section className="space-y-2"><p className="text-sm font-semibold">Role</p>
                   <div className="grid grid-cols-2 gap-2">{ROLES.map((r) => <button key={r.id} type="button" disabled={pending} aria-pressed={member.roles[0] === r.id} onClick={() => member.roles[0] !== r.id && act(() => changeRoleAction(member.id, r.id), `${member.name} is now ${r.label}.`)} className={`min-h-11 rounded-xl border px-3 text-sm font-semibold ${member.roles[0] === r.id ? "border-ink bg-ink text-paper" : "border-line hover:border-ink/40"}`}>{r.label}</button>)}</div>
+                </section>
+                <section className="space-y-2"><p className="text-sm font-semibold">Photo</p>
+                  <label className="flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border border-dashed border-line px-3 text-sm font-semibold hover:border-ink/40">
+                    <Avatar name={member.name} role={member.roles[0]} photoUrl={member.photoUrl} />
+                    {member.photoUrl ? "Change photo" : "Add a photo"}<span className="ml-auto text-xs font-normal text-muted">Shown on the dashboard{member.roles.includes("rider") ? " and to customers" : ""}</span>
+                    <input type="file" accept="image/*" className="sr-only" disabled={pending} onChange={(e) => { const file = e.target.files?.[0]; if (!file) return; const fd = new FormData(); fd.set("photo", file); act(() => setPhotoAction(member.id, fd), `Photo saved for ${member.name}.`); }} />
+                  </label>
                 </section>
                 <section className="space-y-2"><p className="flex items-center gap-1.5 text-sm font-semibold"><KeyRound className="size-4" aria-hidden="true" />Reset PIN</p>
                   <div className="flex gap-2"><Input aria-label="New PIN" className={`${field} font-mono tracking-[0.4em]`} inputMode="numeric" maxLength={4} value={newPin} onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ""))} /><button type="button" disabled={pending || newPin.length !== 4} onClick={() => act(() => resetPinAction(member.id, newPin), `New PIN set for ${member.name}. They are signed out.`)} className="min-h-11 shrink-0 rounded-xl border border-line px-4 text-sm font-semibold hover:border-ink/40 disabled:opacity-50">Set PIN</button></div>

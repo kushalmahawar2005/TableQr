@@ -18,6 +18,7 @@ import {
   waitedMinutes,
   type DayRange,
 } from "@/domain/dashboard";
+import { isDeliveryTable } from "@/domain/delivery";
 import { isPlaceholderName } from "@/domain/guest-name";
 import { canSee } from "@/lib/staff-permissions";
 import { AppError } from "../errors";
@@ -384,6 +385,8 @@ export async function getDashboard(staff: Staff, now = new Date()) {
     .map((b) => ({ ...bookingRow(b), ...lateness(b.startAt.getTime(), now.getTime(), policy.graceMinutes) }))
     .filter((b) => b.lateMinutes > 0);
   const slowBills = waitingBills
+    // Delivery orders sit at "bill requested" until paid; the delivery desk tracks them, not this list
+    .filter((b) => !isDeliveryTable(b.tableCode))
     // Strictly longer than the threshold: a bill asked for exactly ten minutes ago is not late yet
     .filter((b) => b.requestedAt! < billAlertBefore)
     .map((b) => ({ sessionId: b.sessionId, tableCode: b.tableCode, waitedMinutes: waitedMinutes(b.requestedAt!.getTime(), now.getTime()) }));
@@ -524,7 +527,7 @@ export async function getDashboard(staff: Staff, now = new Date()) {
       tableTiles,
       waitlist: { waiting: queue.waiting ?? 0, notified: queue.notified ?? 0 },
       upcoming,
-      billRequestedTables: waitingBills.length,
+      billRequestedTables: waitingBills.filter((b) => !isDeliveryTable(b.tableCode)).length,
       kitchenOrders,
       customerRequests,
       recentPayments,

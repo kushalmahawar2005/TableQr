@@ -37,7 +37,9 @@ export function StaffOnDuty({ duty }: { duty: { rows: DutyRow[]; canChange?: boo
     };
   }, []);
 
-  const rows = duty.rows;
+  // Riders have their own row below; everyone else is the floor and kitchen team
+  const riders = duty.rows.filter((r) => r.roles.includes("rider"));
+  const rows = duty.rows.filter((r) => !r.roles.includes("rider"));
   const selected = rows.find((r) => r.id === selectedId) ?? null;
   const onDutyCount = rows.filter((r) => r.status === "on").length;
   const onBreakCount = rows.filter((r) => r.status === "break").length;
@@ -86,9 +88,11 @@ export function StaffOnDuty({ duty }: { duty: { rows: DutyRow[]; canChange?: boo
                   className="group flex min-h-10 w-14 flex-col items-center rounded-input p-1 text-center transition-colors hover:bg-paper focus-visible:outline-2 focus-visible:outline-forest cursor-pointer"
                 >
                   <span className="relative">
-                    <span className="grid size-11 place-items-center rounded-full border border-line bg-neutral-100 font-display text-xs font-bold text-ink transition-transform group-hover:scale-105">
-                      {initials}
-                    </span>
+                    {staff.photoUrl
+                      // Staff photos live in the photo bucket, so this stays a plain image
+                      // eslint-disable-next-line @next/next/no-img-element
+                      ? <img src={staff.photoUrl} alt="" className="size-11 rounded-full border border-line object-cover transition-transform group-hover:scale-105" />
+                      : <span className="grid size-11 place-items-center rounded-full border border-line bg-neutral-100 font-display text-xs font-bold text-ink transition-transform group-hover:scale-105">{initials}</span>}
                     <span className={`absolute bottom-0 right-0 size-3 rounded-full ring-2 ring-white ${dotColor}`} aria-hidden="true" />
                   </span>
                   <span className="mt-1.5 w-full truncate text-xs font-bold text-ink">{staff.name.split(" ")[0]}</span>
@@ -120,6 +124,30 @@ export function StaffOnDuty({ duty }: { duty: { rows: DutyRow[]; canChange?: boo
                 <span className="mt-1.5 text-[11px] font-semibold text-muted">More</span>
               </Link>
             )}
+          </div>
+        )}
+        {riders.length > 0 && (
+          <div className="mt-4 border-t border-line pt-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-semibold text-muted">Riders · {riders.filter((r) => r.status === "on").length} online</p>
+              <Link href="/console/orders?view=delivery" className="text-xs font-semibold text-forest hover:underline">Deliveries</Link>
+            </div>
+            <div className="mt-2 flex flex-wrap items-start gap-2">
+              {riders.map((r) => (
+                <div key={r.id} className="flex w-14 flex-col items-center p-1 text-center">
+                  <span className="relative">
+                    {r.photoUrl
+                      // Staff photos live in the photo bucket, so this stays a plain image
+                      // eslint-disable-next-line @next/next/no-img-element
+                      ? <img src={r.photoUrl} alt="" className="size-11 rounded-full border border-line object-cover" />
+                      : <span className="grid size-11 place-items-center rounded-full border border-line bg-neutral-100 font-display text-xs font-bold text-ink">{r.name.trim().slice(0, 1).toUpperCase()}</span>}
+                    <span className={`absolute right-0 bottom-0 size-3 rounded-full ring-2 ring-white ${r.status === "on" ? "bg-emerald-500" : "bg-neutral-400"}`} aria-hidden="true" />
+                  </span>
+                  <span className="mt-1.5 w-full truncate text-xs font-bold text-ink">{r.name.split(" ")[0]}</span>
+                  <span className="w-full truncate text-[10px] font-medium text-muted">{r.status === "on" ? "Online" : "Offline"}</span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </Panel>

@@ -1,3 +1,4 @@
+import { tenantFeatures } from "@/server/plan";
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -30,5 +31,8 @@ export default async function DashboardPage() {
   const lang = parseLang((await cookies()).get(LANG_COOKIE)?.value);
   // Who is on duty, set right here by the manager or owner
   const canChange = staff.roles.some((r) => r === "owner" || r === "manager");
-  return <DashboardScreen initial={data} initialTrend={trend} duty={duty ? { rows: duty, canChange } : undefined} setup={setup && <SetupChecklist lang={lang} steps={setup} />} realtimeUrl={process.env.REALTIME_URL?.replace(/^http/, "ws") ?? null} />;
+  // Riders only matter where the plan has delivery
+  const delivery = duty?.some((r) => r.roles.includes("rider")) ? (await tenantFeatures(staff.tenantId)).delivery : false;
+  const dutyRows = duty && !delivery ? duty.filter((r) => !r.roles.includes("rider")) : duty;
+  return <DashboardScreen initial={data} initialTrend={trend} duty={dutyRows ? { rows: dutyRows, canChange } : undefined} setup={setup && <SetupChecklist lang={lang} steps={setup} />} realtimeUrl={process.env.REALTIME_URL?.replace(/^http/, "ws") ?? null} />;
 }

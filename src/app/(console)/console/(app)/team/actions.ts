@@ -3,7 +3,7 @@ import { AppError } from "@/server/errors";
 import { headers } from "next/headers";
 import { consoleSectionRoles } from "@/lib/staff-permissions";
 import { staffFor } from "@/server/staff/request";
-import { changeRole, listTeam, resetPin, setMemberActive } from "@/server/staff/team";
+import { changeRole, listTeam, resetPin, setMemberActive, setMemberPhoto } from "@/server/staff/team";
 import { createStaffInvitation, revokeStaffInvitation } from "@/server/staff/invitations";
 import { publicOrigin } from "@/server/guest/invite";
 import { setDuty, teamDuty, type DutyStatus } from "@/server/staff/duty";
@@ -34,3 +34,10 @@ export async function revokeInvitationAction(invitationId: string) { return run(
 export async function changeRoleAction(userId: string, role: string) { return run((s) => changeRole(s, String(userId), role)); }
 export async function resetPinAction(userId: string, pin: string) { return run((s) => resetPin(s, String(userId), pin)); }
 export async function setActiveAction(userId: string, active: boolean) { return run((s) => setMemberActive(s, String(userId), !!active)); }
+export async function setPhotoAction(userId: string, form: FormData) {
+  return run(async (s) => {
+    const file = form.get("photo");
+    if (!(file instanceof File) || !file.size) throw new AppError("invalid_state", "Choose a photo first.");
+    return setMemberPhoto(s, String(userId), { bytes: Buffer.from(await file.arrayBuffer()), contentType: file.type, filename: file.name });
+  });
+}

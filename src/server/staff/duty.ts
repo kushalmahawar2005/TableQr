@@ -52,19 +52,19 @@ export async function checkIn(staff: Staff, now = new Date()) {
     .where(and(eq(s.users.tenantId, staff.tenantId), eq(s.users.id, staff.userId), or(isNull(s.users.lastSeenAt), lt(s.users.lastSeenAt, new Date(now.getTime() - 60_000)))));
 }
 
-export type DutyRow = { id: string; name: string; roles: string[]; status: DutyStatus; since: number | null; lastSeenAt: number | null; online: boolean };
+export type DutyRow = { id: string; name: string; photoUrl: string | null; roles: string[]; status: DutyStatus; since: number | null; lastSeenAt: number | null; online: boolean };
 
 /** The floor team with their shift status, people on duty first */
 export async function teamDuty(staff: Staff, now = new Date()): Promise<DutyRow[]> {
   if (!canSee(staff, "team")) throw new AppError("forbidden", "Your role cannot view the team.");
   const rows = await db
-    .select({ id: s.users.id, name: s.users.name, role: s.staffRoles.role, status: s.users.dutyStatus, since: s.users.dutyChangedAt, seen: s.users.lastSeenAt })
+    .select({ id: s.users.id, name: s.users.name, photoUrl: s.users.photoUrl, role: s.staffRoles.role, status: s.users.dutyStatus, since: s.users.dutyChangedAt, seen: s.users.lastSeenAt })
     .from(s.staffRoles)
     .innerJoin(s.users, and(eq(s.users.tenantId, s.staffRoles.tenantId), eq(s.users.id, s.staffRoles.userId)))
-    .where(and(eq(s.staffRoles.tenantId, staff.tenantId), eq(s.users.isActive, true), or(isNull(s.staffRoles.outletId), eq(s.staffRoles.outletId, staff.outletId)), inArray(s.staffRoles.role, ["manager", "waiter", "host", "cashier", "kitchen"])));
+    .where(and(eq(s.staffRoles.tenantId, staff.tenantId), eq(s.users.isActive, true), or(isNull(s.staffRoles.outletId), eq(s.staffRoles.outletId, staff.outletId)), inArray(s.staffRoles.role, ["manager", "waiter", "host", "cashier", "kitchen", "rider"])));
   const byId = new Map<string, DutyRow>();
   for (const r of rows) {
-    const row = byId.get(r.id) ?? { id: r.id, name: r.name, roles: [], status: r.status, since: r.since?.getTime() ?? null, lastSeenAt: r.seen?.getTime() ?? null, online: !!r.seen && now.getTime() - r.seen.getTime() < ONLINE_MS };
+    const row = byId.get(r.id) ?? { id: r.id, name: r.name, photoUrl: r.photoUrl, roles: [], status: r.status, since: r.since?.getTime() ?? null, lastSeenAt: r.seen?.getTime() ?? null, online: !!r.seen && now.getTime() - r.seen.getTime() < ONLINE_MS };
     if (!row.roles.includes(r.role)) row.roles.push(r.role);
     byId.set(r.id, row);
   }

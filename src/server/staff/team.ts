@@ -1,3 +1,4 @@
+import { storeMenuImage } from "../menu-storage";
 import "server-only";
 import { and, eq, inArray, isNull, or } from "drizzle-orm";
 import { db } from "@/db";
@@ -40,7 +41,7 @@ async function assertRoomForStaff(tx: Pick<typeof db, "selectDistinct">, staff: 
   if (counted >= maxStaff) throw bad(staffLimitMessage(maxStaff));
 }
 
-export type TeamMember = { id: string; name: string; phone: string; isActive: boolean; roles: StaffRole[]; isMe: boolean; locked: boolean };
+export type TeamMember = { id: string; name: string; phone: string; photoUrl: string | null; isActive: boolean; roles: StaffRole[]; isMe: boolean; locked: boolean };
 
 const bad = (message: string) => new AppError("invalid_state", message, { reason: "team" });
 const ownerOnly = (staff: Staff) => { if (!staff.roles.includes("owner")) throw new AppError("forbidden", "Only the owner can change the team."); };
@@ -48,13 +49,13 @@ const ownerOnly = (staff: Staff) => { if (!staff.roles.includes("owner")) throw 
 export async function listTeam(staff: Staff): Promise<TeamMember[]> {
   if (!canSee(staff, "team")) throw new AppError("forbidden", "Your role cannot view the team.");
   const rows = await db
-    .select({ id: s.users.id, name: s.users.name, phone: s.users.phone, isActive: s.users.isActive, role: s.staffRoles.role, outletId: s.staffRoles.outletId })
+    .select({ id: s.users.id, name: s.users.name, phone: s.users.phone, photoUrl: s.users.photoUrl, isActive: s.users.isActive, role: s.staffRoles.role, outletId: s.staffRoles.outletId })
     .from(s.staffRoles)
     .innerJoin(s.users, and(eq(s.users.tenantId, s.staffRoles.tenantId), eq(s.users.id, s.staffRoles.userId)))
     .where(and(eq(s.staffRoles.tenantId, staff.tenantId), or(isNull(s.staffRoles.outletId), eq(s.staffRoles.outletId, staff.outletId))));
   const byUser = new Map<string, TeamMember>();
   for (const r of rows) {
-    const m = byUser.get(r.id) ?? { id: r.id, name: r.name, phone: r.phone, isActive: r.isActive, roles: [], isMe: r.id === staff.userId, locked: false };
+    const m = byUser.get(r.id) ?? { id: r.id, name: r.name, phone: r.phone, photoUrl: r.photoUrl, isActive: r.isActive, roles: [], isMe: r.id === staff.userId, locked: false };
     if (!m.roles.includes(r.role)) m.roles.push(r.role);
     // Owners and people with access to every outlet are managed by TableQR, not here
     if (r.role === "owner" || r.outletId === null) m.locked = true;
@@ -106,4 +107,16 @@ export async function setMemberActive(staff: Staff, userId: string, active: bool
     if (!active) await revokeSessions(tx, staff, userId, now);
     await audit(tx, staff, { action: active ? "team.member_on" : "team.member_off", entity: "user", entityId: userId, now });
   });
+}
+
+/** A face photo for a team member, shown on the dashboard, the team list and, for riders, to customers */
+export async function setMemberPhoto(staff: Staff, userId: string, photo: { bytes: Buffer; contentType: string; filename: string }, now = new Date()) {
+  ownerOnly(staff);
+  const { url } = await storeMenuImage({ tenantId: staff.tenantId, brandId: "staff", ...photo });
+  await db.transaction(async (tx) => {
+    await target(tx, staff, userId);
+    await tx.update(s.users).set({ photoUrl: url }).where(and(eq(s.users.tenantId, staff.tenantId), eq(s.users.id, userId)));
+    await audit(tx, staff, { action: "team.photo_set", entity: "user", entityId: userId, now });
+  });
+  return { photoUrl: url };
 }
