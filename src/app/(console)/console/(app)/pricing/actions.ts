@@ -1,5 +1,6 @@
 "use server";
 import { AppError } from "@/server/errors";
+import { clearMenuCache } from "@/server/guest/menu";
 import type { StaffSession } from "@/server/staff/auth";
 import { bulkOutletPrice, clearOutletPrice, getPricingData, setOutletPrice, type BulkInput } from "@/server/staff/pricing";
 import { staffFor } from "@/server/staff/request";
@@ -13,7 +14,11 @@ export type PricingResult<T = null> = { ok: true; data: T } | { ok: false; code:
 
 async function run<T>(work: (staff: StaffSession) => Promise<T>): Promise<PricingResult<T>> {
   try {
-    return { ok: true, data: await work(await staffFor(pricingPermissions["pricing.view"], "pricing")) };
+    const staff = await staffFor(pricingPermissions["pricing.view"], "pricing");
+    const data = await work(staff);
+    // A new price shows to guests at once, not after the menu cache runs out
+    clearMenuCache(staff.tenantId);
+    return { ok: true, data };
   } catch (err) {
     if (err instanceof AppError) return { ok: false, code: err.code, message: err.message };
     console.error("[pricing] action failed", err);

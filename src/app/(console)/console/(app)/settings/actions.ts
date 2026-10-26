@@ -1,5 +1,6 @@
 "use server";
 import { AppError } from "@/server/errors";
+import { clearMenuCache } from "@/server/guest/menu";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
@@ -15,7 +16,10 @@ export type SettingsResult = { ok: true } | { ok: false; message: string };
 
 export async function saveSettingsAction(input: SettingsPatch): Promise<SettingsResult> {
   try {
-    await updateOutletSettings(await staffFor(consoleSectionRoles.settings, "settings"), input);
+    const staff = await staffFor(consoleSectionRoles.settings, "settings");
+    await updateOutletSettings(staff, input);
+    // GST and other outlet settings change what a dish costs the guest
+    clearMenuCache(staff.tenantId);
     return { ok: true };
   } catch (err) {
     if (err instanceof AppError) return { ok: false, message: err.message };

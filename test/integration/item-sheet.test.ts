@@ -1,3 +1,4 @@
+import { clearMenuCache } from "@/server/guest/menu";
 import { and, eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db as appDb } from "@/db";
@@ -140,10 +141,13 @@ describe("Add to cart from the sheet (G4)", () => {
   it("treats a dish as sold out when its required choice has nothing left", async () => {
     const bread = [mods().butterNaan, mods().tandooriRoti, mods().noBread];
     for (const id of bread) await env.db.update(s.modifiers).set({ isAvailable: false }).where(eq(s.modifiers.id, id));
+    // The menu actions clear the browsing cache after a change; writing straight to the table skips them
+    clearMenuCache(env.demo.tenantId);
     const data = await getMenuScreen("SRJ01", env.demo.tableQr.T2, "a-guest");
     expect(data.menu.flatMap((c) => c.items).find((i) => i.nameEn === "Butter Chicken")!.available).toBe(false);
     await failsWith(addConfiguredLine(g, { itemId: item("Butter Chicken"), qty: 1, modifierIds: [mods().noBread] }), "items_unavailable");
     for (const id of bread) await env.db.update(s.modifiers).set({ isAvailable: true }).where(eq(s.modifiers.id, id));
+    clearMenuCache(env.demo.tenantId);
   });
 
   it("refuses a dish outside its category hours at Add time, from the sheet and the stepper", async () => {

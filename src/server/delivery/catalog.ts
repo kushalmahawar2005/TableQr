@@ -10,7 +10,7 @@ import { readFeatures } from "@/lib/plan-features";
 import { tenantAccess } from "../access";
 import { AppError } from "../errors";
 import { outletGatewayFromConfig } from "../payments/outlet-gateway";
-import { isWithinCategoryWindow, loadItems } from "../guest/menu";
+import { loadItemsForBrowsing, isWithinCategoryWindow, loadItems } from "../guest/menu";
 import type { Runner } from "../db-types";
 
 export async function deliveryOutlet(code: string, ordering = true, now = new Date()) {
@@ -38,7 +38,7 @@ export async function deliveryMenu(code: string, now = new Date()) {
       .from(s.menuCategories)
       .where(and(eq(s.menuCategories.tenantId, outlet.tenantId), eq(s.menuCategories.brandId, outlet.brandId), eq(s.menuCategories.isActive, true)))
       .orderBy(asc(s.menuCategories.sortOrder)),
-    loadItems(db, { tenantId: outlet.tenantId, outletId: outlet.id, brandId: outlet.brandId }, now),
+    loadItemsForBrowsing({ tenantId: outlet.tenantId, outletId: outlet.id, brandId: outlet.brandId }, now),
   ]);
   const visible = loaded.filter(item => isWithinCategoryWindow(item.categoryWindow, outlet.timezone, now));
   const items = visible.map(({ item, pricing, categoryWindow }) => ({

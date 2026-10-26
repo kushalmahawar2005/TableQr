@@ -1,5 +1,6 @@
 "use server";
 import { staffFor } from "@/server/staff/request";
+import { clearMenuCache } from "@/server/guest/menu";
 import { AppError } from "@/server/errors";
 import { menuManagerRoles, menuManagerData, saveMenuItem, archiveMenuItem, setMenuAvailability, adjustMenuPortions, saveMenuCategory, reorderCategories, archiveCategory, deleteCategory, bulkPrice, savePairings, saveModifierGroup, setModifierGroupActive, reorderModifierGroups } from "@/server/staff/menu-manager";
 import { parseMenuFile, commitMenuCsv } from "@/server/staff/menu-import";
@@ -7,7 +8,13 @@ import { storeMenuImage } from "@/server/menu-storage";
 import { addLibraryDishes, browseLibrary, ensureLibraryCategory, fillLibraryPhotos, libraryCategoryDetail, searchLibrary, type LibraryPick } from "@/server/staff/menu-library";
 
 async function run<T>(work: (staff: Awaited<ReturnType<typeof staffFor>>) => Promise<T>) {
-  try { return { ok: true as const, data: await work(await staffFor(menuManagerRoles, "menu")) }; }
+  try {
+    const staff = await staffFor(menuManagerRoles, "menu");
+    const data = await work(staff);
+    // Guests browsing the menu pick up a change at once, not after the cache runs out
+    clearMenuCache(staff.tenantId);
+    return { ok: true as const, data };
+  }
   catch (e) { return { ok: false as const, error: e instanceof AppError ? e.message : "Could not complete this menu action.", code: e instanceof AppError ? e.code : "unknown" }; }
 }
 export async function dataAction() { return run(menuManagerData); }

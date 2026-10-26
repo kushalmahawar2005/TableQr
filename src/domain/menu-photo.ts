@@ -6,5 +6,6 @@
 /** The small copy of a stored menu photo, or the same URL when it is not one of ours */
 export function menuThumb(url: string | null | undefined): string | null {
   if (!url) return null;
-  return /\/menus\/[^?#]+\.webp$/.test(url) && !url.endsWith("-sm.webp") ? url.replace(/\.webp$/, "-sm.webp") : url;
+  // Restaurant uploads (menus/) and the shared dish library (library/) both have a small copy
+  return /\/(menus|library)\/[^?#]+\.webp$/.test(url) && !url.endsWith("-sm.webp") ? url.replace(/\.webp$/, "-sm.webp") : url;
 }

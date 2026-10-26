@@ -1,4 +1,5 @@
 import "server-only";
+import { clearMenuCache } from "../guest/menu";
 import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import { db } from "@/db";
 import * as s from "@/db/schema";
@@ -274,6 +275,8 @@ export async function setOutOfStock(ctx: StaffContext, itemId: string, outOfStoc
     .insert(s.outletItemOverrides)
     .values({ tenantId: ctx.tenantId, outletId: ctx.outletId, itemId, isAvailable: !outOfStock, soldOutUntil: until })
     .onDuplicateKeyUpdate({ set: { isAvailable: !outOfStock, soldOutUntil: until } });
+  // Hidden from guests at once, not after the menu cache runs out
+  clearMenuCache(ctx.tenantId);
 
   const [{ carts }] = await db
     .select({ carts: sql<number>`count(distinct ${s.cartLines.participantId})` })

@@ -18,7 +18,7 @@ import { topics } from "../realtime/token";
 import { queueReservationConfirmation } from "./notifications";
 import { audit } from "../staff/audit";
 import type { StaffSession } from "../staff/auth";
-import { loadItems } from "../guest/menu";
+import { loadItemsForBrowsing, loadItems } from "../guest/menu";
 import { priceLine } from "@/domain/pricing";
 import { isWithinCategoryWindow } from "../guest/menu";
 import { configuredGuestServices, type GuestService } from "@/domain/guest-services";
@@ -274,7 +274,7 @@ export async function bookingByToken(outletCode: string, token: string, now = ne
 export async function bookingPreorderMenu(outletCode: string) {
   const scope = await outletScope(db, outletCode);
   await requireFeature(scope.tenantId, "reservations");
-  const loaded = await loadItems(db, scope, new Date());
+  const loaded = await loadItemsForBrowsing(scope, new Date());
   return loaded.filter(({ pricing }) => pricing.isAvailable).map(({ item, pricing }) => ({
     id: item.id, nameEn: item.nameEn, nameHi: item.nameHi, pricePaise: pricing.pricePaise,
     taxRateBp: item.taxRateBp, station: item.station, prepMinutes: Math.max(1, item.prepMinutes),

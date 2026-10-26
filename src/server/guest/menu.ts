@@ -27,14 +27,10 @@ export function isWithinCategoryWindow(window: { from: string; to: string } | nu
   return !window || inWindow(localClock(now, timezone).minutes, window.from, window.to);
 }
 
-/** Items with their outlet price, availability and option groups. Pass itemIds to load only those. */
-export async function loadItems(
-  run: Runner,
-  ctx: { tenantId: string; brandId: string; outletId: string },
-  now: Date,
-  itemIds?: string[],
-) {
-  if (itemIds && itemIds.length === 0) return [];
+type MenuCtx = { tenantId: string; brandId: string; outletId: string };
+
+/** Everything the menu needs from the database, before the clock is applied */
+async function loadMenuRows(run: Runner, ctx: MenuCtx, itemIds?: string[]) {
   const items = await run
     .select()
     .from(s.menuItems)
@@ -47,7 +43,7 @@ export async function loadItems(
       ),
     )
     .orderBy(asc(s.menuItems.sortOrder));
-  if (items.length === 0) return [];
+  if (items.length === 0) return null;
   const ids = items.map((i) => i.id);
 
   const [overrides, groups, windows, [seller]] = await Promise.all([
@@ -78,8 +74,6 @@ export async function loadItems(
       ),
     run.select({ gstin: s.outlets.gstin }).from(s.outlets).where(and(eq(s.outlets.tenantId, ctx.tenantId), eq(s.outlets.id, ctx.outletId))),
   ]);
-  // Only a GST-registered outlet may charge GST: without a GSTIN every dish sells at 0% tax
-  const chargesGst = hasGstin(seller?.gstin);
   const mods = groups.length
     ? await run
         .select()
@@ -87,7 +81,17 @@ export async function loadItems(
         .where(and(eq(s.modifiers.tenantId, ctx.tenantId), inArray(s.modifiers.groupId, groups.map((g) => g.id))))
         .orderBy(asc(s.modifiers.sortOrder))
     : [];
+  return { items, overrides, groups, windows, seller, mods };
+}
 
+type MenuRows = NonNullable<Awaited<ReturnType<typeof loadMenuRows>>>;
+
+/** The clock is applied here, on every request, so sold-out windows stay exact even for cached rows */
+function buildItems(rows: MenuRows | null, now: Date) {
+  if (!rows) return [];
+  const { items, overrides, groups, windows, seller, mods } = rows;
+  // Only a GST-registered outlet may charge GST: without a GSTIN every dish sells at 0% tax
+  const chargesGst = hasGstin(seller?.gstin);
   const overrideByItem = new Map(overrides.map((o) => [o.itemId, o]));
   const windowByCategory = new Map(windows.map((w) => [w.id, w.from && w.to ? { from: w.from, to: w.to } : null]));
   return items.filter((item) => windowByCategory.has(item.categoryId)).map((item) => {
@@ -125,18 +129,65 @@ export async function loadItems(
   });
 }
 
-export async function getGuestMenu(
-  ctx: { tenantId: string; brandId: string; outletId: string; timezone: string; soldOutDisplay: "hide" | "grey" },
-  now = new Date(),
-) {
-  const [categories, items] = await Promise.all([
+/** Items with their outlet price, availability and option groups. Pass itemIds to load only those. */
+export async function loadItems(run: Runner, ctx: MenuCtx, now: Date, itemIds?: string[]) {
+  if (itemIds && itemIds.length === 0) return [];
+  return buildItems(await loadMenuRows(run, ctx, itemIds), now);
+}
+
+// ---- Browsing cache -------------------------------------------------------------------------
+// A restaurant's menu is read by every guest who opens it and changes a few times a day. The
+// database rows are kept for a few seconds and shared by everyone asking at once (one load, not
+// one per guest). Only menu browsing uses it: adding to a cart, ordering and checkout always read
+// fresh, so a price or sold-out change can never be ordered at the old terms. The owner's menu and
+// price changes clear it at once (clearMenuCache); stock moving as orders land is up to TTL late.
+const MENU_TTL_MS = 15_000;
+const MENU_CACHE_MAX = 400;
+type MenuBundle = { categories: (typeof s.menuCategories.$inferSelect)[]; rows: MenuRows | null };
+const menuCache = new Map<string, { at: number; load: Promise<MenuBundle> }>();
+
+const loadBundle = async (ctx: MenuCtx): Promise<MenuBundle> => {
+  const [categories, rows] = await Promise.all([
     db
       .select()
       .from(s.menuCategories)
       .where(and(eq(s.menuCategories.tenantId, ctx.tenantId), eq(s.menuCategories.brandId, ctx.brandId), eq(s.menuCategories.isActive, true)))
       .orderBy(asc(s.menuCategories.sortOrder)),
-    loadItems(db, ctx, now),
+    loadMenuRows(db, ctx),
   ]);
+  return { categories, rows };
+};
+
+async function bundleCached(ctx: MenuCtx): Promise<MenuBundle> {
+  const key = `${ctx.tenantId}:${ctx.brandId}:${ctx.outletId}`;
+  const hit = menuCache.get(key);
+  if (hit && Date.now() - hit.at < MENU_TTL_MS) return hit.load;
+  const load = loadBundle(ctx);
+  menuCache.set(key, { at: Date.now(), load });
+  // A failed load must not be remembered
+  load.catch(() => { if (menuCache.get(key)?.load === load) menuCache.delete(key); });
+  // Oldest first (a Map keeps insertion order)
+  for (const k of menuCache.keys()) { if (menuCache.size <= MENU_CACHE_MAX) break; menuCache.delete(k); }
+  return load;
+}
+
+/** Forget a restaurant's cached menu (all of its outlets) after the owner changes it */
+export function clearMenuCache(tenantId: string) {
+  for (const k of menuCache.keys()) if (k.startsWith(`${tenantId}:`)) menuCache.delete(k);
+}
+
+/** loadItems for browsing: the same result, from shared rows a few seconds old at most */
+export async function loadItemsForBrowsing(ctx: MenuCtx, now: Date) {
+  return buildItems((await bundleCached(ctx)).rows, now);
+}
+
+export async function getGuestMenu(
+  ctx: { tenantId: string; brandId: string; outletId: string; timezone: string; soldOutDisplay: "hide" | "grey" },
+  now = new Date(),
+) {
+  const bundle = await bundleCached(ctx);
+  const categories = bundle.categories;
+  const items = buildItems(bundle.rows, now);
 
   const { minutes } = localClock(now, ctx.timezone);
   return categories
