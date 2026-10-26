@@ -110,7 +110,7 @@ export function BookingClient({ outletCode, zones, timezone, today, freeCancella
   const selectedLabel = selected != null ? new Intl.DateTimeFormat(hindi ? "hi-IN-u-nu-latn" : "en-IN", { timeZone: timezone, weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }).format(new Date(selected)) : null;
   const switchLanguage = (next: boolean) => { if (next === hindi) return; setHindi(next); router.replace(`/r/${encodeURIComponent(outletCode)}/book?lang=${next ? "hi" : "en"}`, { scroll: false }); };
 
-  return <main lang={lang} className="mx-auto flex min-h-dvh w-full max-w-[520px] min-w-0 flex-col px-4 pt-5 pb-32 text-ink min-[380px]:px-5">
+  return <main lang={lang} className="flex min-h-dvh w-full min-w-0 flex-col pt-5 pb-32 text-ink">
     <div className="flex items-center justify-between gap-3">
       <Link href={`/r/${encodeURIComponent(outletCode)}`} className="relative -ml-1 inline-flex items-center gap-0.5 rounded-full px-1 py-0.5 text-caption font-semibold text-muted before:absolute before:-inset-2.5 hover:text-ink focus-visible:outline-2 focus-visible:outline-brand">
         <HugeiconsIcon icon={ArrowLeft01Icon} size={16} strokeWidth={2} aria-hidden />{t("Back", "वापस")}
@@ -176,7 +176,7 @@ export function BookingClient({ outletCode, zones, timezone, today, freeCancella
     {party <= 12 && <p className="mt-5 text-center text-label text-muted">{cancellationText(freeCancellationMinutes, hindi)}</p>}
 
     {/* Stays at the bottom with what has been picked so far */}
-    {party <= 12 && <div className="fixed inset-x-0 bottom-0 z-30 mx-auto max-w-[520px] border-t border-line/70 bg-surface/95 px-4 pt-3 pb-[max(12px,env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgb(31_41_55/0.08)] backdrop-blur-md min-[380px]:px-5">
+    {party <= 12 && <div className="fixed inset-x-0 bottom-0 z-30 mx-auto max-w-[480px] border-t border-line/70 bg-surface/95 px-4 pt-3 pb-[max(12px,env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgb(31_41_55/0.08)] backdrop-blur-md min-[380px]:px-5">
       <div className="flex items-center gap-3">
         <div className="min-w-0 flex-1">
           <p className="text-label text-muted">{party} {party === 1 ? t("guest", "मेहमान") : t("guests", "मेहमान")}</p>
