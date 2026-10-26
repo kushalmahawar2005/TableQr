@@ -14,6 +14,8 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Cloudflare Worker, checked by its own tsconfig
     "realtime/**",
+    // Android rider app (Capacitor), built on its own
+    "rider-app/**",
   ]),
 ]);
 

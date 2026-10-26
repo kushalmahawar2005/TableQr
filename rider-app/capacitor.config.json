@@ -1,0 +1,11 @@
+{
+  "appId": "com.craftory.tableqr.rider",
+  "appName": "TableQR Rider",
+  "webDir": "www",
+  "server": {
+    "url": "https://tableqr.craftoryinnovation.com/rider",
+    "cleartext": false,
+    "allowNavigation": ["tableqr.craftoryinnovation.com"]
+  },
+  "android": { "allowMixedContent": false }
+}

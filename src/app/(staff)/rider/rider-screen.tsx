@@ -217,28 +217,52 @@ function ProfileForm({ profile, onSaved }: { profile: Profile; onSaved: (p: Prof
   );
 }
 
+type BackgroundGeolocation = {
+  addWatcher(options: Record<string, unknown>, callback: (location?: { latitude: number; longitude: number }, error?: { code: string; message: string }) => void): Promise<string>;
+  removeWatcher(options: { id: string }): Promise<void>;
+};
+/** The background location plugin, when this page runs inside the TableQR Rider Android app */
+function nativeBackgroundGeolocation(): BackgroundGeolocation | null {
+  const cap = (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean; registerPlugin?: (name: string) => unknown } }).Capacitor;
+  return cap?.isNativePlatform?.() && cap.registerPlugin ? (cap.registerPlugin("BackgroundGeolocation") as BackgroundGeolocation) : null;
+}
+
 /**
  * While the rider is online, watches the phone's position and sends it every 15 seconds, or
- * sooner after moving 40 m. Works only while this page is open (a browser limit).
+ * sooner after moving 40 m. In a browser this works only while the page is open; inside the
+ * TableQR Rider Android app it keeps going with the screen off.
  */
 function useLiveLocation(online: boolean) {
   const [point, setPoint] = useState<{ lat: number; lng: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     if (!online) return;
-    if (!("geolocation" in navigator)) { queueMicrotask(() => setError("This phone cannot share location.")); return; }
     let last: { lat: number; lng: number; t: number } | null = null;
+    const report = (p: { lat: number; lng: number }) => {
+      setPoint(p);
+      setError(null);
+      const now = Date.now();
+      if (!last || now - last.t > 15_000 || distanceKm(last, p) > 0.04) {
+        last = { ...p, t: now };
+        void riderLocationAction(p.lat, p.lng);
+      }
+    };
+    // Inside the TableQR Rider Android app: a background service keeps sending with the screen off
+    const bg = nativeBackgroundGeolocation();
+    if (bg) {
+      let watcher: string | null = null, stopped = false;
+      void bg.addWatcher(
+        { backgroundTitle: "Delivering with TableQR", backgroundMessage: "Sharing your location while you are online", requestPermissions: true, stale: false, distanceFilter: 30 },
+        (loc, err) => {
+          if (err) { setError(err.code === "NOT_AUTHORIZED" ? "Allow location for TableQR Rider in phone settings." : "Location not available. Turn on GPS."); return; }
+          if (loc) report({ lat: loc.latitude, lng: loc.longitude });
+        },
+      ).then((id) => { if (stopped) void bg.removeWatcher({ id }); else watcher = id; });
+      return () => { stopped = true; if (watcher) void bg.removeWatcher({ id: watcher }); };
+    }
+    if (!("geolocation" in navigator)) { queueMicrotask(() => setError("This phone cannot share location.")); return; }
     const id = navigator.geolocation.watchPosition(
-      (pos) => {
-        const p = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        setPoint(p);
-        setError(null);
-        const now = Date.now();
-        if (!last || now - last.t > 15_000 || distanceKm(last, p) > 0.04) {
-          last = { ...p, t: now };
-          void riderLocationAction(p.lat, p.lng);
-        }
-      },
+      (pos) => report({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
       (err) => setError(err.code === err.PERMISSION_DENIED ? "Allow location for this site so customers can track you." : "Location not available. Turn on GPS."),
       { enableHighAccuracy: true, maximumAge: 10_000, timeout: 20_000 },
     );
