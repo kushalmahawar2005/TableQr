@@ -16,10 +16,24 @@ export const deliveryStaffRoles = ["owner", "manager", "cashier"] as const;
 export async function deliveryQueue(staff: StaffSession) {
   await requireStaffRole(staff, deliveryStaffRoles);
   // Historical orders remain manageable if the package is downgraded or delivery is paused.
-  return db.select({ id: s.deliveryCheckouts.id, status: s.deliveryCheckouts.status, sessionId: s.deliveryCheckouts.sessionId, name: s.deliveryCheckouts.name, phone: s.deliveryCheckouts.phone, address: s.deliveryCheckouts.address, courierName: s.deliveryCheckouts.courierName, courierPhone: s.deliveryCheckouts.courierPhone, totalPaise: s.bills.totalPaise, paid: s.bills.status, placedAt: s.deliveryCheckouts.placedAt })
+  const rows = await db.select({ id: s.deliveryCheckouts.id, status: s.deliveryCheckouts.status, sessionId: s.deliveryCheckouts.sessionId, name: s.deliveryCheckouts.name, phone: s.deliveryCheckouts.phone, address: s.deliveryCheckouts.address, courierName: s.deliveryCheckouts.courierName, courierPhone: s.deliveryCheckouts.courierPhone, totalPaise: s.bills.totalPaise, paid: s.bills.status, placedAt: s.deliveryCheckouts.placedAt })
     .from(s.deliveryCheckouts).innerJoin(s.bills, and(eq(s.bills.tenantId, s.deliveryCheckouts.tenantId), eq(s.bills.sessionId, s.deliveryCheckouts.sessionId)))
     .where(and(eq(s.deliveryCheckouts.tenantId, staff.tenantId), eq(s.deliveryCheckouts.outletId, staff.outletId), inArray(s.deliveryCheckouts.status, ["placed", "dispatched", "delivered"])))
     .orderBy(desc(s.deliveryCheckouts.placedAt)).limit(100);
+  // What was ordered and where the kitchen is with it, for the delivery desk
+  const sessionIds = rows.map(r => r.sessionId).filter((id): id is string => !!id);
+  const [orders, lines] = sessionIds.length ? await Promise.all([
+    db.select({ sessionId: s.orders.sessionId, status: s.orders.status }).from(s.orders)
+      .where(and(eq(s.orders.tenantId, staff.tenantId), inArray(s.orders.sessionId, sessionIds))),
+    db.select({ sessionId: s.orderLines.sessionId, name: s.orderLines.nameEn, qty: s.orderLines.qty, status: s.orderLines.status }).from(s.orderLines)
+      .where(and(eq(s.orderLines.tenantId, staff.tenantId), inArray(s.orderLines.sessionId, sessionIds))),
+  ]) : [[], []];
+  const kitchen = new Map(orders.map(o => [o.sessionId, o.status]));
+  return rows.map(r => ({
+    ...r,
+    kitchenStatus: (r.sessionId && kitchen.get(r.sessionId)) || null,
+    items: lines.filter(l => l.sessionId === r.sessionId && l.status !== "cancelled" && l.status !== "voided").map(l => ({ name: l.name, qty: l.qty })),
+  }));
 }
 
 function cleanCourier(input: { name?: unknown; phone?: unknown }) {

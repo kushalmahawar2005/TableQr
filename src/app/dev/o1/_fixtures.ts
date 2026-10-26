@@ -43,6 +43,7 @@ const busy: DashboardData = {
     upcomingReservations: 4,
     waitlist: 3,
     outstandingPaise: 1_294_000,
+    delivery: { active: 3, onTheWay: 1, deliveredToday: 6, cashToCollectPaise: 84_000 },
   },
   secondary: { taxPaise: 402_976, serviceChargePaise: 0, tipPaise: 61_000 },
   operations: {
@@ -84,7 +85,7 @@ const quiet: DashboardData = {
   greeting: "Good morning",
   generatedAt: localTime(DATE, 9 * 60 + 5, TZ).getTime(),
   view: "full",
-  kpis: { revenue: { today: 0, yesterday: 0 }, orders: { today: 0, yesterday: 0 }, covers: { today: 0, yesterday: 0 }, averageBill: { today: 0, yesterday: 0 }, paidBills: 0, openTables: { open: 0, total: 18 }, upcomingReservations: 0, waitlist: 0, outstandingPaise: 0 },
+  kpis: { revenue: { today: 0, yesterday: 0 }, orders: { today: 0, yesterday: 0 }, covers: { today: 0, yesterday: 0 }, averageBill: { today: 0, yesterday: 0 }, paidBills: 0, openTables: { open: 0, total: 18 }, upcomingReservations: 0, waitlist: 0, outstandingPaise: 0, delivery: { active: 0, onTheWay: 0, deliveredToday: 0, cashToCollectPaise: 0 } },
   secondary: { taxPaise: 0, serviceChargePaise: 0, tipPaise: 0 },
   operations: { tables: { available: 18, reserved: 0, seated: 0, billRequested: 0, blocked: 0, total: 18 }, tableTiles: [], waitlist: { waiting: 0, notified: 0 }, upcoming: [], billRequestedTables: 0, kitchenOrders: [], customerRequests: [], recentPayments: [], activityFeed: [] },
   alerts: calm,

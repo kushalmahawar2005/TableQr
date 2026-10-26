@@ -175,10 +175,10 @@ describe("polling controller", () => {
 describe("screen", () => {
   it("shows the seven KPIs, deltas, trend, operations, attention and top items", () => {
     const html = render("busy");
-    for (const label of ["Today&#x27;s Sales", "Orders Today", "Average Bill", "Tables in Use", "Bookings Coming Up", "Waiting List", "Unpaid Bills"]) expect(html).toContain(label);
+    for (const label of ["Today&#x27;s Sales", "Orders Today", "Average Bill", "Tables in Use", "Bookings Coming Up", "Waiting List", "Delivery Orders"]) expect(html).toContain(label);
     expect(html).toContain("₹84,625");
     expect(html).toContain("+12%");
-    expect(html).toContain("₹12,940");
+    expect(html).toContain("1 on the way · ₹840 cash");
     expect(html).toContain("Money from paid bills");
     expect(html).toContain("Revenue trend for the last 7 days");
     expect(html).toContain("Sales, Last 7 Days");
@@ -218,7 +218,7 @@ describe("screen", () => {
     // Every link on the dashboard resolves to a real console route. The kitchen panel links to
     // the KDS; the inventory and team links appear only when their data does (low stock / duty
     // rows), so they are not part of this fixture render.
-    expect(new Set(hrefs)).toEqual(new Set(["/console/floor", "/console/billing", "/console/orders", "/console/reservations", "/console/reports", "/console/reports/day-close", "/console/waitlist", "/console/menu", "/console/kitchen"]));
+    expect(new Set(hrefs)).toEqual(new Set(["/console/floor", "/console/billing", "/console/orders", "/console/orders?view=delivery", "/console/reservations", "/console/reports", "/console/reports/day-close", "/console/waitlist", "/console/menu", "/console/kitchen"]));
     expect(html).not.toMatch(/recharts|chart\.js|echarts|<canvas/i);
   });
 });

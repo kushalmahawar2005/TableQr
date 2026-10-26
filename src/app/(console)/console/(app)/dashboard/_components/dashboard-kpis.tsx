@@ -1,4 +1,4 @@
-import { Calendar, CreditCard, FileText, HandCoins, Receipt, Wallet } from "lucide-react";
+import { Bike, Calendar, CreditCard, FileText, Receipt, Wallet } from "lucide-react";
 import Link from "next/link";
 import type { DashboardData, RevenueTrend } from "@/server/staff/dashboard";
 import { Delta, dayLabel, focusRing, money } from "./dashboard-shared";
@@ -53,16 +53,18 @@ export function DashboardKpis({ data, trend }: { data: DashboardData; trend: Rev
           <div className={footer}><span className="whitespace-nowrap text-[10px] font-medium text-muted">Yesterday</span><span className={deltaBadge}><Delta today={k.orders.today} yesterday={k.orders.yesterday} compact /></span></div>
         </Link>
 
-        <Link href="/console/billing" className={`${card} xl:col-span-1`}>
+        <Link href="/console/orders?view=delivery" className={`${card} xl:col-span-1`}>
           <div className="flex items-center justify-between gap-2">
-            <p className="text-[12px] font-semibold leading-4 text-muted sm:text-[13px]">Unpaid Bills</p>
-            <span className={`${iconBox} bg-terracotta/10 text-terracotta`} aria-hidden="true"><HandCoins className="size-[18px]" /></span>
+            <p className="text-[12px] font-semibold leading-4 text-muted sm:text-[13px]">Delivery Orders</p>
+            <span className={`${iconBox} bg-terracotta/10 text-terracotta`} aria-hidden="true"><Bike className="size-[18px]" /></span>
           </div>
           <div className="mt-2">
-            <p className="font-display text-[30px] font-bold leading-none tracking-tight text-ink tabular sm:text-[32px]">{money(k.outstandingPaise)}</p>
-            <p className="mt-2 min-h-8 text-xs font-medium leading-4 text-muted">Still to collect</p>
+            <p className="font-display text-[30px] font-bold leading-none tracking-tight text-ink tabular sm:text-[32px]">{k.delivery.active}</p>
+            <p className="mt-2 min-h-8 text-xs font-medium leading-4 text-muted">
+              {k.delivery.active ? `${k.delivery.onTheWay} on the way${k.delivery.cashToCollectPaise ? ` · ${money(k.delivery.cashToCollectPaise)} cash` : ""}` : "No delivery running"}
+            </p>
           </div>
-          <div className={`${footer} justify-start`}><span className="text-[11px] font-medium text-muted">Open bills right now</span></div>
+          <div className={`${footer} justify-start`}><span className="text-[11px] font-medium text-muted">{k.delivery.deliveredToday} delivered today</span></div>
         </Link>
 
         <Link href="/console/floor" className={`${card} xl:col-span-1`}>

@@ -224,7 +224,7 @@ export async function getDashboard(staff: Staff, now = new Date()) {
   const lateSince = new Date(now.getTime() - LATE_LOOKBACK_HOURS * 3600_000);
   const billAlertBefore = new Date(now.getTime() - BILL_REQUESTED_ALERT_MINUTES * 60_000);
 
-  const [bills, ordersToday, ordersYesterday, tableStates, waitlist, outstanding, waitingBills, bookings, refunds, top, policy, [outlet], rawRequests, rawKitchenOrders, rawPayments] = await Promise.all([
+  const [bills, ordersToday, ordersYesterday, tableStates, waitlist, outstanding, waitingBills, bookings, refunds, top, policy, [outlet], rawRequests, rawKitchenOrders, rawPayments, deliveryRows] = await Promise.all([
     paidBills(scope, yesterday.start, today.end),
     ordersIn(scope, today),
     ordersIn(scope, yesterday),
@@ -318,6 +318,16 @@ export async function getDashboard(staff: Staff, now = new Date()) {
       // A payment whose table is gone is left out, as the inner joins did
       return latest.filter((p) => code.has(p.billId)).map(({ billId, ...p }) => ({ ...p, tableCode: code.get(billId)! }));
     })(),
+    // Home delivery: everything still out, and what was delivered today
+    db
+      .select({ status: s.deliveryCheckouts.status, billStatus: s.bills.status, totalPaise: s.bills.totalPaise })
+      .from(s.deliveryCheckouts)
+      .innerJoin(s.bills, and(eq(s.bills.tenantId, s.deliveryCheckouts.tenantId), eq(s.bills.sessionId, s.deliveryCheckouts.sessionId)))
+      .where(and(
+        eq(s.deliveryCheckouts.tenantId, scope.tenantId),
+        eq(s.deliveryCheckouts.outletId, scope.outletId),
+        sql`(${s.deliveryCheckouts.status} in ('placed', 'dispatched') or (${s.deliveryCheckouts.status} = 'delivered' and ${s.deliveryCheckouts.placedAt} >= ${today.start}))`,
+      )),
   ]);
 
   const [soldOut, bookingTables, low, rawTables, openSessions] = await Promise.all([
@@ -500,6 +510,12 @@ export async function getDashboard(staff: Staff, now = new Date()) {
       upcomingReservations: upcoming.length,
       waitlist: (queue.waiting ?? 0) + (queue.notified ?? 0),
       outstandingPaise: Number(outstanding[0]?.paise ?? 0),
+      delivery: {
+        active: deliveryRows.filter((d) => d.status === "placed" || d.status === "dispatched").length,
+        onTheWay: deliveryRows.filter((d) => d.status === "dispatched").length,
+        deliveredToday: deliveryRows.filter((d) => d.status === "delivered").length,
+        cashToCollectPaise: deliveryRows.filter((d) => d.status !== "delivered" && d.billStatus !== "paid").reduce((n, d) => n + d.totalPaise, 0),
+      },
     },
     /** Shown beside revenue, never added to it */
     secondary: { taxPaise: moneyToday.taxPaise, serviceChargePaise: moneyToday.serviceChargePaise, tipPaise: moneyToday.tipPaise },
@@ -528,7 +544,7 @@ export async function getDashboard(staff: Staff, now = new Date()) {
 
 /** Takes out what the view may not see; the numbers and lists are removed, not just hidden on screen */
 function redactDashboard<T extends {
-  kpis: { revenue: { today: number; yesterday: number }; averageBill: { today: number | null; yesterday: number | null }; paidBills: number; outstandingPaise: number; orders: { today: number; yesterday: number }; covers: { today: number; yesterday: number }; openTables: { open: number; total: number }; upcomingReservations: number; waitlist: number };
+  kpis: { revenue: { today: number; yesterday: number }; averageBill: { today: number | null; yesterday: number | null }; paidBills: number; outstandingPaise: number; delivery: { active: number; onTheWay: number; deliveredToday: number; cashToCollectPaise: number }; orders: { today: number; yesterday: number }; covers: { today: number; yesterday: number }; openTables: { open: number; total: number }; upcomingReservations: number; waitlist: number };
   secondary: { taxPaise: number; serviceChargePaise: number; tipPaise: number };
   operations: { tables: Record<string, number>; tableTiles: unknown[]; waitlist: { waiting: number; notified: number }; upcoming: unknown[]; billRequestedTables: number; kitchenOrders: unknown[]; customerRequests: unknown[]; recentPayments: unknown[]; activityFeed: unknown[] };
   alerts: { pendingRefunds: { count: number; paise: number }; slowBills: unknown[]; soldOut: number; late: unknown[]; blockedTables: number; lowStock: unknown[] };
@@ -539,7 +555,7 @@ function redactDashboard<T extends {
   if (view === "operations") {
     return {
       ...data, view,
-      kpis: { ...data.kpis, revenue: { today: 0, yesterday: 0 }, averageBill: { today: null, yesterday: null }, paidBills: 0, outstandingPaise: 0 },
+      kpis: { ...data.kpis, revenue: { today: 0, yesterday: 0 }, averageBill: { today: null, yesterday: null }, paidBills: 0, outstandingPaise: 0, delivery: { ...data.kpis.delivery, cashToCollectPaise: 0 } },
       secondary: { taxPaise: 0, serviceChargePaise: 0, tipPaise: 0 },
       operations: { ...data.operations, recentPayments: [] },
       alerts: { ...data.alerts, pendingRefunds: { count: 0, paise: 0 } },
