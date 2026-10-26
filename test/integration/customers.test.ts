@@ -31,14 +31,14 @@ describe("customers", () => {
     const g = await getGuestContext("SRJ01", qr, participantId, "cust-a");
     await rememberCustomer(owner, { sessionId: g.sessionId, phone: "+91 98111 22334", name: "Meera" });
 
-    const list = await getCustomers(owner);
+    const list = (await getCustomers(owner)).customers;
     const meera = list.find((c) => c.phone === "9811122334");
     expect(meera).toMatchObject({ name: "Meera", visits: 1, offersOk: false });
     expect(meera?.lastVisitAt).toBeGreaterThan(0);
 
     // The same number again does not make a second customer
     await rememberCustomer(owner, { sessionId: g.sessionId, phone: "9811122334" });
-    expect((await getCustomers(owner)).filter((c) => c.phone === "9811122334")).toHaveLength(1);
+    expect((await getCustomers(owner)).customers.filter((c) => c.phone === "9811122334")).toHaveLength(1);
   });
 
   it("lists the others at the table with the one who gave a number", async () => {
@@ -49,8 +49,26 @@ describe("customers", () => {
     const g = await getGuestContext("SRJ01", qr, first.participantId, "with-a");
     await rememberCustomer(owner, { sessionId: g.sessionId, phone: "9587507407", name: "Jayendra" });
 
-    const jayendra = (await getCustomers(owner)).find((c) => c.phone === "9587507407");
+    const jayendra = (await getCustomers(owner)).customers.find((c) => c.phone === "9587507407");
     expect(jayendra?.companions).toEqual({ names: ["Hitesh"], unnamed: 1 });
+  });
+
+  it("searches by name or number, filters, and pages the list", async () => {
+    const search = await getCustomers(owner, { q: "meera" });
+    expect(search.customers.map((c) => c.phone)).toContain("9811122334");
+    expect(search.total).toBe(search.customers.length);
+    // Spaces and the number's own formatting do not matter
+    expect((await getCustomers(owner, { q: "98111 22334" })).customers.map((c) => c.phone)).toEqual(["9811122334"]);
+    expect((await getCustomers(owner, { q: "no-one-has-this-name" })).customers).toEqual([]);
+
+    const all = await getCustomers(owner);
+    expect(all.counts.all).toBe(all.total);
+    expect(all.counts.regulars).toBe((await getCustomers(owner, { filter: "regulars" })).total);
+    expect(all.pages).toBeGreaterThanOrEqual(1);
+    // A page past the end lands on the last page instead of coming back empty
+    expect((await getCustomers(owner, { page: 999 })).page).toBe(all.pages);
+    // The CSV asks for everyone at once
+    expect((await getCustomers(owner, { all: true })).customers).toHaveLength(all.total);
   });
 
   it("refuses a bad number, another outlet's visit, and roles without access", async () => {

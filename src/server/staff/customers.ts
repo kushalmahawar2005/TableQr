@@ -34,26 +34,75 @@ const normal = (phone: string | null | undefined) => {
   return local.length >= 10 ? local.slice(-10) : null;
 };
 
-export async function getCustomers(staff: Staff): Promise<Customer[]> {
+export type CustomerFilter = "all" | "regulars" | "offers" | "away";
+export const CUSTOMERS_PAGE_SIZE = 50;
+const DAY = 86_400_000;
+const CHUNK = 400;
+
+export type CustomersPage = {
+  customers: Customer[];
+  /** How many people each filter holds, whatever the search says */
+  counts: Record<CustomerFilter, number>;
+  total: number;
+  page: number;
+  pages: number;
+};
+
+/**
+ * One page of customers. The heavy part runs in SQL (one row per guest, per phone), so memory and
+ * time stay flat as visits pile up; only the people on this page get their "came with" names.
+ * `all` returns every match (for the CSV), still without loading each visit.
+ */
+export async function getCustomers(
+  staff: Staff,
+  opts: { q?: string; filter?: CustomerFilter; page?: number; all?: boolean } = {},
+  now = Date.now(),
+): Promise<CustomersPage> {
   if (!canSee(staff, "customers")) throw new AppError("forbidden", "Your role cannot see customers.");
   await requireFeature(staff.tenantId, "whatsappBills");
-  const [guests, visits, reservations, waitlist] = await Promise.all([
-    db.select().from(s.guests).where(eq(s.guests.tenantId, staff.tenantId)),
-    // One row per guest per visit, with that table's paid total
+  const t = staff.tenantId;
+  const perVisit = db
+    .selectDistinct({
+      guestId: s.participants.guestId,
+      sessionId: s.tableSessions.id,
+      openedAt: s.tableSessions.openedAt,
+      spend: sql<number>`case when ${s.bills.status} = 'paid' then ${s.bills.totalPaise} else 0 end`.as("spend"),
+    })
+    .from(s.participants)
+    .innerJoin(s.tableSessions, and(eq(s.tableSessions.tenantId, s.participants.tenantId), eq(s.tableSessions.id, s.participants.sessionId)))
+    .leftJoin(s.bills, and(eq(s.bills.tenantId, s.tableSessions.tenantId), eq(s.bills.sessionId, s.tableSessions.id)))
+    .where(and(eq(s.participants.tenantId, t), isNotNull(s.participants.guestId)))
+    .as("pv");
+  const [guests, visitStats, reservations, waitlist] = await Promise.all([
+    db.select({ id: s.guests.id, phone: s.guests.phone, name: s.guests.name, firstSeenAt: s.guests.firstSeenAt, consentMarketing: s.guests.consentMarketing, noShowCount: s.guests.noShowCount }).from(s.guests).where(eq(s.guests.tenantId, t)),
+    // One row per guest: visits, last visit and what their tables paid
     db
-      .selectDistinct({ guestId: s.participants.guestId, sessionId: s.tableSessions.id, openedAt: s.tableSessions.openedAt, spend: s.bills.totalPaise, billStatus: s.bills.status })
-      .from(s.participants)
-      .innerJoin(s.tableSessions, and(eq(s.tableSessions.tenantId, s.participants.tenantId), eq(s.tableSessions.id, s.participants.sessionId)))
-      .leftJoin(s.bills, and(eq(s.bills.tenantId, s.tableSessions.tenantId), eq(s.bills.sessionId, s.tableSessions.id)))
-      .where(and(eq(s.participants.tenantId, staff.tenantId), isNotNull(s.participants.guestId))),
+      .select({
+        guestId: perVisit.guestId,
+        visits: sql<number>`count(*)`.mapWith(Number),
+        last: sql<Date>`max(${perVisit.openedAt})`.mapWith(s.tableSessions.openedAt),
+        first: sql<Date>`min(${perVisit.openedAt})`.mapWith(s.tableSessions.openedAt),
+        spend: sql<number>`coalesce(sum(${perVisit.spend}), 0)`.mapWith(Number),
+      })
+      .from(perVisit)
+      .groupBy(perVisit.guestId),
+    // One row per phone number used on a booking
     db
-      .select({ phone: s.reservations.phone, name: s.reservations.name, status: s.reservations.status, startAt: s.reservations.startAt, createdAt: s.reservations.createdAt })
+      .select({
+        phone: s.reservations.phone,
+        name: sql<string | null>`max(case when lower(trim(${s.reservations.name})) <> 'pending guest' and trim(${s.reservations.name}) <> '' then ${s.reservations.name} end)`,
+        bookings: sql<number>`sum(${s.reservations.status} <> 'cancelled')`.mapWith(Number),
+        noShows: sql<number>`sum(${s.reservations.status} = 'no_show')`.mapWith(Number),
+        first: sql<Date>`min(${s.reservations.createdAt})`.mapWith(s.reservations.createdAt),
+      })
       .from(s.reservations)
-      .where(and(eq(s.reservations.tenantId, staff.tenantId), isNotNull(s.reservations.phone))),
+      .where(and(eq(s.reservations.tenantId, t), isNotNull(s.reservations.phone)))
+      .groupBy(s.reservations.phone),
     db
-      .select({ phone: s.waitlistEntries.phone, name: s.waitlistEntries.name, joinedAt: s.waitlistEntries.joinedAt })
+      .select({ phone: s.waitlistEntries.phone, name: sql<string | null>`max(${s.waitlistEntries.name})`, first: sql<Date>`min(${s.waitlistEntries.joinedAt})`.mapWith(s.waitlistEntries.joinedAt) })
       .from(s.waitlistEntries)
-      .where(and(eq(s.waitlistEntries.tenantId, staff.tenantId), isNotNull(s.waitlistEntries.phone))),
+      .where(and(eq(s.waitlistEntries.tenantId, t), isNotNull(s.waitlistEntries.phone)))
+      .groupBy(s.waitlistEntries.phone),
   ]);
 
   const byPhone = new Map<string, Customer>();
@@ -67,7 +116,6 @@ export async function getCustomers(staff: Staff): Promise<Customer[]> {
     if (seen && (c.firstSeenAt === null || seen.getTime() < c.firstSeenAt)) c.firstSeenAt = seen.getTime();
     return c;
   };
-
   const phoneOfGuest = new Map<string, string>();
   for (const g of guests) {
     const phone = normal(g.phone);
@@ -77,54 +125,89 @@ export async function getCustomers(staff: Staff): Promise<Customer[]> {
     c.offersOk = c.offersOk || g.consentMarketing;
     c.noShows = Math.max(c.noShows, g.noShowCount);
   }
-  const counted = new Set<string>();
-  const lastSession = new Map<string, string>();
-  for (const v of visits) {
+  for (const v of visitStats) {
     const phone = v.guestId ? phoneOfGuest.get(v.guestId) : undefined;
-    if (!phone || counted.has(`${phone}:${v.sessionId}`)) continue;
-    counted.add(`${phone}:${v.sessionId}`);
-    const c = get(phone, null, v.openedAt);
-    c.visits++;
-    if (v.openedAt.getTime() >= (c.lastVisitAt ?? 0)) lastSession.set(phone, v.sessionId);
-    c.lastVisitAt = Math.max(c.lastVisitAt ?? 0, v.openedAt.getTime());
-    if (v.billStatus === "paid") c.spendPaise += v.spend ?? 0;
+    if (!phone) continue;
+    const c = get(phone, null, v.first);
+    c.visits += v.visits;
+    c.lastVisitAt = Math.max(c.lastVisitAt ?? 0, v.last.getTime());
+    c.spendPaise += v.spend;
   }
-  const noShowFromBookings = new Map<string, number>();
   for (const r of reservations) {
     const phone = normal(r.phone);
     if (!phone) continue;
-    const c = get(phone, r.name, r.createdAt);
-    if (r.status === "cancelled") continue;
-    c.bookings++;
-    if (r.status === "no_show") noShowFromBookings.set(phone, (noShowFromBookings.get(phone) ?? 0) + 1);
-  }
-  for (const [phone, n] of noShowFromBookings) {
-    const c = byPhone.get(phone)!;
-    c.noShows = Math.max(c.noShows, n);
+    const c = get(phone, r.name, r.first);
+    c.bookings += r.bookings;
+    c.noShows = Math.max(c.noShows, r.noShows);
   }
   for (const w of waitlist) {
     const phone = normal(w.phone);
-    if (phone) get(phone, w.name, w.joinedAt);
+    if (phone) get(phone, w.name, w.first);
   }
-  // Only one person at a table usually gives a number; list the others with them
-  const sessionIds = [...new Set(lastSession.values())];
-  const people = sessionIds.length
-    ? await db
-        .select({ sessionId: s.participants.sessionId, name: s.participants.displayName, guestId: s.participants.guestId })
-        .from(s.participants)
-        .where(and(eq(s.participants.tenantId, staff.tenantId), inArray(s.participants.sessionId, sessionIds)))
-        .orderBy(s.participants.joinedAt)
-    : [];
-  for (const [phone, sessionId] of lastSession) {
-    const c = byPhone.get(phone)!;
-    for (const p of people) {
-      if (p.sessionId !== sessionId || (p.guestId && phoneOfGuest.get(p.guestId) === phone)) continue;
+
+  const everyone = [...byPhone.values()];
+  const away = (c: Customer) => c.lastVisitAt !== null && now - c.lastVisitAt > 30 * DAY;
+  const counts = { all: everyone.length, regulars: everyone.filter((c) => c.visits >= 3).length, offers: everyone.filter((c) => c.offersOk).length, away: everyone.filter(away).length };
+  const filter = opts.filter ?? "all";
+  const q = String(opts.q ?? "").trim().toLowerCase().replace(/\s/g, "");
+  const matches = everyone
+    .filter((c) => {
+      if (q && !`${c.name ?? ""}${c.phone}`.toLowerCase().replace(/\s/g, "").includes(q)) return false;
+      if (filter === "regulars") return c.visits >= 3;
+      if (filter === "offers") return c.offersOk;
+      if (filter === "away") return away(c);
+      return true;
+    })
+    .sort((a, b) => (b.lastVisitAt ?? b.firstSeenAt ?? 0) - (a.lastVisitAt ?? a.firstSeenAt ?? 0));
+
+  const pages = Math.max(1, Math.ceil(matches.length / CUSTOMERS_PAGE_SIZE));
+  const page = opts.all ? 1 : Math.min(pages, Math.max(1, Math.floor(opts.page ?? 1) || 1));
+  const shown = opts.all ? matches : matches.slice((page - 1) * CUSTOMERS_PAGE_SIZE, page * CUSTOMERS_PAGE_SIZE);
+  await addCompanions(t, shown, phoneOfGuest);
+  return { customers: shown, counts, total: matches.length, page, pages };
+}
+
+/** Who else sat at the table on each shown guest's last visit. Only these guests are looked up. */
+async function addCompanions(tenantId: string, shown: Customer[], phoneOfGuest: Map<string, string>) {
+  const guestIdsOf = new Map<string, string[]>();
+  for (const [guestId, phone] of phoneOfGuest) guestIdsOf.set(phone, [...(guestIdsOf.get(phone) ?? []), guestId]);
+  const wanted = new Set(shown.map((c) => c.phone));
+  const ids = shown.flatMap((c) => guestIdsOf.get(c.phone) ?? []);
+  const lastSession = new Map<string, { sessionId: string; at: number }>();
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const rows = await db
+      .selectDistinct({ guestId: s.participants.guestId, sessionId: s.tableSessions.id, openedAt: s.tableSessions.openedAt })
+      .from(s.participants)
+      .innerJoin(s.tableSessions, and(eq(s.tableSessions.tenantId, s.participants.tenantId), eq(s.tableSessions.id, s.participants.sessionId)))
+      .where(and(eq(s.participants.tenantId, tenantId), inArray(s.participants.guestId, ids.slice(i, i + CHUNK))));
+    for (const r of rows) {
+      const phone = r.guestId ? phoneOfGuest.get(r.guestId) : undefined;
+      if (!phone || !wanted.has(phone)) continue;
+      const at = r.openedAt.getTime();
+      if (at >= (lastSession.get(phone)?.at ?? 0)) lastSession.set(phone, { sessionId: r.sessionId, at });
+    }
+  }
+  const sessionIds = [...new Set([...lastSession.values()].map((v) => v.sessionId))];
+  const people: { sessionId: string; name: string; guestId: string | null }[] = [];
+  for (let i = 0; i < sessionIds.length; i += CHUNK) {
+    people.push(...(await db
+      .select({ sessionId: s.participants.sessionId, name: s.participants.displayName, guestId: s.participants.guestId })
+      .from(s.participants)
+      .where(and(eq(s.participants.tenantId, tenantId), inArray(s.participants.sessionId, sessionIds.slice(i, i + CHUNK))))
+      .orderBy(s.participants.joinedAt)));
+  }
+  const bySession = new Map<string, typeof people>();
+  for (const p of people) bySession.set(p.sessionId, [...(bySession.get(p.sessionId) ?? []), p]);
+  for (const c of shown) {
+    const last = lastSession.get(c.phone);
+    if (!last) continue;
+    for (const p of bySession.get(last.sessionId) ?? []) {
+      if (p.guestId && phoneOfGuest.get(p.guestId) === c.phone) continue;
       const name = p.name.trim();
       if (!name || isPlaceholderName(name)) c.companions.unnamed++;
       else if (!c.companions.names.includes(name) && name !== c.name) c.companions.names.push(name);
     }
   }
-  return [...byPhone.values()].sort((a, b) => (b.lastVisitAt ?? b.firstSeenAt ?? 0) - (a.lastVisitAt ?? a.firstSeenAt ?? 0));
 }
 
 /**
