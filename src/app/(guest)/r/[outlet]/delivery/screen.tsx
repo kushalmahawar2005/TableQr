@@ -3,14 +3,17 @@ import { ArrowLeft01Icon, Cancel01Icon, FilterHorizontalIcon, Location01Icon, Mi
 import { HugeiconsIcon } from "@hugeicons/react";
 import Link from "next/link";
 import Image from "next/image";
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
+import { applyFilters, hasActiveFilters, NO_FILTERS, type MenuFilters } from "@/domain/menu-filter";
 import type { DeliveryAddress, DeliveryCartLine } from "@/db/schema/delivery";
 import type { deliveryMenu, priceDeliveryCart } from "@/server/delivery/catalog";
 import type { deliveryStatus } from "@/server/delivery/checkout";
 import { priceLine } from "@/domain/pricing";
 import { openCheckout } from "@/lib/payments/checkout";
 import { OutletLogo } from "../t/[table]/_components/outlet-logo";
+import { g3Copy } from "../t/[table]/menu/_copy";
 import { CategoryBar } from "../t/[table]/menu/_components/category-bar";
+import { FilterBar } from "../t/[table]/menu/_components/filter-bar";
 import { Thumb, VegMark } from "../t/[table]/menu/_components/menu-row";
 import { claimManualQrDeliveryAction, deliveryStatusAction, pincodeAction, placeDeliveryAction, quoteDeliveryAction, resendDeliveryAction, startDeliveryAction, startDeliveryPaymentAction, verifyDeliveryAction } from "./actions";
 
@@ -46,6 +49,8 @@ export function DeliveryScreen({ outletCode, data, initialStatus, hindi: initial
   const [error, setError] = useState<string | null>(null), [pending, start] = useTransition();
   const [selected, setSelected] = useState<Menu["items"][number] | null>(null), [choices, setChoices] = useState<string[]>([]);
   const [search, setSearch] = useState("");
+  const [filters, setFilters] = useState<MenuFilters>(NO_FILTERS);
+  const allFiltersRef = useRef<HTMLDialogElement>(null);
   const [pin, setPin] = useState<{ code: string; info: PinInfo; busy: boolean } | null>(null);
   const [remember, setRemember] = useState(true);
   const statusCode = status?.status;
@@ -113,7 +118,9 @@ export function DeliveryScreen({ outletCode, data, initialStatus, hindi: initial
   // page usable instead of crashing during render while the menu is refreshed.
   const menuItems = Array.isArray(data?.items) ? data.items : [];
   const menuCategories = Array.isArray(data?.categories) ? data.categories : [];
-  const visibleItems = menuItems.filter(item => `${item.name} ${item.nameHi ?? ""} ${item.description ?? ""} ${item.descriptionHi ?? ""}`.toLowerCase().includes(search.toLowerCase()));
+  const filtered = applyFilters(menuItems, filters);
+  const filtersOn = hasActiveFilters(filters);
+  const visibleItems = filtered.shown.filter(item => `${item.name} ${item.nameHi ?? ""} ${item.description ?? ""} ${item.descriptionHi ?? ""}`.toLowerCase().includes(search.toLowerCase()));
   const visibleIds = new Set(visibleItems.map(item => item.id));
   const visibleCategories = menuCategories.map(category => ({
     id: category.id,
@@ -169,9 +176,20 @@ export function DeliveryScreen({ outletCode, data, initialStatus, hindi: initial
           <HugeiconsIcon icon={Search01Icon} size={20} className="pointer-events-none absolute top-1/2 left-4 -translate-y-1/2 text-brand" aria-hidden />
           <input type="search" enterKeyHint="search" autoComplete="off" value={search} onChange={event => setSearch(event.target.value)} placeholder={t("Search paneer, dosa, coffee…", "पनीर, डोसा, कॉफ़ी खोजें…")} className="h-[52px] w-full rounded-2xl border border-line/70 bg-surface pr-12 pl-12 text-body text-ink shadow-[0_2px_10px_rgb(31_41_55/0.05)] outline-none placeholder:text-muted/80 focus:border-brand focus:shadow-[0_0_0_3px_var(--brand-soft)] [&::-webkit-search-cancel-button]:hidden" />
           {search ? <button type="button" onClick={() => setSearch("")} aria-label={t("Clear search", "खोज साफ़ करें")} className="absolute top-1/2 right-1 grid size-11 -translate-y-1/2 place-items-center rounded-full text-muted hover:text-ink"><HugeiconsIcon icon={Cancel01Icon} size={18} aria-hidden /></button>
-            : <HugeiconsIcon icon={FilterHorizontalIcon} size={20} className="pointer-events-none absolute top-1/2 right-4 -translate-y-1/2 text-muted/70" aria-hidden />}
+            : <button type="button" onClick={() => allFiltersRef.current?.showModal()} aria-haspopup="dialog" aria-label={filtersOn ? t("Filters. Filters on", "फ़िल्टर। फ़िल्टर चालू हैं") : t("Filters", "फ़िल्टर")} className="absolute top-1/2 right-1.5 grid size-10 -translate-y-1/2 place-items-center rounded-xl border-l border-line/70 text-ink/70 hover:text-ink focus-visible:outline-2 focus-visible:outline-brand">
+                <HugeiconsIcon icon={FilterHorizontalIcon} size={20} aria-hidden />
+                {filtersOn && <span aria-hidden className="absolute top-2 right-2 size-2 rounded-full bg-brand ring-2 ring-surface" />}
+              </button>}
         </label>
       </form>
+      <div className="mt-3">
+        <FilterBar filters={filters} onChange={setFilters} lang={hindi ? "hi" : "en"} c={g3Copy[hindi ? "hi" : "en"]} allRef={allFiltersRef} />
+      </div>
+      {filtersOn && <p role="status" className="mt-2 flex flex-wrap items-center gap-x-2 text-caption text-muted">
+        {filtered.hidden > 0 && <span>{g3Copy[hindi ? "hi" : "en"].hidden(filtered.hidden)}</span>}
+        {filtered.hidden > 0 && <span aria-hidden>·</span>}
+        <button type="button" onClick={() => setFilters(NO_FILTERS)} className="-my-2 py-2 font-semibold text-brand-strong hover:underline">{g3Copy[hindi ? "hi" : "en"].clearFilters}</button>
+      </p>}
       {visibleCategories.length > 0 && <CategoryBar categories={visibleCategories.map(({ id, label, photo }) => ({ id, label, photo }))} label={t("Menu categories", "मेन्यू कैटेगरी")} />}
       {visibleCategories.map(category => <section key={category.id} id={`cat-${category.id}`} aria-labelledby={`dh-${category.id}`} className="scroll-mt-32 pt-5">
         <div className="flex items-baseline justify-between gap-3">
@@ -212,7 +230,7 @@ export function DeliveryScreen({ outletCode, data, initialStatus, hindi: initial
           })}
         </ul>
       </section>)}
-      {visibleCategories.length === 0 && <p className="mt-5 rounded-2xl border border-dashed border-line p-6 text-center text-caption text-muted">{menuItems.length > 0 ? t("No dishes match your search.", "आपकी खोज से कोई डिश नहीं मिली।") : t("No delivery dishes are available right now.", "अभी डिलीवरी के लिए कोई डिश उपलब्ध नहीं है।")}</p>}
+      {visibleCategories.length === 0 && <p className="mt-5 rounded-2xl border border-dashed border-line p-6 text-center text-caption text-muted">{menuItems.length > 0 ? (filtersOn ? t("No dishes match your filters.", "आपके फ़िल्टर से कोई डिश नहीं मिली।") : t("No dishes match your search.", "आपकी खोज से कोई डिश नहीं मिली।")) : t("No delivery dishes are available right now.", "अभी डिलीवरी के लिए कोई डिश उपलब्ध नहीं है।")}</p>}
       {cart.length > 0 && <div className="fixed inset-x-0 bottom-0 z-30 mx-auto max-w-[480px] px-4 pb-[max(12px,env(safe-area-inset-bottom))] min-[360px]:px-5">
         <button type="button" onClick={openCart} className="flex min-h-14 w-full items-center gap-3 rounded-2xl bg-brand px-4 py-2.5 text-left text-brand-on shadow-[0_12px_28px_-8px_var(--brand-border)] transition-transform active:scale-[0.99]">
           <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-white/20"><HugeiconsIcon icon={ShoppingBasket01Icon} size={19} aria-hidden /></span>

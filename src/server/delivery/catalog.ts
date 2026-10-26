@@ -1,4 +1,5 @@
 import "server-only";
+import { parseAllergens, parseSpice } from "@/domain/allergens";
 import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import * as s from "@/db/schema";
@@ -50,6 +51,8 @@ export async function deliveryMenu(code: string, now = new Date()) {
     imageUrl: item.imageUrl,
     isVeg: item.isVeg,
     isJain: item.isJain,
+    spice: parseSpice(item.spiceLevel),
+    allergens: parseAllergens(item.allergens),
     available: pricing.isAvailable,
     pricing,
     categoryWindow,
