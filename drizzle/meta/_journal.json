@@ -400,6 +400,13 @@
       "when": 1793010909018,
       "tag": "0056_rider_fleet",
       "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "5",
+      "when": 1793014152575,
+      "tag": "0057_rider_location",
+      "breakpoints": true
     }
   ]
 }

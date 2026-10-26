@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition, type ReactNode } from "react";
 import type { RiderCard } from "@/server/delivery/riders";
+import { LiveMap, type MapPoint } from "@/components/live-map";
 import type { deliveryQueue, pendingManualDeliveryPayments } from "@/server/delivery/staff";
 import { assignTeamRiderAction } from "../../../../../(staff)/rider/actions";
 import { advanceDeliveryAction, assignDeliveryCourierAction, cancelDeliveryOrderAction, confirmManualQrDeliveryPaymentAction } from "./actions";
@@ -75,6 +76,18 @@ export function DeliveryQueueScreen({ rows, pendingPayments, canAssignCourier, o
         <dd className="mt-1.5 text-caption text-muted">{hint}</dd>
       </div>)}
     </dl>
+
+    {(() => {
+      // Riders sharing their location, and the doors of live orders that have a pin
+      const points: MapPoint[] = [
+        ...riders.filter((r) => r.location).map((r) => ({ id: `r-${r.id}`, kind: "rider" as const, lat: r.location!.lat, lng: r.location!.lng, photoUrl: r.photoUrl, label: r.name })),
+        ...active.filter((r) => r.address.lat !== undefined && r.address.lng !== undefined).map((r) => ({ id: `h-${r.id}`, kind: "home" as const, lat: r.address.lat!, lng: r.address.lng!, label: r.name ?? "Customer" })),
+      ];
+      return points.length ? <section className="mt-5">
+        <div className="mb-2 flex items-center justify-between gap-2"><h2 className="font-display text-section font-bold text-ink">Live map</h2><p className="text-caption text-muted">🛵 riders · 🏠 customers · updates by itself</p></div>
+        <LiveMap className="h-72" points={points} />
+      </section> : null;
+    })()}
 
     {error && <p role="alert" className="mt-4 rounded-card border border-danger/30 bg-[var(--state-seated-soft)] p-4 text-body font-semibold text-danger">{error}</p>}
 

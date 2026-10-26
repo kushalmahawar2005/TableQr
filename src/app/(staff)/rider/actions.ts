@@ -1,5 +1,5 @@
 "use server";
-import { assignTeamRider, riderCollectCash, riderDelivered, riderJobs, riderPickUp, riderProfile, riderSetOnline, saveRiderProfile } from "@/server/delivery/riders";
+import { assignTeamRider, riderReportLocation, riderCollectCash, riderDelivered, riderJobs, riderPickUp, riderProfile, riderSetOnline, saveRiderProfile } from "@/server/delivery/riders";
 import { AppError } from "@/server/errors";
 import { staffFor } from "@/server/staff/request";
 import { deliveryStaffRoles } from "@/server/delivery/staff";
@@ -25,3 +25,4 @@ export async function riderSaveProfileAction(form: FormData) {
 }
 /** Console: give a delivery to a team rider */
 export async function assignTeamRiderAction(deliveryId: string, riderId: string) { return run(deliveryStaffRoles, (s) => assignTeamRider(s, deliveryId, riderId)); }
+export async function riderLocationAction(lat: number, lng: number) { return run(["rider"], (s) => riderReportLocation(s, { lat, lng })); }

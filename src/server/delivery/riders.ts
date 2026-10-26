@@ -11,6 +11,7 @@ import { topics } from "../realtime/token";
 import { audit } from "../staff/audit";
 import type { StaffSession } from "../staff/auth";
 import { requireStaffRole } from "../staff/waiter";
+import { freshLocation } from "@/domain/delivery";
 import { deliveryStaffRoles } from "./staff";
 
 // The restaurant's own riders: who can take a delivery right now, giving one to a rider, and
@@ -26,7 +27,10 @@ export type RiderCard = {
   availability: RiderAvailability;
   /** Deliveries given to this rider that are not delivered yet */
   activeCount: number;
+  /** Last known position, when the rider app sent one in the last 10 minutes */
+  location: { lat: number; lng: number; at: number } | null;
 };
+
 
 const LIVE = ["placed", "dispatched"] as const;
 
@@ -34,7 +38,7 @@ const LIVE = ["placed", "dispatched"] as const;
 export async function outletRiders(staff: StaffSession): Promise<RiderCard[]> {
   await requireStaffRole(staff, deliveryStaffRoles);
   const people = await db
-    .selectDistinct({ id: s.users.id, name: s.users.name, phone: s.users.phone, photoUrl: s.users.photoUrl, vehicleNo: s.users.vehicleNo, duty: s.users.dutyStatus })
+    .selectDistinct({ id: s.users.id, name: s.users.name, phone: s.users.phone, photoUrl: s.users.photoUrl, vehicleNo: s.users.vehicleNo, duty: s.users.dutyStatus, lastLat: s.users.lastLat, lastLng: s.users.lastLng, lastLocAt: s.users.lastLocAt })
     .from(s.users)
     .innerJoin(s.staffRoles, and(eq(s.staffRoles.tenantId, s.users.tenantId), eq(s.staffRoles.userId, s.users.id)))
     .where(and(
@@ -55,7 +59,7 @@ export async function outletRiders(staff: StaffSession): Promise<RiderCard[]> {
     .map((p) => {
       const activeCount = load.get(p.id) ?? 0;
       const availability: RiderAvailability = p.duty !== "on" ? "offline" : activeCount > 0 ? "busy" : "free";
-      return { id: p.id, name: p.name, phone: p.phone, photoUrl: p.photoUrl, vehicleNo: p.vehicleNo, availability, activeCount };
+      return { id: p.id, name: p.name, phone: p.phone, photoUrl: p.photoUrl, vehicleNo: p.vehicleNo, availability, activeCount, location: freshLocation(p.lastLat, p.lastLng, p.lastLocAt) };
     })
     .sort((a, b) => order[a.availability] - order[b.availability] || a.activeCount - b.activeCount || a.name.localeCompare(b.name));
 }
@@ -213,4 +217,14 @@ export async function saveRiderProfile(staff: StaffSession, input: { vehicleNo?:
   await db.update(s.users).set({ ...(vehicleNo !== undefined ? { vehicleNo } : {}), ...(photoUrl ? { photoUrl } : {}) })
     .where(and(eq(s.users.tenantId, staff.tenantId), eq(s.users.id, staff.userId)));
   return riderProfile(staff);
+}
+
+/** The rider app reports where the phone is, while it is open and the rider is online */
+export async function riderReportLocation(staff: StaffSession, input: { lat: number; lng: number }, now = new Date()) {
+  await requireStaffRole(staff, ["rider"]);
+  const lat = Number(input?.lat), lng = Number(input?.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) throw new AppError("invalid_state", "Location not understood.");
+  await db.update(s.users).set({ lastLat: Math.round(lat * 1e6) / 1e6, lastLng: Math.round(lng * 1e6) / 1e6, lastLocAt: now })
+    .where(and(eq(s.users.tenantId, staff.tenantId), eq(s.users.id, staff.userId), eq(s.users.dutyStatus, "on")));
+  return { ok: true };
 }

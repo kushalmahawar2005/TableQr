@@ -2,7 +2,9 @@
 import { Banknote, Bike, Camera, Check, ChefHat, CircleCheck, MapPin, Navigation, Package, Phone, Store, UserRound } from "lucide-react";
 import { useEffect, useState, useTransition } from "react";
 import type { riderJobs, riderProfile } from "@/server/delivery/riders";
-import { riderCashAction, riderDeliveredAction, riderJobsAction, riderOnlineAction, riderPickUpAction, riderSaveProfileAction } from "./actions";
+import { riderCashAction, riderDeliveredAction, riderJobsAction, riderLocationAction, riderOnlineAction, riderPickUpAction, riderSaveProfileAction } from "./actions";
+import { LiveMap } from "@/components/live-map";
+import { distanceKm, etaMinutes } from "@/domain/delivery";
 
 type Jobs = Awaited<ReturnType<typeof riderJobs>>;
 type Job = Jobs["jobs"][number];
@@ -23,6 +25,8 @@ export function RiderScreen({ initialJobs, initialProfile }: { initialJobs: Jobs
     const t = setInterval(async () => { if (document.hidden) return; const r = await riderJobsAction(); if (r.ok) setJobs(r.data); }, 15000);
     return () => clearInterval(t);
   }, []);
+
+  const here = useLiveLocation(profile.online);
 
   const act = (work: () => Promise<{ ok: boolean; error?: string }>) => {
     setError(null);
@@ -58,6 +62,11 @@ export function RiderScreen({ initialJobs, initialProfile }: { initialJobs: Jobs
         </button>
       </header>
 
+      <p className={`mt-3 flex items-center gap-2 rounded-2xl px-3 py-2 text-caption font-semibold ${!profile.online ? "bg-ink/5 text-muted" : here.error ? "bg-[var(--state-held-soft)] text-[var(--state-held-text)]" : "bg-[var(--state-available-soft)] text-[var(--state-available-text)]"}`}>
+        <MapPin className="size-4" aria-hidden="true" />
+        {!profile.online ? "Location is off while you are offline" : here.error ?? (here.point ? "Sharing your live location with the restaurant and customer" : "Finding your location…")}
+      </p>
+
       {editing && <ProfileForm profile={profile} onSaved={(p) => { setProfile((old) => ({ ...old, ...p })); setEditing(false); }} />}
 
       {error && <p role="alert" className="mt-4 rounded-2xl border border-danger/30 bg-[var(--state-seated-soft)] p-3 text-body font-semibold text-danger">{error}</p>}
@@ -81,7 +90,7 @@ export function RiderScreen({ initialJobs, initialProfile }: { initialJobs: Jobs
       )}
 
       <div className="mt-4 grid gap-4">
-        {live.map((job) => <JobCard key={job.id} job={job} pickup={jobs.pickup} pending={pending} act={act} />)}
+        {live.map((job) => <JobCard key={job.id} job={job} pickup={jobs.pickup} pending={pending} act={act} here={here.point} photoUrl={profile.photoUrl} />)}
       </div>
 
       {delivered.length > 0 && (
@@ -96,8 +105,8 @@ export function RiderScreen({ initialJobs, initialProfile }: { initialJobs: Jobs
   );
 }
 
-function JobCard({ job, pickup, pending, act }: { job: Job; pickup: Jobs["pickup"]; pending: boolean; act: (w: () => Promise<{ ok: boolean; error?: string }>) => void }) {
-  const drop = `${job.address.line}, ${job.address.locality}, ${job.address.pincode}`;
+function JobCard({ job, pickup, pending, act, here, photoUrl }: { job: Job; pickup: Jobs["pickup"]; pending: boolean; act: (w: () => Promise<{ ok: boolean; error?: string }>) => void; here: { lat: number; lng: number } | null; photoUrl: string | null }) {
+  const drop = job.address.lat !== undefined && job.address.lng !== undefined ? `${job.address.lat},${job.address.lng}` : `${job.address.line}, ${job.address.locality}, ${job.address.pincode}`;
   const onWay = job.status === "dispatched";
   return (
     <article className="overflow-hidden rounded-3xl border border-line bg-surface shadow-[0_4px_18px_rgb(31_41_55/0.06)]">
@@ -124,6 +133,13 @@ function JobCard({ job, pickup, pending, act }: { job: Job; pickup: Jobs["pickup
           {job.address.instructions && <p className="mt-0.5 text-caption text-muted">Note: {job.address.instructions}</p>}
         </li>
       </ol>
+
+      {onWay && here && job.address.lat !== undefined && job.address.lng !== undefined && (
+        <div className="mx-4 mt-4">
+          <LiveMap className="h-48" points={[{ id: "me", kind: "rider", lat: here.lat, lng: here.lng, photoUrl, label: "You" }, { id: "home", kind: "home", lat: job.address.lat, lng: job.address.lng!, label: job.name ?? "Customer" }]} />
+          <p className="mt-1.5 text-caption font-semibold text-muted">{distanceKm(here, { lat: job.address.lat, lng: job.address.lng! }).toFixed(1)} km away · about {etaMinutes(distanceKm(here, { lat: job.address.lat, lng: job.address.lng! }))} min</p>
+        </div>
+      )}
 
       <div className="mx-4 mt-4 flex gap-2">
         <a href={`tel:${job.phone}`} className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-2xl border border-line text-body font-semibold"><Phone className="size-4" aria-hidden="true" />Call</a>
@@ -184,4 +200,34 @@ function ProfileForm({ profile, onSaved }: { profile: Profile; onSaved: (p: Prof
       <button disabled={pending} className="min-h-12 rounded-2xl bg-brand text-button font-bold text-brand-on disabled:opacity-60">{pending ? "Saving…" : "Save profile"}</button>
     </form>
   );
+}
+
+/**
+ * While the rider is online, watches the phone's position and sends it every 15 seconds, or
+ * sooner after moving 40 m. Works only while this page is open (a browser limit).
+ */
+function useLiveLocation(online: boolean) {
+  const [point, setPoint] = useState<{ lat: number; lng: number } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!online) return;
+    if (!("geolocation" in navigator)) { queueMicrotask(() => setError("This phone cannot share location.")); return; }
+    let last: { lat: number; lng: number; t: number } | null = null;
+    const id = navigator.geolocation.watchPosition(
+      (pos) => {
+        const p = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        setPoint(p);
+        setError(null);
+        const now = Date.now();
+        if (!last || now - last.t > 15_000 || distanceKm(last, p) > 0.04) {
+          last = { ...p, t: now };
+          void riderLocationAction(p.lat, p.lng);
+        }
+      },
+      (err) => setError(err.code === err.PERMISSION_DENIED ? "Allow location for this site so customers can track you." : "Location not available. Turn on GPS."),
+      { enableHighAccuracy: true, maximumAge: 10_000, timeout: 20_000 },
+    );
+    return () => navigator.geolocation.clearWatch(id);
+  }, [online]);
+  return { point: online ? point : null, error: online ? error : null };
 }

@@ -11,6 +11,8 @@ import type { deliveryStatus } from "@/server/delivery/checkout";
 import { priceLine } from "@/domain/pricing";
 import { openCheckout } from "@/lib/payments/checkout";
 import { OutletLogo } from "../t/[table]/_components/outlet-logo";
+import { LiveMap } from "@/components/live-map";
+import { distanceKm, etaMinutes } from "@/domain/delivery";
 import { g3Copy } from "../t/[table]/menu/_copy";
 import { CategoryBar } from "../t/[table]/menu/_components/category-bar";
 import { FilterBar } from "../t/[table]/menu/_components/filter-bar";
@@ -274,6 +276,7 @@ export function DeliveryScreen({ outletCode, data, initialStatus, hindi: initial
                 return <button key={area} type="button" aria-pressed={on} onClick={() => setAddress(current => ({ ...current, locality: value }))} className={`min-h-9 rounded-full border px-3.5 text-caption font-semibold transition-colors ${on ? "border-brand bg-brand text-brand-on" : "border-line/70 bg-surface text-ink hover:border-ink/30"}`}>{area}</button>;
               })}</div>
             </div>}
+            <ExactPin hindi={hindi} address={address} onPin={(p) => setAddress(current => ({ ...current, ...p }))} />
             <label className="block text-caption font-semibold text-muted">{t("Area and city", "इलाका और शहर")}<input required maxLength={100} autoComplete="address-level2" className={`${control} mt-1.5 bg-paper`} value={address.locality} onChange={event => setAddress(current => ({ ...current, locality: event.target.value }))} /></label>
             <label className="block text-caption font-semibold text-muted">{t("House / flat, building and street", "घर / फ्लैट, बिल्डिंग और सड़क")}<input required maxLength={200} autoComplete="street-address" className={`${control} mt-1.5 bg-paper`} value={address.line} onChange={event => setAddress(current => ({ ...current, line: event.target.value }))} /></label>
             <label className="block text-caption font-semibold text-muted">{t("Delivery instructions (optional)", "डिलीवरी निर्देश (वैकल्पिक)")}<input maxLength={200} autoComplete="off" placeholder={t("e.g. Ring the bell, near the temple", "जैसे घंटी बजाएँ, मंदिर के पास")} className={`${control} mt-1.5 bg-paper`} value={address.instructions} onChange={event => setAddress(current => ({ ...current, instructions: event.target.value }))} /></label>
@@ -339,6 +342,16 @@ function StatusView({ status, hindi, pending, statusMessage, onPay, onRefresh, n
       </ol>
     </section>}
 
+    {status.status === "dispatched" && status.riderLocation && <section className={card}>
+      <LiveMap className="h-60" points={[
+        { id: "rider", kind: "rider", lat: status.riderLocation.lat, lng: status.riderLocation.lng, photoUrl: status.courierPhotoUrl, label: status.courierName ?? "Rider" },
+        ...(status.address.lat !== undefined && status.address.lng !== undefined ? [{ id: "home", kind: "home" as const, lat: status.address.lat, lng: status.address.lng, label: t("Your door", "आपका घर") }] : []),
+      ]} />
+      {status.address.lat !== undefined && status.address.lng !== undefined
+        ? <p className="mt-2 text-body font-bold">{t(`About ${etaMinutes(distanceKm(status.riderLocation, { lat: status.address.lat, lng: status.address.lng }))} min away`, `लगभग ${etaMinutes(distanceKm(status.riderLocation, { lat: status.address.lat, lng: status.address.lng }))} मिनट दूर`)} <span className="text-caption font-medium text-muted">· {distanceKm(status.riderLocation, { lat: status.address.lat, lng: status.address.lng }).toFixed(1)} km</span></p>
+        : <p className="mt-2 text-caption text-muted">{t("Your rider is on the way. The map updates by itself.", "राइडर रास्ते में है। नक्शा अपने आप अपडेट होता है।")}</p>}
+    </section>}
+
     {status.courierName && ["dispatched", "delivered"].includes(status.status) && <section className={`${card} flex items-center gap-3`}>
       {status.courierPhotoUrl
         // Rider photos live in the photo bucket, so this stays a plain image
@@ -380,5 +393,32 @@ function StatusView({ status, hindi, pending, statusMessage, onPay, onRefresh, n
       <button type="button" disabled={pending} onClick={onRefresh} className="text-caption font-semibold text-muted hover:text-ink">{pending ? t("Updating…", "अपडेट हो रहा है…") : t("Updates by itself · refresh now", "अपने आप अपडेट होता है · अभी देखें")}</button>
       <Link href={newOrderHref} className="text-caption font-bold text-brand-strong">{t("Start another order", "नया ऑर्डर करें")}</Link>
     </div>
+  </div>;
+}
+
+/** "Use my location", then a map whose pin the guest drags to their exact door */
+function ExactPin({ hindi, address, onPin }: { hindi: boolean; address: DeliveryAddress; onPin: (p: { lat: number; lng: number }) => void }) {
+  const t = (en: string, hi: string) => (hindi ? hi : en);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const hasPin = address.lat !== undefined && address.lng !== undefined;
+  const locate = () => {
+    if (!("geolocation" in navigator)) { setError(t("This phone cannot share location.", "यह फ़ोन लोकेशन नहीं दे सकता।")); return; }
+    setBusy(true); setError(null);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => { setBusy(false); onPin({ lat: pos.coords.latitude, lng: pos.coords.longitude }); },
+      (err) => { setBusy(false); setError(err.code === err.PERMISSION_DENIED ? t("Allow location in your browser, or just type the address.", "ब्राउज़र में लोकेशन की अनुमति दें, या पता लिखें।") : t("Could not find you. Turn on GPS and try again.", "लोकेशन नहीं मिली। GPS चालू करके फिर कोशिश करें।")); },
+      { enableHighAccuracy: true, timeout: 15_000 },
+    );
+  };
+  return <div className="grid gap-2">
+    <button type="button" onClick={locate} disabled={busy} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-brand/40 bg-brand-soft/50 px-4 text-caption font-bold text-brand-strong disabled:opacity-60">
+      <HugeiconsIcon icon={Location01Icon} size={17} aria-hidden />{busy ? t("Finding you…", "लोकेशन ढूँढ रहे हैं…") : hasPin ? t("Use my current location again", "फिर से मेरी लोकेशन लें") : t("Use my current location", "मेरी अभी की लोकेशन लें")}
+    </button>
+    {error && <p role="status" className="text-caption text-muted">{error}</p>}
+    {hasPin && <>
+      <LiveMap className="h-48" points={[{ id: "home", kind: "home", lat: address.lat!, lng: address.lng!, label: t("Your door", "आपका घर") }]} onHomeMove={onPin} />
+      <p className="text-caption text-muted">{t("Drag the pin or tap the map to mark your exact door. The rider sees this spot.", "पिन खिसकाकर या नक्शे पर टैप करके अपना सही दरवाज़ा चुनें। राइडर को यही जगह दिखेगी।")}</p>
+    </>}
   </div>;
 }

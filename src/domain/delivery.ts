@@ -54,3 +54,17 @@ export function deliveryQuote(policy: DeliveryPolicy, pincode: string, foodSubto
 /** Delivery orders run on a hidden counter whose code starts with this, e.g. "DL-NZdh0hp0z" */
 export const DELIVERY_TABLE_PREFIX = "DL-";
 export const isDeliveryTable = (code: string) => code.startsWith(DELIVERY_TABLE_PREFIX);
+
+/** A rider position older than this is not shown as live */
+export const LOCATION_FRESH_MS = 10 * 60_000;
+export const freshLocation = (lat: number | null, lng: number | null, at: Date | null, now = Date.now()) =>
+  lat !== null && lng !== null && at && now - at.getTime() < LOCATION_FRESH_MS ? { lat, lng, at: at.getTime() } : null;
+
+/** Straight-line distance in km between two points */
+export function distanceKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
+  const rad = Math.PI / 180, dLat = (b.lat - a.lat) * rad, dLng = (b.lng - a.lng) * rad;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLng / 2) ** 2;
+  return 6371 * 2 * Math.asin(Math.sqrt(h));
+}
+/** Rough minutes on a two-wheeler in town: roads wind about 1.3 times the straight line, at 20 km/h */
+export const etaMinutes = (km: number) => Math.max(1, Math.round((km * 1.3 / 20) * 60));

@@ -13,7 +13,7 @@ import { syncBill } from "../billing/bill";
 import { announceBill, settleExternalGatewayInTransaction, settleManualQrInTransaction } from "../billing/payments";
 import { publish } from "../realtime/publish";
 import { topics } from "../realtime/token";
-import { DELIVERY_TABLE_PREFIX } from "@/domain/delivery";
+import { DELIVERY_TABLE_PREFIX, freshLocation } from "@/domain/delivery";
 import { TAKEAWAY_CLASS } from "../floor/takeaway-class";
 import { deliveryOutlet, cleanDeliveryCart, priceDeliveryCart } from "./catalog";
 import { audit } from "../staff/audit";
@@ -33,7 +33,10 @@ function cleanAddress(raw: s.DeliveryAddress): s.DeliveryAddress {
   if (!raw || typeof raw !== "object") throw new AppError("invalid_state", "Enter your delivery address.");
   const line = String(raw.line ?? "").trim(), locality = String(raw.locality ?? "").trim(), pincode = String(raw.pincode ?? "").trim(), instructions = String(raw.instructions ?? "").trim();
   if (line.length < 5 || line.length > 200 || locality.length < 2 || locality.length > 100 || !/^[1-9]\d{5}$/.test(pincode) || instructions.length > 200) throw new AppError("invalid_state", "Enter a complete address, locality and six-digit pincode.");
-  return { line, locality, pincode, instructions };
+  // A pin is optional; one outside India or not a number is dropped, never trusted
+  const lat = Number(raw.lat), lng = Number(raw.lng);
+  const pin = Number.isFinite(lat) && Number.isFinite(lng) && lat > 6 && lat < 38 && lng > 68 && lng < 98 ? { lat: Math.round(lat * 1e6) / 1e6, lng: Math.round(lng * 1e6) / 1e6 } : {};
+  return { line, locality, pincode, instructions, ...pin };
 }
 
 export async function createDeliveryCheckout(code: string, deviceId: string, input: { lines: s.DeliveryCartLine[]; address: s.DeliveryAddress }, now = new Date()) {
@@ -166,7 +169,7 @@ export async function deliveryStatus(code: string, token: string, deviceId: stri
   const { outlet, row } = await deliveryCheckout(code, token, deviceId, now);
   const orders = row.sessionId ? await db.select({ status: s.orders.status }).from(s.orders).where(and(eq(s.orders.tenantId, outlet.tenantId), eq(s.orders.sessionId, row.sessionId))) : [];
   const [bill] = row.sessionId ? await db.select({ totalPaise: s.bills.totalPaise, status: s.bills.status }).from(s.bills).where(and(eq(s.bills.tenantId, outlet.tenantId), eq(s.bills.sessionId, row.sessionId))) : [];
-  const [rider] = row.courierUserId ? await db.select({ photoUrl: s.users.photoUrl, vehicleNo: s.users.vehicleNo }).from(s.users).where(and(eq(s.users.tenantId, outlet.tenantId), eq(s.users.id, row.courierUserId))) : [];
+  const [rider] = row.courierUserId ? await db.select({ photoUrl: s.users.photoUrl, vehicleNo: s.users.vehicleNo, lastLat: s.users.lastLat, lastLng: s.users.lastLng, lastLocAt: s.users.lastLocAt }).from(s.users).where(and(eq(s.users.tenantId, outlet.tenantId), eq(s.users.id, row.courierUserId))) : [];
   const lines = row.sessionId ? await db.select({ name: s.orderLines.nameEn, nameHi: s.orderLines.nameHi, qty: s.orderLines.qty, status: s.orderLines.status }).from(s.orderLines).where(and(eq(s.orderLines.tenantId, outlet.tenantId), eq(s.orderLines.sessionId, row.sessionId))) : [];
-  return { id: row.id, status: row.status, placedAt: row.placedAt?.getTime() ?? null, items: lines.filter(l => l.status !== "cancelled" && l.status !== "voided").map(({ name, nameHi, qty }) => ({ name, nameHi, qty })), name: row.name, address: row.address, totalPaise: bill?.totalPaise ?? row.totalPaise, deliveryFeePaise: row.deliveryFeePaise, paid: bill?.status === "paid" || row.paymentStatus === "paid", paymentMode: row.paymentMode, paymentStatus: row.paymentStatus, paymentFailureReason: row.paymentFailureReason, refundStatus: row.refundStatus, manualPaymentQrUrl: row.manualPaymentQrUrl, manualPaymentReference: row.manualPaymentReference, manualPaymentClaimedAt: row.manualPaymentClaimedAt, courierName: row.courierName, courierPhone: row.courierPhone, courierPhotoUrl: rider?.photoUrl ?? null, courierVehicleNo: rider?.vehicleNo ?? null, kitchenStatus: orders[0]?.status ?? null };
+  return { id: row.id, status: row.status, placedAt: row.placedAt?.getTime() ?? null, items: lines.filter(l => l.status !== "cancelled" && l.status !== "voided").map(({ name, nameHi, qty }) => ({ name, nameHi, qty })), name: row.name, address: row.address, totalPaise: bill?.totalPaise ?? row.totalPaise, deliveryFeePaise: row.deliveryFeePaise, paid: bill?.status === "paid" || row.paymentStatus === "paid", paymentMode: row.paymentMode, paymentStatus: row.paymentStatus, paymentFailureReason: row.paymentFailureReason, refundStatus: row.refundStatus, manualPaymentQrUrl: row.manualPaymentQrUrl, manualPaymentReference: row.manualPaymentReference, manualPaymentClaimedAt: row.manualPaymentClaimedAt, courierName: row.courierName, courierPhone: row.courierPhone, courierPhotoUrl: rider?.photoUrl ?? null, courierVehicleNo: rider?.vehicleNo ?? null, riderLocation: row.status === "dispatched" && rider ? freshLocation(rider.lastLat, rider.lastLng, rider.lastLocAt, now.getTime()) : null, kitchenStatus: orders[0]?.status ?? null };
 }

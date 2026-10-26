@@ -4,7 +4,7 @@ import { guests, tableSessions } from "./sessions";
 import { outlets } from "./tenancy";
 
 export type DeliveryCartLine = { itemId: string; qty: number; modifierIds: string[] };
-export type DeliveryAddress = { line: string; locality: string; pincode: string; instructions: string };
+export type DeliveryAddress = { line: string; locality: string; pincode: string; instructions: string; /** The exact door, when the guest dropped a pin or shared their location */ lat?: number; lng?: number };
 
 export const deliveryCheckouts = mysqlTable("delivery_checkouts", {
   id: id(), tenantId: tenantId(), outletId: ref("outlet_id").notNull(),

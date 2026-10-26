@@ -1,4 +1,4 @@
-import {
+import { double,
   boolean,
   char,
   index,
@@ -240,6 +240,10 @@ export const users = mysqlTable(
     photoUrl: varchar("photo_url", { length: 500 }),
     /** Riders: the vehicle registration, e.g. RJ06 AB 1234 */
     vehicleNo: varchar("vehicle_no", { length: 20 }),
+    /** Riders: where their phone last said they were, while the rider app was open. Only the latest point is kept. */
+    lastLat: double("last_lat"),
+    lastLng: double("last_lng"),
+    lastLocAt: at("last_loc_at"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
