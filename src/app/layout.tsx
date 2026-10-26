@@ -17,6 +17,8 @@ export const metadata: Metadata = {
     template: "%s | TableQR",
   },
   description: "QR table booking, ordering and billing for restaurants.",
+  // The app has its own dark mode; Dark Reader rewriting colours breaks the guest pages and hydration
+  other: { "darkreader-lock": "true" },
 };
 
 export const viewport: Viewport = {
