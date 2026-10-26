@@ -3,6 +3,12 @@
 import {
   AlertCircleIcon,
   ArrowRight01Icon,
+  ChefHatIcon,
+  LeftToRightListBulletIcon,
+  Note01Icon,
+  ServingFoodIcon,
+  ShoppingBasket01Icon,
+  Tick02Icon,
   BellRingIcon,
   Cancel01Icon,
   CheckmarkCircle02Icon,
@@ -17,10 +23,12 @@ import {
   WifiOff01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { brandStyle, deriveBrandTokens } from "@/domain/brand";
 import { formatRupees } from "@/domain/menu-price";
+import { menuThumb } from "@/domain/menu-photo";
 import type { LineStatus } from "@/domain/kitchen";
 import type { Lang } from "@/lib/i18n";
 import type { TrackerScreenData } from "@/server/guest/tracker-screen";
@@ -39,6 +47,7 @@ type Line = Round["lines"][number];
 export type TrackerPreview = { offline?: boolean; failed?: boolean; confirm?: "cancel" | "bill"; notice?: { text: string; error?: boolean }; tab?: "orders" | "items" };
 
 const steps = ["placed", "accepted", "preparing", "ready"] as const;
+const STEP_ICONS = { placed: Note01Icon, accepted: CheckmarkCircle02Icon, preparing: ChefHatIcon, ready: ServingFoodIcon } as const;
 
 const tone: Record<LineStatus, string> = {
   placed: "bg-[#F0F4F8] text-[#1E5F8A] border border-[#D5E3EF]",
@@ -197,40 +206,57 @@ export function TrackerScreen({
       className={`relative flex flex-1 flex-col ${preview ? "min-h-full" : "min-h-dvh"}`}
     >
       {/* Restaurant Header */}
-      <header className="flex items-center gap-3 pt-4">
-        <OutletLogo name={data.outlet.name} logoUrl={data.outlet.logoUrl} size={40} />
+      <header className="flex items-center gap-2.5 pt-5">
+        <OutletLogo name={data.outlet.name} logoUrl={data.outlet.logoUrl} size={44} />
         <div className="min-w-0 flex-1">
-          <p className="font-display text-section font-bold break-words text-ink">{data.outlet.name}</p>
-          <p className="text-caption text-muted">
-            {isRoomCode(data.table.code) ? (lang === "hi" ? placeHi(data.table.code) : data.table.code) : <>{lang === "hi" ? "टेबल" : "Table"} {data.table.code.replace(/^T(?=\d)/, "")}</>} <span aria-hidden>·</span>{" "}
-            {session.people} {lang === "hi" ? "लोग" : "people"}
-          </p>
+          <p className="font-display text-section leading-tight font-bold break-words text-ink">{data.outlet.name}</p>
+          <Link
+            href={preview ? "#" : `${tablePath}/table`}
+            prefetch={false}
+            className="relative text-caption whitespace-nowrap text-muted underline-offset-2 before:absolute before:-inset-y-3.5 before:inset-x-0 hover:text-ink hover:underline focus-visible:outline-2 focus-visible:outline-brand"
+          >
+            {c.tableLine(isRoomCode(data.table.code) ? (lang === "hi" ? placeHi(data.table.code) : data.table.code) : `${lang === "hi" ? "टेबल" : "Table"} ${data.table.code.replace(/^T(?=\d)/, "")}`, session.people)} <span aria-hidden>›</span>
+          </Link>
         </div>
         <LanguageToggle lang={lang} label={c.language} preview={!!preview} />
+        <Link
+          href={preview ? "#" : `${tablePath}/cart`}
+          prefetch={false}
+          aria-label={c.openCart(data.cartCount)}
+          className="relative grid size-11 shrink-0 place-items-center rounded-full border border-line/70 bg-surface text-ink shadow-[0_2px_8px_rgb(31_41_55/0.06)] hover:border-ink/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+        >
+          <HugeiconsIcon icon={ShoppingBasket01Icon} size={21} aria-hidden />
+          {data.cartCount > 0 && (
+            <span aria-hidden className="absolute -top-1 -right-1 grid h-5 min-w-5 place-items-center rounded-full bg-brand px-1 text-label font-bold tabular text-brand-on ring-2 ring-paper">
+              {data.cartCount > 99 ? "99+" : data.cartCount}
+            </span>
+          )}
+        </Link>
       </header>
       <RoomDashboardLink outletCode={data.outlet.code} shortCode={shortCode} tableCode={data.table.code} lang={lang} preview={!!preview} />
 
       <main className="pb-8">
-        {/* Active Orders Bar */}
-        <div className="mt-5 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <h1 className="font-display text-title font-bold text-ink">
-              {data.rounds.length ? c.activeOrders : c.title}
-            </h1>
-            {data.rounds.length > 0 && data.inProgress > 0 && (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-success/10 px-2.5 py-0.5 text-caption font-semibold text-success">
-                <span className="size-2 rounded-full bg-success animate-pulse" aria-hidden />
-                {c.live}
-              </span>
-            )}
+        {/* Title */}
+        <div className="mt-5 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="font-display text-[1.625rem] leading-tight font-bold tracking-tight text-ink">{c.title}</h1>
+            <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-body text-muted">
+              {data.rounds.length > 0 && data.inProgress > 0 && (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-success/10 px-2 py-0.5 text-caption font-semibold text-success">
+                  <span className="size-2 animate-pulse rounded-full bg-success" aria-hidden />
+                  {c.live}
+                </span>
+              )}
+              {c.liveSub}
+            </p>
           </div>
           {canOrder && data.rounds.length > 0 && (
             <button
               type="button"
               onClick={goMenu}
-              className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-1.5 text-caption font-semibold text-ink shadow-sm transition-colors hover:border-brand hover:text-brand focus-visible:outline-2 focus-visible:outline-brand"
+              className="mt-1 inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl border border-line/70 bg-surface px-3 text-caption font-semibold text-ink shadow-[0_1px_3px_rgb(31_41_55/0.05)] transition-colors hover:border-brand hover:text-brand focus-visible:outline-2 focus-visible:outline-brand"
             >
-              <span>{c.addMore}</span>
+              {c.addMore}
             </button>
           )}
         </div>
@@ -307,7 +333,7 @@ export function TrackerScreen({
 
         {/* Two views of the same orders: by round as sent, or every dish added up */}
         {data.rounds.length > 0 && (
-          <div role="tablist" aria-label={c.activeOrders} className="mt-5 grid grid-cols-2 border-b border-line">
+          <div role="tablist" aria-label={c.activeOrders} className="mt-5 grid grid-cols-2 gap-2">
             {(["orders", "items"] as const).map((t) => {
               const on = tab === t;
               const count = t === "orders" ? data.rounds.length : items.lines.reduce((n, l) => n + l.qty, 0);
@@ -318,12 +344,13 @@ export function TrackerScreen({
                   role="tab"
                   aria-selected={on}
                   onClick={() => setTab(t)}
-                  className={`-mb-px flex min-h-12 items-center justify-center gap-2 border-b-2 text-body font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-brand ${
-                    on ? "border-brand text-brand-strong" : "border-transparent text-muted hover:text-ink"
+                  className={`flex min-h-12 items-center justify-center gap-2 rounded-2xl border text-body font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
+                    on ? "border-brand bg-brand text-brand-on shadow-[0_4px_12px_-2px_var(--brand-border)]" : "border-line/70 bg-surface text-ink shadow-[0_1px_3px_rgb(31_41_55/0.05)] hover:border-ink/30"
                   }`}
                 >
+                  <HugeiconsIcon icon={t === "orders" ? Note01Icon : LeftToRightListBulletIcon} size={18} aria-hidden />
                   {t === "orders" ? c.ordersTab : c.itemsTab}
-                  <span className={`min-w-6 rounded-full px-1.5 text-label tabular ${on ? "bg-brand text-brand-on" : "bg-ink/10 text-ink"}`}>{count}</span>
+                  <span className={`min-w-6 rounded-full px-1.5 text-label tabular ${on ? "bg-white/25 text-brand-on" : "bg-ink/10 text-ink"}`}>{count}</span>
                 </button>
               );
             })}
@@ -350,6 +377,25 @@ export function TrackerScreen({
                 canOrder={canOrder}
               />
             ))}
+            {items.lines.length > 0 && (
+              <div className="flex items-center gap-3 rounded-[20px] border border-brand-border/60 bg-brand-soft/60 p-3.5">
+                <span aria-hidden className="grid size-11 shrink-0 place-items-center rounded-xl bg-surface text-brand">
+                  <HugeiconsIcon icon={Invoice01Icon} size={22} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-body font-bold text-ink">{c.totalSoFar}</p>
+                  <p className="text-caption text-muted tabular">{c.totalLine(items.lines.reduce((n, l) => n + l.qty, 0), formatRupees(items.totalPaise))}</p>
+                </div>
+                <Link
+                  href={preview ? "#" : `${tablePath}/bill`}
+                  prefetch={false}
+                  className="inline-flex min-h-11 shrink-0 items-center gap-1 rounded-xl border border-brand bg-surface px-3.5 text-caption font-bold text-brand-strong hover:bg-brand-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+                >
+                  {c.viewBill}
+                  <HugeiconsIcon icon={ArrowRight01Icon} size={16} aria-hidden />
+                </Link>
+              </div>
+            )}
           </div>
         ) : (
           <div className="py-14 text-center">
@@ -372,16 +418,18 @@ export function TrackerScreen({
         )}
 
         {/* Service Requests Section */}
-        <section aria-labelledby="service-heading" className="mt-8 border-t border-line pt-6">
-          <div className="flex items-center gap-2">
-            <HugeiconsIcon icon={Notification01Icon} size={20} className="text-muted" aria-hidden />
-            <h2 id="service-heading" className="font-display text-section font-bold text-ink">
-              {c.needs}
-            </h2>
+        <section aria-labelledby="service-heading" className="mt-8">
+          <div className="flex items-start gap-3">
+            <HugeiconsIcon icon={Notification01Icon} size={22} className="mt-0.5 text-brand" aria-hidden />
+            <div>
+              <h2 id="service-heading" className="font-display text-section font-bold text-ink">
+                {c.needs}
+              </h2>
+              <p className="text-caption text-muted">{c.serviceHelp}</p>
+            </div>
           </div>
-          <p className="mt-1 text-caption text-muted">{c.serviceHelp}</p>
 
-          <div className="mt-4 grid grid-cols-2 gap-2.5 min-[360px]:gap-3 min-[400px]:gap-3.5">
+          <div className="mt-4 grid grid-cols-2 gap-2.5 min-[400px]:grid-cols-4 min-[400px]:gap-2">
             {data.requests.map((request) => {
               const isBill = request.kind === "request_bill";
               const cooling = Math.max(0, Math.ceil((request.cooldownUntil - clock) / 1000));
@@ -393,23 +441,23 @@ export function TrackerScreen({
               const IconComponent = serviceIcons[request.kind];
 
               return (
-                <div key={request.kind} className={isBill ? "col-span-2 mt-1" : ""}>
+                <div key={request.kind} className={isBill ? "col-span-2 mt-1 min-[400px]:col-span-4" : ""}>
                   <button
                     type="button"
                     onClick={() => (isBill ? setConfirm("bill") : void sendService(request.kind))}
                     disabled={disabled}
                     aria-busy={busy === request.kind || undefined}
-                    className={`group flex w-full flex-col items-center justify-center gap-1.5 rounded-2xl border p-3.5 text-center transition-all focus-visible:outline-2 focus-visible:outline-brand disabled:cursor-not-allowed ${
+                    className={`group flex w-full flex-col items-center justify-center gap-2 rounded-[20px] border p-3 text-center transition-all focus-visible:outline-2 focus-visible:outline-brand disabled:cursor-not-allowed ${
                       isBill
                         ? session.isHost && !billRequested
                           ? "min-h-[82px] border-brand/30 bg-surface text-ink hover:border-brand shadow-sm"
                           : "min-h-[76px] border-line bg-[#F5F2EC] text-muted opacity-85"
                         : pending || cooling > 0
                         ? "min-h-[92px] border-line bg-[#F5F2EC] text-muted"
-                        : "min-h-[92px] border-line bg-surface text-ink hover:border-brand shadow-sm"
+                        : "min-h-[100px] border-line/60 bg-surface text-ink shadow-[0_2px_12px_rgb(31_41_55/0.05)] hover:border-brand"
                     }`}
                   >
-                    <div className="relative">
+                    <div className={`relative grid size-10 place-items-center rounded-full ${pending || cooling > 0 ? "bg-ink/5" : "bg-brand-soft"}`}>
                       {busy === request.kind ? (
                         <HugeiconsIcon icon={Loading03Icon} size={22} className="animate-spin text-brand" aria-hidden />
                       ) : (
@@ -421,13 +469,13 @@ export function TrackerScreen({
                               ? "text-muted"
                               : isBill && session.isHost && !billRequested
                               ? "text-brand"
-                              : "text-ink group-hover:text-brand"
+                              : "text-brand"
                           }
                           aria-hidden
                         />
                       )}
                     </div>
-                    <span className="text-body font-semibold leading-tight">
+                    <span className="text-caption leading-tight font-semibold min-[400px]:text-label">
                       {isBill && billRequested ? c.billTitle : c.service[request.kind]}
                     </span>
 
@@ -523,54 +571,54 @@ function RoundView({
     : c.anotherGuest;
 
   return (
-    <section aria-label={c.round(round.roundNo)} className="rounded-2xl border border-line bg-surface p-4 min-[360px]:p-5 shadow-[0_1px_3px_rgba(0,0,0,0.03)]">
+    <section aria-label={c.round(round.roundNo)} className="rounded-[20px] border border-line/60 bg-surface p-4 shadow-[0_2px_12px_rgb(31_41_55/0.05)] min-[360px]:p-5">
       {/* Round Header */}
       <div className="flex items-start justify-between gap-3">
-        <div>
-          <h2 className="font-display text-section font-bold text-ink">
-            {c.round(round.roundNo)} <span className="font-normal text-muted tabular text-caption">· {time}</span>
-          </h2>
-          <p className="mt-0.5 text-caption text-muted">{placedByLabel}</p>
+        <div className="min-w-0">
+          <h2 className="font-display text-section font-bold text-ink">{c.round(round.roundNo)}</h2>
+          <p className="mt-0.5 text-caption text-muted tabular">{c.placedAt(time, round.lines.reduce((n, l) => n + (l.status === "cancelled" || l.status === "voided" ? 0 : l.qty), 0))}</p>
+          <p className="text-caption text-muted">{placedByLabel}</p>
         </div>
-        {isAllServed && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-success/10 px-2.5 py-1 text-caption font-semibold text-success">
+        {isAllServed ? (
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-success/10 px-2.5 py-1 text-caption font-semibold text-success">
             <HugeiconsIcon icon={CheckmarkCircle02Icon} size={14} aria-hidden />
             {c.allServedBadge}
           </span>
-        )}
+        ) : round.status !== "cancelled" ? (
+          <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-caption font-semibold ${tone[round.status]}`}>
+            <StatusIcon status={round.status} />
+            {c.status[round.status]}
+          </span>
+        ) : null}
       </div>
 
       {/* Progress Strip Stepper */}
       {round.status !== "cancelled" ? (
         <div className="mt-4 px-1" aria-label={`${c.progress}: ${c.meaning[round.status]}`}>
-          <div className="relative flex items-center justify-between" aria-hidden>
-            {/* connecting line background */}
-            <div className="absolute left-3 right-3 top-2.5 -translate-y-1/2 h-0.5 bg-line/80" />
-            {/* active progress line */}
+          <div className="relative flex items-start justify-between" aria-hidden>
+            <div className="absolute top-[18px] right-[34px] left-[34px] h-0.5 -translate-y-1/2 bg-line/80" />
             <div
-              className="absolute left-3 top-2.5 -translate-y-1/2 h-0.5 bg-success transition-all duration-300"
-              style={{
-                width: isAllServed ? "calc(100% - 24px)" : `${(Math.max(0, round.step) / 3) * 100}%`,
-              }}
+              className="absolute top-[18px] left-[34px] h-0.5 -translate-y-1/2 bg-success transition-all duration-300"
+              style={{ width: `calc((100% - 68px) * ${isAllServed ? 1 : Math.max(0, round.step) / 3})` }}
             />
             {steps.map((step, i) => {
               const isComplete = isAllServed || i < round.step;
               const isCurrent = !isAllServed && i === round.step;
               return (
-                <div key={step} className="relative z-10 flex flex-col items-center">
+                <div key={step} className="relative z-10 flex w-[68px] flex-col items-center">
                   <div
-                    className={`grid size-5 place-items-center rounded-full transition-all duration-200 ${
+                    className={`grid size-9 place-items-center rounded-full transition-all duration-200 ${
                       isComplete
                         ? "bg-success text-white"
                         : isCurrent
-                        ? "bg-success ring-4 ring-success/20 text-white"
-                        : "border-2 border-line bg-surface"
+                        ? "bg-success text-white ring-4 ring-success/20"
+                        : "border border-line bg-paper text-muted"
                     }`}
                   >
-                    {(isComplete || isCurrent) && <span className="size-1.5 rounded-full bg-white" />}
+                    <HugeiconsIcon icon={isComplete ? Tick02Icon : STEP_ICONS[step]} size={isComplete ? 18 : 17} strokeWidth={isComplete ? 2.6 : 1.8} />
                   </div>
                   <p
-                    className={`mt-2 text-label tabular text-center transition-colors break-words max-w-[68px] min-[360px]:max-w-[76px] ${
+                    className={`mt-2 max-w-[68px] text-center text-label break-words transition-colors min-[360px]:max-w-[76px] ${
                       isCurrent ? "font-bold text-ink" : isComplete ? "font-medium text-ink" : "text-muted"
                     }`}
                   >
@@ -596,15 +644,30 @@ function RoundView({
 
           return (
             <li key={line.id} className="py-3.5 first:pt-2 last:pb-0">
-              <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <LineThumb photo={line.imageUrl} faded={removed} />
                 <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-baseline gap-2">
-                    <p className={`text-body font-semibold break-words ${removed ? "text-muted line-through" : "text-ink"}`}>
-                      {name}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className={`text-body font-bold break-words ${removed ? "text-muted line-through" : "text-ink"}`}>{name}</p>
+                      {line.isVeg !== null && (
+                        <p className="mt-0.5 flex items-center gap-1.5 text-caption text-muted">
+                          <span
+                            role="img"
+                            aria-label={line.isVeg ? c.vegLabel : c.nonVegLabel}
+                            className={`grid size-3.5 shrink-0 place-items-center rounded-[3px] border-[1.5px] ${line.isVeg ? "border-success" : "border-danger"}`}
+                          >
+                            <span className={`size-1.5 rounded-full ${line.isVeg ? "bg-success" : "bg-danger"}`} />
+                          </span>
+                          <span aria-hidden>{line.isVeg ? c.veg : c.nonVeg}</span>
+                          {line.spice !== null && line.spice > 0 && <><span aria-hidden>·</span>{c.spice[line.spice]}</>}
+                        </p>
+                      )}
+                    </div>
+                    <p className="shrink-0 text-right tabular">
+                      <span className={`block text-body font-bold ${removed ? "text-muted" : "text-ink"}`}>{formatRupees(line.amountPaise)}</span>
+                      <span className="block text-caption text-muted">× {line.qty}</span>
                     </p>
-                    <span className="whitespace-nowrap font-normal tabular text-caption text-muted">
-                      × {line.qty}
-                    </span>
                   </div>
 
                   {line.options.length > 0 && (
@@ -616,31 +679,24 @@ function RoundView({
                     <p className="mt-0.5 text-caption break-words text-muted italic">“{line.note}”</p>
                   )}
 
-                  {/* Prominent Status Chip with icon */}
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <span
-                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-caption font-semibold ${
-                        tone[line.status]
-                      }`}
-                    >
+                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-caption font-semibold ${tone[line.status]}`}>
                       <StatusIcon status={line.status} />
                       <span>{c.meaning[line.status]}</span>
                     </span>
+                    {line.canCancel && (
+                      <button
+                        type="button"
+                        onClick={() => onCancel(line)}
+                        disabled={disabled}
+                        aria-label={`${c.cancel}: ${name} × ${line.qty}`}
+                        className="inline-flex min-h-11 min-w-[72px] items-center justify-center rounded-xl border border-line bg-surface px-3 py-1.5 text-caption font-semibold text-ink shadow-sm transition-colors hover:border-danger hover:text-danger focus-visible:outline-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {c.cancel}
+                      </button>
+                    )}
                   </div>
                 </div>
-
-                {/* Cancel Button */}
-                {line.canCancel && (
-                  <button
-                    type="button"
-                    onClick={() => onCancel(line)}
-                    disabled={disabled}
-                    aria-label={`${c.cancel}: ${name} × ${line.qty}`}
-                    className="shrink-0 inline-flex min-h-11 min-w-[72px] items-center justify-center rounded-lg border border-line bg-surface px-3 py-1.5 text-caption font-semibold text-ink shadow-sm transition-colors hover:border-danger hover:text-danger focus-visible:outline-2 focus-visible:outline-brand disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {c.cancel}
-                  </button>
-                )}
               </div>
 
               {/* Late item warning banner */}
@@ -669,6 +725,21 @@ function RoundView({
         </button>
       )}
     </section>
+  );
+}
+
+/** The dish's small menu photo, or a plate icon when it has none */
+function LineThumb({ photo, faded }: { photo: string | null; faded: boolean }) {
+  const [failed, setFailed] = useState(0);
+  const src = failed === 0 ? menuThumb(photo) : failed === 1 ? photo : null;
+  return src ? (
+    // Restaurant photos can live on any host, so this stays a plain lazy image
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={src} alt="" loading="lazy" decoding="async" onError={() => setFailed((n) => n + 1)} className={`size-16 shrink-0 rounded-xl bg-line/40 object-cover ${faded ? "opacity-50 grayscale" : ""}`} />
+  ) : (
+    <span aria-hidden className="grid size-16 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-brand-soft to-paper text-brand/60">
+      <HugeiconsIcon icon={Restaurant01Icon} size={24} strokeWidth={1.5} />
+    </span>
   );
 }
 

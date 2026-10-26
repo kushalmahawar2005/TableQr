@@ -12,7 +12,7 @@ const NOW = Date.parse("2026-10-01T15:14:00Z");
 type Round = TrackerScreenData["rounds"][number];
 type Line = Round["lines"][number];
 function line(id: string, nameEn: string, nameHi: string, status: Line["status"], qty = 1, mine = true): Line {
-  return { id, nameEn, nameHi, qty, amountPaise: qty * 24000, status, options: [], note: null, isMine: mine, canCancel: mine && status === "placed" };
+  return { id, imageUrl: null, isVeg: !/chicken/i.test(nameEn), spice: /tikka|chicken/i.test(nameEn) ? 2 : null, nameEn, nameHi, qty, amountPaise: qty * 24000, status, options: [], note: null, isMine: mine, canCancel: mine && status === "placed" };
 }
 function round(n: number, status: Round["status"], lines: Line[], minutes = 3): Round {
   return { orderId: `r${n}`, roundNo: n, placedAt: NOW - minutes * 60_000, placedBy: n === 1 ? "Bhavna" : "Aarav", status, statusText: GUEST_STATUS_TEXT[status], step: status === "served" ? 3 : ["placed", "accepted", "preparing", "ready"].indexOf(status), isLate: false, lateAt: ["placed", "accepted", "preparing"].includes(status) ? NOW + 600_000 : null, canRepeat: lines.some((item) => item.isMine && item.status !== "cancelled" && item.status !== "voided"), lines };
@@ -27,6 +27,7 @@ const base: TrackerScreenData = {
     round(1, "preparing", [line("paneer", "Paneer Tikka", "पनीर टिक्का", "ready"), { ...line("chicken", "Butter Chicken", "बटर चिकन", "preparing"), options: [{ nameEn: "Extra gravy", nameHi: "एक्स्ट्रा ग्रेवी", priceDeltaPaise: 3000 }], note: "Less spicy" }, line("naan", "Butter Naan", "बटर नान", "served", 3)], 22),
   ], inProgress: 3,
   requests: (["water", "cutlery", "call_waiter", "clean_table", "request_bill"] as const).map((kind) => ({ kind, requestId: null, requestedAt: null, cooldownUntil: 0, status: null, escalated: false })),
+  cartCount: 2,
 };
 
 export default async function G6Preview(props: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {

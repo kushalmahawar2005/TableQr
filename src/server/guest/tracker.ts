@@ -25,9 +25,11 @@ export async function getOrderTracker(ctx: GuestContext, now = new Date()) {
     .orderBy(desc(s.orders.roundNo));
   if (orders.length === 0) return { rounds: [], inProgress: 0 };
 
+  // The dish's photo, veg mark and spice come from the menu as it is now; name and price stay as placed
   const lines = await db
-    .select({ line: s.orderLines })
+    .select({ line: s.orderLines, imageUrl: s.menuItems.imageUrl, isVeg: s.menuItems.isVeg, spice: s.menuItems.spiceLevel })
     .from(s.orderLines)
+    .leftJoin(s.menuItems, and(eq(s.menuItems.tenantId, ctx.tenantId), eq(s.menuItems.id, s.orderLines.itemId)))
     .where(and(eq(s.orderLines.tenantId, ctx.tenantId), eq(s.orderLines.sessionId, ctx.sessionId)))
     .orderBy(asc(s.orderLines.id));
 
@@ -49,8 +51,11 @@ export async function getOrderTracker(ctx: GuestContext, now = new Date()) {
       isLate: lateThreshold !== null && now.getTime() >= lateThreshold,
       lateAt: lateThreshold,
       canRepeat: own.some(({ line }) => line.participantId === ctx.participantId && line.status !== "cancelled" && line.status !== "voided"),
-      lines: own.map(({ line }) => ({
+      lines: own.map(({ line, imageUrl, isVeg, spice }) => ({
         id: line.id,
+        imageUrl,
+        isVeg,
+        spice,
         nameEn: line.nameEn,
         nameHi: line.nameHi,
         qty: line.qty,
