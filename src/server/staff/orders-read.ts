@@ -5,6 +5,7 @@ import * as s from "@/db/schema";
 import { canSee } from "@/lib/staff-permissions";
 import { AppError } from "../errors";
 import type { StaffSession } from "./auth";
+import { isDeliveryTable } from "@/domain/delivery";
 import { TAKEAWAY_CLASS } from "../floor/takeaway-class";
 
 // Orders board (read-only): the signed-in outlet's orders from the last 24 hours. Plain SELECTs
@@ -31,13 +32,15 @@ export type OrderRow = {
   readyLineIds: string[];
   /** A parcel order from the counter, not a table */
   takeaway: boolean;
+  /** A home delivery order, with the name the guest gave */
+  delivery: { name: string | null } | null;
 };
 
 export async function getRecentOrders(staff: Staff, now: Date): Promise<OrderRow[]> {
   if (!canSee(staff, "orders")) throw new AppError("forbidden", "Your role cannot view orders.");
   const since = new Date(now.getTime() - 24 * 3_600_000);
   const orders = await db
-    .select({ id: s.orders.id, sessionId: s.orders.sessionId, roundNo: s.orders.roundNo, note: s.orders.note, placedAt: s.orders.placedAt, acceptedAt: s.orders.acceptedAt, readyAt: s.orders.readyAt, servedAt: s.orders.servedAt, status: s.orders.status, sessionStatus: s.tableSessions.status, tableCode: s.diningTables.code, tableClass: s.diningTables.tableClass })
+    .select({ id: s.orders.id, sessionId: s.orders.sessionId, roundNo: s.orders.roundNo, note: s.orders.note, placedAt: s.orders.placedAt, acceptedAt: s.orders.acceptedAt, readyAt: s.orders.readyAt, servedAt: s.orders.servedAt, status: s.orders.status, sessionStatus: s.tableSessions.status, tableCode: s.diningTables.code, tableClass: s.diningTables.tableClass, guestName: s.tableSessions.guestName })
     .from(s.orders)
     .innerJoin(s.tableSessions, and(eq(s.orders.sessionId, s.tableSessions.id), eq(s.orders.tenantId, s.tableSessions.tenantId)))
     .innerJoin(s.diningTables, and(eq(s.tableSessions.tableId, s.diningTables.id), eq(s.tableSessions.tenantId, s.diningTables.tenantId)))
@@ -62,6 +65,6 @@ export async function getRecentOrders(staff: Staff, now: Date): Promise<OrderRow
     // A paid takeaway is still being cooked and handed over, so it stays on the board
     const takeaway = o.tableClass === TAKEAWAY_CLASS;
     const done = o.sessionStatus === "closed" && o.status !== "cancelled" && !takeaway;
-    return { id: o.id, sessionId: o.sessionId, roundNo: o.roundNo, note: o.note, placedAt: o.placedAt.toISOString(), acceptedAt: o.acceptedAt?.toISOString() ?? null, readyAt: o.readyAt?.toISOString() ?? null, servedAt: o.servedAt?.toISOString() ?? null, table: o.tableCode, status: done ? "served" : o.status, items: byOrder.get(o.id) ?? [], totalPaise: totals.get(o.id) ?? 0, readyLineIds: done ? [] : (ready.get(o.id) ?? []), takeaway };
+    return { id: o.id, sessionId: o.sessionId, roundNo: o.roundNo, note: o.note, placedAt: o.placedAt.toISOString(), acceptedAt: o.acceptedAt?.toISOString() ?? null, readyAt: o.readyAt?.toISOString() ?? null, servedAt: o.servedAt?.toISOString() ?? null, table: o.tableCode, status: done ? "served" : o.status, items: byOrder.get(o.id) ?? [], totalPaise: totals.get(o.id) ?? 0, readyLineIds: done ? [] : (ready.get(o.id) ?? []), takeaway, delivery: isDeliveryTable(o.tableCode) ? { name: o.guestName } : null };
   });
 }

@@ -1,4 +1,3 @@
-import Link from "next/link";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { canSee } from "@/lib/staff-permissions";
@@ -20,5 +19,5 @@ export default async function OrdersPage() {
     );
   }
   const orders = await getRecentOrders(staff, new Date());
-  return <>{staff.roles.some(role => ["owner", "manager", "cashier"].includes(role)) && <div className="px-6 pt-4"><Link href="/console/orders/delivery" className="inline-flex min-h-11 items-center rounded-xl border border-line px-4 text-sm font-semibold text-brand-strong">Delivery orders →</Link></div>}<OrdersScreen orders={orders} outlet={staff.outlet.name} /></>;
+  return <OrdersScreen orders={orders} outlet={staff.outlet.name} showDelivery={staff.roles.some(role => ["owner", "manager", "cashier"].includes(role))} />;
 }

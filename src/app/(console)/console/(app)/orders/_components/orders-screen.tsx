@@ -1,8 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { Check, ChefHat, Clock, Printer, Receipt, RefreshCw, Search, Utensils, TriangleAlert } from "lucide-react";
+import { Bike, Check, ChefHat, Clock, Printer, Receipt, RefreshCw, Search, Utensils, TriangleAlert } from "lucide-react";
 import type { OrderRow } from "@/server/staff/orders-read";
 import { VisitRecord } from "../../reservations/_components/visit-record";
 import { servedAction } from "../actions";
@@ -31,7 +32,7 @@ const money = (paise: number) => `₹${Math.round(paise / 100).toLocaleString("e
 const clock = (v: string) => new Intl.DateTimeFormat("en-IN", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" }).format(new Date(v));
 const ago = (mins: number) => (mins < 1 ? "just now" : mins < 60 ? `${mins} min ago` : `${Math.floor(mins / 60)}h ${mins % 60}m ago`);
 
-export function OrdersScreen({ orders, outlet }: { orders: OrderRow[]; outlet: string }) {
+export function OrdersScreen({ orders, outlet, showDelivery = false }: { orders: OrderRow[]; outlet: string; /** Roles that run delivery see the way to the delivery desk */ showDelivery?: boolean }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [filter, setFilter] = useState<Filter>("active");
@@ -83,9 +84,18 @@ export function OrdersScreen({ orders, outlet }: { orders: OrderRow[]; outlet: s
           </h1>
           <p className="mt-1 text-body text-muted">Track what is being prepared and what is ready to serve.</p>
         </div>
+        <div className="flex flex-wrap items-center gap-2">
+        {showDelivery && (() => {
+          const live = orders.filter((o) => o.delivery && o.status !== "served" && o.status !== "cancelled").length;
+          return <Link href="/console/orders/delivery" className="inline-flex min-h-11 items-center gap-2 rounded-input border border-brand/40 bg-brand-soft px-3.5 text-body font-semibold text-brand-strong hover:border-brand focus-visible:outline-2 focus-visible:outline-ink">
+            <Bike className="size-4" aria-hidden="true" />Delivery orders
+            {live > 0 && <span className="grid h-5 min-w-5 place-items-center rounded-full bg-brand px-1.5 text-label font-bold tabular text-brand-on">{live}</span>}
+          </Link>;
+        })()}
         <button type="button" onClick={() => start(() => router.refresh())} disabled={pending} className="inline-flex min-h-11 items-center gap-2 rounded-input border border-line bg-surface px-3.5 text-body font-semibold text-ink hover:border-ink/40 disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-ink">
           <RefreshCw className={`size-4 ${pending ? "animate-spin" : ""}`} aria-hidden="true" />{pending ? "Refreshing" : "Refresh"}
         </button>
+        </div>
       </header>
 
       <dl className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -142,7 +152,7 @@ export function OrdersScreen({ orders, outlet }: { orders: OrderRow[]; outlet: s
                 <div className="p-4 sm:p-5">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="font-display text-section font-bold text-ink">{o.takeaway ? `Takeaway ${o.table}` : placeEn(o.table)}{o.roundNo > 1 && <span className="ml-2 text-body font-semibold text-muted">· Round {o.roundNo}</span>}</p>
+                    <p className="font-display text-section font-bold text-ink">{o.delivery ? <><span className="mr-2 inline-flex items-center gap-1 rounded-full bg-brand-soft px-2 py-0.5 align-middle text-label font-bold tracking-wide text-brand-strong uppercase"><Bike className="size-3.5" aria-hidden="true" />Delivery</span>{o.delivery.name || "Guest"}</> : o.takeaway ? `Takeaway ${o.table}` : placeEn(o.table)}{o.roundNo > 1 && <span className="ml-2 text-body font-semibold text-muted">· Round {o.roundNo}</span>}</p>
                     <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-muted tabular"><span>Placed {clock(o.placedAt)}</span><span aria-hidden="true">·</span><span className={isSlow ? "font-semibold text-danger" : ""}>{ago(age)}</span>{took !== null && <><span aria-hidden="true">·</span><span>Served in {took} min</span></>}</p>
                   </div>
                   <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-caption font-semibold ${TONE[o.status]}`}><span className={`size-1.5 rounded-full ${o.status === "ready" ? "bg-[var(--state-available)]" : o.status === "cancelled" ? "bg-[var(--state-seated)]" : "bg-current"}`} aria-hidden="true" />{LABEL[o.status]}</span>

@@ -13,6 +13,7 @@ import { syncBill } from "../billing/bill";
 import { announceBill, settleExternalGatewayInTransaction, settleManualQrInTransaction } from "../billing/payments";
 import { publish } from "../realtime/publish";
 import { topics } from "../realtime/token";
+import { DELIVERY_TABLE_PREFIX } from "@/domain/delivery";
 import { TAKEAWAY_CLASS } from "../floor/takeaway-class";
 import { deliveryOutlet, cleanDeliveryCart, priceDeliveryCart } from "./catalog";
 import { audit } from "../staff/audit";
@@ -122,7 +123,7 @@ async function placeKnownDeliveryOrder(code: string, found: Awaited<ReturnType<t
     if (!zone) throw new AppError("outlet_unavailable", "Please contact the restaurant to order.");
     const tableId = uuidv7(), sessionId = uuidv7(), participantId = uuidv7();
     // Hidden counters reuse the kitchen and payment infrastructure without occupying a dining table.
-    await tx.insert(s.diningTables).values({ id: tableId, tenantId: outlet.tenantId, outletId: outlet.id, zoneId: zone.id, code: `DL-${randomBytes(7).toString("base64url").slice(0, 9)}`, tableClass: TAKEAWAY_CLASS, minSeats: 1, maxSeats: 1, joinCode: "0000", isActive: false, isBookableOnline: false, state: "seated", stateChangedAt: now });
+    await tx.insert(s.diningTables).values({ id: tableId, tenantId: outlet.tenantId, outletId: outlet.id, zoneId: zone.id, code: `${DELIVERY_TABLE_PREFIX}${randomBytes(7).toString("base64url").slice(0, 9)}`, tableClass: TAKEAWAY_CLASS, minSeats: 1, maxSeats: 1, joinCode: "0000", isActive: false, isBookableOnline: false, state: "seated", stateChangedAt: now });
     await tx.insert(s.tableSessions).values({ id: sessionId, tenantId: outlet.tenantId, outletId: outlet.id, tableId, mode: "verified", source: "walk_in", partySize: 1, guestName: checkout.name, hostParticipantId: participantId, openKey: tableId, deliveryFeePaise: quote.deliveryFeePaise, openedAt: now, lastActivityAt: now });
     await tx.insert(s.participants).values({ id: participantId, tenantId: outlet.tenantId, sessionId, guestId: checkout.guestId, displayName: checkout.name!, deviceId, joinedAt: now });
     await tx.insert(s.cartLines).values(checkout.lines.map(line => ({ tenantId: outlet.tenantId, sessionId, participantId, itemId: line.itemId, qty: line.qty, modifiers: line.modifierIds.map(modifierId => ({ modifierId, groupId: "" })), personalForPickup: true })));

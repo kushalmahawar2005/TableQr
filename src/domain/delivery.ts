@@ -50,3 +50,7 @@ export function deliveryQuote(policy: DeliveryPolicy, pincode: string, foodSubto
   const feePaise = policy.freeDeliveryAbovePaise !== null && foodSubtotalPaise >= policy.freeDeliveryAbovePaise ? 0 : policy.deliveryFeePaise;
   return { feePaise, estimatedMinutes: policy.estimatedMinutes, paymentMode: policy.paymentMode };
 }
+
+/** Delivery orders run on a hidden counter whose code starts with this, e.g. "DL-NZdh0hp0z" */
+export const DELIVERY_TABLE_PREFIX = "DL-";
+export const isDeliveryTable = (code: string) => code.startsWith(DELIVERY_TABLE_PREFIX);

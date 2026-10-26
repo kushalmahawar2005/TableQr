@@ -1,4 +1,5 @@
 "use client";
+import { isDeliveryTable } from "@/domain/delivery";
 import {
   Alert02Icon,
   AlertDiamondIcon,
@@ -75,7 +76,7 @@ export function TicketCard({ card, lang, c, showStation, canAct, busy, busyLines
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h2 className="flex items-center gap-3 font-display text-[34px] font-bold leading-[38px] tracking-tight">
-              {card.tableCodes.join(" + ")}
+              {card.tableCodes.some(isDeliveryTable) ? <span className="flex items-center gap-2"><span className="rounded-md bg-kds-text px-2 py-0.5 font-sans text-[18px] font-bold leading-6 tracking-wide text-kds-bg">DELIVERY</span>{card.placedBy?.name ?? ""}</span> : card.tableCodes.join(" + ")}
               {fresh && <span className="rounded-md bg-kds-text px-2 py-0.5 font-sans text-[16px] font-bold leading-5 tracking-wide text-kds-bg">{c.newTag}</span>}
             </h2>
             <p className="text-[20px] font-semibold leading-7">

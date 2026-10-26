@@ -1,5 +1,6 @@
 import { paperSaved } from "@/lib/print/runtime";
 import { charsPerLine, clock, esc, profileFor, thermalDocument, wrapRows, type PaperMm } from "@/lib/print/thermal";
+import { isDeliveryTable } from "@/domain/delivery";
 import type { KdsCard } from "./kds-logic";
 
 // The kitchen order ticket (KOT) for a thermal printer: what the cook needs and nothing else, in
@@ -10,6 +11,8 @@ const PARCEL_NOTE = "PACK FOR TAKEAWAY";
 
 function slip(card: KdsCard) {
   const takeaway = card.tableCodes.some((t) => /^TA-\d+$/.test(t));
+  // Home delivery: the hidden counter code means nothing to the cook, so say what it is
+  const delivery = card.tableCodes.some(isDeliveryTable);
   const lines = card.lines
     .map((l) => {
       const extras = [
@@ -20,8 +23,8 @@ function slip(card: KdsCard) {
       return `<div class="l"><span class="q">${l.qty}×</span><div class="d"><div class="nm">${esc(l.nameEn)}</div>${extras}</div></div>`;
     })
     .join("");
-  return `<div class="ty">${takeaway ? "PARCEL" : "DINE-IN"}</div>
-<h1>${esc(card.tableCodes.join(" + "))}</h1>
+  return `<div class="ty">${delivery ? "DELIVERY · PACK ALL" : takeaway ? "PARCEL" : "DINE-IN"}</div>
+<h1>${delivery ? esc(card.placedBy?.name || "Delivery") : esc(card.tableCodes.join(" + "))}</h1>
 <div class="mt"><b>Round ${card.roundNo}</b> · ${clock(card.placedAt)}${card.station ? ` · ${esc(card.station)}` : ""}</div>
 <hr class="s">${lines}<hr class="s">
 ${card.orderNote ? `<div class="on"><b>ORDER NOTE:</b> ${esc(card.orderNote)}</div>` : ""}
