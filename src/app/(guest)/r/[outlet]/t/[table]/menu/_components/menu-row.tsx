@@ -68,8 +68,18 @@ export const MenuRow = memo(function MenuRow({
 
   const words = (
     <>
-      <div className="flex items-center gap-1.5">
+      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-caption text-muted">
         <VegMark veg={item.isVeg} label={item.isVeg ? c.veg : c.nonVeg} />
+        <span aria-hidden className="font-medium">{item.isVeg ? c.diet.veg : c.diet.non_veg}</span>
+        {item.spice !== null && item.spice > 0 && (
+          <>
+            <span aria-hidden>•</span>
+            <span className="inline-flex items-center gap-0.5 font-medium">
+              <HugeiconsIcon icon={PepperIcon} size={13} className="text-[var(--state-bill-text)]" aria-hidden />
+              {c.spiceLevel[item.spice]}
+            </span>
+          </>
+        )}
         {item.isJain && (
           <span className="rounded-[4px] border border-line px-1 text-[10px] leading-3.5 font-semibold text-muted">{c.jainMark}</span>
         )}
@@ -77,44 +87,38 @@ export const MenuRow = memo(function MenuRow({
           <span className={`rounded-full px-1.5 text-label font-semibold ${TAG_TONE[item.tag]}`}>{c.tag[item.tag]}</span>
         )}
       </div>
-      <h3 className="mt-1.5 text-body font-bold text-ink">{name}</h3>
-      <p className={`mt-0.5 flex flex-wrap items-center gap-x-2 text-body font-semibold tabular ${soldOut ? "text-muted" : "text-ink"}`}>
+      <h3 className="mt-1 font-display text-[1.0625rem] leading-snug font-bold text-ink">{name}</h3>
+      {description && <p className="mt-0.5 line-clamp-2 text-caption leading-snug text-muted">{description}</p>}
+      {/* Room on the right for the Add button, which sits on this line */}
+      <p className={`mt-auto flex min-h-10 items-end pt-1.5 pr-[116px] font-display text-section font-bold tabular ${soldOut ? "text-muted" : "text-ink"}`}>
         {item.price.from ? c.from(price) : price}
-        {item.spice !== null && item.spice > 0 && (
-          <span className="inline-flex items-center gap-0.5 text-caption font-medium text-muted" title={c.spiceLevel[item.spice]}>
-            <HugeiconsIcon icon={PepperIcon} size={14} className="text-[var(--state-bill-text)]" aria-hidden />
-            {c.spiceLevel[item.spice]}
-          </span>
-        )}
       </p>
-      {description && <p className="mt-1 line-clamp-2 text-caption text-muted">{description}</p>}
     </>
   );
 
   const thumb = (
-    <Thumb photo={photo} soldOut={soldOut} size="size-[88px]" onError={() => setImageOk(false)} />
+    <Thumb photo={photo} soldOut={soldOut} size="size-[104px] min-[380px]:size-[112px]" onError={() => setImageOk(false)} />
   );
 
   return (
     // Sold out stays readable: name in ink, price and description muted, photo faded
-    <li className="mb-3 flex gap-3 rounded-2xl border border-line/80 bg-surface p-3 shadow-[0_1px_3px_rgb(0_0_0/0.05)]">
-      {/* Tapping the dish opens its sheet once the item sheet (G4) exists; until then it is plain text */}
+    <li className="relative mb-3 rounded-[20px] border border-line/60 bg-surface p-3 shadow-[0_2px_12px_rgb(31_41_55/0.05)]">
       {state.canOpenSheet ? (
         <button
           type="button"
           onClick={() => onOpen(item.id)}
-          className="flex min-w-0 flex-1 gap-3 text-left focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand"
+          className="flex w-full min-w-0 gap-3.5 text-left focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand"
         >
           {thumb}
-          <span className="min-w-0 flex-1">{words}</span>
+          <span className="flex min-w-0 flex-1 flex-col">{words}</span>
         </button>
       ) : (
-        <div className="flex min-w-0 flex-1 gap-3">
+        <div className="flex min-w-0 gap-3.5">
           {thumb}
-          <div className="min-w-0 flex-1">{words}</div>
+          <div className="flex min-w-0 flex-1 flex-col">{words}</div>
         </div>
       )}
-      <div className="flex shrink-0 flex-col items-end justify-end">
+      <div className="absolute right-3 bottom-3 flex flex-col items-end">
         <RowAction item={item} name={name} state={state} c={c} onQty={onQty} onOpen={onOpen} />
       </div>
     </li>
@@ -139,11 +143,11 @@ export function Thumb({ photo, soldOut, size, onError }: { photo: string | null;
       ref={(el) => {
         if (el?.complete && el.naturalWidth === 0) fail();
       }}
-      className={`${size} shrink-0 rounded-xl bg-line/40 object-cover ${soldOut ? "opacity-60 grayscale" : ""}`}
+      className={`${size} shrink-0 rounded-2xl bg-line/40 object-cover ${soldOut ? "opacity-60 grayscale" : ""}`}
     />
   ) : (
-    <span aria-hidden className={`${size} grid shrink-0 place-items-center rounded-xl bg-brand-soft text-brand/70`}>
-      <HugeiconsIcon icon={Restaurant01Icon} size={28} strokeWidth={1.5} />
+    <span aria-hidden className={`${size} grid shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-brand-soft to-paper text-brand/60`}>
+      <HugeiconsIcon icon={Restaurant01Icon} size={30} strokeWidth={1.5} />
     </span>
   );
 }
@@ -178,7 +182,7 @@ export const PopularCard = memo(function PopularCard({
     </>
   );
   return (
-    <li className="w-40 shrink-0 rounded-2xl border border-line/80 bg-surface p-2.5 shadow-[0_1px_3px_rgb(0_0_0/0.05)]">
+    <li className="w-44 shrink-0 rounded-[20px] border border-line/60 bg-surface p-2.5 shadow-[0_2px_12px_rgb(31_41_55/0.05)]">
       {state.canOpenSheet ? (
         <button type="button" onClick={() => onOpen(item.id)} className="block w-full text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">
           {body}
@@ -186,8 +190,8 @@ export const PopularCard = memo(function PopularCard({
       ) : (
         <div>{body}</div>
       )}
-      <div className="mt-1.5 flex items-center justify-between gap-2">
-        <span className={`text-body font-bold tabular ${item.available ? "text-brand-strong" : "text-muted"}`}>{item.price.from ? c.from(price) : price}</span>
+      <p className={`mt-1 font-display text-section font-bold tabular ${item.available ? "text-ink" : "text-muted"}`}>{item.price.from ? c.from(price) : price}</p>
+      <div className="mt-2 flex justify-end">
         <RowAction item={item} name={name} state={state} c={c} onQty={onQty} onOpen={onOpen} />
       </div>
     </li>
@@ -246,9 +250,10 @@ function RowAction({
           onClick={() => onQty(item.id, 1)}
           disabled={state.blocked}
           aria-label={blockedNote ? `${c.addOne(name)}. ${blockedNote}` : c.addOne(name)}
-          className="relative grid size-9 place-items-center rounded-[10px] bg-brand text-brand-on shadow-[0_1px_2px_rgb(31_41_55/0.15)] transition-[transform,background-color] duration-100 ease-natural before:absolute before:-inset-1 hover:bg-brand-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand active:scale-[0.95] disabled:cursor-default disabled:bg-line disabled:text-muted disabled:shadow-none"
+          className="relative flex h-10 min-w-[96px] items-center justify-center gap-1.5 rounded-xl bg-brand px-4 text-body font-bold text-brand-on shadow-[0_4px_12px_-2px_var(--brand-border)] transition-[transform,background-color] duration-100 ease-natural before:absolute before:-inset-1 hover:bg-brand-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand active:scale-[0.96] disabled:cursor-default disabled:bg-line disabled:text-muted disabled:shadow-none"
         >
-          <HugeiconsIcon icon={PlusSignIcon} size={18} strokeWidth={2.4} aria-hidden />
+          <HugeiconsIcon icon={PlusSignIcon} size={17} strokeWidth={2.6} aria-hidden />
+          {c.add}
         </button>
         {inCart}
       </div>
@@ -261,7 +266,7 @@ function RowAction({
       <div
         role="group"
         aria-label={c.qtyOf(state.qty, name)}
-        className={`flex min-h-9 min-w-[92px] items-center justify-between gap-1 rounded-[10px] text-brand-on shadow-[0_1px_2px_rgb(31_41_55/0.12)] ${state.blocked ? "bg-muted" : "bg-brand"}`}
+        className={`flex h-10 min-w-[96px] items-center justify-between gap-1 rounded-xl text-brand-on shadow-[0_4px_12px_-2px_var(--brand-border)] ${state.blocked ? "bg-muted" : "bg-brand"}`}
       >
         <StepButton icon={MinusSignIcon} label={c.removeOne(name)} disabled={state.blocked} note={blockedNote} onClick={() => onQty(item.id, state.qty - 1)} />
         <span aria-live="polite" className="min-w-6 text-center text-body font-bold tabular">
@@ -303,7 +308,7 @@ function OutlineButton({
       onClick={onClick}
       disabled={disabled}
       aria-label={note ? `${ariaLabel}. ${note}` : ariaLabel}
-      className="relative flex min-h-9 min-w-[96px] items-center justify-center gap-1 rounded-[10px] px-3 py-1 border border-brand-border bg-surface text-body font-bold text-brand-strong shadow-[0_1px_2px_rgb(31_41_55/0.08)] transition-[transform,background-color] duration-100 ease-natural before:absolute before:-inset-1 hover:bg-brand-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand active:scale-[0.97] disabled:cursor-default disabled:border-line disabled:text-muted disabled:shadow-none disabled:hover:bg-surface disabled:active:scale-100"
+      className="relative flex h-10 min-w-[96px] items-center justify-center gap-1 rounded-xl px-3 py-1 border border-brand-border bg-surface text-body font-bold text-brand-strong shadow-[0_1px_2px_rgb(31_41_55/0.08)] transition-[transform,background-color] duration-100 ease-natural before:absolute before:-inset-1 hover:bg-brand-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand active:scale-[0.97] disabled:cursor-default disabled:border-line disabled:text-muted disabled:shadow-none disabled:hover:bg-surface disabled:active:scale-100"
     >
       {label}
       <HugeiconsIcon icon={icon} size={16} strokeWidth={2.2} aria-hidden />

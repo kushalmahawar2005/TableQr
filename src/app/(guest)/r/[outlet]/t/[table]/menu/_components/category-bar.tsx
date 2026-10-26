@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckmarkCircle02Icon, Restaurant01Icon, StarIcon } from "@hugeicons/core-free-icons";
+import { Restaurant01Icon, StarIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useEffect, useRef, useState } from "react";
 import { menuThumb } from "@/domain/menu-photo";
@@ -44,7 +44,7 @@ export function CategoryBar({ categories, label }: { categories: CategoryLink[];
 
   return (
     <nav aria-label={label} className="sticky top-0 z-20 -mx-4 mt-3 bg-paper/95 px-4 pb-1 backdrop-blur-[2px] min-[360px]:-mx-5 min-[360px]:px-5">
-      <div ref={bar} className="flex gap-1 overflow-x-auto pt-2 [scrollbar-width:none]">
+      <div ref={bar} className="flex gap-1.5 overflow-x-auto pt-2.5 [scrollbar-width:none]">
         {categories.map((c) => {
           const on = c.id === current;
           return (
@@ -58,18 +58,11 @@ export function CategoryBar({ categories, label }: { categories: CategoryLink[];
                 setActive(c.id);
                 document.getElementById(`cat-${c.id}`)?.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
               }}
-              className="group flex w-[72px] shrink-0 flex-col items-center gap-1.5 rounded-xl pb-2 text-center focus-visible:outline-2 focus-visible:outline-brand"
+              className="group flex w-[76px] shrink-0 flex-col items-center gap-1.5 rounded-xl pb-1.5 text-center focus-visible:outline-2 focus-visible:outline-brand"
             >
-              <span className="relative">
-                <TilePhoto id={c.id} photo={c.photo} on={on} />
-                {on && (
-                  <span aria-hidden className="absolute -top-1.5 -right-1.5 grid size-5 place-items-center rounded-full bg-brand text-brand-on ring-2 ring-paper">
-                    <HugeiconsIcon icon={CheckmarkCircle02Icon} size={14} strokeWidth={2.2} />
-                  </span>
-                )}
-              </span>
+              <TilePhoto id={c.id} photo={c.photo} on={on} />
               <span className={`line-clamp-2 min-h-[2lh] text-label leading-tight break-words ${on ? "font-bold text-brand-strong" : "font-medium text-ink"}`}>{c.label}</span>
-              <span aria-hidden className={`h-[3px] w-10 rounded-full transition-colors duration-150 ${on ? "bg-brand" : "bg-transparent"}`} />
+              <span aria-hidden className={`h-[3px] w-8 rounded-full transition-colors duration-150 ${on ? "bg-brand" : "bg-transparent"}`} />
             </a>
           );
         })}
@@ -82,7 +75,7 @@ function TilePhoto({ id, photo, on }: { id: string; photo: string | null; on: bo
   const [ok, setOk] = useState(true);
   const [smallFailed, setSmallFailed] = useState(false);
   const src = smallFailed ? photo : menuThumb(photo);
-  const frame = `size-14 rounded-xl border-2 transition-colors duration-150 ${on ? "border-brand" : "border-line/80 group-hover:border-ink/30"}`;
+  const frame = `size-16 rounded-2xl transition-[box-shadow,transform] duration-150 ${on ? "ring-2 ring-brand ring-offset-2 ring-offset-paper" : "ring-1 ring-line/70 group-hover:ring-ink/30"}`;
   if (photo && ok) {
     return (
       // Restaurant photos can live on any host, so this stays a plain lazy image
@@ -91,7 +84,7 @@ function TilePhoto({ id, photo, on }: { id: string; photo: string | null; on: bo
     );
   }
   return (
-    <span aria-hidden className={`${frame} grid place-items-center bg-surface ${on ? "text-brand" : "text-muted"}`}>
+    <span aria-hidden className={`${frame} grid place-items-center bg-gradient-to-br from-brand-soft to-surface ${on ? "text-brand" : "text-brand/60"}`}>
       <HugeiconsIcon icon={id === "popular" ? StarIcon : Restaurant01Icon} size={24} strokeWidth={1.5} />
     </span>
   );

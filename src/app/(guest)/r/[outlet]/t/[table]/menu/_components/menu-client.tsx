@@ -1,9 +1,10 @@
 "use client";
 
-import { Cancel01Icon, CheckmarkCircle02Icon, InformationCircleIcon, Invoice01Icon, PauseIcon, Search01Icon, WifiOff01Icon } from "@hugeicons/core-free-icons";
+import { Cancel01Icon, CheckmarkCircle02Icon, FilterHorizontalIcon, InformationCircleIcon, Invoice01Icon, PauseIcon, Search01Icon, ShoppingBasket01Icon, WifiOff01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { applyFilters, hasActiveFilters, NO_FILTERS, type MenuFilters } from "@/domain/menu-filter";
 import { searchItems } from "@/domain/menu-search";
 import type { Lang } from "@/lib/i18n";
@@ -55,6 +56,8 @@ export function MenuClient({
   realtimeUrl,
   sessionKey,
   preview,
+  brand,
+  language,
 }: {
   data: MenuScreenData;
   lang: Lang;
@@ -63,6 +66,9 @@ export function MenuClient({
   realtimeUrl: string | null;
   sessionKey: string;
   preview?: MenuPreview;
+  /** Logo, name and table line, drawn on the server */
+  brand?: ReactNode;
+  language?: ReactNode;
 }) {
   const c = g3Copy[lang];
   const screens = preview?.showFuture ? { itemSheet: true, cart: true } : BUILT;
@@ -107,6 +113,7 @@ export function MenuClient({
     window.dispatchEvent(new Event(filterEvent));
   };
   const [searchFocused, setSearchFocused] = useState(false);
+  const allFiltersRef = useRef<HTMLDialogElement>(null);
   const [toast, setToast] = useState<string | null>(preview?.toast ? c.failed : null);
 
   // ---- cart ----
@@ -186,6 +193,7 @@ export function MenuClient({
   // The item sheet (G4) opens over the menu as its own route, loaded only when opened
   const router = useRouter();
   const outletCode = data.outlet.code;
+  const cartPath = `/r/${encodeURIComponent(outletCode)}/t/${encodeURIComponent(shortCode)}/cart?from=menu`;
   const canOpenSheet = !preview && screens.itemSheet;
   const openItem = (itemId: string) => {
     if (!canOpenSheet) return;
@@ -213,6 +221,30 @@ export function MenuClient({
 
   return (
     <>
+      <header className="flex items-center gap-2.5 pt-5">
+        {brand}
+        {language}
+        <Link
+          href={preview ? "#" : cartPath}
+          prefetch={false}
+          onNavigate={rememberScroll}
+          aria-label={c.openCart(count)}
+          className="relative grid size-11 shrink-0 place-items-center rounded-full border border-line/70 bg-surface text-ink shadow-[0_2px_8px_rgb(31_41_55/0.06)] hover:border-ink/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+        >
+          <HugeiconsIcon icon={ShoppingBasket01Icon} size={21} aria-hidden />
+          {count > 0 && (
+            <span aria-hidden className="absolute -top-1 -right-1 grid h-5 min-w-5 place-items-center rounded-full bg-brand px-1 text-label font-bold tabular text-brand-on ring-2 ring-paper">
+              {count > 99 ? "99+" : count}
+            </span>
+          )}
+        </Link>
+      </header>
+
+      <div className="mt-5">
+        <h1 className="font-display text-[1.625rem] leading-tight font-bold tracking-tight text-ink">{c.craving}</h1>
+        <p className="mt-1 text-body text-muted">{c.cravingNote}</p>
+      </div>
+
       {paused ? (
         <Banner icon={PauseIcon} tone="paused" title={c.pausedBy(data.session.hostName)} body={c.pausedBody} />
       ) : billRequested ? (
@@ -226,8 +258,8 @@ export function MenuClient({
         </p>
       )}
 
-      {/* Search */}
-      <form role="search" onSubmit={(e) => { e.preventDefault(); (document.activeElement as HTMLElement | null)?.blur(); }} className="mt-3">
+      {/* Search, with the filters one tap away inside it */}
+      <form role="search" onSubmit={(e) => { e.preventDefault(); (document.activeElement as HTMLElement | null)?.blur(); }} className="mt-4">
         <label className="relative block">
           <span className="sr-only">{c.searchLabel}</span>
           <HugeiconsIcon icon={Search01Icon} size={20} className="pointer-events-none absolute top-1/2 left-4 -translate-y-1/2 text-brand" aria-hidden />
@@ -240,9 +272,9 @@ export function MenuClient({
             onFocus={() => setSearchFocused(true)}
             onBlur={() => setSearchFocused(false)}
             placeholder={c.searchPlaceholder}
-            className="h-12 w-full rounded-full border border-line/80 bg-surface pr-11 pl-12 text-body text-ink shadow-[0_1px_3px_rgb(0_0_0/0.05)] outline-none placeholder:text-muted/80 focus:border-brand focus:shadow-[0_0_0_3px_var(--brand-soft)] [&::-webkit-search-cancel-button]:hidden"
+            className="h-[52px] w-full rounded-2xl border border-line/70 bg-surface pr-14 pl-12 text-body text-ink shadow-[0_2px_10px_rgb(31_41_55/0.05)] outline-none placeholder:text-muted/80 focus:border-brand focus:shadow-[0_0_0_3px_var(--brand-soft)] [&::-webkit-search-cancel-button]:hidden"
           />
-          {query && (
+          {query ? (
             <button
               type="button"
               onClick={() => setQuery("")}
@@ -251,12 +283,23 @@ export function MenuClient({
             >
               <HugeiconsIcon icon={Cancel01Icon} size={18} aria-hidden />
             </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => allFiltersRef.current?.showModal()}
+              aria-haspopup="dialog"
+              aria-label={filtersOn ? `${c.allFilters}. ${c.filtersOn}` : c.allFilters}
+              className="absolute top-1/2 right-1.5 grid size-10 -translate-y-1/2 place-items-center rounded-xl border-l border-line/70 text-ink/70 hover:text-ink focus-visible:outline-2 focus-visible:outline-brand"
+            >
+              <HugeiconsIcon icon={FilterHorizontalIcon} size={20} aria-hidden />
+              {filtersOn && <span aria-hidden className="absolute top-2 right-2 size-2 rounded-full bg-brand ring-2 ring-surface" />}
+            </button>
           )}
         </label>
       </form>
 
       <div className="mt-3">
-        <FilterBar filters={filters} onChange={setFilters} lang={lang} c={c} openSheet={preview?.sheet} />
+        <FilterBar filters={filters} onChange={setFilters} lang={lang} c={c} openSheet={preview?.sheet} allRef={allFiltersRef} />
       </div>
 
       {filtersOn && (
@@ -348,7 +391,7 @@ export function MenuClient({
           onOpen={() => {
             if (preview) return;
             rememberScroll();
-            router.push(`/r/${encodeURIComponent(outletCode)}/t/${encodeURIComponent(shortCode)}/cart?from=menu`, { scroll: false });
+            router.push(cartPath, { scroll: false });
           }}
           c={c}
         />

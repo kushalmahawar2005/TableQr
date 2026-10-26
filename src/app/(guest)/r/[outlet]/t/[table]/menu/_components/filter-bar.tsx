@@ -1,10 +1,10 @@
 "use client";
 
-import { ArrowDown01Icon, Cancel01Icon, Tick02Icon } from "@hugeicons/core-free-icons";
+import { ArrowDown01Icon, Cancel01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useId, useRef, type ReactNode } from "react";
 import { ALLERGEN_LABELS, ALLERGENS, type Allergen, type SpiceLevel } from "@/domain/allergens";
-import type { DietChoice, MenuFilters } from "@/domain/menu-filter";
+import { hasActiveFilters, NO_FILTERS, type DietChoice, type MenuFilters } from "@/domain/menu-filter";
 import type { Lang } from "@/lib/i18n";
 import type { G3Copy } from "../_copy";
 
@@ -19,6 +19,7 @@ export function FilterBar({
   lang,
   c,
   openSheet,
+  allRef,
 }: {
   filters: MenuFilters;
   onChange: (f: MenuFilters) => void;
@@ -26,6 +27,8 @@ export function FilterBar({
   c: G3Copy;
   /** Dev board: draw one sheet open */
   openSheet?: "spice" | "allergens";
+  /** The filter button in the search box opens every filter in one sheet */
+  allRef?: React.RefObject<HTMLDialogElement | null>;
 }) {
   const spiceRef = useRef<HTMLDialogElement>(null);
   const allergenRef = useRef<HTMLDialogElement>(null);
@@ -33,7 +36,8 @@ export function FilterBar({
 
   return (
     <>
-      <div role="group" aria-label={c.filtersLabel} className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] min-[360px]:-mx-5 min-[360px]:px-5">
+      {/* Fades at the right edge so a cut-off chip reads as "more this way" */}
+      <div role="group" aria-label={c.filtersLabel} className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [mask-image:linear-gradient(to_right,#000_calc(100%-28px),transparent)] [scrollbar-width:none] min-[360px]:-mx-5 min-[360px]:px-5">
         {diets.map((d) => (
           <Chip key={d} active={filters.diet === d} onClick={() => onChange({ ...filters, diet: d })}>
             {c.diet[d]}
@@ -93,6 +97,50 @@ export function FilterBar({
           ))}
         </fieldset>
       </Sheet>
+
+      {allRef && (
+        <Sheet refEl={allRef} title={c.allFilters} note={c.allFiltersNote} c={c} onReset={hasActiveFilters(filters) ? () => onChange(NO_FILTERS) : undefined}>
+          <div className="max-h-[52dvh] space-y-5 overflow-y-auto">
+            <fieldset>
+              <legend className="text-caption font-semibold text-muted">{c.dietTitle}</legend>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {diets.map((d) => (
+                  <Chip key={d} active={filters.diet === d} onClick={() => onChange({ ...filters, diet: d })}>
+                    {c.diet[d]}
+                  </Chip>
+                ))}
+                <Chip active={filters.jainOnly} onClick={() => onChange({ ...filters, jainOnly: !filters.jainOnly })}>
+                  {c.jain}
+                </Chip>
+              </div>
+            </fieldset>
+            <fieldset>
+              <legend className="text-caption font-semibold text-muted">{c.spiceSheetTitle}</legend>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {[null, ...SPICE_STEPS].map((level) => (
+                  <Chip key={String(level)} active={filters.maxSpice === level} onClick={() => onChange({ ...filters, maxSpice: level })}>
+                    {level === null ? c.spiceAny : c.spiceChoice[level]}
+                  </Chip>
+                ))}
+              </div>
+            </fieldset>
+            <fieldset>
+              <legend className="text-caption font-semibold text-muted">{c.allergenSheetTitle}</legend>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {AVOIDABLE.map((a: Allergen) => (
+                  <Chip
+                    key={a}
+                    active={filters.avoid.includes(a)}
+                    onClick={() => onChange({ ...filters, avoid: filters.avoid.includes(a) ? filters.avoid.filter((x) => x !== a) : [...filters.avoid, a] })}
+                  >
+                    {ALLERGEN_LABELS[a][lang]}
+                  </Chip>
+                ))}
+              </div>
+            </fieldset>
+          </div>
+        </Sheet>
+      )}
     </>
   );
 }
@@ -105,10 +153,9 @@ function Chip({ active, menu, onClick, children }: { active: boolean; menu?: boo
       aria-haspopup={menu ? "dialog" : undefined}
       onClick={onClick}
       className={`flex h-9 shrink-0 items-center gap-1 rounded-full border px-3.5 text-caption font-semibold whitespace-nowrap transition-colors duration-150 ease-natural focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
-        active ? "border-brand bg-brand text-brand-on" : "border-line/80 bg-surface text-ink shadow-[0_1px_2px_rgb(0_0_0/0.04)] hover:border-ink/30"
+        active ? "border-brand bg-brand text-brand-on shadow-[0_2px_8px_var(--brand-soft)]" : "border-line/70 bg-surface text-ink shadow-[0_1px_3px_rgb(31_41_55/0.05)] hover:border-ink/30"
       }`}
     >
-      {active && !menu && <HugeiconsIcon icon={Tick02Icon} size={14} strokeWidth={2.4} aria-hidden />}
       {children}
       {menu && <HugeiconsIcon icon={ArrowDown01Icon} size={14} strokeWidth={2} aria-hidden />}
     </button>
