@@ -1,6 +1,7 @@
 "use client";
 import { BadgeCheck, Banknote, Bike, Camera, Check, ShieldAlert, ChefHat, CircleCheck, MapPin, Navigation, Package, Phone, Store, UserRound } from "lucide-react";
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
+import { shrinkPhotoFile } from "@/lib/shrink-photo";
 import type { riderJobs, riderProfile } from "@/server/delivery/riders";
 import type { RiderVerification } from "@/server/delivery/rider-docs";
 import { connectRealtime } from "@/lib/realtime-client";
@@ -38,6 +39,7 @@ export function RiderScreen({ initialJobs, initialProfile, initialVerification, 
   }, [realtimeUrl]);
 
   const here = useLiveLocation(profile.online);
+  useAppTopInset();
 
   const act = (work: () => Promise<{ ok: boolean; error?: string }>) => {
     setError(null);
@@ -200,14 +202,21 @@ function Avatar({ url, name }: { url: string | null; name: string }) {
 function ProfileForm({ profile, onSaved }: { profile: Profile; onSaved: (p: Profile) => void }) {
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [photo, setPhoto] = useState<File | null>(null);
   return (
-    <form className="mt-4 grid gap-3 rounded-3xl border border-line bg-surface p-4" onSubmit={(e) => { e.preventDefault(); const form = new FormData(e.currentTarget); setError(null); start(async () => { const r = await riderSaveProfileAction(form); if (r.ok) onSaved(r.data); else setError(r.error); }); }}>
+    <form className="mt-4 grid min-w-0 gap-3 rounded-3xl border border-line bg-surface p-4" onSubmit={(e) => {
+      e.preventDefault();
+      const form = new FormData(e.currentTarget);
+      if (photo) form.set("photo", photo);
+      setError(null);
+      start(async () => {
+        try { const r = await riderSaveProfileAction(form); if (r.ok) onSaved(r.data); else setError(r.error); }
+        catch { setError(SEND_FAILED); }
+      });
+    }}>
       <p className="text-body font-bold">Your rider profile</p>
       <p className="-mt-2 text-caption text-muted">Customers see your photo, name and vehicle number when you bring their order.</p>
-      <label className="flex items-center gap-3 rounded-2xl border border-dashed border-line p-3 text-body font-semibold">
-        <Camera className="size-5 text-brand-strong" aria-hidden="true" />{profile.photoUrl ? "Change photo" : "Add your photo"}
-        <input name="photo" type="file" accept="image/*" capture="user" className="ml-auto max-w-[45%] text-caption" />
-      </label>
+      <PhotoPicker label={profile.photoUrl ? "Change your photo" : "Add your photo"} hint="A clear photo of your face" capture="user" current={profile.photoUrl} value={photo} onChange={setPhoto} />
       <label className="text-caption font-semibold text-muted">Vehicle number
         <input name="vehicleNo" defaultValue={profile.vehicleNo ?? ""} placeholder="RJ06 AB 1234" maxLength={20} className="mt-1 min-h-12 w-full rounded-2xl border border-line bg-paper px-4 text-body uppercase text-ink" />
       </label>
@@ -277,6 +286,7 @@ function VerificationCard({ initial, hasPhoto }: { initial: RiderVerification; h
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [sides, setSides] = useState<{ front: File | null; back: File | null }>({ front: null, back: null });
   if (v.status === "verified") return <p className="mt-3 flex items-center gap-2 rounded-2xl bg-[var(--state-available-soft)] px-3 py-2 text-caption font-bold text-[var(--state-available-text)]"><BadgeCheck className="size-4" aria-hidden="true" />Verified rider · customers see a verified badge</p>;
   if (v.status === "pending") return <p className="mt-3 flex items-center gap-2 rounded-2xl bg-[var(--state-held-soft)] px-3 py-2 text-caption font-semibold text-[var(--state-held-text)]"><ShieldAlert className="size-4" aria-hidden="true" />Your documents are with the owner for checking</p>;
   return (
@@ -290,13 +300,21 @@ function VerificationCard({ initial, hasPhoto }: { initial: RiderVerification; h
         {!open && <button type="button" onClick={() => setOpen(true)} className="min-h-10 shrink-0 rounded-xl bg-brand px-3 text-caption font-bold text-brand-on">{v.status === "rejected" ? "Send again" : "Start"}</button>}
       </div>
       {open && (
-        <form className="mt-3 grid gap-3" onSubmit={(e) => { e.preventDefault(); const form = new FormData(e.currentTarget); setError(null); start(async () => { const r = await submitDocumentsAction(form); if (r.ok) { setV(r.data); setOpen(false); } else setError(r.error); }); }}>
+        <form className="mt-3 grid min-w-0 gap-3" onSubmit={(e) => {
+          e.preventDefault();
+          if (!sides.front || !sides.back) { setError("Add photos of both sides of your Aadhaar."); return; }
+          const form = new FormData(e.currentTarget);
+          form.set("front", sides.front);
+          form.set("back", sides.back);
+          setError(null);
+          start(async () => {
+            try { const r = await submitDocumentsAction(form); if (r.ok) { setV(r.data); setOpen(false); } else setError(r.error); }
+            catch { setError(SEND_FAILED); }
+          });
+        }}>
           {!hasPhoto && <p className="rounded-xl bg-[var(--state-held-soft)] p-2 text-caption text-[var(--state-held-text)]">First add your face photo with Edit profile. It is used as your selfie.</p>}
           {(["front", "back"] as const).map((side) => (
-            <label key={side} className="flex items-center gap-3 rounded-2xl border border-dashed border-line p-3 text-body font-semibold">
-              <Camera className="size-5 text-brand-strong" aria-hidden="true" />Aadhaar {side}
-              <input name={side} type="file" accept="image/*" capture="environment" required className="ml-auto max-w-[50%] text-caption" />
-            </label>
+            <PhotoPicker key={side} label={`Aadhaar ${side}`} hint={side === "front" ? "The side with your photo" : "The side with your address"} capture="environment" value={sides[side]} onChange={(f) => setSides((cur) => ({ ...cur, [side]: f }))} />
           ))}
           <label className="text-caption font-semibold text-muted">Last 4 digits of your Aadhaar
             <input name="last4" inputMode="numeric" pattern="[0-9]{4}" maxLength={4} required placeholder="1234" className="mt-1 min-h-12 w-full rounded-2xl border border-line bg-paper px-4 text-body tracking-[.3em] text-ink" />
@@ -309,4 +327,61 @@ function VerificationCard({ initial, hasPhoto }: { initial: RiderVerification; h
       )}
     </section>
   );
+}
+
+const SEND_FAILED = "Could not send. Check your internet and try again.";
+
+/**
+ * A photo button: opens the camera or gallery, shrinks the photo on the phone (a camera photo is
+ * 3-8 MB, too big to send) and shows it. The form adds the chosen file itself when it is sent.
+ */
+function PhotoPicker({ label, hint, capture, current = null, value, onChange }: { label: string; hint: string; capture: "user" | "environment"; current?: string | null; value: File | null; onChange: (f: File | null) => void }) {
+  const [busy, setBusy] = useState(false);
+  const preview = useMemo(() => (value ? URL.createObjectURL(value) : null), [value]);
+  useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
+  const shown = preview ?? current;
+  return (
+    <label className="flex min-w-0 cursor-pointer items-center gap-3 rounded-2xl border border-dashed border-line p-3 transition-colors hover:border-brand/50 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-brand">
+      {shown
+        // A local preview or the photo bucket, so this stays a plain image
+        // eslint-disable-next-line @next/next/no-img-element
+        ? <img src={shown} alt="" className="size-12 shrink-0 rounded-xl object-cover" />
+        : <span className="grid size-12 shrink-0 place-items-center rounded-xl bg-brand-soft text-brand-strong"><Camera className="size-5" aria-hidden="true" /></span>}
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-body font-semibold">{label}</span>
+        <span className="block truncate text-caption text-muted">{busy ? "Getting the photo ready…" : value ? "Ready · tap to change" : hint}</span>
+      </span>
+      {value ? <Check className="size-5 shrink-0 text-[var(--state-available)]" aria-hidden="true" /> : <span className="shrink-0 rounded-xl bg-ink/5 px-3 py-2 text-caption font-bold">{shown ? "Change" : "Add"}</span>}
+      <input
+        type="file"
+        accept="image/*"
+        capture={capture}
+        className="sr-only"
+        onChange={async (e) => {
+          const file = e.target.files?.[0];
+          e.target.value = "";
+          if (!file) return;
+          setBusy(true);
+          try { onChange(await shrinkPhotoFile(file)); } finally { setBusy(false); }
+        }}
+      />
+    </label>
+  );
+}
+
+/**
+ * The Android app draws the page under the status bar. When the WebView does not report that
+ * space (older WebViews give env(safe-area-inset-top) as 0), leave room for it by hand.
+ */
+function useAppTopInset() {
+  useEffect(() => {
+    const cap = (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor;
+    if (!cap?.isNativePlatform?.()) return;
+    const probe = document.createElement("div");
+    probe.style.paddingTop = "env(safe-area-inset-top)";
+    document.body.appendChild(probe);
+    const inset = parseFloat(getComputedStyle(probe).paddingTop) || 0;
+    probe.remove();
+    if (inset === 0) document.documentElement.style.setProperty("--app-top", "2rem");
+  }, []);
 }

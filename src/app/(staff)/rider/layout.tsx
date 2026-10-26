@@ -16,14 +16,16 @@ export async function generateMetadata(): Promise<Metadata> {
   return staffAppMetadataFor(await riderAppBrand());
 }
 
+// cover: in the Android app the page runs under the status bar, and env(safe-area-inset-top) says by how much
 export async function generateViewport(): Promise<Viewport> {
-  return staffAppViewportFor(await riderAppBrand());
+  return { ...staffAppViewportFor(await riderAppBrand()), viewportFit: "cover" };
 }
 
 export default async function RiderLayout({ children }: LayoutProps<"/rider">) {
   const brand = await riderAppBrand();
   return (
-    <>
+    // Room for the phone's status bar: the reported inset, or --app-top set by the screen inside the app
+    <div className="pt-[max(env(safe-area-inset-top),var(--app-top,0px))]">
       <div className="mx-auto w-full max-w-xl px-4 pt-3 empty:hidden">
         <InstallApp name={brand?.name ?? "TableQR"} logoUrl={brand?.logoUrl} />
       </div>
@@ -31,6 +33,6 @@ export default async function RiderLayout({ children }: LayoutProps<"/rider">) {
         <NotificationPermissionOnboarding />
       </div>
       {children}
-    </>
+    </div>
   );
 }
