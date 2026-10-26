@@ -125,7 +125,7 @@ describe("the register and the month", () => {
     const w = m.rows.find((r) => r.id === waiter.userId)!;
     expect(w.counts).toMatchObject({ present: 2, half_day: 0, daysWorked: 2 });
     const c = m.rows.find((r) => r.id === cashier.userId)!;
-    expect(c.counts).toMatchObject({ half_day: 1, absent: 1, daysWorked: 0.5, present: 1 });
+    expect(c.counts).toMatchObject({ half_day: 1, absent: 1, daysWorked: 1.5, present: 1 });
     expect(c.counts.unmarked).toBe(20 - 3);
     const k = m.rows.find((r) => r.id === kitchen.userId)!;
     expect(k.counts).toMatchObject({ leave: 1, week_off: 1, daysWorked: 0 });
@@ -144,7 +144,7 @@ describe("the register and the month", () => {
     expect(lines[0].split(",").slice(0, 9)).toEqual(["Name", "Role", "Present", "Half day", "Absent", "Leave", "Week off", "Not marked", "Days worked"]);
     expect(lines[0].split(",")).toHaveLength(9 + 30);
     const cashierLine = lines.find((l) => l.startsWith("Priya Singh"))!.split(",");
-    expect(cashierLine.slice(2, 9)).toEqual(["1", "1", "1", "0", "0", "17", "0.5"]);
+    expect(cashierLine.slice(2, 9)).toEqual(["1", "1", "1", "0", "0", "17", "1.5"]);
     expect(cashierLine[9 + 16]).toBe("H");
     expect(csv).toContain("'=HYPERLINK");
     expect(csv).not.toMatch(/(^|,)=HYPERLINK/m);

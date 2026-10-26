@@ -1,6 +1,7 @@
 import "server-only";
 import { and, between, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/db";
+import { uuidv7 } from "@/db/id";
 import * as s from "@/db/schema";
 import { csvRows, datesOfMonth, isDate, isMonth, isStatus, monthCounts, STATUS_LABEL, STATUSES, type AttendanceStatus, type MonthCounts } from "@/lib/attendance";
 import { canSee } from "@/lib/staff-permissions";
@@ -88,20 +89,25 @@ export async function markAttendance(staff: Staff, input: { userId: string; date
   if (!onList) throw new AppError("not_found", "That person is not on this outlet's staff list.");
 
   return db.transaction(async (tx) => {
-    const [before] = await tx.select().from(s.attendanceMarks).where(and(eq(s.attendanceMarks.tenantId, scope.tenantId), eq(s.attendanceMarks.userId, input.userId), eq(s.attendanceMarks.markDate, input.date)));
     if (status === null) {
+      const [before] = await tx.select().from(s.attendanceMarks).where(and(eq(s.attendanceMarks.tenantId, scope.tenantId), eq(s.attendanceMarks.userId, input.userId), eq(s.attendanceMarks.markDate, input.date))).for("update");
       if (before) {
         await tx.delete(s.attendanceMarks).where(and(eq(s.attendanceMarks.tenantId, scope.tenantId), eq(s.attendanceMarks.id, before.id)));
         await audit(tx, { ...staff, outletId: outlet.id }, { action: "attendance.cleared", entity: "user", entityId: input.userId, before: { date: input.date, status: before.status }, now });
       }
       return null;
     }
-    const [res] = await tx.insert(s.attendanceMarks).values({ tenantId: scope.tenantId, outletId: outlet.id, userId: input.userId, markDate: input.date, status, note, markedBy: staff.userId, createdAt: now })
-      .onDuplicateKeyUpdate({ set: { status, note, markedBy: staff.userId, outletId: outlet.id } });
-    // The database says whether anything changed (a new mark, or a different one): only a change is logged,
-    // so twenty identical taps at once leave one entry
-    if (res.affectedRows > 0) {
-      await audit(tx, { ...staff, outletId: outlet.id }, { action: "attendance.marked", entity: "user", entityId: input.userId, before: before ? { date: input.date, status: before.status } : null, after: { date: input.date, status }, now });
+    // Take the day's row with a statement that cannot deadlock when taps arrive together (insert it, or
+    // touch the one there without changing it), then lock it: the taps queue up and only a real change is logged
+    const newId = uuidv7();
+    await tx.insert(s.attendanceMarks).values({ id: newId, tenantId: scope.tenantId, outletId: outlet.id, userId: input.userId, markDate: input.date, status, note, markedBy: staff.userId, createdAt: now })
+      .onDuplicateKeyUpdate({ set: { id: sql`${s.attendanceMarks.id}` } });
+    const [row] = await tx.select().from(s.attendanceMarks).where(and(eq(s.attendanceMarks.tenantId, scope.tenantId), eq(s.attendanceMarks.userId, input.userId), eq(s.attendanceMarks.markDate, input.date))).for("update");
+    if (row.id === newId) {
+      await audit(tx, { ...staff, outletId: outlet.id }, { action: "attendance.marked", entity: "user", entityId: input.userId, before: null, after: { date: input.date, status }, now });
+    } else if (row.status !== status || (row.note ?? null) !== note) {
+      await tx.update(s.attendanceMarks).set({ status, note, markedBy: staff.userId, outletId: outlet.id }).where(and(eq(s.attendanceMarks.tenantId, scope.tenantId), eq(s.attendanceMarks.id, row.id)));
+      await audit(tx, { ...staff, outletId: outlet.id }, { action: "attendance.marked", entity: "user", entityId: input.userId, before: { date: input.date, status: row.status }, after: { date: input.date, status }, now });
     }
     return status;
   });
