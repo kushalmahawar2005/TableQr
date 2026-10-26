@@ -2,6 +2,7 @@
 
 import {
   AlertCircleIcon,
+  ArrowDown01Icon,
   ArrowRight01Icon,
   ChefHatIcon,
   LeftToRightListBulletIcon,
@@ -557,6 +558,9 @@ function RoundView({
   canOrder: boolean;
 }) {
   const isAllServed = round.status === "served";
+  // Rounds still with the kitchen start open; finished ones fold to their header
+  const [open, setOpen] = useState(!isAllServed && round.status !== "cancelled");
+  const bodyId = `round-${round.orderId}`;
   const time = new Intl.DateTimeFormat("en-IN", {
     timeZone: timezone,
     hour: "numeric",
@@ -579,19 +583,32 @@ function RoundView({
           <p className="mt-0.5 text-caption text-muted tabular">{c.placedAt(time, round.lines.reduce((n, l) => n + (l.status === "cancelled" || l.status === "voided" ? 0 : l.qty), 0))}</p>
           <p className="text-caption text-muted">{placedByLabel}</p>
         </div>
-        {isAllServed ? (
-          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-success/10 px-2.5 py-1 text-caption font-semibold text-success">
-            <HugeiconsIcon icon={CheckmarkCircle02Icon} size={14} aria-hidden />
-            {c.allServedBadge}
-          </span>
-        ) : round.status !== "cancelled" ? (
-          <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-caption font-semibold ${tone[round.status]}`}>
-            <StatusIcon status={round.status} />
-            {c.status[round.status]}
-          </span>
-        ) : null}
+        <div className="flex shrink-0 items-center gap-1.5">
+          {isAllServed ? (
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-success/10 px-2.5 py-1 text-caption font-semibold text-success">
+              <HugeiconsIcon icon={CheckmarkCircle02Icon} size={14} aria-hidden />
+              {c.status.served}
+            </span>
+          ) : round.status !== "cancelled" ? (
+            <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-caption font-semibold ${tone[round.status]}`}>
+              <StatusIcon status={round.status} />
+              {c.status[round.status]}
+            </span>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => setOpen((o) => !o)}
+            aria-expanded={open}
+            aria-controls={bodyId}
+            aria-label={open ? c.collapse(c.round(round.roundNo)) : c.expand(c.round(round.roundNo))}
+            className="-mr-1.5 grid size-11 place-items-center rounded-full text-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-2 focus-visible:outline-brand"
+          >
+            <HugeiconsIcon icon={ArrowDown01Icon} size={20} className={`transition-transform duration-200 ${open ? "rotate-180" : ""}`} aria-hidden />
+          </button>
+        </div>
       </div>
 
+      <div id={bodyId} hidden={!open}>
       {/* Progress Strip Stepper */}
       {round.status !== "cancelled" ? (
         <div className="mt-4 px-1" aria-label={`${c.progress}: ${c.meaning[round.status]}`}>
@@ -714,6 +731,7 @@ function RoundView({
           );
         })}
       </ul>
+      </div>
       {round.canRepeat && (
         <button
           type="button"
