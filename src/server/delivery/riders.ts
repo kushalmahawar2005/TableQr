@@ -13,6 +13,7 @@ import type { StaffSession } from "../staff/auth";
 import { requireStaffRole } from "../staff/waiter";
 import { freshLocation } from "@/domain/delivery";
 import { announceDelivery } from "./events";
+import { verifiedRiders } from "./rider-docs";
 import { deliveryStaffRoles } from "./staff";
 
 // The restaurant's own riders: who can take a delivery right now, giving one to a rider, and
@@ -30,6 +31,8 @@ export type RiderCard = {
   activeCount: number;
   /** Last known position, when the rider app sent one in the last 10 minutes */
   location: { lat: number; lng: number; at: number } | null;
+  /** The owner checked this rider's Aadhaar */
+  verified: boolean;
 };
 
 
@@ -55,12 +58,13 @@ export async function outletRiders(staff: StaffSession): Promise<RiderCard[]> {
     .where(and(eq(s.deliveryCheckouts.tenantId, staff.tenantId), inArray(s.deliveryCheckouts.courierUserId, people.map((p) => p.id)), inArray(s.deliveryCheckouts.status, LIVE)))
     .groupBy(s.deliveryCheckouts.courierUserId);
   const load = new Map(loads.map((l) => [l.riderId, Number(l.n)]));
+  const verified = await verifiedRiders(staff.tenantId, people.map((p) => p.id));
   const order: Record<RiderAvailability, number> = { free: 0, busy: 1, offline: 2 };
   return people
     .map((p) => {
       const activeCount = load.get(p.id) ?? 0;
       const availability: RiderAvailability = p.duty !== "on" ? "offline" : activeCount > 0 ? "busy" : "free";
-      return { id: p.id, name: p.name, phone: p.phone, photoUrl: p.photoUrl, vehicleNo: p.vehicleNo, availability, activeCount, location: freshLocation(p.lastLat, p.lastLng, p.lastLocAt) };
+      return { id: p.id, name: p.name, phone: p.phone, photoUrl: p.photoUrl, vehicleNo: p.vehicleNo, availability, activeCount, location: freshLocation(p.lastLat, p.lastLng, p.lastLocAt), verified: verified.has(p.id) };
     })
     .sort((a, b) => order[a.availability] - order[b.availability] || a.activeCount - b.activeCount || a.name.localeCompare(b.name));
 }

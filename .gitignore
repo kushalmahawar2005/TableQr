@@ -48,3 +48,6 @@ next-env.d.ts
 
 # Graphify knowledge graph (local only)
 graphify-out/
+
+# Encrypted rider documents in local development
+/.private-uploads

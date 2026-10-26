@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { consoleSectionRoles } from "@/lib/staff-permissions";
 import { staffFor } from "@/server/staff/request";
 import { changeRole, listTeam, resetPin, setMemberActive, setMemberPhoto } from "@/server/staff/team";
+import { reviewRiderDocuments, riderVerificationFor } from "@/server/delivery/rider-docs";
 import { createStaffInvitation, revokeStaffInvitation } from "@/server/staff/invitations";
 import { publicOrigin } from "@/server/guest/invite";
 import { setDuty, teamDuty, type DutyStatus } from "@/server/staff/duty";
@@ -41,3 +42,5 @@ export async function setPhotoAction(userId: string, form: FormData) {
     return setMemberPhoto(s, String(userId), { bytes: Buffer.from(await file.arrayBuffer()), contentType: file.type, filename: file.name });
   });
 }
+export async function riderVerificationAction(userId: string) { return run((s) => riderVerificationFor(s, String(userId))); }
+export async function reviewRiderAction(userId: string, decision: "verified" | "rejected", note: string, keepPhotos: boolean) { return run((s) => reviewRiderDocuments(s, String(userId), decision, note, !!keepPhotos)); }

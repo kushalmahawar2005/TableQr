@@ -1,6 +1,7 @@
 "use server";
 import { assignTeamRider, riderReportLocation, riderCollectCash, riderDelivered, riderJobs, riderPickUp, riderProfile, riderSetOnline, saveRiderProfile } from "@/server/delivery/riders";
 import { AppError } from "@/server/errors";
+import { myVerification, submitRiderDocuments } from "@/server/delivery/rider-docs";
 import { staffFor } from "@/server/staff/request";
 import { staffRealtimeToken, topics } from "@/server/realtime/token";
 import { deliveryStaffRoles } from "@/server/delivery/staff";
@@ -31,4 +32,15 @@ export async function riderLocationAction(lat: number, lng: number) { return run
 export async function riderTokenAction() {
   try { const s = await staffFor(["rider"]); return staffRealtimeToken(s, [topics.rider(s.userId), topics.kitchen]); }
   catch { return null; }
+}
+export async function myVerificationAction() { return run(["rider"], (s) => myVerification(s)); }
+export async function submitDocumentsAction(form: FormData) {
+  return run(["rider"], async (s) => {
+    const file = async (name: string) => {
+      const f = form.get(name);
+      if (!(f instanceof File) || !f.size) throw new AppError("invalid_state", `Add the ${name === "front" ? "front" : "back"} photo of your Aadhaar.`);
+      return { bytes: Buffer.from(await f.arrayBuffer()), contentType: f.type };
+    };
+    return submitRiderDocuments(s, { last4: String(form.get("last4") ?? ""), consent: form.get("consent") === "on", front: await file("front"), back: await file("back") });
+  });
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Copy, KeyRound, Phone, Plus, Power, Search, Settings2, UserRound, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -11,7 +11,8 @@ import type { TeamMember } from "@/server/staff/team";
 import type { PendingStaffInvitation } from "@/server/staff/invitations";
 import type { DutyRow } from "@/server/staff/duty";
 import { WhoIsWorking } from "./who-is-working";
-import { changeRoleAction, createInvitationAction, resetPinAction, revokeInvitationAction, setActiveAction, setPhotoAction } from "../actions";
+import { changeRoleAction, createInvitationAction, resetPinAction, reviewRiderAction, revokeInvitationAction, riderVerificationAction, setActiveAction, setPhotoAction } from "../actions";
+import type { RiderVerification } from "@/server/delivery/rider-docs";
 
 const ALL_ROLES = [
   { id: "manager", label: "Manager", does: "Runs the outlet: floor, menu, billing, reports, approvals", opens: "Dashboard", path: "/console/dashboard" },
@@ -237,6 +238,7 @@ export function TeamScreen({ initial, invitations: initialInvitations = [], canE
                 <section className="space-y-2"><p className="text-sm font-semibold">Role</p>
                   <div className="grid grid-cols-2 gap-2">{ROLES.map((r) => <button key={r.id} type="button" disabled={pending} aria-pressed={member.roles[0] === r.id} onClick={() => member.roles[0] !== r.id && act(() => changeRoleAction(member.id, r.id), `${member.name} is now ${r.label}.`)} className={`min-h-11 rounded-xl border px-3 text-sm font-semibold ${member.roles[0] === r.id ? "border-ink bg-ink text-paper" : "border-line hover:border-ink/40"}`}>{r.label}</button>)}</div>
                 </section>
+                {member.roles.includes("rider") && <RiderCheck key={member.id} userId={member.id} name={member.name} />}
                 <section className="space-y-2"><p className="text-sm font-semibold">Photo</p>
                   <label className="flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border border-dashed border-line px-3 text-sm font-semibold hover:border-ink/40">
                     <Avatar name={member.name} role={member.roles[0]} photoUrl={member.photoUrl} />
@@ -259,5 +261,44 @@ export function TeamScreen({ initial, invitations: initialInvitations = [], canE
         </SheetContent>
       </Sheet>
     </main>
+  );
+}
+
+/** Owner or manager checks a rider's Aadhaar photos and verifies or rejects them */
+function RiderCheck({ userId, name }: { userId: string; name: string }) {
+  const [v, setV] = useState<RiderVerification | null>(null);
+  const [note, setNote] = useState("");
+  const [keep, setKeep] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => { void riderVerificationAction(userId).then((r) => (r.ok ? setV(r.data) : setError(r.message))); }, [userId]);
+  const decide = (decision: "verified" | "rejected") => { setBusy(true); setError(null); void reviewRiderAction(userId, decision, note, keep).then((r) => { setBusy(false); if (r.ok) setV(r.data); else setError(r.message); }); };
+  return (
+    <section className="space-y-2 rounded-xl border border-line p-3">
+      <p className="text-sm font-semibold">Rider verification</p>
+      {!v ? <p className="text-xs text-muted">{error ?? "Loading…"}</p>
+        : v.status === "verified" ? <p className="text-sm font-semibold text-[var(--state-available-text)]">Verified · Aadhaar ending {v.last4}. Customers see a verified badge.</p>
+        : v.status === "none" ? <p className="text-xs text-muted">{name} has not sent documents yet. They do it from the rider app.</p>
+        : v.status === "rejected" ? <p className="text-xs text-muted">Sent back: {v.note}. Waiting for {name} to send again.</p>
+        : <>
+          <p className="text-xs text-muted">Aadhaar ending <b className="text-ink">{v.last4}</b>. Check the photos match their face photo and name.</p>
+          {v.hasDocs && <div className="grid grid-cols-2 gap-2">
+            {(["front", "back"] as const).map((side) => (
+              <a key={side} href={`/console/team/rider-doc/${userId}/${side}`} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-lg border border-line">
+                {/* Decrypted by the server for owners and managers only */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={`/console/team/rider-doc/${userId}/${side}`} alt={`Aadhaar ${side}`} className="aspect-[3/2] w-full object-cover" />
+              </a>
+            ))}
+          </div>}
+          <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={200} placeholder="If rejecting: what to fix (e.g. photo blurry)" className="min-h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm" />
+          <label className="flex items-center gap-2 text-xs text-muted"><input type="checkbox" checked={keep} onChange={(e) => setKeep(e.target.checked)} />Keep the photos after verifying (normally deleted)</label>
+          {error && <p role="alert" className="text-xs font-semibold text-danger">{error}</p>}
+          <div className="flex gap-2">
+            <button type="button" disabled={busy} onClick={() => decide("verified")} className="min-h-10 flex-1 rounded-lg bg-[var(--state-available)] text-sm font-semibold text-white disabled:opacity-60">Verify</button>
+            <button type="button" disabled={busy || note.trim().length < 3} onClick={() => decide("rejected")} className="min-h-10 flex-1 rounded-lg border border-danger/50 text-sm font-semibold text-danger disabled:opacity-50">Reject</button>
+          </div>
+        </>}
+    </section>
   );
 }

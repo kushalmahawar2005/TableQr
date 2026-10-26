@@ -1,9 +1,10 @@
 "use client";
-import { Banknote, Bike, Camera, Check, ChefHat, CircleCheck, MapPin, Navigation, Package, Phone, Store, UserRound } from "lucide-react";
+import { BadgeCheck, Banknote, Bike, Camera, Check, ShieldAlert, ChefHat, CircleCheck, MapPin, Navigation, Package, Phone, Store, UserRound } from "lucide-react";
 import { useEffect, useState, useTransition } from "react";
 import type { riderJobs, riderProfile } from "@/server/delivery/riders";
+import type { RiderVerification } from "@/server/delivery/rider-docs";
 import { connectRealtime } from "@/lib/realtime-client";
-import { riderCashAction, riderDeliveredAction, riderJobsAction, riderLocationAction, riderOnlineAction, riderPickUpAction, riderSaveProfileAction, riderTokenAction } from "./actions";
+import { riderCashAction, riderDeliveredAction, riderJobsAction, riderLocationAction, riderOnlineAction, riderPickUpAction, riderSaveProfileAction, riderTokenAction, submitDocumentsAction } from "./actions";
 import { LiveMap } from "@/components/live-map";
 import { distanceKm, etaMinutes } from "@/domain/delivery";
 
@@ -14,7 +15,7 @@ const money = (p: number) => `₹${(p / 100).toLocaleString("en-IN", { maximumFr
 const clock = (ms: number | null) => (ms ? new Date(ms).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" }) : "");
 const directions = (q: string) => `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(q)}&travelmode=driving`;
 
-export function RiderScreen({ initialJobs, initialProfile, realtimeUrl = null }: { initialJobs: Jobs; initialProfile: Profile; realtimeUrl?: string | null }) {
+export function RiderScreen({ initialJobs, initialProfile, initialVerification, realtimeUrl = null }: { initialJobs: Jobs; initialProfile: Profile; initialVerification: RiderVerification; realtimeUrl?: string | null }) {
   const [jobs, setJobs] = useState(initialJobs);
   const [profile, setProfile] = useState(initialProfile);
   const [error, setError] = useState<string | null>(null);
@@ -76,6 +77,8 @@ export function RiderScreen({ initialJobs, initialProfile, realtimeUrl = null }:
         <MapPin className="size-4" aria-hidden="true" />
         {!profile.online ? "Location is off while you are offline" : here.error ?? (here.point ? "Sharing your live location with the restaurant and customer" : "Finding your location…")}
       </p>
+
+      <VerificationCard initial={initialVerification} hasPhoto={!!profile.photoUrl} />
 
       {editing && <ProfileForm profile={profile} onSaved={(p) => { setProfile((old) => ({ ...old, ...p })); setEditing(false); }} />}
 
@@ -240,4 +243,44 @@ function useLiveLocation(online: boolean) {
     return () => navigator.geolocation.clearWatch(id);
   }, [online]);
   return { point: online ? point : null, error: online ? error : null };
+}
+
+/** Identity check: Aadhaar front and back plus the last 4 digits; the owner verifies */
+function VerificationCard({ initial, hasPhoto }: { initial: RiderVerification; hasPhoto: boolean }) {
+  const [v, setV] = useState(initial);
+  const [open, setOpen] = useState(false);
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  if (v.status === "verified") return <p className="mt-3 flex items-center gap-2 rounded-2xl bg-[var(--state-available-soft)] px-3 py-2 text-caption font-bold text-[var(--state-available-text)]"><BadgeCheck className="size-4" aria-hidden="true" />Verified rider · customers see a verified badge</p>;
+  if (v.status === "pending") return <p className="mt-3 flex items-center gap-2 rounded-2xl bg-[var(--state-held-soft)] px-3 py-2 text-caption font-semibold text-[var(--state-held-text)]"><ShieldAlert className="size-4" aria-hidden="true" />Your documents are with the owner for checking</p>;
+  return (
+    <section className="mt-3 rounded-3xl border border-line bg-surface p-4">
+      <div className="flex items-start gap-3">
+        <ShieldAlert className="mt-0.5 size-5 shrink-0 text-brand-strong" aria-hidden="true" />
+        <div className="min-w-0 flex-1">
+          <p className="text-body font-bold">Get verified</p>
+          <p className="text-caption text-muted">{v.status === "rejected" ? `Not approved: ${v.note ?? "please send again"}` : "Customers trust a verified rider. It takes a minute."}</p>
+        </div>
+        {!open && <button type="button" onClick={() => setOpen(true)} className="min-h-10 shrink-0 rounded-xl bg-brand px-3 text-caption font-bold text-brand-on">{v.status === "rejected" ? "Send again" : "Start"}</button>}
+      </div>
+      {open && (
+        <form className="mt-3 grid gap-3" onSubmit={(e) => { e.preventDefault(); const form = new FormData(e.currentTarget); setError(null); start(async () => { const r = await submitDocumentsAction(form); if (r.ok) { setV(r.data); setOpen(false); } else setError(r.error); }); }}>
+          {!hasPhoto && <p className="rounded-xl bg-[var(--state-held-soft)] p-2 text-caption text-[var(--state-held-text)]">First add your face photo with Edit profile. It is used as your selfie.</p>}
+          {(["front", "back"] as const).map((side) => (
+            <label key={side} className="flex items-center gap-3 rounded-2xl border border-dashed border-line p-3 text-body font-semibold">
+              <Camera className="size-5 text-brand-strong" aria-hidden="true" />Aadhaar {side}
+              <input name={side} type="file" accept="image/*" capture="environment" required className="ml-auto max-w-[50%] text-caption" />
+            </label>
+          ))}
+          <label className="text-caption font-semibold text-muted">Last 4 digits of your Aadhaar
+            <input name="last4" inputMode="numeric" pattern="[0-9]{4}" maxLength={4} required placeholder="1234" className="mt-1 min-h-12 w-full rounded-2xl border border-line bg-paper px-4 text-body tracking-[.3em] text-ink" />
+          </label>
+          <p className="text-label text-muted">Your full Aadhaar number is never saved. The photos are encrypted, seen only by your restaurant&apos;s owner, and deleted after the check.</p>
+          <label className="flex items-start gap-2 text-caption text-ink"><input name="consent" type="checkbox" required className="mt-0.5 size-4 accent-[var(--brand-main)]" />I agree to share these for identity verification by my restaurant.</label>
+          {error && <p role="alert" className="text-caption font-semibold text-danger">{error}</p>}
+          <button disabled={pending || !hasPhoto} className="min-h-12 rounded-2xl bg-brand text-button font-bold text-brand-on disabled:opacity-60">{pending ? "Sending securely…" : "Send for verification"}</button>
+        </form>
+      )}
+    </section>
+  );
 }

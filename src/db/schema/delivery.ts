@@ -1,7 +1,7 @@
 import { char, index, int, json, mysqlEnum, mysqlTable, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
 import { at, createdAt, id, ref, sameTenant, tenantId, tenantKey } from "./_columns";
 import { guests, tableSessions } from "./sessions";
-import { outlets } from "./tenancy";
+import { outlets, users } from "./tenancy";
 
 export type DeliveryCartLine = { itemId: string; qty: number; modifierIds: string[] };
 export type DeliveryAddress = { line: string; locality: string; pincode: string; instructions: string; /** The exact door, when the guest dropped a pin or shared their location */ lat?: number; lng?: number };
@@ -31,3 +31,18 @@ export const deliveryOtpChallenges = mysqlTable("delivery_otp_challenges", {
   deviceId: varchar("device_id", { length: 64 }).notNull(), phone: varchar("phone", { length: 15 }).notNull(), codeHash: char("code_hash", { length: 64 }).notNull(),
   attempts: int("attempts").notNull().default(0), expiresAt: at("expires_at").notNull(), resendAt: at("resend_at").notNull(), lockedUntil: at("locked_until"), verifiedAt: at("verified_at"), deadAt: at("dead_at"), createdAt: createdAt(),
 }, t => [index("delivery_otp_phone_idx").on(t.tenantId, t.phone, t.createdAt), index("delivery_otp_device_idx").on(t.tenantId, t.deviceId, t.createdAt), sameTenant("fk_delivery_otp_checkout", t, t.checkoutId, deliveryCheckouts), sameTenant("fk_delivery_otp_outlet", t, t.outletId, outlets)]);
+
+/**
+ * A rider's identity check. The Aadhaar photos are encrypted before they are stored (only the
+ * object keys are here) and can be deleted once the owner verifies; only the last four digits
+ * of the number are ever kept, never the full number.
+ */
+export const riderDocuments = mysqlTable("rider_documents", {
+  id: id(), tenantId: tenantId(), userId: ref("user_id").notNull(),
+  status: mysqlEnum("status", ["pending", "verified", "rejected"]).notNull().default("pending"),
+  aadhaarLast4: char("aadhaar_last4", { length: 4 }),
+  frontKey: varchar("front_key", { length: 200 }), backKey: varchar("back_key", { length: 200 }),
+  consentAt: at("consent_at").notNull(), submittedAt: at("submitted_at").notNull(),
+  reviewedAt: at("reviewed_at"), reviewedByUserId: ref("reviewed_by_user_id"), note: varchar("note", { length: 200 }),
+  createdAt: createdAt(),
+}, t => [uniqueIndex("rider_documents_user_uq").on(t.tenantId, t.userId), tenantKey("rider_documents", t), sameTenant("fk_rider_documents_user", t, t.userId, users)]);
