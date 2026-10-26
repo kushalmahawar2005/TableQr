@@ -116,7 +116,8 @@ export function BookingClient({ outletCode, zones, timezone, today, freeCancella
         <HugeiconsIcon icon={ArrowLeft01Icon} size={16} strokeWidth={2} aria-hidden />{t("Back", "वापस")}
       </Link>
       <div role="group" aria-label={t("Language", "भाषा")} className="flex rounded-full border border-line/70 bg-surface p-0.5 text-caption font-semibold shadow-[0_1px_3px_rgb(31_41_55/0.05)]">
-        {([[false, "EN"], [true, "हिं"]] as const).map(([hi, label]) => <button key={label} type="button" aria-pressed={hindi === hi} onClick={() => switchLanguage(hi)} className={`min-h-9 min-w-11 rounded-full px-3 transition-colors ${hindi === hi ? "bg-ink text-white" : "text-muted hover:text-ink"}`}>{label}</button>)}
+        {/* On an English page the "हिं" label uses the phone's own font, so it does not pull the 70 KB Hindi web font before the page can paint */}
+        {([[false, "EN"], [true, "हिं"]] as const).map(([hi, label]) => <button key={label} type="button" aria-pressed={hindi === hi} onClick={() => switchLanguage(hi)} className={`min-h-9 min-w-11 rounded-full px-3 transition-colors ${hindi === hi ? "bg-ink text-white" : "text-muted hover:text-ink"}`}><span className={hi && !hindi ? "font-[system-ui]" : undefined}>{label}</span></button>)}
       </div>
     </div>
 
