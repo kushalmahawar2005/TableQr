@@ -50,6 +50,11 @@ export async function createServiceRequest(ctx: GuestContext, kind: StoredServic
       .where(and(eq(s.participants.tenantId, ctx.tenantId), eq(s.participants.sessionId, ctx.sessionId), eq(s.participants.id, ctx.participantId), isNull(s.participants.removedAt)))
       .for("update");
     if (!me || me.paidOutAt) throw new AppError("session_expired", "You have already left this table.");
+    if (kind === "paid_upi") {
+      if (session.status !== "bill_requested") throw new AppError("invalid_state", "Request the bill first.", { reason: "not_requested" });
+      const [outlet] = await tx.select({ upiId: s.outlets.upiId }).from(s.outlets).where(and(eq(s.outlets.tenantId, ctx.tenantId), eq(s.outlets.id, ctx.outletId)));
+      if (!outlet?.upiId) throw new AppError("invalid_state", "This restaurant does not take UPI on the bill.");
+    }
     if (kind === "pay_at_counter" && session.status !== "bill_requested") {
       throw new AppError("invalid_state", "Request the bill first.", { reason: "not_requested" });
     }

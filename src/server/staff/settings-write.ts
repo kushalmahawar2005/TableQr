@@ -27,6 +27,9 @@ export type SettingsPatch = {
   guestServices?: GuestService[];
   bookingPaymentMode?: "gateway" | "manual_qr";
   bookingAdvancePaise?: number;
+  /** The restaurant's own UPI for guests to pay the bill; empty turns it off */
+  upiId?: string | null;
+  upiName?: string | null;
   announcementActive?: boolean; announcementTitle?: string; announcementBody?: string;
 };
 
@@ -36,6 +39,9 @@ export async function updateOutletSettings(staff: Staff, input: SettingsPatch, n
   if (!staff.roles.includes("owner")) throw new AppError("forbidden", "Only the owner can change settings.");
   if (input.guestOnlinePayments !== undefined && typeof input.guestOnlinePayments !== "boolean") throw bad("Choose a valid online payment preference.");
   if (input.bookingPaymentMode !== undefined && !["gateway", "manual_qr"].includes(input.bookingPaymentMode)) throw bad("Choose a valid booking payment method.");
+  const upiId = input.upiId === undefined ? undefined : String(input.upiId ?? "").trim().toLowerCase();
+  if (upiId && !/^[a-z0-9._-]{2,256}@[a-z][a-z0-9]{1,63}$/.test(upiId)) throw bad("Enter a UPI ID like restaurant@okaxis.");
+  const upiName = input.upiName === undefined ? undefined : String(input.upiName ?? "").trim().replace(/\s+/g, " ").slice(0, 60);
   if (input.bookingAdvancePaise !== undefined && (!Number.isSafeInteger(input.bookingAdvancePaise) || input.bookingAdvancePaise < 0 || input.bookingAdvancePaise > 1_000_000_000)) throw bad("Reservation advance must be between ₹0 and ₹10,000,000.");
   if (input.announcementActive !== undefined && typeof input.announcementActive !== "boolean") throw bad("Choose whether the announcement is published.");
   const announcementTitle = String(input.announcementTitle ?? "").trim();
@@ -105,7 +111,7 @@ export async function updateOutletSettings(staff: Staff, input: SettingsPatch, n
     if ((input.bookingAdvancePaise ?? before.bookingAdvancePaise) > 0 && bookingPaymentMode === "manual_qr" && !before.bookingPaymentQrUrl) throw bad("Upload your restaurant payment QR before requiring reservation advances.");
     if (deliveryPolicy?.paymentMode === "manual_qr" && !before.bookingPaymentQrUrl) throw bad("Upload your restaurant payment QR before selecting manual delivery payments.");
     const bookingAdvancePaise = input.bookingAdvancePaise ?? before.bookingAdvancePaise;
-    await tx.update(s.outlets).set({ ...next, ...(deliveryPolicy ? { deliveryPolicy } : {}), guestServices: nextGuestServices, bookingPaymentMode, bookingAdvancePaise }).where(and(eq(s.outlets.tenantId, staff.tenantId), eq(s.outlets.id, staff.outletId)));
+    await tx.update(s.outlets).set({ ...next, ...(deliveryPolicy ? { deliveryPolicy } : {}), guestServices: nextGuestServices, bookingPaymentMode, bookingAdvancePaise, ...(upiId !== undefined ? { upiId: upiId || null } : {}), ...(upiName !== undefined ? { upiName: upiName || null } : {}) }).where(and(eq(s.outlets.tenantId, staff.tenantId), eq(s.outlets.id, staff.outletId)));
     await audit(tx, staff, {
       action: "outlet.settings_changed", entity: "outlet", entityId: staff.outletId, now,
       before: { deliveryPolicy: before.deliveryPolicy, city: before.city, address: before.address, gstin: before.gstin, fssai: before.fssai, serviceChargeBp: before.serviceChargeBp, tipPresetsBp: before.tipPresetsBp, autoAcceptOrders: before.autoAcceptOrders, guestOnlinePayments: before.guestOnlinePayments, guestServices: before.guestServices, bookingPaymentMode: before.bookingPaymentMode, bookingAdvancePaise: before.bookingAdvancePaise, reviewUrl: before.reviewUrl, openingHours: before.openingHours, roomServices: before.roomServices, wifiSsid: before.wifiSsid, hasWifiPassword: !!before.wifiPassword, announcementActive: before.announcementActive, announcementTitle: before.announcementTitle, announcementBody: before.announcementBody },

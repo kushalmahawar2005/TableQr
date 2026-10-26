@@ -88,6 +88,8 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
   const [bookingPaymentMode, setBookingPaymentMode] = useState(o.bookingPaymentMode);
   const [bookingAdvance, setBookingAdvance] = useState(o.bookingAdvancePaise ? String(o.bookingAdvancePaise / 100) : "0");
   const [paymentQr, setPaymentQr] = useState(o.bookingPaymentQrUrl);
+  const [upiId, setUpiId] = useState(o.upiId ?? "");
+  const [upiName, setUpiName] = useState(o.upiName ?? "");
   const [qrBusy, setQrBusy] = useState(false);
   const [review, setReview] = useState(o.reviewUrl ?? "");
   const [roomServices, setRoomServices] = useState<RoomRequestKind[]>(o.roomServices);
@@ -236,6 +238,8 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
         announcementActive, announcementTitle, announcementBody,
         bookingPaymentMode,
         bookingAdvancePaise: Math.round(bookingAdvanceNum * 100),
+        upiId,
+        upiName,
         ...(o.deliveryAvailable ? { deliveryPolicy } : {}),
         openingHours: hoursOn ? hours : null,
       });
@@ -382,6 +386,7 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
               <p className="text-right text-xs text-muted">{announcementBody.length}/240</p>
             </div>
             <Row label="Booking advance per reservation" hint="This fixed deposit is charged when a guest books and is credited to their final bill. Set ₹0 to collect only preorder or peak-slot advances."><div className="relative sm:ml-auto sm:max-w-xs"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted">₹</span><Input inputMode="decimal" type="number" min="0" max="10000000" step="0.01" className={`${fieldCls} w-full pl-8`} value={bookingAdvance} onChange={event => setBookingAdvance(event.target.value)} disabled={!canEdit} /></div></Row>
+            <Row label="UPI on the bill" hint="Guests pay this UPI ID from their bill with any UPI app and tap I have paid. Staff check the money arrived, then settle the bill as UPI. Leave empty to turn it off."><div className="grid gap-2 sm:grid-cols-2"><input className={`${fieldCls} w-full border border-line bg-surface px-3`} value={upiId} onChange={e => setUpiId(e.target.value)} placeholder="restaurant@okaxis" inputMode="email" autoComplete="off" disabled={!canEdit} aria-label="UPI ID" /><input className={`${fieldCls} w-full border border-line bg-surface px-3`} value={upiName} onChange={e => setUpiName(e.target.value)} placeholder="Name shown in the UPI app" maxLength={60} disabled={!canEdit} aria-label="UPI payee name" /></div></Row>
             <Row label="Booking advance payments" hint={!o.bookingGatewayAvailable ? "Online gateway checkout is not connected. Use the restaurant QR option to collect advances and verify them in bookings." : "Choose how guests pay for reservation advances and preordered food."}><select className={`${fieldCls} w-full border border-line bg-surface px-3`} value={bookingPaymentMode} onChange={event => setBookingPaymentMode(event.target.value as typeof bookingPaymentMode)} disabled={!canEdit}><option value="gateway" disabled={!o.bookingGatewayAvailable}>Online gateway checkout {!o.bookingGatewayAvailable ? "(not connected)" : ""}</option><option value="manual_qr" disabled={!paymentQr}>Restaurant’s UPI QR · staff verifies receipt</option></select></Row>
             <div className="py-4">
               <p className="text-sm font-semibold">Restaurant payment QR</p><p className="mt-1 text-xs text-muted">Upload the merchant QR issued by your bank or payment app. QR uploads save immediately; save changes to switch the booking payment method.</p>

@@ -42,6 +42,8 @@ export function CustomerRequests({ initialRequests }: { initialRequests: Custome
         return { label: "Extra cutlery", icon: UtensilsCrossed, color: "text-amber-600 bg-amber-50", actionLabel: "Mark done" };
       case "call_waiter":
         return { label: "Waiter call", icon: Bell, color: "text-terracotta bg-terracotta/10", actionLabel: "Respond" };
+      case "paid_upi":
+        return { label: "Paid by UPI · check", icon: Receipt, color: "text-emerald-700 bg-emerald-50", actionLabel: "Settle" };
       case "request_bill":
       case "pay_at_counter":
         return { label: "Bill requested", icon: Receipt, color: "text-emerald-700 bg-emerald-50", actionLabel: "Take bill" };
@@ -68,7 +70,7 @@ export function CustomerRequests({ initialRequests }: { initialRequests: Custome
         <div className="divide-y divide-line">
           {requests.slice(0, 5).map((r) => {
             const { label, icon: Icon, color, actionLabel } = getKindDetails(r.kind);
-            const isBill = r.kind === "request_bill" || r.kind === "pay_at_counter";
+            const isBill = r.kind === "request_bill" || r.kind === "pay_at_counter" || r.kind === "paid_upi";
             const waiting = r.elapsedMinutes >= 10;
             return (
               <div key={r.id} className="flex items-center justify-between gap-2 py-2.5 first:pt-0 last:pb-0">

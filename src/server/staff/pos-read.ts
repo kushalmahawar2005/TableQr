@@ -39,16 +39,18 @@ export async function posQueue(staff: StaffSession) {
     db.select({ share: s.billShares, billSessionId: s.bills.sessionId }).from(s.billShares).innerJoin(s.bills, and(eq(s.bills.tenantId, s.billShares.tenantId), eq(s.bills.id, s.billShares.billId))).where(and(eq(s.billShares.tenantId, staff.tenantId), inArray(s.bills.sessionId, ids))),
     db.select({ payment: s.payments, billSessionId: s.bills.sessionId }).from(s.payments).innerJoin(s.bills, and(eq(s.bills.tenantId, s.payments.tenantId), eq(s.bills.id, s.payments.billId))).where(and(eq(s.payments.tenantId, staff.tenantId), inArray(s.bills.sessionId, ids))),
     db.select({ sessionId: s.participants.sessionId }).from(s.participants).where(and(eq(s.participants.tenantId, staff.tenantId), inArray(s.participants.sessionId, ids), isNull(s.participants.removedAt))),
-    db.select({ sessionId: s.serviceRequests.sessionId }).from(s.serviceRequests).where(and(eq(s.serviceRequests.tenantId, staff.tenantId), inArray(s.serviceRequests.sessionId, ids), eq(s.serviceRequests.kind, "pay_at_counter"), eq(s.serviceRequests.status, "open"))),
+    db.select({ sessionId: s.serviceRequests.sessionId, kind: s.serviceRequests.kind }).from(s.serviceRequests).where(and(eq(s.serviceRequests.tenantId, staff.tenantId), inArray(s.serviceRequests.sessionId, ids), inArray(s.serviceRequests.kind, ["pay_at_counter", "paid_upi"]), eq(s.serviceRequests.status, "open"))),
   ]);
-  const counterSessions = new Set(counterReqs.map(r => r.sessionId));
+  const counterSessions = new Set(counterReqs.filter(r => r.kind === "pay_at_counter").map(r => r.sessionId));
+  // The guest says they paid the restaurant's UPI; staff check their UPI app before settling
+  const upiSessions = new Set(counterReqs.filter(r => r.kind === "paid_upi").map(r => r.sessionId));
   const cards = sessions.map(({ session, table }) => {
     const bill = bills.find(b => b.sessionId === session.id);
     const sh = shares.filter(x => x.billSessionId === session.id).map(x => x.share);
     const ps = payments.filter(x => x.billSessionId === session.id).map(x => x.payment);
     const due = sh.reduce((n, x) => n + Math.max(0, x.amountPaise - x.paidPaise), 0);
     const paid = sh.reduce((n, x) => n + x.paidPaise, 0);
-    return { sessionId: session.id, tableCode: table.code, takeaway: table.tableClass === TAKEAWAY_CLASS, guestName: session.guestName, status: session.status, billStatus: bill?.status ?? null, totalPaise: bill?.totalPaise ?? 0, paidPaise: paid, balancePaise: due, partySize: Math.max(session.partySize ?? 0, people.filter(p => p.sessionId === session.id).length), requestedAt: bill?.requestedAt?.getTime() ?? null, pendingOnline: ps.some(p => ["initiated", "pending"].includes(p.status)), payAtCounter: counterSessions.has(session.id), paymentMethods: [...new Set(ps.map(p => p.method))] };
+    return { sessionId: session.id, tableCode: table.code, takeaway: table.tableClass === TAKEAWAY_CLASS, guestName: session.guestName, status: session.status, billStatus: bill?.status ?? null, totalPaise: bill?.totalPaise ?? 0, paidPaise: paid, balancePaise: due, partySize: Math.max(session.partySize ?? 0, people.filter(p => p.sessionId === session.id).length), requestedAt: bill?.requestedAt?.getTime() ?? null, pendingOnline: ps.some(p => ["initiated", "pending"].includes(p.status)), payAtCounter: counterSessions.has(session.id), paidUpi: upiSessions.has(session.id), paymentMethods: [...new Set(ps.map(p => p.method))] };
   });
   // Takeaway orders wait here from the first item, since the guest pays at the counter anyway
   const queue = cards.filter(c => c.balancePaise > 0 || (c.takeaway && c.billStatus !== "paid")).sort((a, b) => Number(b.payAtCounter) - Number(a.payAtCounter) || Number(b.pendingOnline) - Number(a.pendingOnline) || (b.requestedAt ?? 0) - (a.requestedAt ?? 0));

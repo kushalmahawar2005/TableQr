@@ -184,6 +184,9 @@ export const outlets = mysqlTable(
     announcementBody: varchar("announcement_body", { length: 240 }),
     bookingPaymentMode: mysqlEnum("booking_payment_mode", ["gateway", "manual_qr"]).notNull().default("gateway"),
     bookingPaymentQrUrl: varchar("booking_payment_qr_url", { length: 500 }),
+    /** The restaurant's own UPI ID; guests pay it from the bill and staff confirm the money arrived */
+    upiId: varchar("upi_id", { length: 60 }),
+    upiName: varchar("upi_name", { length: 60 }),
     /** Optional fixed advance due for every online reservation, in paise; separate from preorder spend. */
     bookingAdvancePaise: int("booking_advance_paise").notNull().default(0),
     /** Open mode: first order of a new session above this needs staff confirmation */

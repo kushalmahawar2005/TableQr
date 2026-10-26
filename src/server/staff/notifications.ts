@@ -27,6 +27,7 @@ const REQUEST_TEXT: Record<string, string> = {
   clean_table: "asks to clean the table",
   request_bill: "asked for the bill",
   pay_at_counter: "will pay at the counter",
+  paid_upi: "says they paid by UPI: check your UPI app and settle",
 };
 const LIMIT = 20;
 
@@ -93,9 +94,9 @@ export async function getConsoleNotices(staff: Staff, since: Date): Promise<Cons
       id: `request:${r.id}`,
       kind: r.kind === "request_bill" ? ("bill_requested" as const) : ("request" as const),
       title: `Table ${r.table} ${REQUEST_TEXT[r.kind] ?? "needs something"}`,
-      body: r.kind === "request_bill" || r.kind === "pay_at_counter" ? "Open billing to settle" : "Someone on the floor should go",
+      body: r.kind === "request_bill" || r.kind === "pay_at_counter" || r.kind === "paid_upi" ? "Open billing to settle" : "Someone on the floor should go",
       at: r.at.getTime(),
-      href: r.kind === "request_bill" || r.kind === "pay_at_counter" ? "/console/billing" : "/console/floor",
+      href: r.kind === "request_bill" || r.kind === "pay_at_counter" || r.kind === "paid_upi" ? "/console/billing" : "/console/floor",
     })),
     ...paid.map((b) => ({
       id: `paid:${b.id}`,

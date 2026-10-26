@@ -31,7 +31,7 @@ const STATE_TONE: Record<string, { bg: string; fg: string; en: string; hi: strin
   needs_cleaning: { bg: "var(--state-cleaning-soft)", fg: "var(--state-cleaning-text)", en: "Needs cleaning", hi: "सफ़ाई चाहिए" },
   blocked: { bg: "var(--state-blocked-soft, var(--state-held-soft))", fg: "var(--state-blocked-text, var(--state-held-text))", en: "Blocked", hi: "बंद" },
 };
-const REQUEST_ICON: Record<string, typeof Droplets> = { water: Droplets, cutlery: Utensils, call_waiter: BellRing, clean_table: Sparkles, request_bill: Receipt, pay_at_counter: Wallet };
+const REQUEST_ICON: Record<string, typeof Droplets> = { water: Droplets, cutlery: Utensils, call_waiter: BellRing, clean_table: Sparkles, request_bill: Receipt, pay_at_counter: Wallet, paid_upi: Wallet };
 const LINE_STATUS: Record<string, [string, string]> = { placed: ["Sent", "भेजा"], accepted: ["Accepted", "स्वीकार"], preparing: ["Cooking", "बन रहा है"], ready: ["Ready", "तैयार"], served: ["Served", "परोसा"], voided: ["Removed", "हटाया"], cancelled: ["Cancelled", "रद्द"] };
 
 export function WaiterScreen({

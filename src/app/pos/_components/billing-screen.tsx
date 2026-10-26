@@ -19,7 +19,7 @@ import { RefundPanel } from "./refund-panel";
 import { billMessage, whatsappLink, whatsappNumber } from "@/domain/bill-message";
 import { isRoomCode } from "@/domain/rooms";
 
-type Card = { sessionId: string; tableCode: string; takeaway?: boolean; guestName?: string | null; status: string; totalPaise: number; paidPaise: number; balancePaise: number; partySize: number; requestedAt: number | null; pendingOnline: boolean; payAtCounter?: boolean };
+type Card = { sessionId: string; tableCode: string; takeaway?: boolean; guestName?: string | null; status: string; totalPaise: number; paidPaise: number; balancePaise: number; partySize: number; requestedAt: number | null; pendingOnline: boolean; payAtCounter?: boolean; paidUpi?: boolean };
 type Sheet = { kind: "pay" } | { kind: "reopen" } | { kind: "void"; lineId: string } | null;
 
 const rs = (paise: number) => `₹${(paise / 100).toLocaleString("en-IN", { minimumFractionDigits: paise % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
@@ -196,6 +196,7 @@ export function BillingScreen({ initial, realtimeUrl, embedded = false, openSess
                         {tab === "paid" && <span className="rounded-full bg-[var(--state-paid-soft)] px-2 py-0.5 text-caption font-semibold text-[var(--state-paid-text)]">{L("Paid", "भुगतान हुआ")}</span>}
                         {tab === "takeaway" && <span className="rounded-full bg-[var(--state-held-soft)] px-2 py-0.5 text-caption font-semibold text-[var(--state-held-text)]">{L("Not billed yet", "बिल बाकी है")}</span>}
                         {tab === "due" && c.payAtCounter && !c.pendingOnline && <span className="inline-flex items-center gap-1 rounded-full bg-[var(--state-held-soft)] px-2 py-0.5 text-caption font-semibold text-[var(--state-held-text)]"><BellRing className="size-3" aria-hidden="true" />{L("Wants to pay at counter", "काउंटर पर भुगतान")}</span>}
+                        {tab === "due" && c.paidUpi && <span className="inline-flex items-center gap-1 rounded-full bg-[var(--state-available-soft)] px-2 py-0.5 text-caption font-semibold text-[var(--state-available-text)]"><BellRing className="size-3" aria-hidden="true" />{L("Says paid by UPI · check app", "UPI से भुगतान बताया · जाँचें")}</span>}
                         {c.pendingOnline && <span className="rounded-full bg-[var(--state-cleaning-soft)] px-2 py-0.5 text-caption font-semibold text-[var(--state-cleaning-text)]">{L("Online payment being checked", "ऑनलाइन भुगतान जाँच में")}</span>}
                         {tab === "due" && c.paidPaise > 0 && <span className="rounded-full bg-[var(--state-available-soft)] px-2 py-0.5 text-caption font-semibold text-[var(--state-available-text)]">{L("Part paid", "आंशिक भुगतान")} {rs(c.paidPaise)}</span>}
                         {tab === "due" && c.status !== "bill_requested" && !c.takeaway && <span className="rounded-full bg-ink/10 px-2 py-0.5 text-caption font-semibold text-muted">{L("Still eating", "अभी खा रहे हैं")}</span>}

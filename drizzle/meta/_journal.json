@@ -428,6 +428,13 @@
       "when": 1793019976968,
       "tag": "0060_guest_push_bookings",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "5",
+      "when": 1793020331886,
+      "tag": "0061_restaurant_upi",
+      "breakpoints": true
     }
   ]
 }

@@ -26,7 +26,7 @@ export type OutletSettings = {
   roomServices: RoomRequestKind[]; wifiSsid: string; wifiPassword: string;
   customDomain: string | null; customDomainVerifiedAt: Date | null; customDomainToken: string | null; customDomainLive: boolean;
   guestServices: GuestService[]; availableGuestServices: GuestService[];
-  bookingPaymentMode: "gateway" | "manual_qr"; bookingPaymentQrUrl: string | null;
+  bookingPaymentMode: "gateway" | "manual_qr"; bookingPaymentQrUrl: string | null; upiId: string | null; upiName: string | null;
   bookingAdvancePaise: number;
   announcementActive: boolean; announcementTitle: string; announcementBody: string;
   tables: number; staff: number; plan: string;
@@ -61,7 +61,7 @@ export async function getOutletSettings(staff: Staff): Promise<OutletSettings> {
     reviewUrl: outlet.reviewUrl, openingHours: outlet.openingHours, tables: Number(tables.n), staff: Number(team.n), plan: plan?.name ?? "",
     roomServices: configuredRoomRequestKinds(outlet.roomServices), wifiSsid: outlet.wifiSsid ?? "", wifiPassword: outlet.wifiPassword ?? "",
     guestServices: configuredGuestServices(outlet.guestServices), availableGuestServices: guestServices.filter(service => features[service]),
-    bookingPaymentMode: outlet.bookingPaymentMode, bookingPaymentQrUrl: outlet.bookingPaymentQrUrl,
+    bookingPaymentMode: outlet.bookingPaymentMode, bookingPaymentQrUrl: outlet.bookingPaymentQrUrl, upiId: outlet.upiId, upiName: outlet.upiName,
     bookingAdvancePaise: outlet.bookingAdvancePaise,
     announcementActive: outlet.announcementActive, announcementTitle: outlet.announcementTitle ?? "", announcementBody: outlet.announcementBody ?? "",
     customDomain: outlet.customDomain ?? null, customDomainVerifiedAt: outlet.customDomainVerifiedAt ?? null, customDomainToken: outlet.customDomainToken ?? null, customDomainLive: outlet.customDomainLive,

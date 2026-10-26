@@ -106,6 +106,13 @@ export async function getBillScreen(outletCode: string, shortCode: string, devic
     .where(and(eq(s.serviceRequests.tenantId, ctx.tenantId), eq(s.serviceRequests.sessionId, ctx.sessionId), eq(s.serviceRequests.kind, "pay_at_counter")))
     .orderBy(desc(s.serviceRequests.createdAt))
     .limit(1);
+  const [upiClaim] = await db
+    .select({ createdAt: s.serviceRequests.createdAt, status: s.serviceRequests.status })
+    .from(s.serviceRequests)
+    .where(and(eq(s.serviceRequests.tenantId, ctx.tenantId), eq(s.serviceRequests.sessionId, ctx.sessionId), eq(s.serviceRequests.kind, "paid_upi")))
+    .orderBy(desc(s.serviceRequests.createdAt))
+    .limit(1);
+  const [upiOutlet] = await db.select({ upiId: s.outlets.upiId, upiName: s.outlets.upiName, name: s.outlets.name }).from(s.outlets).where(and(eq(s.outlets.tenantId, ctx.tenantId), eq(s.outlets.id, ctx.outletId)));
   const host = hostId ? person.get(hostId) : undefined;
 
   return {
@@ -183,6 +190,9 @@ export async function getBillScreen(outletCode: string, shortCode: string, devic
       : null,
     refundPendingPaise: refunds.reduce((n, r) => n + r.amountPaise, 0),
     payAtCounter: counter ? { requestedAt: counter.createdAt.getTime(), done: counter.status === "done" } : null,
+    /** The restaurant's own UPI, when it takes UPI on the bill; staff confirm the money arrived */
+    upi: upiOutlet?.upiId ? { id: upiOutlet.upiId, name: upiOutlet.upiName || upiOutlet.name } : null,
+    paidUpi: upiClaim ? { requestedAt: upiClaim.createdAt.getTime(), done: upiClaim.status === "done" } : null,
   };
 }
 

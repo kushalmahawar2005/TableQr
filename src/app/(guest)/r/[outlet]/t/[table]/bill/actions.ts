@@ -73,6 +73,9 @@ export const paidAndLeftAction = async (outlet: string, table: string, participa
   run(outlet, table, (ctx) => markPaidAndLeft({ kind: "guest", ctx }, String(participantId)));
 export const payAtCounterAction = async (outlet: string, table: string, requestId: string) =>
   run(outlet, table, (ctx) => createServiceRequest(ctx, "pay_at_counter", String(requestId)));
+/** The guest says they paid the restaurant's UPI; staff are asked to check and settle */
+export const paidUpiAction = async (outlet: string, table: string, requestId: string) =>
+  run(outlet, table, (ctx) => createServiceRequest(ctx, "paid_upi", String(requestId)));
 
 /** Starts (or, for the same request id, resumes) a payment and returns the hosted checkout to open */
 export async function startPaymentAction(

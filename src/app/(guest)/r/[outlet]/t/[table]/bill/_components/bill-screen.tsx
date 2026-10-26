@@ -38,6 +38,7 @@ import {
   customAmountsAction,
   paidAndLeftAction,
   payAtCounterAction,
+  paidUpiAction,
   paymentStatusAction,
   reopenAction,
   serviceChargeAction,
@@ -536,6 +537,19 @@ export function BillScreen({
                   </div>
                 </dl>
               </section>
+            )}
+
+            {/* The restaurant's own UPI: pay from any UPI app, then say so; staff confirm and settle */}
+            {data.upi && session.status === "bill_requested" && remainingTotal > 0 && (
+              <UpiPay
+                upi={data.upi}
+                amountPaise={myDue > 0 ? myDue : remainingTotal}
+                note={`${data.outlet.name} ${data.table.code}`}
+                lang={lang}
+                claimed={data.paidUpi}
+                disabled={!online || !!busy}
+                onPaid={() => void act("upi", () => paidUpiAction(data.outlet.code, shortCode, `upi-${session.key}`.slice(0, 64)), lang === "hi" ? "स्टाफ आपका भुगतान जाँच रहा है।" : "Staff are checking your payment.")}
+              />
             )}
 
             {/* No online payment: everyone settles at the counter */}
@@ -1123,5 +1137,54 @@ function Confirm({
         </button>
       </div>
     </Sheet>
+  );
+}
+
+/**
+ * Pay the restaurant's own UPI ID from the bill. The button opens the guest's UPI app with the
+ * amount filled in; the QR is for paying from another phone. Nothing here can see the payment,
+ * so the guest tells staff, who check their UPI app before settling.
+ */
+function UpiPay({ upi, amountPaise, note, lang, claimed, disabled, onPaid }: {
+  upi: { id: string; name: string };
+  amountPaise: number;
+  note: string;
+  lang: Lang;
+  claimed: { requestedAt: number; done: boolean } | null;
+  disabled: boolean;
+  onPaid: () => void;
+}) {
+  const t = (en: string, hi: string) => (lang === "hi" ? hi : en);
+  const link = `upi://pay?${new URLSearchParams({ pa: upi.id, pn: upi.name, am: (amountPaise / 100).toFixed(2), cu: "INR", tn: note.slice(0, 50) }).toString()}`;
+  const [qr, setQr] = useState<string | null>(null);
+  const [showQr, setShowQr] = useState(false);
+  useEffect(() => {
+    if (!showQr) return;
+    let live = true;
+    void import("qrcode").then((q) => q.toDataURL(link, { margin: 1, width: 240 })).then((url) => { if (live) setQr(url); });
+    return () => { live = false; };
+  }, [showQr, link]);
+  return (
+    <section aria-label={t("Pay by UPI", "UPI से भुगतान")} className="mt-6 rounded-[22px] border border-line/60 bg-surface p-4 shadow-[0_2px_12px_rgb(31_41_55/0.05)]">
+      <p className="text-body font-bold text-ink">{t("Pay by UPI", "UPI से भुगतान")}</p>
+      <p className="text-caption text-muted">{t(`To ${upi.name} · ${upi.id}`, `${upi.name} को · ${upi.id}`)}</p>
+      {claimed ? (
+        <p role="status" className="mt-3 rounded-2xl bg-[var(--state-available-soft)] px-3 py-2.5 text-caption font-semibold text-[var(--state-available-text)]">
+          {claimed.done ? t("Staff confirmed your payment.", "स्टाफ ने आपका भुगतान पक्का कर दिया।") : t("You told staff you paid. They are checking it now.", "आपने स्टाफ को भुगतान बताया। वे अभी जाँच रहे हैं।")}
+        </p>
+      ) : (
+        <>
+          <a href={link} className="mt-3 flex min-h-13 w-full items-center justify-center gap-2 rounded-2xl bg-brand px-4 text-button font-bold text-brand-on shadow-[0_8px_20px_-6px_var(--brand-border)]">
+            {t(`Pay ${formatRupees(amountPaise)} with a UPI app`, `UPI ऐप से ${formatRupees(amountPaise)} दें`)}
+          </a>
+          <button type="button" onClick={() => setShowQr((v) => !v)} className="mt-2 w-full text-center text-caption font-semibold text-brand-strong">{showQr ? t("Hide QR", "QR छिपाएँ") : t("Paying from another phone? Show QR", "दूसरे फ़ोन से? QR दिखाएँ")}</button>
+          {/* A data URL made on this phone; next/image adds nothing here */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          {showQr && (qr ? <img src={qr} alt={t("UPI QR code", "UPI QR कोड")} className="mx-auto mt-2 size-60 rounded-xl bg-white p-2" /> : <p className="mt-2 text-center text-caption text-muted">…</p>)}
+          <button type="button" disabled={disabled} onClick={onPaid} className="mt-3 min-h-12 w-full rounded-2xl border border-line/70 bg-surface px-4 text-body font-semibold text-ink disabled:opacity-50">{t("I have paid", "मैंने भुगतान कर दिया")}</button>
+          <p className="mt-2 text-center text-label text-muted">{t("Tap this only after your UPI app says the payment worked.", "UPI ऐप में भुगतान सफल होने के बाद ही दबाएँ।")}</p>
+        </>
+      )}
+    </section>
   );
 }

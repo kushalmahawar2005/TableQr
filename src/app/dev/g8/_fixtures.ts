@@ -84,7 +84,7 @@ export const g8Base: BillScreenData = {
   groupSplit: true,
   latestPayment: null,
   refundPendingPaise: 0,
-  payAtCounter: null,
+  payAtCounter: null, upi: null, paidUpi: null,
 };
 
 export type G8Case = { id: string; label: string; data: BillScreenData; preview: BillPreview; lang?: "en" | "hi"; solo?: boolean; loading?: boolean; width?: number; height?: number };
