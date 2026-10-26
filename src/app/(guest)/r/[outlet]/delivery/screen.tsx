@@ -340,8 +340,12 @@ function StatusView({ status, hindi, pending, statusMessage, onPay, onRefresh, n
     </section>}
 
     {status.courierName && ["dispatched", "delivered"].includes(status.status) && <section className={`${card} flex items-center gap-3`}>
-      <span className="grid size-11 shrink-0 place-items-center rounded-full bg-brand-soft text-brand-strong"><HugeiconsIcon icon={DeliveryTruck01Icon} size={21} aria-hidden /></span>
-      <div className="min-w-0 flex-1"><p className="text-caption text-muted">{t("Your delivery rider", "आपका डिलीवरी राइडर")}</p><p className="text-body font-bold">{status.courierName}</p></div>
+      {status.courierPhotoUrl
+        // Rider photos live in the photo bucket, so this stays a plain image
+        // eslint-disable-next-line @next/next/no-img-element
+        ? <img src={status.courierPhotoUrl} alt="" className="size-12 shrink-0 rounded-full object-cover" />
+        : <span className="grid size-12 shrink-0 place-items-center rounded-full bg-brand-soft text-brand-strong"><HugeiconsIcon icon={DeliveryTruck01Icon} size={21} aria-hidden /></span>}
+      <div className="min-w-0 flex-1"><p className="text-caption text-muted">{t("Your delivery rider", "आपका डिलीवरी राइडर")}</p><p className="text-body font-bold">{status.courierName}</p>{status.courierVehicleNo && <p className="text-caption font-semibold tracking-wide text-muted">{status.courierVehicleNo}</p>}</div>
       {status.courierPhone && <a href={`tel:${status.courierPhone}`} className="inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-brand px-4 text-caption font-bold text-brand-on shadow-[0_4px_12px_-2px_var(--brand-border)]"><HugeiconsIcon icon={Call02Icon} size={17} aria-hidden />{t("Call", "कॉल")}</a>}
     </section>}
 

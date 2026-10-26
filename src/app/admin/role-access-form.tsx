@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { visibleSections } from "@/lib/console-nav";
 import { assignableRoles, sectionRoles, staffRoles, type ConsoleSectionSlug, type RoleAccess, type StaffRole } from "@/lib/staff-permissions";
 
-const ROLE_LABELS: Record<StaffRole, string> = { owner: "Owner", manager: "Manager", cashier: "Cashier", host: "Host", waiter: "Waiter", kitchen: "Kitchen", accountant: "Accountant", reception: "Reception" };
+const ROLE_LABELS: Record<StaffRole, string> = { owner: "Owner", manager: "Manager", cashier: "Cashier", host: "Host", waiter: "Waiter", kitchen: "Kitchen", accountant: "Accountant", reception: "Reception", rider: "Rider" };
 const GRID_ROLES = staffRoles.filter((r) => r !== "owner");
 
 type Grid = Record<ConsoleSectionSlug, StaffRole[]>;

@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { canSee } from "@/lib/staff-permissions";
+import { outletRiders } from "@/server/delivery/riders";
 import { deliveryQueue, deliveryStaffRoles, pendingManualDeliveryPayments } from "@/server/delivery/staff";
 import { getRecentOrders } from "@/server/staff/orders-read";
 import { currentStaff } from "@/server/staff/request";
@@ -25,10 +26,11 @@ export default async function OrdersPage(props: PageProps<"/console/orders">) {
   const { view } = await props.searchParams;
   const runsDelivery = staff.roles.some(role => (deliveryStaffRoles as readonly string[]).includes(role));
   const showDelivery = runsDelivery && view === "delivery";
-  const [orders, deliveries, pendingPayments] = await Promise.all([
+  const [orders, deliveries, pendingPayments, riders] = await Promise.all([
     getRecentOrders(staff, new Date()),
     runsDelivery ? deliveryQueue(staff) : Promise.resolve([]),
     runsDelivery ? pendingManualDeliveryPayments(staff) : Promise.resolve([]),
+    showDelivery ? outletRiders(staff) : Promise.resolve([]),
   ]);
   const tableLive = orders.filter(o => !o.delivery && o.status !== "served" && o.status !== "cancelled").length;
   const deliveryLive = deliveries.filter(d => d.status !== "delivered").length + pendingPayments.length;
@@ -50,6 +52,7 @@ export default async function OrdersPage(props: PageProps<"/console/orders">) {
     return <DeliveryQueueScreen
       outlet={staff.outlet.name}
       tabs={tabs}
+      riders={riders}
       canAssignCourier={staff.roles.some(role => role === "owner" || role === "manager")}
       rows={deliveries.map(row => ({ ...row, placedAt: row.placedAt?.toISOString() ?? null }))}
       pendingPayments={pendingPayments.map(row => ({ ...row, claimedAt: row.claimedAt?.toISOString() ?? null }))}

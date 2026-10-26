@@ -393,6 +393,13 @@
       "when": 1792958027622,
       "tag": "0055_attendance_register",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "5",
+      "when": 1793010909018,
+      "tag": "0056_rider_fleet",
+      "breakpoints": true
     }
   ]
 }

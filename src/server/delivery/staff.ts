@@ -16,7 +16,7 @@ export const deliveryStaffRoles = ["owner", "manager", "cashier"] as const;
 export async function deliveryQueue(staff: StaffSession) {
   await requireStaffRole(staff, deliveryStaffRoles);
   // Historical orders remain manageable if the package is downgraded or delivery is paused.
-  const rows = await db.select({ id: s.deliveryCheckouts.id, status: s.deliveryCheckouts.status, sessionId: s.deliveryCheckouts.sessionId, name: s.deliveryCheckouts.name, phone: s.deliveryCheckouts.phone, address: s.deliveryCheckouts.address, courierName: s.deliveryCheckouts.courierName, courierPhone: s.deliveryCheckouts.courierPhone, totalPaise: s.bills.totalPaise, paid: s.bills.status, placedAt: s.deliveryCheckouts.placedAt })
+  const rows = await db.select({ id: s.deliveryCheckouts.id, status: s.deliveryCheckouts.status, sessionId: s.deliveryCheckouts.sessionId, name: s.deliveryCheckouts.name, phone: s.deliveryCheckouts.phone, address: s.deliveryCheckouts.address, courierName: s.deliveryCheckouts.courierName, courierPhone: s.deliveryCheckouts.courierPhone, courierUserId: s.deliveryCheckouts.courierUserId, totalPaise: s.bills.totalPaise, paid: s.bills.status, placedAt: s.deliveryCheckouts.placedAt })
     .from(s.deliveryCheckouts).innerJoin(s.bills, and(eq(s.bills.tenantId, s.deliveryCheckouts.tenantId), eq(s.bills.sessionId, s.deliveryCheckouts.sessionId)))
     .where(and(eq(s.deliveryCheckouts.tenantId, staff.tenantId), eq(s.deliveryCheckouts.outletId, staff.outletId), inArray(s.deliveryCheckouts.status, ["placed", "dispatched", "delivered"])))
     .orderBy(desc(s.deliveryCheckouts.placedAt)).limit(100);

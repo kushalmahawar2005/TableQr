@@ -19,6 +19,7 @@ const ALL_ROLES = [
   { id: "waiter", label: "Waiter", does: "Takes orders at tables, serves, requests the bill", opens: "Waiter app", path: "/waiter" },
   { id: "accountant", label: "Accountant", does: "Takes payments, views bills and reports", opens: "Billing", path: "/pos" },
   { id: "kitchen", label: "Kitchen", does: "Sees orders and marks food ready. Signs in on the kitchen screen with this phone and PIN", opens: "Kitchen", path: "/console/kitchen" },
+  { id: "rider", label: "Rider", does: "Delivers home orders: sees only the deliveries given to them, calls the customer, collects cash", opens: "Rider app", path: "/rider" },
 ] as const;
 // Older roles still shown on people who have them
 const LABEL: Record<string, string> = { owner: "Owner", cashier: "Cashier", host: "Host", ...Object.fromEntries(ALL_ROLES.map((r) => [r.id, r.label])) };

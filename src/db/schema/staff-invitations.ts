@@ -2,7 +2,7 @@ import { char, index, int, mysqlEnum, mysqlTable, uniqueIndex, varchar } from "d
 import { at, createdAt, id, ref, sameTenant, tenantId } from "./_columns";
 import { outlets, users } from "./tenancy";
 
-export const staffInvitationRoles = ["manager", "reception", "waiter", "accountant", "kitchen"] as const;
+export const staffInvitationRoles = ["manager", "reception", "waiter", "accountant", "kitchen", "rider"] as const;
 
 /** An owner-scoped, single-use link. Only the token hash is stored. */
 export const staffInvitations = mysqlTable(

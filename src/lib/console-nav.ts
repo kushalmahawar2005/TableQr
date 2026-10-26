@@ -54,6 +54,7 @@ export function homeFor(who: Who): string {
   if (has("waiter")) return "/waiter";
   if (has("cashier", "accountant")) return "/pos";
   if (has("kitchen")) return "/console/kitchen";
+  if (has("rider")) return "/rider";
   return "/console/floor";
 }
 

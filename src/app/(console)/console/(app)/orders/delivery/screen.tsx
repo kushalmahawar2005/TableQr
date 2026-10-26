@@ -3,7 +3,9 @@ import { Banknote, Bike, Check, ChefHat, CircleCheck, Clock, MapPin, MessageCirc
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition, type ReactNode } from "react";
+import type { RiderCard } from "@/server/delivery/riders";
 import type { deliveryQueue, pendingManualDeliveryPayments } from "@/server/delivery/staff";
+import { assignTeamRiderAction } from "../../../../../(staff)/rider/actions";
 import { advanceDeliveryAction, assignDeliveryCourierAction, cancelDeliveryOrderAction, confirmManualQrDeliveryPaymentAction } from "./actions";
 
 type Row = Omit<Awaited<ReturnType<typeof deliveryQueue>>[number], "placedAt"> & { placedAt: string | null };
@@ -36,7 +38,7 @@ const STAGE_TONE = [
   "bg-[var(--state-available-soft)] text-[var(--state-available-text)]",
 ];
 
-export function DeliveryQueueScreen({ rows, pendingPayments, canAssignCourier, outlet, tabs }: { rows: Row[]; pendingPayments: PendingPayment[]; canAssignCourier: boolean; outlet: string; tabs?: ReactNode }) {
+export function DeliveryQueueScreen({ rows, pendingPayments, canAssignCourier, outlet, tabs, riders = [] }: { rows: Row[]; pendingPayments: PendingPayment[]; canAssignCourier: boolean; outlet: string; tabs?: ReactNode; riders?: RiderCard[] }) {
   const router = useRouter();
   const [pending, start] = useTransition(), [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<"active" | "delivered">("active");
@@ -106,12 +108,12 @@ export function DeliveryQueueScreen({ rows, pendingPayments, canAssignCourier, o
     </div>}
 
     <div className="mt-4 grid gap-4 xl:grid-cols-2">
-      {shown.map(row => <DeliveryCard key={row.id} row={row} now={now} pending={pending} canAssignCourier={canAssignCourier} run={run} />)}
+      {shown.map(row => <DeliveryCard key={row.id} row={row} now={now} pending={pending} canAssignCourier={canAssignCourier} run={run} riders={riders} />)}
     </div>
   </main>;
 }
 
-function DeliveryCard({ row, now, pending, canAssignCourier, run }: { row: Row; now: number; pending: boolean; canAssignCourier: boolean; run: (fn: () => Promise<{ ok: boolean; message?: string }>, after?: () => void) => void }) {
+function DeliveryCard({ row, now, pending, canAssignCourier, run, riders }: { row: Row; now: number; pending: boolean; canAssignCourier: boolean; riders: RiderCard[]; run: (fn: () => Promise<{ ok: boolean; message?: string }>, after?: () => void) => void }) {
   const stage = stageOf(row);
   const [editRider, setEditRider] = useState(false);
   const [courier, setCourier] = useState({ name: row.courierName ?? "", phone: row.courierPhone ?? "" });
@@ -171,20 +173,32 @@ function DeliveryCard({ row, now, pending, canAssignCourier, run }: { row: Row; 
         {row.items.map((item, i) => <li key={i} className="flex items-center gap-3 border-b border-line px-3 py-2 last:border-b-0"><span className="min-w-8 rounded-md bg-ink/5 px-1.5 text-center text-caption font-bold tabular text-ink">{item.qty}×</span><span className="text-body text-ink">{item.name}</span></li>)}
       </ul>}
 
-      {/* Rider */}
+      {/* Rider: pick from the team (photo, free or busy), or type one from outside the team */}
       {row.courierName && !editRider ? <div className="flex flex-wrap items-center gap-3 rounded-input border border-line p-3">
-        <Bike className="size-5 text-brand-strong" aria-hidden="true" />
-        <div className="min-w-0 flex-1"><p className="text-caption text-muted">{row.status === "delivered" ? "Delivered by" : "Rider"}</p><p className="font-semibold text-ink">{row.courierName}{row.courierPhone && <span className="font-normal text-muted"> · {row.courierPhone}</span>}</p></div>
+        <RiderFace url={riders.find((r) => r.id === row.courierUserId)?.photoUrl ?? null} />
+        <div className="min-w-0 flex-1"><p className="text-caption text-muted">{row.status === "delivered" ? "Delivered by" : "Rider"}</p><p className="font-semibold text-ink">{row.courierName}{riders.find((r) => r.id === row.courierUserId)?.vehicleNo && <span className="font-normal text-muted"> · {riders.find((r) => r.id === row.courierUserId)?.vehicleNo}</span>}</p></div>
         {row.courierPhone && <a href={`tel:${row.courierPhone}`} className="inline-flex min-h-10 items-center gap-1.5 rounded-input border border-line px-3 text-caption font-semibold text-ink hover:border-ink/40"><Phone className="size-4" aria-hidden="true" />Call rider</a>}
-        {canAssignCourier && live && <button type="button" onClick={() => setEditRider(true)} className="min-h-10 px-2 text-caption font-semibold text-brand-strong hover:underline">Change</button>}
-      </div> : canAssignCourier && live ? <form className="grid gap-2 rounded-input border border-dashed border-line p-3 sm:grid-cols-[1fr_1fr_auto]" onSubmit={event => { event.preventDefault(); run(() => assignDeliveryCourierAction(row.id, courier.name, courier.phone), () => setEditRider(false)); }}>
-        <label className="sr-only" htmlFor={`courier-name-${row.id}`}>Rider name</label>
-        <input id={`courier-name-${row.id}`} value={courier.name} onChange={event => setCourier(c => ({ ...c, name: event.target.value }))} maxLength={80} autoComplete="name" placeholder="Rider name" className="min-h-11 min-w-0 rounded-input border border-line bg-surface px-3 text-body text-ink" />
-        <label className="sr-only" htmlFor={`courier-phone-${row.id}`}>Rider phone</label>
-        <input id={`courier-phone-${row.id}`} value={courier.phone} onChange={event => setCourier(c => ({ ...c, phone: event.target.value }))} maxLength={20} inputMode="tel" autoComplete="tel" placeholder="Rider phone" className="min-h-11 min-w-0 rounded-input border border-line bg-surface px-3 text-body text-ink" />
-        <button type="submit" disabled={pending} className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-input border border-line bg-surface px-4 text-body font-semibold text-ink disabled:opacity-50"><Bike className="size-4" aria-hidden="true" />{row.courierName ? "Save rider" : "Assign rider"}</button>
-        <p className="text-caption text-muted sm:col-span-3">The customer sees the rider&apos;s name and can call once the order is on the way.</p>
-      </form> : null}
+        {live && <button type="button" onClick={() => setEditRider(true)} className="min-h-10 px-2 text-caption font-semibold text-brand-strong hover:underline">Change</button>}
+      </div> : live ? <div className="rounded-input border border-dashed border-line p-3">
+        <p className="text-caption font-semibold text-ink">Give this delivery to</p>
+        {riders.length ? <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+          {riders.map((r) => <button key={r.id} type="button" disabled={pending || r.availability === "offline"} onClick={() => run(() => assignTeamRiderAction(row.id, r.id), () => setEditRider(false))}
+            className={`flex items-center gap-2.5 rounded-input border p-2 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${r.id === row.courierUserId ? "border-brand bg-brand-soft" : "border-line bg-surface hover:border-ink/40"}`}>
+            <span className="relative shrink-0"><RiderFace url={r.photoUrl} /><span aria-hidden="true" className={`absolute -right-0.5 -bottom-0.5 size-3.5 rounded-full ring-2 ring-surface ${r.availability === "free" ? "bg-[var(--state-available)]" : r.availability === "busy" ? "bg-danger" : "bg-muted"}`} /></span>
+            <span className="min-w-0"><span className="block truncate text-caption font-bold text-ink">{r.name}</span><span className={`block text-label font-semibold ${r.availability === "free" ? "text-[var(--state-available-text)]" : r.availability === "busy" ? "text-danger" : "text-muted"}`}>{r.availability === "free" ? "Free" : r.availability === "busy" ? `Busy · ${r.activeCount} ${r.activeCount === 1 ? "order" : "orders"}` : "Offline"}</span></span>
+          </button>)}
+        </div> : <p className="mt-1 text-caption text-muted">No riders on your team yet. Add one in Team with the Rider role.</p>}
+        {canAssignCourier && <details className="mt-2">
+          <summary className="cursor-pointer text-caption font-semibold text-brand-strong">Rider from outside the team</summary>
+          <form className="mt-2 grid gap-2 sm:grid-cols-[1fr_1fr_auto]" onSubmit={event => { event.preventDefault(); run(() => assignDeliveryCourierAction(row.id, courier.name, courier.phone), () => setEditRider(false)); }}>
+            <label className="sr-only" htmlFor={`courier-name-${row.id}`}>Rider name</label>
+            <input id={`courier-name-${row.id}`} value={courier.name} onChange={event => setCourier(c => ({ ...c, name: event.target.value }))} maxLength={80} autoComplete="name" placeholder="Rider name" className="min-h-11 min-w-0 rounded-input border border-line bg-surface px-3 text-body text-ink" />
+            <label className="sr-only" htmlFor={`courier-phone-${row.id}`}>Rider phone</label>
+            <input id={`courier-phone-${row.id}`} value={courier.phone} onChange={event => setCourier(c => ({ ...c, phone: event.target.value }))} maxLength={20} inputMode="tel" autoComplete="tel" placeholder="Rider phone" className="min-h-11 min-w-0 rounded-input border border-line bg-surface px-3 text-body text-ink" />
+            <button type="submit" disabled={pending} className="min-h-11 rounded-input border border-line bg-surface px-4 text-body font-semibold text-ink disabled:opacity-50">Save</button>
+          </form>
+        </details>}
+      </div> : null}
 
       {/* Actions */}
       <div className="flex flex-wrap items-center gap-2 pt-1">
@@ -206,4 +220,10 @@ function DeliveryCard({ row, now, pending, canAssignCourier, run }: { row: Row; 
       </form>}
     </div>
   </article>;
+}
+
+function RiderFace({ url }: { url: string | null }) {
+  // Staff photos live in the photo bucket, so this stays a plain image
+  // eslint-disable-next-line @next/next/no-img-element
+  return url ? <img src={url} alt="" className="size-10 shrink-0 rounded-full object-cover" /> : <span className="grid size-10 shrink-0 place-items-center rounded-full bg-brand-soft text-brand-strong"><Bike className="size-5" aria-hidden="true" /></span>;
 }

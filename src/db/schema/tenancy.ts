@@ -236,6 +236,10 @@ export const users = mysqlTable(
     lastSeenAt: at("last_seen_at"),
     /** First-run guide: when this person saw the welcome, finished the tour, hid the setup list (epoch ms) */
     guide: json("guide").$type<{ welcome?: number; tour?: number; setupHidden?: number; qrPrinted?: number }>(),
+    /** Face photo shown to the team and, for riders, to the customer */
+    photoUrl: varchar("photo_url", { length: 500 }),
+    /** Riders: the vehicle registration, e.g. RJ06 AB 1234 */
+    vehicleNo: varchar("vehicle_no", { length: 20 }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -252,6 +256,8 @@ export const staffRoleNames = [
   "accountant",
   /** Hotel front desk: rooms, check-in and check-out, room bills */
   "reception",
+  /** The restaurant's own delivery rider: sees and completes only the deliveries given to them */
+  "rider",
 ] as const;
 
 export const staffRoles = mysqlTable(

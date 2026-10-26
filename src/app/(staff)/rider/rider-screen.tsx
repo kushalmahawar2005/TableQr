@@ -1,0 +1,187 @@
+"use client";
+import { Banknote, Bike, Camera, Check, ChefHat, CircleCheck, MapPin, Navigation, Package, Phone, Store, UserRound } from "lucide-react";
+import { useEffect, useState, useTransition } from "react";
+import type { riderJobs, riderProfile } from "@/server/delivery/riders";
+import { riderCashAction, riderDeliveredAction, riderJobsAction, riderOnlineAction, riderPickUpAction, riderSaveProfileAction } from "./actions";
+
+type Jobs = Awaited<ReturnType<typeof riderJobs>>;
+type Job = Jobs["jobs"][number];
+type Profile = Awaited<ReturnType<typeof riderProfile>>;
+const money = (p: number) => `₹${(p / 100).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
+const clock = (ms: number | null) => (ms ? new Date(ms).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" }) : "");
+const directions = (q: string) => `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(q)}&travelmode=driving`;
+
+export function RiderScreen({ initialJobs, initialProfile }: { initialJobs: Jobs; initialProfile: Profile }) {
+  const [jobs, setJobs] = useState(initialJobs);
+  const [profile, setProfile] = useState(initialProfile);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  const [editing, setEditing] = useState(!initialProfile.photoUrl || !initialProfile.vehicleNo);
+
+  // New jobs and kitchen progress arrive by themselves
+  useEffect(() => {
+    const t = setInterval(async () => { if (document.hidden) return; const r = await riderJobsAction(); if (r.ok) setJobs(r.data); }, 15000);
+    return () => clearInterval(t);
+  }, []);
+
+  const act = (work: () => Promise<{ ok: boolean; error?: string }>) => {
+    setError(null);
+    start(async () => {
+      const r = await work();
+      if (!r.ok) setError(r.error ?? "Could not update.");
+      const fresh = await riderJobsAction();
+      if (fresh.ok) setJobs(fresh.data);
+    });
+  };
+  const live = jobs.jobs.filter((j) => j.status !== "delivered");
+  const delivered = jobs.jobs.filter((j) => j.status === "delivered");
+
+  return (
+    <main className="mx-auto min-h-dvh w-full max-w-xl px-4 pt-4 pb-10 text-ink">
+      {/* Who I am, and whether I take deliveries now */}
+      <header className="flex items-center gap-3">
+        <Avatar url={profile.photoUrl} name={profile.name} />
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-display text-section font-bold">{profile.name}</p>
+          <p className="text-caption text-muted">{profile.vehicleNo ?? "Add your vehicle number"} · <button type="button" className="font-semibold text-brand-strong" onClick={() => setEditing((v) => !v)}>{editing ? "Close" : "Edit profile"}</button></p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={profile.online}
+          disabled={pending}
+          onClick={() => start(async () => { const r = await riderOnlineAction(!profile.online); if (r.ok) setProfile((p) => ({ ...p, online: r.data.online })); else setError(r.error); })}
+          className={`inline-flex min-h-11 items-center gap-2 rounded-full px-4 text-body font-bold transition-colors ${profile.online ? "bg-[var(--state-available)] text-white" : "bg-ink/10 text-ink"}`}
+        >
+          <span className={`size-2.5 rounded-full ${profile.online ? "animate-pulse bg-white" : "bg-muted"}`} aria-hidden="true" />
+          {profile.online ? "Online" : "Offline"}
+        </button>
+      </header>
+
+      {editing && <ProfileForm profile={profile} onSaved={(p) => { setProfile((old) => ({ ...old, ...p })); setEditing(false); }} />}
+
+      {error && <p role="alert" className="mt-4 rounded-2xl border border-danger/30 bg-[var(--state-seated-soft)] p-3 text-body font-semibold text-danger">{error}</p>}
+
+      <div className="mt-4 grid grid-cols-3 gap-2">
+        {([[Bike, "Active", String(live.length)], [CircleCheck, "Delivered", String(delivered.length)], [Banknote, "Cash due", money(live.filter((j) => !j.paid).reduce((n, j) => n + j.totalPaise, 0))]] as const).map(([Icon, label, value]) => (
+          <div key={label} className="rounded-2xl border border-line bg-surface p-3">
+            <p className="flex items-center gap-1.5 text-label font-semibold text-muted"><Icon className="size-3.5" aria-hidden="true" />{label}</p>
+            <p className="mt-1 font-display text-section font-bold tabular">{value}</p>
+          </div>
+        ))}
+      </div>
+
+      {!profile.online && live.length === 0 && <p className="mt-4 rounded-2xl bg-ink/5 p-4 text-center text-body text-muted">You are offline. Go online to get deliveries.</p>}
+      {profile.online && live.length === 0 && (
+        <div className="mt-6 rounded-3xl border border-dashed border-line p-8 text-center">
+          <Bike className="mx-auto size-9 text-muted" aria-hidden="true" />
+          <p className="mt-3 font-semibold">Waiting for a delivery</p>
+          <p className="mt-1 text-caption text-muted">New orders given to you show up here by themselves.</p>
+        </div>
+      )}
+
+      <div className="mt-4 grid gap-4">
+        {live.map((job) => <JobCard key={job.id} job={job} pickup={jobs.pickup} pending={pending} act={act} />)}
+      </div>
+
+      {delivered.length > 0 && (
+        <section className="mt-6">
+          <h2 className="text-caption font-bold tracking-wide text-muted uppercase">Delivered today</h2>
+          <ul className="mt-2 divide-y divide-line rounded-2xl border border-line bg-surface">
+            {delivered.map((j) => <li key={j.id} className="flex items-center justify-between gap-3 px-4 py-3"><span className="min-w-0 truncate text-body">{j.name}</span><span className="shrink-0 text-caption text-muted tabular">{clock(j.deliveredAt)} · {money(j.totalPaise)}</span></li>)}
+          </ul>
+        </section>
+      )}
+    </main>
+  );
+}
+
+function JobCard({ job, pickup, pending, act }: { job: Job; pickup: Jobs["pickup"]; pending: boolean; act: (w: () => Promise<{ ok: boolean; error?: string }>) => void }) {
+  const drop = `${job.address.line}, ${job.address.locality}, ${job.address.pincode}`;
+  const onWay = job.status === "dispatched";
+  return (
+    <article className="overflow-hidden rounded-3xl border border-line bg-surface shadow-[0_4px_18px_rgb(31_41_55/0.06)]">
+      <div className={`flex items-center justify-between gap-3 px-4 py-3 ${onWay ? "bg-[var(--state-cleaning-soft)] text-[var(--state-cleaning-text)]" : job.kitchenReady ? "bg-[var(--state-bill-soft)] text-[var(--state-bill-text)]" : "bg-[var(--state-held-soft)] text-[var(--state-held-text)]"}`}>
+        <p className="flex items-center gap-2 text-body font-bold">
+          {onWay ? <><Bike className="size-4" aria-hidden="true" />On the way</> : job.kitchenReady ? <><Package className="size-4" aria-hidden="true" />Ready to pick up</> : <><ChefHat className="size-4" aria-hidden="true" />Kitchen is preparing</>}
+        </p>
+        <p className="text-caption font-semibold tabular">Placed {clock(job.placedAt)}</p>
+      </div>
+
+      {/* Pickup and drop, like a route */}
+      <ol className="relative mx-4 mt-4 grid gap-4 border-l-2 border-dashed border-line pl-5">
+        <li className={onWay ? "opacity-50" : ""}>
+          <span className="absolute -left-[9px] grid size-4 place-items-center rounded-full bg-brand text-brand-on"><Store className="size-2.5" aria-hidden="true" /></span>
+          <p className="text-label font-semibold text-muted uppercase">Pick up</p>
+          <p className="text-body font-semibold">{pickup.name}</p>
+          {pickup.address && <p className="text-caption text-muted">{pickup.address}</p>}
+        </li>
+        <li>
+          <span className="absolute -left-[9px] mt-0.5 grid size-4 place-items-center rounded-full bg-[var(--state-available)] text-white"><MapPin className="size-2.5" aria-hidden="true" /></span>
+          <p className="text-label font-semibold text-muted uppercase">Drop</p>
+          <p className="text-body font-semibold">{job.name}</p>
+          <p className="text-caption text-ink">{drop}</p>
+          {job.address.instructions && <p className="mt-0.5 text-caption text-muted">Note: {job.address.instructions}</p>}
+        </li>
+      </ol>
+
+      <div className="mx-4 mt-4 flex gap-2">
+        <a href={`tel:${job.phone}`} className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-2xl border border-line text-body font-semibold"><Phone className="size-4" aria-hidden="true" />Call</a>
+        <a href={directions(onWay ? drop : pickup.address || pickup.name)} target="_blank" rel="noreferrer" className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-2xl border border-line text-body font-semibold"><Navigation className="size-4" aria-hidden="true" />Navigate</a>
+      </div>
+
+      {job.items.length > 0 && (
+        <ul className="mx-4 mt-3 rounded-2xl bg-paper px-3 py-2">
+          {job.items.map((it, i) => <li key={i} className="flex gap-2 py-0.5 text-body"><span className="font-bold tabular">{it.qty}×</span>{it.name}</li>)}
+        </ul>
+      )}
+
+      <div className="m-4 flex items-center justify-between gap-3 rounded-2xl border border-line p-3">
+        <div>
+          <p className="text-label text-muted">{job.paid ? "Paid online / recorded" : "Collect cash"}</p>
+          <p className="font-display text-title font-bold leading-none tabular">{money(job.totalPaise)}</p>
+        </div>
+        {job.paid ? <span className="inline-flex items-center gap-1 rounded-full bg-[var(--state-available-soft)] px-3 py-1 text-caption font-bold text-[var(--state-available-text)]"><Check className="size-3.5" aria-hidden="true" />Paid</span>
+          : onWay && <button type="button" disabled={pending} onClick={() => { if (window.confirm(`Collected ${money(job.totalPaise)} in cash?`)) act(() => riderCashAction(job.id, `cash-${job.id}`)); }} className="inline-flex min-h-11 items-center gap-2 rounded-2xl bg-ink px-4 text-body font-bold text-white disabled:opacity-50"><Banknote className="size-4" aria-hidden="true" />Cash received</button>}
+      </div>
+
+      <div className="px-4 pb-4">
+        {!onWay ? (
+          <button type="button" disabled={pending || !job.kitchenReady} onClick={() => act(() => riderPickUpAction(job.id))} className="flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-brand text-button font-bold text-brand-on shadow-[0_8px_20px_-6px_var(--brand-border)] disabled:bg-line disabled:text-muted disabled:shadow-none">
+            <Package className="size-5" aria-hidden="true" />{job.kitchenReady ? "Picked up · start delivery" : "Wait for the kitchen"}
+          </button>
+        ) : (
+          <button type="button" disabled={pending || !job.paid} onClick={() => act(() => riderDeliveredAction(job.id))} className="flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[var(--state-available)] text-button font-bold text-white disabled:bg-line disabled:text-muted">
+            <CircleCheck className="size-5" aria-hidden="true" />{job.paid ? "Delivered" : "Take cash first"}
+          </button>
+        )}
+      </div>
+    </article>
+  );
+}
+
+function Avatar({ url, name }: { url: string | null; name: string }) {
+  // Staff photos live in the photo bucket, so this stays a plain image
+  // eslint-disable-next-line @next/next/no-img-element
+  return url ? <img src={url} alt="" className="size-12 shrink-0 rounded-full object-cover ring-2 ring-surface" /> : <span className="grid size-12 shrink-0 place-items-center rounded-full bg-brand-soft text-brand-strong"><UserRound className="size-6" aria-label={name} /></span>;
+}
+
+function ProfileForm({ profile, onSaved }: { profile: Profile; onSaved: (p: Profile) => void }) {
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <form className="mt-4 grid gap-3 rounded-3xl border border-line bg-surface p-4" onSubmit={(e) => { e.preventDefault(); const form = new FormData(e.currentTarget); setError(null); start(async () => { const r = await riderSaveProfileAction(form); if (r.ok) onSaved(r.data); else setError(r.error); }); }}>
+      <p className="text-body font-bold">Your rider profile</p>
+      <p className="-mt-2 text-caption text-muted">Customers see your photo, name and vehicle number when you bring their order.</p>
+      <label className="flex items-center gap-3 rounded-2xl border border-dashed border-line p-3 text-body font-semibold">
+        <Camera className="size-5 text-brand-strong" aria-hidden="true" />{profile.photoUrl ? "Change photo" : "Add your photo"}
+        <input name="photo" type="file" accept="image/*" capture="user" className="ml-auto max-w-[45%] text-caption" />
+      </label>
+      <label className="text-caption font-semibold text-muted">Vehicle number
+        <input name="vehicleNo" defaultValue={profile.vehicleNo ?? ""} placeholder="RJ06 AB 1234" maxLength={20} className="mt-1 min-h-12 w-full rounded-2xl border border-line bg-paper px-4 text-body uppercase text-ink" />
+      </label>
+      {error && <p role="alert" className="text-caption font-semibold text-danger">{error}</p>}
+      <button disabled={pending} className="min-h-12 rounded-2xl bg-brand text-button font-bold text-brand-on disabled:opacity-60">{pending ? "Saving…" : "Save profile"}</button>
+    </form>
+  );
+}

@@ -1,7 +1,7 @@
 // Who may see and do what on the staff console (PS 7.5). Pure data, shared by the server, which
 // enforces it, and the sidebar, which hides what a role cannot use. Never trusted from a client.
 
-export const staffRoles = ["owner", "manager", "cashier", "host", "waiter", "kitchen", "accountant", "reception"] as const;
+export const staffRoles = ["owner", "manager", "cashier", "host", "waiter", "kitchen", "accountant", "reception", "rider"] as const;
 export type StaffRole = (typeof staffRoles)[number];
 
 export const consoleSectionRoles = {
