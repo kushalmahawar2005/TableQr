@@ -5,7 +5,7 @@ export function OutletLogo({ name, logoUrl, size = 44 }: { name: string; logoUrl
   return logoUrl ? (
     // Restaurant uploads can live on any host, so this stays a plain image
     // eslint-disable-next-line @next/next/no-img-element
-    <img src={logoUrl} alt="" width={size} height={size} className={`${box} shrink-0 rounded-card bg-surface object-contain`} />
+    <img src={logoUrl} alt="" width={size} height={size} className={`${box} shrink-0 rounded-card object-contain`} />
   ) : (
     <span
       aria-hidden
