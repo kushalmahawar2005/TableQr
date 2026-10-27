@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useGuestBase } from "@/lib/guest-base";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
@@ -46,6 +47,7 @@ function ManualAdvance({ summary, outletCode, token, timezone, disabled, onRefre
 }
 
 export function DetailsClient({ outletCode, token, timezone, freeCancellationMinutes, hindi: initialHindi = false }: { outletCode: string; token: string; timezone: string; freeCancellationMinutes: number; hindi?: boolean }) {
+  const base = useGuestBase(outletCode);
   const router = useRouter();
   const [hindi, setHindi] = useState(initialHindi);
   const t = (en: string, hi: string) => hindi ? hi : en;
@@ -61,7 +63,7 @@ export function DetailsClient({ outletCode, token, timezone, freeCancellationMin
     return () => { active = false; };
   }, [outletCode, token]);
   useEffect(() => {
-    if (summary?.status === "confirmed") router.replace(`/r/${encodeURIComponent(outletCode)}/book/confirmed?token=${encodeURIComponent(token)}&lang=${lang}`);
+    if (summary?.status === "confirmed") router.replace(`${base}/book/confirmed?token=${encodeURIComponent(token)}&lang=${lang}`);
   }, [summary?.status, outletCode, token, router, lang]);
   useEffect(() => {
     if (!summary?.manualClaimedAt || summary.manualConfirmedAt) return;
@@ -79,14 +81,14 @@ export function DetailsClient({ outletCode, token, timezone, freeCancellationMin
   }, [summary?.manualClaimedAt, summary?.manualConfirmedAt, outletCode, token]);
   const savePreorder = async () => { setBusy(true); const lines = Object.entries(qty).filter(([, count]) => count > 0).map(([itemId, count]) => ({ itemId, qty: count, modifierIds: modifierIds[itemId] ?? [] })); const r = await saveBookingPreorderAction(outletCode, token, lines); setBusy(false); if (!r.ok) { setMessage(r.message); return; } setPreorderSaved(true); await refresh(); setMessage(lines.length ? "Your preorder is saved. Pay the advance before confirming." : "Preorder removed."); };
   const send = async () => { setBusy(true); const r = await sendBookingOtpAction(outletCode, token, phone); setBusy(false); if (r.ok) { setChallenge(r.data.challengeId); setDevCode(r.data.devCode ?? ""); setMessage("Code sent."); } else setMessage(r.message); };
-  const confirm = async () => { setBusy(true); try { const result = await confirmBookingAction(outletCode, token, { name, phone }); if (result.ok) router.push(`/r/${encodeURIComponent(outletCode)}/book/confirmed?token=${encodeURIComponent(token)}&lang=${lang}`); else setMessage(result.message); } finally { setBusy(false); } };
+  const confirm = async () => { setBusy(true); try { const result = await confirmBookingAction(outletCode, token, { name, phone }); if (result.ok) router.push(`${base}/book/confirmed?token=${encodeURIComponent(token)}&lang=${lang}`); else setMessage(result.message); } finally { setBusy(false); } };
   const verify = async () => { setBusy(true); const r = await verifyBookingOtpAction(outletCode, token, { challengeId: challenge, code, name, marketingConsent: marketing }); if (!r.ok) { setBusy(false); setMessage(r.message); return; } await refresh(); setBusy(false); if (summary && summary.creditRequiredPaise > summary.creditPaidPaise) { setMessage("Mobile number verified. Complete your advance payment to continue."); return; } await confirm(); };
   const payCredit = async () => { setBusy(true); const r = await startBookingCreditAction(outletCode, token, globalThis.crypto?.randomUUID?.() ?? `${Date.now()}`); setBusy(false); if (r.ok && !r.data.paid) { try { await openCheckout(r.data.checkout); } catch { setMessage("Payment page could not open. Try again."); } } else if (!r.ok) setMessage(r.message); else await refresh(); };
   const menuValid = menu.every(item => (qty[item.id] ?? 0) === 0 || item.groups.every(group => { const count = (modifierIds[item.id] ?? []).filter(id => group.modifiers.some(modifier => modifier.id === id)).length; return count >= group.minSelect && count <= group.maxSelect; }));
   const draftTotal = inclusiveTotal(menu.filter(item => (qty[item.id] ?? 0) > 0).map(item => ({ qty: qty[item.id], unitPricePaise: item.pricePaise + (modifierIds[item.id] ?? []).reduce((sum, id) => sum + (item.groups.flatMap(group => group.modifiers).find(modifier => modifier.id === id)?.priceDeltaPaise ?? 0), 0), taxRateBp: item.taxRateBp })));
-  if (!summary) return <main lang={lang} className="flex min-h-dvh w-full min-w-0 flex-col pt-5 pb-10 text-ink"><Link href={`/r/${encodeURIComponent(outletCode)}`} className="relative -ml-1 inline-flex items-center gap-0.5 rounded-full px-1 py-0.5 text-caption font-semibold text-muted before:absolute before:-inset-2.5 hover:text-ink">‹ {t("Back to restaurant", "रेस्टोरेंट पर वापस जाएँ")}</Link><h1 className="mt-4 font-display text-[1.875rem] leading-tight font-bold tracking-tight">{t("Booking details", "बुकिंग का विवरण")}</h1><p className="mt-4 text-muted">{message || t("Loading your hold…", "आपकी टेबल रोक रहे हैं…")}</p></main>;
+  if (!summary) return <main lang={lang} className="flex min-h-dvh w-full min-w-0 flex-col pt-5 pb-10 text-ink"><Link href={`${base}`} className="relative -ml-1 inline-flex items-center gap-0.5 rounded-full px-1 py-0.5 text-caption font-semibold text-muted before:absolute before:-inset-2.5 hover:text-ink">‹ {t("Back to restaurant", "रेस्टोरेंट पर वापस जाएँ")}</Link><h1 className="mt-4 font-display text-[1.875rem] leading-tight font-bold tracking-tight">{t("Booking details", "बुकिंग का विवरण")}</h1><p className="mt-4 text-muted">{message || t("Loading your hold…", "आपकी टेबल रोक रहे हैं…")}</p></main>;
   return <main lang={lang} className="flex min-h-dvh w-full min-w-0 flex-col pt-5 pb-10 text-ink">
-    <div className="flex items-center justify-between gap-3"><Link href={`/r/${encodeURIComponent(outletCode)}`} className="relative -ml-1 inline-flex items-center gap-0.5 rounded-full px-1 py-0.5 text-caption font-semibold text-muted before:absolute before:-inset-2.5 hover:text-ink">‹ {t("Back to restaurant", "रेस्टोरेंट पर वापस जाएँ")}</Link><button type="button" onClick={() => { const next = !hindi; setHindi(next); router.replace(`/r/${encodeURIComponent(outletCode)}/book/details?token=${encodeURIComponent(token)}&lang=${next ? "hi" : "en"}`, { scroll: false }); }} className="min-h-9 rounded-full border border-line/70 bg-surface px-3.5 text-caption font-semibold shadow-[0_1px_3px_rgb(31_41_55/0.05)]">{hindi ? "English" : "हिन्दी"}</button></div>
+    <div className="flex items-center justify-between gap-3"><Link href={`${base}`} className="relative -ml-1 inline-flex items-center gap-0.5 rounded-full px-1 py-0.5 text-caption font-semibold text-muted before:absolute before:-inset-2.5 hover:text-ink">‹ {t("Back to restaurant", "रेस्टोरेंट पर वापस जाएँ")}</Link><button type="button" onClick={() => { const next = !hindi; setHindi(next); router.replace(`${base}/book/details?token=${encodeURIComponent(token)}&lang=${next ? "hi" : "en"}`, { scroll: false }); }} className="min-h-9 rounded-full border border-line/70 bg-surface px-3.5 text-caption font-semibold shadow-[0_1px_3px_rgb(31_41_55/0.05)]">{hindi ? "English" : "हिन्दी"}</button></div>
     <p className="mt-3 text-xs font-semibold uppercase tracking-[.18em] text-muted">{summary.manualClaimedAt ? t("Payment verification", "भुगतान की जाँच") : t("Five-minute hold", "पाँच मिनट का होल्ड")}</p><h1 className="mt-2 font-display text-[1.875rem] leading-tight font-bold tracking-tight">{t("Complete your booking", "अपनी बुकिंग पूरी करें")}</h1>
     {summary.manualConfirmedAt && summary.status !== "confirmed" && <p role="status" className="mt-4 rounded-xl bg-brand-soft p-4 text-sm font-semibold">{t("Your advance was received after the hold expired. Please contact the restaurant to arrange a new booking or refund.", "टेबल रोकने का समय खत्म होने के बाद आपका अग्रिम भुगतान मिला। नई बुकिंग या रिफंड के लिए रेस्टोरेंट से संपर्क करें।")}</p>}
     <section className="mt-6 rounded-[22px] border border-line/60 bg-surface p-4 shadow-[0_2px_12px_rgb(31_41_55/0.05)]"><p className="text-sm text-muted">{t("Booking reference", "बुकिंग संदर्भ")}</p><p className="text-xl font-bold">{summary.reference}</p><p className="mt-3 text-sm">{new Intl.DateTimeFormat(hindi ? "hi-IN-u-nu-latn" : "en-IN", { timeZone: timezone, dateStyle: "medium", timeStyle: "short" }).format(new Date(summary.startAt))} · {summary.partySize} {t("guests", "मेहमान")}</p></section>

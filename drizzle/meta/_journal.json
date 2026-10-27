@@ -456,6 +456,20 @@
       "when": 1793082929962,
       "tag": "0064_inventory_pro",
       "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "5",
+      "when": 1793109620505,
+      "tag": "0065_delivery_pin_rating",
+      "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "5",
+      "when": 1793111265721,
+      "tag": "0066_room_guest_phone",
+      "breakpoints": true
     }
   ]
 }

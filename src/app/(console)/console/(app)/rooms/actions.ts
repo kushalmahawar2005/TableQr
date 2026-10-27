@@ -1,7 +1,7 @@
 "use server";
 import type { RoomStatus } from "@/domain/rooms";
 import { AppError } from "@/server/errors";
-import { checkIn, checkOut, finishRoomRequest, getRooms, removeRoom, roomFoodTab, saveRoom, setRoomStatus, stayHistory } from "@/server/staff/rooms";
+import { assignRoomWaiter, checkIn, checkOut, finishRoomRequest, getRooms, removeRoom, roomFoodTab, saveRoom, setRoomStatus, stayHistory } from "@/server/staff/rooms";
 import { staffFor } from "@/server/staff/request";
 
 const ROLES = ["owner", "manager", "reception"] as const;
@@ -21,3 +21,4 @@ export async function checkInAction(id: string, input: Parameters<typeof checkIn
 export async function checkOutAction(id: string) { return run((s) => checkOut(s, id)); }
 export async function foodTabAction(id: string) { return run((s) => roomFoodTab(s, id)); }
 export async function requestDoneAction(id: string) { return run((s) => finishRoomRequest(s, id)); }
+export async function roomWaiterAction(id: string, waiterId: string | null) { return run((s) => assignRoomWaiter(s, String(id), waiterId ? String(waiterId) : null)); }

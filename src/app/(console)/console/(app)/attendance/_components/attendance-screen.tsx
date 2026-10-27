@@ -15,9 +15,10 @@ const TONE: Record<AttendanceStatus, { on: string; letter: string }> = {
   half_day: { on: "bg-[var(--state-reserved-soft)] text-[var(--state-reserved-text)] border-[var(--state-reserved)]", letter: "H" },
   absent: { on: "bg-terracotta text-white border-terracotta", letter: "A" },
   leave: { on: "bg-[var(--state-cleaning-soft)] text-[var(--state-cleaning-text)] border-[var(--state-cleaning)]", letter: "L" },
-  week_off: { on: "bg-neutral-200 text-ink border-neutral-300", letter: "W" },
+  // Theme tokens, so the chip reads in dark mode too (fixed greys turned white-on-white there)
+  week_off: { on: "bg-ink/15 text-ink border-ink/40", letter: "W" },
 };
-const ROLE: Record<string, string> = { owner: "Owner", manager: "Manager", cashier: "Cashier", host: "Host", waiter: "Waiter", kitchen: "Kitchen", accountant: "Accountant", reception: "Reception" };
+const ROLE: Record<string, string> = { owner: "Owner", manager: "Manager", cashier: "Cashier", host: "Host", waiter: "Waiter", kitchen: "Kitchen", accountant: "Accountant", reception: "Reception", rider: "Rider" };
 const initials = (name: string) => name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
 const field = "h-10 rounded-xl border border-line bg-surface px-3 text-body text-ink focus-visible:outline-2 focus-visible:outline-forest";
 
@@ -107,7 +108,7 @@ function Daily({ r, go }: { r: Register; go: (p: Record<string, string>) => void
               <li key={p.id} className="px-4 py-3.5 sm:px-5">
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
                   <div className="flex min-w-0 flex-1 basis-48 items-center gap-3">
-                    <span className="grid size-10 shrink-0 place-items-center rounded-full bg-sage text-body font-bold text-forest" aria-hidden="true">{initials(p.name)}</span>
+                    <Face url={p.photoUrl} name={p.name} />
                     <div className="min-w-0"><p className="truncate text-body font-semibold text-ink">{p.name}</p><p className="truncate text-caption text-muted">{p.roles.map((x) => ROLE[x] ?? x).join(", ")}</p></div>
                   </div>
                   <div role="group" aria-label={`Attendance for ${p.name}`} className="flex flex-wrap gap-1.5">
@@ -162,7 +163,7 @@ function Monthly({ m, go }: { m: Month; go: (p: Record<string, string>) => void 
             <tbody className="divide-y divide-line">
               {m.rows.map((r) => (
                 <tr key={r.id}>
-                  <th scope="row" className="sticky left-0 bg-surface px-4 py-3 font-semibold text-ink">{r.name}<span className="block text-caption font-normal text-muted">{r.roles.map((x) => ROLE[x] ?? x).join(", ")}</span></th>
+                  <th scope="row" className="sticky left-0 bg-surface px-4 py-3 font-semibold text-ink"><span className="flex items-center gap-2.5"><Face url={r.photoUrl} name={r.name} small /><span className="min-w-0">{r.name}<span className="block text-caption font-normal text-muted">{r.roles.map((x) => ROLE[x] ?? x).join(", ")}</span></span></span></th>
                   {cols.map(([k, key]) => <td key={k} className="px-2.5 py-3 text-center tabular-nums text-ink">{r.counts[key] || <span className="text-muted/50">0</span>}</td>)}
                   <td className="px-2.5 py-3 text-center tabular-nums text-muted">{r.counts.unmarked}</td>
                   <td className="px-3 py-3 text-center font-bold tabular-nums text-ink">{num(r.counts.daysWorked)}</td>
@@ -176,4 +177,12 @@ function Monthly({ m, go }: { m: Month; go: (p: Record<string, string>) => void 
       <p className="text-caption text-muted">P present · H half day (counts as half a day) · A absent · L leave · W week off. Leave and week off are not counted as days worked.</p>
     </>
   );
+}
+
+/** The person's own photo when they added one in their app, else their initials */
+function Face({ url, name, small = false }: { url: string | null; name: string; small?: boolean }) {
+  const size = small ? "size-8 text-caption" : "size-10 text-body";
+  // Staff photos live in the photo bucket, so this stays a plain image
+  // eslint-disable-next-line @next/next/no-img-element
+  return url ? <img src={url} alt="" className={`${size} shrink-0 rounded-full object-cover`} /> : <span className={`grid ${size} shrink-0 place-items-center rounded-full bg-sage font-bold text-forest`} aria-hidden="true">{initials(name)}</span>;
 }

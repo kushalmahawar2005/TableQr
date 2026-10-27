@@ -1,5 +1,6 @@
 import "server-only";
-import { and, count, eq, gte, inArray, isNull, or } from "drizzle-orm";
+import { and, avg, count, eq, gte, inArray, isNotNull, isNull, or } from "drizzle-orm";
+import { randomInt } from "node:crypto";
 import { db } from "@/db";
 import * as s from "@/db/schema";
 import { settleAtCounter } from "../billing/payments";
@@ -105,7 +106,7 @@ export async function riderJobs(staff: StaffSession, now = new Date()) {
       id: s.deliveryCheckouts.id, status: s.deliveryCheckouts.status, sessionId: s.deliveryCheckouts.sessionId,
       name: s.deliveryCheckouts.name, phone: s.deliveryCheckouts.phone, address: s.deliveryCheckouts.address,
       placedAt: s.deliveryCheckouts.placedAt, pickedUpAt: s.deliveryCheckouts.pickedUpAt, deliveredAt: s.deliveryCheckouts.deliveredAt,
-      totalPaise: s.bills.totalPaise, billStatus: s.bills.status,
+      totalPaise: s.bills.totalPaise, billStatus: s.bills.status, deliveryPin: s.deliveryCheckouts.deliveryPin, paymentIssue: s.deliveryCheckouts.paymentIssue,
     })
     .from(s.deliveryCheckouts)
     .innerJoin(s.bills, and(eq(s.bills.tenantId, s.deliveryCheckouts.tenantId), eq(s.bills.sessionId, s.deliveryCheckouts.sessionId)))
@@ -124,11 +125,13 @@ export async function riderJobs(staff: StaffSession, now = new Date()) {
   return {
     pickup: { name: outlet?.name ?? staff.outlet.name, address: [outlet?.address, outlet?.city].filter(Boolean).join(", ") },
     jobs: rows
-      .map((r) => {
+      .map(({ deliveryPin, ...r }) => {
         const live = lines.filter((l) => l.sessionId === r.sessionId && l.status !== "cancelled" && l.status !== "voided");
         return {
           ...r,
           paid: r.billStatus === "paid",
+          // The rider never sees the PIN itself; only whether this order needs one
+          hasPin: !!deliveryPin,
           kitchenReady: live.length > 0 && live.every((l) => l.status === "ready" || l.status === "served"),
           kitchenStatus: (r.sessionId && kitchen.get(r.sessionId)) || null,
           items: live.map((l) => ({ name: l.name, qty: l.qty })),
@@ -160,7 +163,8 @@ export async function riderPickUp(staff: StaffSession, id: string, now = new Dat
     const lines = await tx.select({ status: s.orderLines.status }).from(s.orderLines).where(and(eq(s.orderLines.tenantId, staff.tenantId), eq(s.orderLines.sessionId, row.sessionId)));
     const live = lines.filter((l) => l.status !== "voided" && l.status !== "cancelled");
     if (!live.length || live.some((l) => l.status !== "ready" && l.status !== "served")) throw new AppError("invalid_state", "The kitchen has not packed every item yet.");
-    await tx.update(s.deliveryCheckouts).set({ status: "dispatched", pickedUpAt: now }).where(and(eq(s.deliveryCheckouts.tenantId, staff.tenantId), eq(s.deliveryCheckouts.id, row.id)));
+    // The customer reads this PIN out at the door; the rider cannot finish the delivery without it
+    await tx.update(s.deliveryCheckouts).set({ status: "dispatched", pickedUpAt: now, deliveryPin: row.deliveryPin ?? String(randomInt(1000, 10000)), pinAttempts: 0 }).where(and(eq(s.deliveryCheckouts.tenantId, staff.tenantId), eq(s.deliveryCheckouts.id, row.id)));
     await audit(tx, staff, { action: "delivery.dispatched", entity: "delivery", entityId: row.id, before: { status: row.status }, after: { status: "dispatched", by: "rider" }, now });
     return row.sessionId;
   }, LOCK_THEN_READ);
@@ -183,18 +187,28 @@ export async function riderCollectCash(staff: StaffSession, id: string, requestI
 }
 
 /** Food handed over. Cash orders must be paid first, so the bill and the drawer agree. */
-export async function riderDelivered(staff: StaffSession, id: string, now = new Date()) {
+export async function riderDelivered(staff: StaffSession, id: string, pin: string, now = new Date()) {
   await requireStaffRole(staff, ["rider"]);
   const sessionId = await db.transaction(async (tx) => {
     const row = await ownJob(tx, staff, id);
     if (row.status === "delivered") return row.sessionId;
     if (row.status !== "dispatched") throw new AppError("invalid_state", "Pick up the order before marking it delivered.");
+    // Orders picked up before PINs existed have none; every new one does
+    if (row.deliveryPin) {
+      if (row.pinAttempts >= 5) throw new AppError("invalid_state", "Too many wrong PINs. Call the restaurant to finish this delivery.");
+      if (String(pin ?? "").trim() !== row.deliveryPin) {
+        await tx.update(s.deliveryCheckouts).set({ pinAttempts: row.pinAttempts + 1 }).where(and(eq(s.deliveryCheckouts.tenantId, staff.tenantId), eq(s.deliveryCheckouts.id, row.id)));
+        return { wrongPin: 4 - row.pinAttempts };
+      }
+    }
     const [bill] = await tx.select({ status: s.bills.status }).from(s.bills).where(and(eq(s.bills.tenantId, staff.tenantId), eq(s.bills.sessionId, row.sessionId)));
     if (bill?.status !== "paid") throw new AppError("invalid_state", "Collect the cash first, then mark it delivered.");
     await tx.update(s.deliveryCheckouts).set({ status: "delivered", deliveredAt: now }).where(and(eq(s.deliveryCheckouts.tenantId, staff.tenantId), eq(s.deliveryCheckouts.id, row.id)));
-    await audit(tx, staff, { action: "delivery.delivered", entity: "delivery", entityId: row.id, before: { status: row.status }, after: { status: "delivered", by: "rider" }, now });
+    await audit(tx, staff, { action: "delivery.delivered", entity: "delivery", entityId: row.id, before: { status: row.status }, after: { status: "delivered", by: "rider", pin: !!row.deliveryPin }, now });
     return row.sessionId;
   }, LOCK_THEN_READ);
+  // A wrong PIN is counted (and committed) but the delivery stays open
+  if (typeof sessionId === "object") throw new AppError("invalid_state", sessionId.wrongPin > 0 ? `Wrong PIN. Ask the customer again (${sessionId.wrongPin} ${sessionId.wrongPin === 1 ? "try" : "tries"} left).` : "Too many wrong PINs. Call the restaurant to finish this delivery.");
   await announceDelivery(staff, sessionId, "delivery.updated", [], "delivered");
 }
 
@@ -213,7 +227,19 @@ export async function riderProfile(staff: StaffSession) {
   const [me] = await db.select({ name: s.users.name, phone: s.users.phone, photoUrl: s.users.photoUrl, vehicleNo: s.users.vehicleNo, duty: s.users.dutyStatus })
     .from(s.users).where(and(eq(s.users.tenantId, staff.tenantId), eq(s.users.id, staff.userId)));
   if (!me) throw new AppError("not_found", "Your profile was not found.");
-  return { ...me, online: me.duty === "on" };
+  return { ...me, online: me.duty === "on", stats: await riderStats(staff.tenantId, staff.userId) };
+}
+
+/** Rides done (all time and today) and the customers' average stars, for the rider's profile and the customer's tracking card */
+export async function riderStats(tenantId: string, riderId: string, now = new Date()) {
+  const dayStart = new Date(now); dayStart.setHours(0, 0, 0, 0);
+  const done = and(eq(s.deliveryCheckouts.courierUserId, riderId), eq(s.deliveryCheckouts.status, "delivered"));
+  const [[all], [today], [stars]] = await Promise.all([
+    db.select({ n: count() }).from(s.deliveryCheckouts).where(and(eq(s.deliveryCheckouts.tenantId, tenantId), done)),
+    db.select({ n: count() }).from(s.deliveryCheckouts).where(and(eq(s.deliveryCheckouts.tenantId, tenantId), done, gte(s.deliveryCheckouts.deliveredAt, dayStart))),
+    db.select({ avg: avg(s.deliveryCheckouts.riderRating), n: count() }).from(s.deliveryCheckouts).where(and(eq(s.deliveryCheckouts.tenantId, tenantId), done, isNotNull(s.deliveryCheckouts.riderRating))),
+  ]);
+  return { rides: Number(all?.n ?? 0), today: Number(today?.n ?? 0), rating: stars?.n ? Math.round(Number(stars.avg) * 10) / 10 : null, ratings: Number(stars?.n ?? 0) };
 }
 
 export async function saveRiderProfile(staff: StaffSession, input: { vehicleNo?: string | null; photo?: { bytes: Buffer; contentType: string; filename: string } | null }) {

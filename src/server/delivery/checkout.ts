@@ -1,6 +1,6 @@
 import "server-only";
 import { createHash, randomBytes } from "node:crypto";
-import { and, count, eq, gte, inArray, ne } from "drizzle-orm";
+import { and, count, eq, gte, inArray, isNull, ne } from "drizzle-orm";
 import { db } from "@/db";
 import { uuidv7 } from "@/db/id";
 import * as s from "@/db/schema";
@@ -16,6 +16,7 @@ import { signRealtimeToken, topics } from "../realtime/token";
 import { DELIVERY_TABLE_PREFIX, freshLocation } from "@/domain/delivery";
 import { notifyDeliveryCustomer } from "../guest/push";
 import { verifiedRiders } from "./rider-docs";
+import { riderStats } from "./riders";
 import { TAKEAWAY_CLASS } from "../floor/takeaway-class";
 import { deliveryOutlet, cleanDeliveryCart, priceDeliveryCart } from "./catalog";
 import { audit } from "../staff/audit";
@@ -149,7 +150,7 @@ async function placeKnownDeliveryOrder(code: string, found: Awaited<ReturnType<t
   if (!placed.replayed) {
     await publish(deliveryScope(found), [{ topic: topics.kitchen, type: "ticket.created", data: { orderId: placed.order!.orderId, stations: placed.order!.stations } }, { topic: topics.floor, type: "delivery.placed", data: { sessionId: placed.sessionId } }, { topic: topics.session(placed.sessionId), type: "delivery.placed" }]);
     void notifyDeliveryCustomer(deliveryScope(found), placed.sessionId, "placed");
-    if (placed.billPayment) announceBill(placed.billPayment.scope, placed.billPayment.closedTableIds ? { tableIds: placed.billPayment.closedTableIds, state: "paid" } : undefined, [{ topic: topics.session(placed.sessionId), type: "payment.updated", data: { paymentId: placed.billPayment.paymentId } }, { topic: topics.session(placed.sessionId), type: "session.closed" }]);
+    if (placed.billPayment) announceBill(placed.billPayment.scope, placed.billPayment.closedTableIds ? { tableIds: placed.billPayment.closedTableIds, state: "needs_cleaning" } : undefined, [{ topic: topics.session(placed.sessionId), type: "payment.updated", data: { paymentId: placed.billPayment.paymentId } }, { topic: topics.session(placed.sessionId), type: "session.closed" }]);
   }
   return { sessionId: placed.sessionId, replayed: placed.replayed };
 }
@@ -174,7 +175,23 @@ export async function deliveryStatus(code: string, token: string, deviceId: stri
   const [bill] = row.sessionId ? await db.select({ totalPaise: s.bills.totalPaise, status: s.bills.status }).from(s.bills).where(and(eq(s.bills.tenantId, outlet.tenantId), eq(s.bills.sessionId, row.sessionId))) : [];
   const [rider] = row.courierUserId ? await db.select({ photoUrl: s.users.photoUrl, vehicleNo: s.users.vehicleNo, lastLat: s.users.lastLat, lastLng: s.users.lastLng, lastLocAt: s.users.lastLocAt }).from(s.users).where(and(eq(s.users.tenantId, outlet.tenantId), eq(s.users.id, row.courierUserId))) : [];
   const lines = row.sessionId ? await db.select({ name: s.orderLines.nameEn, nameHi: s.orderLines.nameHi, qty: s.orderLines.qty, status: s.orderLines.status }).from(s.orderLines).where(and(eq(s.orderLines.tenantId, outlet.tenantId), eq(s.orderLines.sessionId, row.sessionId))) : [];
-  return { id: row.id, status: row.status, placedAt: row.placedAt?.getTime() ?? null, items: lines.filter(l => l.status !== "cancelled" && l.status !== "voided").map(({ name, nameHi, qty }) => ({ name, nameHi, qty })), name: row.name, address: row.address, totalPaise: bill?.totalPaise ?? row.totalPaise, deliveryFeePaise: row.deliveryFeePaise, paid: bill?.status === "paid" || row.paymentStatus === "paid", paymentMode: row.paymentMode, paymentStatus: row.paymentStatus, paymentFailureReason: row.paymentFailureReason, refundStatus: row.refundStatus, manualPaymentQrUrl: row.manualPaymentQrUrl, manualPaymentReference: row.manualPaymentReference, manualPaymentClaimedAt: row.manualPaymentClaimedAt, courierName: row.courierName, courierPhone: row.courierPhone, courierPhotoUrl: rider?.photoUrl ?? null, courierVehicleNo: rider?.vehicleNo ?? null, courierVerified: row.courierUserId ? (await verifiedRiders(outlet.tenantId, [row.courierUserId])).has(row.courierUserId) : false, riderLocation: row.status === "dispatched" && rider ? freshLocation(rider.lastLat, rider.lastLng, rider.lastLocAt, now.getTime()) : null, kitchenStatus: orders[0]?.status ?? null };
+  return { id: row.id, status: row.status, placedAt: row.placedAt?.getTime() ?? null, items: lines.filter(l => l.status !== "cancelled" && l.status !== "voided").map(({ name, nameHi, qty }) => ({ name, nameHi, qty })), name: row.name, address: row.address, totalPaise: bill?.totalPaise ?? row.totalPaise, deliveryFeePaise: row.deliveryFeePaise, paid: bill?.status === "paid" || row.paymentStatus === "paid", paymentMode: row.paymentMode, paymentStatus: row.paymentStatus, paymentFailureReason: row.paymentFailureReason, refundStatus: row.refundStatus, manualPaymentQrUrl: row.manualPaymentQrUrl, manualPaymentReference: row.manualPaymentReference, manualPaymentClaimedAt: row.manualPaymentClaimedAt, courierName: row.courierName, courierPhone: row.courierPhone, courierPhotoUrl: rider?.photoUrl ?? null, courierVehicleNo: rider?.vehicleNo ?? null, courierVerified: row.courierUserId ? (await verifiedRiders(outlet.tenantId, [row.courierUserId])).has(row.courierUserId) : false, riderLocation: row.status === "dispatched" && rider ? freshLocation(rider.lastLat, rider.lastLng, rider.lastLocAt, now.getTime()) : null, kitchenStatus: orders[0]?.status ?? null,
+    // Shown to the customer only while the food is on its way; they read it out to the rider at the door
+    deliveryPin: row.status === "dispatched" ? row.deliveryPin : null,
+    courierRating: row.courierUserId ? await riderStats(outlet.tenantId, row.courierUserId, now).then((st) => ({ rating: st.rating, ratings: st.ratings, rides: st.rides })) : null,
+    myRating: row.riderRating ?? null, canRate: row.status === "delivered" && !!row.courierUserId && row.riderRating === null };
+}
+
+/** The customer's stars for the rider, once, after delivery */
+export async function rateDeliveryRider(code: string, token: string, deviceId: string, input: { stars: number; note?: string }, now = new Date()) {
+  const { outlet, row } = await deliveryCheckout(code, token, deviceId, now);
+  const stars = Number(input.stars);
+  if (!Number.isInteger(stars) || stars < 1 || stars > 5) throw new AppError("invalid_state", "Choose 1 to 5 stars.");
+  if (row.status !== "delivered" || !row.courierUserId) throw new AppError("invalid_state", "You can rate the rider after delivery.");
+  const note = String(input.note ?? "").trim().replace(/\s+/g, " ").slice(0, 200) || null;
+  await db.update(s.deliveryCheckouts).set({ riderRating: stars, riderRatingNote: note, riderRatedAt: now })
+    .where(and(eq(s.deliveryCheckouts.tenantId, outlet.tenantId), eq(s.deliveryCheckouts.id, row.id), isNull(s.deliveryCheckouts.riderRating)));
+  return { stars };
 }
 
 /** The customer's phone hears only this delivery's updates (its session topic) */

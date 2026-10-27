@@ -232,7 +232,7 @@ describe("paying", () => {
     const [session] = await env.db.select().from(s.tableSessions).where(eq(s.tableSessions.id, g.A.sessionId));
     expect(session).toMatchObject({ status: "closed", openKey: null });
     const [table] = await env.db.select().from(s.diningTables).where(eq(s.diningTables.id, env.demo.tableIds.T12));
-    expect(table.state).toBe("paid");
+    expect(table.state).toBe("needs_cleaning");
   });
 
   it("Chirag's UPI succeeding after he paid cash is recorded and queued for refund, never double counted", async () => {

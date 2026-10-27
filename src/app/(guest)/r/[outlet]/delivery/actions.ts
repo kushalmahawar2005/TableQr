@@ -3,10 +3,10 @@ import { cookies } from "next/headers";
 import { headers } from "next/headers";
 import { uuidv7 } from "@/db/id";
 import type { DeliveryAddress, DeliveryCartLine } from "@/db/schema/delivery";
-import { claimManualQrDeliveryPayment, createDeliveryCheckout, deliveryRealtimeToken, deliveryStatus, placeDeliveryOrder } from "@/server/delivery/checkout";
+import { claimManualQrDeliveryPayment, createDeliveryCheckout, deliveryRealtimeToken, deliveryStatus, placeDeliveryOrder, rateDeliveryRider } from "@/server/delivery/checkout";
 import { priceDeliveryCart, deliveryOutlet } from "@/server/delivery/catalog";
 import { sendDeliveryOtp, verifyDeliveryOtp } from "@/server/delivery/otp";
-import { lookupPincode } from "@/server/delivery/pincode";
+import { lookupPincode, reverseGeocode } from "@/server/delivery/pincode";
 import { saveDeliveryPush } from "@/server/guest/push";
 import { staffPushConfig, type PushSubscriptionInput } from "@/server/staff/web-push";
 import { db } from "@/db";
@@ -62,9 +62,19 @@ export async function deliveryStatusAction(outlet: string) {
   return result(async () => { const who = await identity(outlet); await reconcileDeliveryPayment(outlet, who.token, who.deviceId); return deliveryStatus(outlet, who.token, who.deviceId); });
 }
 
+/** Stars for the rider, once the food has arrived */
+export async function rateRiderAction(outlet: string, stars: number, note: string) {
+  return result(async () => { const who = await identity(outlet); return rateDeliveryRider(outlet, who.token, who.deviceId, { stars: Number(stars), note: String(note ?? "") }); });
+}
+
 /** City and areas for the address form; null when the pincode is unknown or the lookup is down */
 export async function pincodeAction(pincode: string) {
   return lookupPincode(String(pincode ?? "").trim());
+}
+
+/** Pincode, area and street for the guest's shared location or dropped pin */
+export async function placeAction(lat: number, lng: number) {
+  return reverseGeocode(Number(lat), Number(lng));
 }
 
 /** Live updates for the customer's own delivery; null when realtime is off (the page polls) */

@@ -1,6 +1,7 @@
 "use client";
 import { isDeliveryTable } from "@/domain/delivery";
 import {
+  Cancel01Icon,
   Alert02Icon,
   AlertDiamondIcon,
   CheckmarkCircle02Icon,
@@ -57,9 +58,11 @@ type Props = {
   onBumpLine: (card: KdsCard, lineId: string) => void;
   /** Prints this ticket's kitchen slip (KOT) */
   onPrint?: () => void;
+  /** Cancel one item, even after accept (asks for a reason and a manager) */
+  onCancelLine?: (card: KdsCard, line: KdsCard["lines"][number]) => void;
 };
 
-export function TicketCard({ card, lang, c, showStation, canAct, busy, busyLines, leaving, onAction, onBumpLine, onPrint }: Props) {
+export function TicketCard({ card, lang, c, showStation, canAct, busy, busyLines, leaving, onAction, onBumpLine, onPrint, onCancelLine }: Props) {
   const name = (en: string, hi: string | null) => (lang === "hi" && hi ? hi : en);
   const fresh = isFresh(card);
   const waiting = !!card.awaitingStaff;
@@ -136,13 +139,13 @@ export function TicketCard({ card, lang, c, showStation, canAct, busy, busyLines
           const actionable = mine && linesActive && !line.done;
           const working = busyLines.has(line.id);
           return (
-            <li key={line.id} className={line.otherStation ? "opacity-45" : undefined}>
+            <li key={line.id} className={`flex items-stretch ${line.otherStation ? "opacity-45" : ""}`}>
               <button
                 type="button"
                 disabled={!actionable || working}
                 onClick={() => onBumpLine(card, line.id)}
                 aria-label={actionable ? `${name(line.nameEn, line.nameHi)} — ${c.tapReady}` : undefined}
-                className={`grid min-h-[60px] w-full grid-cols-[auto_1fr_auto] items-start gap-3 px-4 py-2.5 text-left ${actionable ? "cursor-pointer active:bg-kds-line" : "cursor-default"}`}
+                className={`grid min-h-[60px] min-w-0 flex-1 grid-cols-[auto_1fr_auto] items-start gap-3 py-2.5 pl-4 text-left ${onCancelLine ? "pr-1" : "pr-4"} ${actionable ? "cursor-pointer active:bg-kds-line" : "cursor-default"}`}
               >
                 <span className={`tabular w-10 text-[24px] font-bold leading-8 ${line.done ? "text-kds-muted" : "text-kds-text"}`}>{line.qty}×</span>
                 <span className="min-w-0">
@@ -168,6 +171,11 @@ export function TicketCard({ card, lang, c, showStation, canAct, busy, busyLines
                   ) : null}
                 </span>
               </button>
+              {onCancelLine && mine && canAct && line.status !== "served" && (
+                <button type="button" onClick={() => onCancelLine(card, line)} aria-label={`${c.cancelItem}: ${name(line.nameEn, line.nameHi)}`} title={c.cancelItem} className="mr-2 grid w-11 shrink-0 place-items-center self-start rounded-lg py-3 text-kds-muted hover:bg-kds-line hover:text-kds-late">
+                  <HugeiconsIcon icon={Cancel01Icon} size={22} aria-hidden />
+                </button>
+              )}
             </li>
           );
         })}

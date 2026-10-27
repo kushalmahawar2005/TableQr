@@ -21,6 +21,7 @@ export type AppErrorCode =
   | "recall_expired"
   | "needs_choice"
   | "name_required"
+  | "phone_required"
   | "invalid_name"
   /** Staff: not signed in, or the sign-in has ended */
   | "staff_signed_out"

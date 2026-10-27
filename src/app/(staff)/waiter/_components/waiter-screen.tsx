@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, ArrowLeft, BellRing, BellOff, MonitorSmartphone, Check, ChefHat, ClipboardList, Droplets, LayoutGrid, Minus, Plus, Receipt, Search, ShoppingBag, Sparkles, Trash2, User, Utensils, Wallet, WifiOff } from "lucide-react";
+import { AlertTriangle, ArrowLeft, BellRing, BellOff, MonitorSmartphone, Volume2, Check, ChefHat, ClipboardList, Droplets, LayoutGrid, Minus, Plus, Receipt, Search, ShoppingBag, Sparkles, Trash2, User, Utensils, Wallet, WifiOff } from "lucide-react";
 import type { WaiterBoard, WaiterDetail, WaiterMenu } from "@/server/staff/waiter-read";
 import { connectRealtime } from "@/lib/realtime-client";
 import { priceLine } from "@/domain/pricing";
@@ -10,6 +10,8 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { copy, money, requestNames, requestUrgency } from "../_copy";
 import * as actions from "../actions";
 import { signOutAction } from "@/app/(console)/console/login/actions";
+import { MyProfile } from "./my-profile";
+import { readyPhrase, requestPhrase, saveVoicePreference, speak, voicePreference } from "@/lib/voice-alert";
 
 type Tab = "tasks" | "tables" | "order" | "me";
 type Draft = { itemId: string; qty: number; modifierIds: string[]; note: string; name: string; paise: number };
@@ -43,9 +45,17 @@ export function WaiterScreen({
   initialConnection?: string; theme?: "light" | "dark";
 }) {
   const [board, setBoard] = useState(initial), [tab, setTab] = useState<Tab>(initialTab), [language, setLanguage] = useState(initialLanguage), [offline, setOffline] = useState(initialOffline);
+  // Keep the open tab in the address so a refresh lands back on it
+  useEffect(() => {
+    if (preview) return;
+    const url = new URL(window.location.href);
+    if (tab === "tasks") url.searchParams.delete("tab"); else url.searchParams.set("tab", tab);
+    window.history.replaceState(window.history.state, "", url);
+  }, [tab, preview]);
   const [now, setNow] = useState(initial.renderedAt), [connection, setConnection] = useState(initialConnection), [busy, setBusy] = useState(false), [message, setMessage] = useState(initialMessage);
   const [detail, setDetail] = useState<WaiterDetail | null>(initialDetail), [menu, setMenu] = useState<WaiterMenu>(initialMenu), [stage, setStage] = useState(initialStage);
   const [person, setPerson] = useState(initialDetail?.people.find((p) => !p.paidOut)?.id ?? ""), [name, setName] = useState(""), [draft, setDraft] = useState<Draft[]>(initialDraft);
+  const [seatFor, setSeatFor] = useState<{ id: string; label: string } | null>(null), [seatSize, setSeatSize] = useState(2);
   const [item, setItem] = useState<MenuItem | null>(initialItem), [mods, setMods] = useState<string[]>([]), [qty, setQty] = useState(1), [note, setNote] = useState(""), [sheet, setSheet] = useState<SheetState | null>(initialSheet);
   const [destination, setDestination] = useState(""), [reason, setReason] = useState(""), [phone, setPhone] = useState(""), [pin, setPin] = useState("");
   const [method, setMethod] = useState<"cash" | "card">("cash"), [received, setReceived] = useState(""), [reference, setReference] = useState(""), [share, setShare] = useState("");
@@ -53,6 +63,9 @@ export function WaiterScreen({
   // Shift status, set by the manager on the dashboard: only a waiter on duty is rung for new tasks
   const dutyRef = useRef(initial.identity.duty);
   const [alerts, setAlerts] = useState(true), [awake, setAwake] = useState(false);
+  // Spoken alerts ("Table 1 needs water") alongside the beep; remembered per phone
+  const [voice, setVoice] = useState(true);
+  const voiceRef = useRef(true);
   const [acked, setAcked] = useState<Set<string>>(new Set());
   const alertsRef = useRef(true), pingRef = useRef<(text: string, quiet?: boolean) => void>(() => {}), audioRef = useRef<AudioContext | null>(null), seenReady = useRef(new Set(initial.ready.map((g) => g.id)));
   const seen = useRef(new Set(initial.requests.map((r) => r.id))), mutation = useRef(false), orderKey = useRef<string | null>(null), settleKey = useRef<string | null>(null);
@@ -64,7 +77,8 @@ export function WaiterScreen({
   useEffect(() => {
     try {
       const a = localStorage.getItem("tq_waiter_alerts") !== "off", w = localStorage.getItem("tq_waiter_awake") === "on";
-      queueMicrotask(() => { setAlerts(a); alertsRef.current = a; setAwake(w); });
+      const v = voicePreference();
+      queueMicrotask(() => { setAlerts(a); alertsRef.current = a; setAwake(w); setVoice(v); voiceRef.current = v; });
     } catch { /* storage blocked: keep defaults */ }
     try { const raw = JSON.parse(localStorage.getItem("tq_waiter_acked") ?? "[]"); if (Array.isArray(raw)) queueMicrotask(() => setAcked(new Set(raw.map(String)))); } catch { /* ignore */ }
     // Phones suspend sound when the screen locks or the app goes to the background, so wake it on every tap and on return
@@ -138,6 +152,10 @@ export function WaiterScreen({
           for (const g of res.data.ready) seenReady.current.add(g.id);
           if (freshRequests.length) pingRef.current(copy[language].newTask);
           else if (freshReady.length) pingRef.current(`${freshReady[0].tableCode} · ${copy[language].ready}`);
+          // Say what it is, on duty only, the same rule as the beep
+          if (voiceRef.current && alertsRef.current && dutyRef.current === "on" && (freshRequests.length || freshReady.length)) {
+            speak(freshRequests.length ? requestPhrase(freshRequests[0].kind, freshRequests[0].tableCode, language) : readyPhrase(freshReady[0].tableCode, language), language);
+          }
           if (detailId.current) { const d = await actions.detailAction(detailId.current); if (alive && d.ok) setDetail(d.data); }
         } else { setMessage(res.error); if (res.code === "staff_signed_out" || res.code === "forbidden") setOffline(true); }
       } catch { if (alive) setOffline(true); } finally { inflight = false; }
@@ -175,12 +193,27 @@ export function WaiterScreen({
   ];
   const duty = board.identity.duty;
   const ringing = pending.length > 0 && alerts && duty === "on" && !preview;
+  // The oldest unaccepted task, as a sentence to say out loud
+  const firstPending = pending[0]?.id;
+  const spokenTask = (() => {
+    if (!firstPending) return "";
+    const r = board.requests.find((x) => x.id === firstPending);
+    if (r) return requestPhrase(r.kind, r.tableCode, language);
+    const g = board.ready.find((x) => x.id === firstPending);
+    return g ? readyPhrase(g.tableCode, language) : "";
+  })();
+  const spokenRef = useRef(spokenTask);
+  useEffect(() => { spokenRef.current = spokenTask; }, [spokenTask]);
   useEffect(() => {
     if (!ringing) return;
-    // Buzz and beep about every 2.5 seconds until someone taps Accept
-    const t = setInterval(() => pingRef.current("", true), 2500);
+    // Buzz and beep about every 2.5 seconds until someone taps Accept, and say the task every 10 seconds
+    let tick = 0;
+    const t = setInterval(() => {
+      pingRef.current("", true);
+      if (++tick % 4 === 0 && voiceRef.current) speak(spokenRef.current, language);
+    }, 2500);
     return () => clearInterval(t);
-  }, [ringing]);
+  }, [ringing, language]);
   useEffect(() => { dutyRef.current = board.identity.duty; }, [board.identity.duty]);
   function accept(ids: string[], sessionId?: string) {
     const acknowledge = () => setAcked(prev => {
@@ -354,7 +387,7 @@ export function WaiterScreen({
                 const tone = STATE_TONE[t.state] ?? STATE_TONE.available;
                 return (
                   <article key={t.id} className="flex flex-col rounded-2xl border border-line bg-surface p-3">
-                    <button disabled={disabled || !t.sessionId} onClick={() => openTable(t.sessionId!)} className="flex-1 text-left disabled:cursor-default">
+                    <button disabled={disabled || (!t.sessionId && t.state !== "available")} onClick={() => (t.sessionId ? openTable(t.sessionId) : (setSeatFor({ id: t.id, label: t.label }), setSeatSize(2)))} className="flex-1 text-left disabled:cursor-default">
                       <span className="flex items-start justify-between gap-2"><span className="font-display text-2xl font-bold leading-tight">{t.label}</span>
                         {t.sessionId && (t.requestCount > 0 || t.readyCount > 0) && <span className="flex gap-1">{t.requestCount > 0 && <span className="grid size-6 place-items-center rounded-full bg-danger text-xs font-bold text-white">{t.requestCount}</span>}{t.readyCount > 0 && <span className="grid size-6 place-items-center rounded-full bg-[var(--state-available)] text-xs font-bold text-white">{t.readyCount}</span>}</span>}
                       </span>
@@ -362,7 +395,7 @@ export function WaiterScreen({
                       {t.sessionId && <p className="mt-2 text-sm text-muted">{t.partySize} {t.partySize === 1 ? L("guest", "व्यक्ति") : L("guests", "लोग")}{t.openedAt ? ` · ${age(t.openedAt)}` : ""}</p>}
                       {t.unpaidPaise !== null && t.unpaidPaise > 0 && <p className="mt-1 text-sm font-semibold">{c.unpaid} {money(t.unpaidPaise)}</p>}
                     </button>
-                    {t.state === "needs_cleaning" && <button className={`${primary} mt-2 min-h-11 w-full text-sm`} disabled={disabled} onClick={() => perform(() => actions.cleanAction(t.id))}><Sparkles className="size-4" aria-hidden="true" />{c.clean}</button>}
+                    {(t.state === "needs_cleaning" || t.state === "paid") && <button className={`${primary} mt-2 min-h-11 w-full text-sm`} disabled={disabled} onClick={() => perform(() => actions.cleanAction(t.id))}><Sparkles className="size-4" aria-hidden="true" />{c.clean}</button>}
                   </article>
                 );
               })}
@@ -492,10 +525,7 @@ export function WaiterScreen({
 
         {tab === "me" && (
           <section className="mt-5 space-y-3">
-            <div className={`${card} flex items-center gap-4`}>
-              <span className="grid size-16 place-items-center rounded-full bg-brand-soft font-display text-3xl font-bold text-brand-strong">{board.identity.name.trim().slice(0, 1).toUpperCase()}</span>
-              <div className="min-w-0"><h2 className="truncate font-display text-xl font-bold">{board.identity.name}</h2><p className="text-sm text-muted">{board.identity.roles.join(", ")} · {board.identity.outlet}</p></div>
-            </div>
+            <MyProfile name={board.identity.name} subtitle={`${board.identity.roles.join(", ")} · ${board.identity.outlet}`} hi={hi} preview={preview} />
             <div className={card}>
               <h3 className="font-display text-lg font-bold">{L("My shift", "मेरी शिफ़्ट")}</h3>
               <p className="mt-1 text-sm text-muted">{L("Your manager sets this on the dashboard. New tasks ring only while you are on duty.", "इसे आपके मैनेजर डैशबोर्ड से बदलते हैं। नए काम की घंटी सिर्फ़ ड्यूटी पर रहते बजती है।")}</p>
@@ -511,7 +541,10 @@ export function WaiterScreen({
                 <button type="button" role="switch" aria-checked={awake} className={`${btn} justify-between`} onClick={() => { const v = !awake; setAwake(v); try { localStorage.setItem("tq_waiter_awake", v ? "on" : "off"); } catch { /* ignore */ } }}>
                   <span className="flex items-center gap-2"><MonitorSmartphone className="size-5" aria-hidden="true" />{L("Keep screen on", "स्क्रीन चालू रखें")}</span><b className={awake ? "text-[var(--state-available-text)]" : "text-muted"}>{awake ? L("On", "चालू") : L("Off", "बंद")}</b>
                 </button>
-                <button type="button" className={btn} onClick={() => pingRef.current(L("Test alert: new request", "टेस्ट अलर्ट: नया अनुरोध"))}>{L("Test alert", "अलर्ट टेस्ट करें")}</button>
+                <button type="button" role="switch" aria-checked={voice} className={`${btn} justify-between`} onClick={() => { const v = !voice; setVoice(v); voiceRef.current = v; saveVoicePreference(v); if (v) speak(L("Voice alerts are on", "आवाज़ वाले अलर्ट चालू हैं"), language); }}>
+                  <span className="flex items-center gap-2"><Volume2 className="size-5" aria-hidden="true" />{L("Speak the task (\"Table 1 needs water\")", "काम बोलकर बताएँ (\"टेबल 1 को पानी चाहिए\")")}</span><b className={voice ? "text-[var(--state-available-text)]" : "text-muted"}>{voice ? L("On", "चालू") : L("Off", "बंद")}</b>
+                </button>
+                <button type="button" className={btn} onClick={() => { pingRef.current(L("Test alert: new request", "टेस्ट अलर्ट: नया अनुरोध")); if (voice) speak(requestPhrase("water", "T1", language), language); }}>{L("Test alert", "अलर्ट टेस्ट करें")}</button>
               </div>
               <p className="mt-2 text-xs text-muted">{L("iPhone does not vibrate in a browser; the beep and notification still work. Alerts stop if the phone is locked and the page is closed.", "iPhone ब्राउज़र में वाइब्रेट नहीं करता; बीप और नोटिफिकेशन चलते हैं। फ़ोन लॉक हो और पेज बंद हो तो अलर्ट नहीं आएँगे।")}</p>
             </div>
@@ -534,6 +567,21 @@ export function WaiterScreen({
           ))}
         </div>
       </nav>
+
+      <Sheet open={!!seatFor} onOpenChange={(o) => !o && setSeatFor(null)}>
+        <SheetContent side="bottom" className="rounded-t-3xl bg-background">
+          {seatFor && (
+            <>
+              <SheetHeader><SheetTitle className="font-display text-2xl font-bold">{L(`Seat guests at ${seatFor.label}`, `${seatFor.label} पर ग्राहक बैठाएं`)}</SheetTitle><SheetDescription>{L("How many people? Then take their order.", "कितने लोग हैं? फिर ऑर्डर लें।")}</SheetDescription></SheetHeader>
+              <div className="space-y-5 px-4 pb-6">
+                <div className="grid grid-cols-4 gap-2">{[1, 2, 3, 4, 5, 6, 7, 8].map((n) => <button key={n} type="button" aria-pressed={seatSize === n} onClick={() => setSeatSize(n)} className={`min-h-12 rounded-xl border text-lg font-semibold ${seatSize === n ? "border-ink bg-ink text-paper" : "border-line bg-surface"}`}>{n}</button>)}</div>
+                <button type="button" className={`${primary} w-full`} disabled={disabled || duty !== "on"} onClick={async () => { let opened: string | null = null; await perform(() => actions.seatAction(seatFor.id, seatSize), (r) => { setSeatFor(null); opened = r.sessionId; }); if (opened) await openTable(opened, true); }}><Plus className="size-5" aria-hidden="true" />{L("Seat & take order", "बैठाएं और ऑर्डर लें")}</button>
+                {duty !== "on" && <p className="text-center text-sm text-muted">{L("Go on duty first (Me tab).", "पहले ड्यूटी शुरू करें (मैं टैब)।")}</p>}
+              </div>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
 
       <Sheet open={!!item} onOpenChange={(o) => !o && setItem(null)}>
         <SheetContent side="bottom" className="max-h-[92dvh] overflow-y-auto rounded-t-3xl bg-background">

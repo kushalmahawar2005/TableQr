@@ -21,6 +21,9 @@ export type KdsActions = {
   recall: (ticketId: string) => Promise<KdsResult<unknown>>;
   stock: (itemId: string, outOfStock: boolean) => Promise<KdsResult<{ cartsAffected: number }>>;
   search: (q: string) => Promise<SearchHits>;
+  /** Cancel one item with a reason; a manager or owner PIN unless the signed-in person is one */
+  cancelLine: (lineId: string, reason: string, phone: string, pin: string) => Promise<KdsResult<unknown>>;
+  cancelNeedsPin: boolean;
 };
 
 /** The wall screen: every call is checked against its device cookie */
@@ -35,6 +38,8 @@ export const wallActions: KdsActions = {
   recall: wall.recallAction,
   stock: wall.stockAction,
   search: wall.searchAction,
+  cancelLine: wall.cancelLineAction,
+  cancelNeedsPin: true,
 };
 
 const KdsActionsContext = createContext<KdsActions>(wallActions);

@@ -134,7 +134,7 @@ describe("walk-in and the table lifecycle", () => {
     expect(await env.db.select().from(s.sessionTables).where(and(eq(s.sessionTables.tableId, T("T4")), isNotNull(s.sessionTables.activeKey)))).toHaveLength(1);
   });
 
-  it("goes Paid → Needs cleaning → Available, and never resets a table out of order", async () => {
+  it("goes straight to Needs cleaning when paid, then Available, and never resets a table out of order", async () => {
     const visit = (await getTableDetail(host, T("T4"))).visit!;
     const guest = await startOrJoinTable({ outletCode: "SRJ01", shortCode: QR("T4"), deviceId: "t4-a", displayName: "Tara" });
     const ctx = await attachVerifiedTestGuest(appDb, await getGuestContext("SRJ01", QR("T4"), guest.participantId, "t4-a"), "Tara");
@@ -143,9 +143,9 @@ describe("walk-in and the table lifecycle", () => {
     await failsWith(markNeedsCleaning(host, T("T4")), "invalid_state");
     await failsWith(markReady(host, T("T4")), "invalid_state");
     await settleAtCounter({ tenantId: host.tenantId, outletId: host.outletId, userId: host.userId }, { sessionId: visit.sessionId, method: "cash" });
-    expect(await stateOf("T4")).toBe("paid");
-    await markNeedsCleaning(host, T("T4"));
+    // Paying sends the table straight to Needs cleaning; the old Paid step is skipped
     expect(await stateOf("T4")).toBe("needs_cleaning");
+    await failsWith(markNeedsCleaning(host, T("T4")), "invalid_state");
     await markReady(host, T("T4"));
     expect(await stateOf("T4")).toBe("available");
   });
@@ -395,7 +395,7 @@ describe("realtime and isolation", () => {
   it("still settles a combined or moved party for G9: paid page finds the visit from any of its QRs", async () => {
     const visit = (await getTableDetail(host, T("T5"))).visit!;
     await settleAtCounter({ tenantId: host.tenantId, outletId: host.outletId, userId: host.userId }, { sessionId: visit.sessionId, method: "cash" });
-    expect(await stateOf("T5")).toBe("paid");
+    expect(await stateOf("T5")).toBe("needs_cleaning");
     const after = await getAfterVisit("SRJ01", QR("T9"), "mv-b");
     expect(after && !after.expired && after.state).toBe("closed");
   });

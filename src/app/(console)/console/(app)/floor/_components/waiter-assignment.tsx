@@ -25,7 +25,7 @@ export function WaiterAssignment({ data, initialIds, hi, onClose, onSaved }: { d
     finally { setBusy(false); }
   };
   return <Dialog title={L("Assign tables", "टेबल असाइन करें")} onClose={() => !busy && onClose()} closeLabel={L("Close", "बंद करें")} wide>
-    <div className="max-h-[70dvh] space-y-5 overflow-y-auto p-5">
+    <div className="space-y-5">
       <p className="text-sm text-muted">{L("Choose tables, then a waiter. Auto-balance gives more work to the least busy staff on duty.", "टेबल और वेटर चुनें। ऑटो बैलेंस कम व्यस्त ऑन-ड्यूटी वेटर को काम देता है।")}</p>
       <fieldset disabled={busy}>
         <div className="flex items-center justify-between gap-3"><legend className="font-semibold">{L("Tables", "टेबल")} · {selected.size}</legend><button type="button" className="min-h-9 text-sm font-semibold text-brand-strong" onClick={() => setSelected(new Set(selected.size === tables.length ? [] : tables.map(t => t.id)))}>{selected.size === tables.length ? L("Clear all", "सब हटाएं") : L("Select all", "सब चुनें")}</button></div>

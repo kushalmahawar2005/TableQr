@@ -9,6 +9,8 @@ import type { StaffContext } from "./context";
 import { chooseWaiter } from "@/domain/waiter-routing";
 import { waiterCoverage } from "./waiter-coverage";
 import { LOCK_THEN_READ } from "../db-types";
+import type { StaffSession } from "./auth";
+import { seatWalkIn } from "../floor/table-actions";
 
 const staffRoles = ["waiter", "manager", "owner"] as const;
 
@@ -30,7 +32,7 @@ export async function getWaiterTasks(ctx: StaffContext, now = new Date()) {
   const owners = new Map(coverage.visits.map(v => [v.id, v.waiterUserId]));
   const visible = (sessionId: string) => {
     const owner = coverage.activeOwner(owners.get(sessionId));
-    return actor.supervisor || !owner || owner.id === ctx.userId;
+    return actor.supervisor || owner?.id === ctx.userId;
   };
   const [requests, readyLines] = await Promise.all([
     db.select({
@@ -70,6 +72,27 @@ export async function getWaiterTasks(ctx: StaffContext, now = new Date()) {
     ready: [...groups.values()].map((group) => ({ ...group, readyAt: group.readyAt.getTime() })),
     realtimeToken: staffRealtimeToken(ctx, [topics.tasks, topics.kitchen, topics.floor]),
   };
+}
+
+/** A plain waiter only works on visits they own; managers and owners can open any table. */
+export async function requireOwnVisit(ctx: StaffContext & { roles: readonly string[] }, sessionId: string) {
+  if (ctx.roles.some(r => r === "manager" || r === "owner")) return;
+  const [visit] = await db.select({ waiterUserId: s.tableSessions.waiterUserId }).from(s.tableSessions).where(and(eq(s.tableSessions.tenantId, ctx.tenantId), eq(s.tableSessions.outletId, ctx.outletId), eq(s.tableSessions.id, String(sessionId))));
+  if (!visit || visit.waiterUserId !== ctx.userId) throw new AppError("forbidden", "This table is not assigned to you. Ask a manager.");
+}
+
+/** Seat a walk-in from the waiter app. A plain waiter may only open a table assigned to them; the visit is theirs. */
+export async function waiterSeatTable(staff: StaffSession, tableId: string, partySize: number, now = new Date()) {
+  const actor = await requireStaffRole(staff);
+  if (!actor.supervisor) {
+    if (actor.duty !== "on") throw new AppError("forbidden", "Go on duty before seating a table.");
+    const coverage = await waiterCoverage(staff, now);
+    if (coverage.shifts.find(a => a.tableId === String(tableId))?.waiterUserId !== staff.userId) throw new AppError("forbidden", "This table is not assigned to you. Ask a manager.");
+  }
+  // Waiters cannot seat from the floor screen; here the assignment check above stands in for that permission
+  const { sessionId } = await seatWalkIn(staff, { tableId: String(tableId), partySize: Number(partySize) }, now, { checkedByPos: true });
+  await claimWaiterVisit(staff, sessionId, now);
+  return { sessionId };
 }
 
 /** Assign a shift default and the current visit in one transaction. Combined tables share their primary table. */

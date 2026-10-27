@@ -1,12 +1,14 @@
 "use client";
-import { BadgeCheck, Banknote, Bike, Camera, Check, ShieldAlert, ChefHat, CircleCheck, MapPin, Navigation, Package, Phone, Store, UserRound } from "lucide-react";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { AlertTriangle, BadgeCheck, Banknote, Bike, Camera, Check, ShieldAlert, ChefHat, CircleCheck, Loader2, MapPin, Navigation, Package, Phone, QrCode, Star, Store, UserRound } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { shrinkPhotoFile } from "@/lib/shrink-photo";
 import type { riderJobs, riderProfile } from "@/server/delivery/riders";
 import type { RiderVerification } from "@/server/delivery/rider-docs";
 import { connectRealtime } from "@/lib/realtime-client";
-import { riderCashAction, riderDeliveredAction, riderJobsAction, riderLocationAction, riderOnlineAction, riderPickUpAction, riderSaveProfileAction, riderTokenAction, submitDocumentsAction } from "./actions";
+import { riderCashAction, riderDeliveredAction, riderJobsAction, riderLocationAction, riderOnlineAction, riderPaymentIssueAction, riderPickUpAction, riderProfileAction, riderQrAction, riderQrStatusAction, riderSaveProfileAction, riderTokenAction, riderUpiReceivedAction, submitDocumentsAction } from "./actions";
+import type { RiderQr } from "@/server/delivery/rider-pay";
 import { LiveMap } from "@/components/live-map";
+import { signOutAction } from "@/app/(console)/console/login/actions";
 import { distanceKm, etaMinutes } from "@/domain/delivery";
 
 type Jobs = Awaited<ReturnType<typeof riderJobs>>;
@@ -22,6 +24,8 @@ export function RiderScreen({ initialJobs, initialProfile, initialVerification, 
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const [editing, setEditing] = useState(!initialProfile.photoUrl || !initialProfile.vehicleNo);
+  // A rider without a photo or vehicle number starts on Me to finish their profile
+  const [tab, setTab] = useState<"rides" | "me">(!initialProfile.photoUrl || !initialProfile.vehicleNo ? "me" : "rides");
 
   // New jobs and kitchen progress arrive live; a burst of events is one reload. Without a live
   // connection the list is checked every 20 s.
@@ -46,21 +50,24 @@ export function RiderScreen({ initialJobs, initialProfile, initialVerification, 
     start(async () => {
       const r = await work();
       if (!r.ok) setError(r.error ?? "Could not update.");
-      const fresh = await riderJobsAction();
+      const [fresh, me] = await Promise.all([riderJobsAction(), riderProfileAction()]);
       if (fresh.ok) setJobs(fresh.data);
+      // Rides and rating move after a delivery
+      if (me.ok) setProfile((old) => ({ ...old, stats: me.data.stats }));
     });
   };
   const live = jobs.jobs.filter((j) => j.status !== "delivered");
   const delivered = jobs.jobs.filter((j) => j.status === "delivered");
 
+  const cashDue = live.filter((j) => !j.paid).reduce((n, j) => n + j.totalPaise, 0);
   return (
-    <main className="mx-auto min-h-dvh w-full max-w-xl px-4 pt-4 pb-10 text-ink">
+    <main className="mx-auto min-h-dvh w-full max-w-xl px-4 pt-4 pb-28 text-ink">
       {/* Who I am, and whether I take deliveries now */}
       <header className="flex items-center gap-3">
         <Avatar url={profile.photoUrl} name={profile.name} />
         <div className="min-w-0 flex-1">
           <p className="truncate font-display text-section font-bold">{profile.name}</p>
-          <p className="text-caption text-muted">{profile.vehicleNo ?? "Add your vehicle number"} · <button type="button" className="font-semibold text-brand-strong" onClick={() => setEditing((v) => !v)}>{editing ? "Close" : "Edit profile"}</button></p>
+          <p className="truncate text-caption text-muted">{profile.vehicleNo ?? "Add your vehicle number in Me"}</p>
         </div>
         <button
           type="button"
@@ -75,47 +82,81 @@ export function RiderScreen({ initialJobs, initialProfile, initialVerification, 
         </button>
       </header>
 
-      <p className={`mt-3 flex items-center gap-2 rounded-2xl px-3 py-2 text-caption font-semibold ${!profile.online ? "bg-ink/5 text-muted" : here.error ? "bg-[var(--state-held-soft)] text-[var(--state-held-text)]" : "bg-[var(--state-available-soft)] text-[var(--state-available-text)]"}`}>
-        <MapPin className="size-4" aria-hidden="true" />
-        {!profile.online ? "Location is off while you are offline" : here.error ?? (here.point ? "Sharing your live location with the restaurant and customer" : "Finding your location…")}
-      </p>
-
-      <VerificationCard initial={initialVerification} hasPhoto={!!profile.photoUrl} />
-
-      {editing && <ProfileForm profile={profile} onSaved={(p) => { setProfile((old) => ({ ...old, ...p })); setEditing(false); }} />}
-
       {error && <p role="alert" className="mt-4 rounded-2xl border border-danger/30 bg-[var(--state-seated-soft)] p-3 text-body font-semibold text-danger">{error}</p>}
 
-      <div className="mt-4 grid grid-cols-3 gap-2">
-        {([[Bike, "Active", String(live.length)], [CircleCheck, "Delivered", String(delivered.length)], [Banknote, "Cash due", money(live.filter((j) => !j.paid).reduce((n, j) => n + j.totalPaise, 0))]] as const).map(([Icon, label, value]) => (
-          <div key={label} className="rounded-2xl border border-line bg-surface p-3">
-            <p className="flex items-center gap-1.5 text-label font-semibold text-muted"><Icon className="size-3.5" aria-hidden="true" />{label}</p>
-            <p className="mt-1 font-display text-section font-bold tabular">{value}</p>
-          </div>
-        ))}
-      </div>
+      {tab === "rides" ? <>
+        <p className={`mt-3 flex items-center gap-2 rounded-2xl px-3 py-2 text-caption font-semibold ${!profile.online ? "bg-ink/5 text-muted" : here.error ? "bg-[var(--state-held-soft)] text-[var(--state-held-text)]" : "bg-[var(--state-available-soft)] text-[var(--state-available-text)]"}`}>
+          <MapPin className="size-4" aria-hidden="true" />
+          {!profile.online ? "Location is off while you are offline" : here.error ?? (here.point ? "Sharing your live location with the restaurant and customer" : "Finding your location…")}
+        </p>
 
-      {!profile.online && live.length === 0 && <p className="mt-4 rounded-2xl bg-ink/5 p-4 text-center text-body text-muted">You are offline. Go online to get deliveries.</p>}
-      {profile.online && live.length === 0 && (
-        <div className="mt-6 rounded-3xl border border-dashed border-line p-8 text-center">
-          <Bike className="mx-auto size-9 text-muted" aria-hidden="true" />
-          <p className="mt-3 font-semibold">Waiting for a delivery</p>
-          <p className="mt-1 text-caption text-muted">New orders given to you show up here by themselves.</p>
+        <div className="mt-4 grid grid-cols-3 gap-2">
+          {([[Bike, "Active", String(live.length)], [CircleCheck, "Delivered today", String(delivered.length)], [Banknote, "To collect", money(cashDue)]] as const).map(([Icon, label, value]) => (
+            <div key={label} className="rounded-2xl border border-line bg-surface p-3">
+              <p className="flex items-center gap-1.5 text-label font-semibold text-muted"><Icon className="size-3.5 shrink-0" aria-hidden="true" />{label}</p>
+              <p className="mt-1 font-display text-section font-bold tabular">{value}</p>
+            </div>
+          ))}
         </div>
-      )}
 
-      <div className="mt-4 grid gap-4">
-        {live.map((job) => <JobCard key={job.id} job={job} pickup={jobs.pickup} pending={pending} act={act} here={here.point} photoUrl={profile.photoUrl} />)}
-      </div>
+        {!profile.online && live.length === 0 && <p className="mt-4 rounded-2xl bg-ink/5 p-4 text-center text-body text-muted">You are offline. Go online to get deliveries.</p>}
+        {profile.online && live.length === 0 && (
+          <div className="mt-6 rounded-3xl border border-dashed border-line p-8 text-center">
+            <Bike className="mx-auto size-9 text-muted" aria-hidden="true" />
+            <p className="mt-3 font-semibold">Waiting for a delivery</p>
+            <p className="mt-1 text-caption text-muted">New orders given to you show up here by themselves.</p>
+          </div>
+        )}
 
-      {delivered.length > 0 && (
-        <section className="mt-6">
-          <h2 className="text-caption font-bold tracking-wide text-muted uppercase">Delivered today</h2>
-          <ul className="mt-2 divide-y divide-line rounded-2xl border border-line bg-surface">
-            {delivered.map((j) => <li key={j.id} className="flex items-center justify-between gap-3 px-4 py-3"><span className="min-w-0 truncate text-body">{j.name}</span><span className="shrink-0 text-caption text-muted tabular">{clock(j.deliveredAt)} · {money(j.totalPaise)}</span></li>)}
-          </ul>
+        <div className="mt-4 grid gap-4">
+          {live.map((job) => <JobCard key={job.id} job={job} pickup={jobs.pickup} pending={pending} act={act} here={here.point} photoUrl={profile.photoUrl} />)}
+        </div>
+
+        {delivered.length > 0 && (
+          <section className="mt-6">
+            <h2 className="text-caption font-bold tracking-wide text-muted uppercase">Delivered today</h2>
+            <ul className="mt-2 divide-y divide-line rounded-2xl border border-line bg-surface">
+              {delivered.map((j) => <li key={j.id} className="flex items-center justify-between gap-3 px-4 py-3"><span className="min-w-0 truncate text-body">{j.name}</span><span className="shrink-0 text-caption text-muted tabular">{clock(j.deliveredAt)} · {money(j.totalPaise)}</span></li>)}
+            </ul>
+          </section>
+        )}
+      </> : <>
+        {/* Me: the rider's own record and profile */}
+        <section className="mt-4 overflow-hidden rounded-3xl border border-line bg-surface">
+          <div className="flex flex-col items-center gap-2 bg-brand-soft/50 px-4 pt-6 pb-5 text-center">
+            {/* Staff photos live in the photo bucket, so this stays a plain image */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            {profile.photoUrl ? <img src={profile.photoUrl} alt="" className="size-24 rounded-full object-cover ring-4 ring-surface" /> : <span className="grid size-24 place-items-center rounded-full bg-surface text-brand-strong ring-4 ring-surface"><UserRound className="size-10" aria-hidden="true" /></span>}
+            <p className="font-display text-title font-bold">{profile.name}</p>
+            <p className="text-caption text-muted">{profile.phone}{profile.vehicleNo ? ` · ${profile.vehicleNo}` : ""}</p>
+            <p className="inline-flex items-center gap-1 text-body font-bold"><Star className="size-4 fill-[var(--state-held)] text-[var(--state-held)]" aria-hidden="true" />{profile.stats.rating !== null ? <>{profile.stats.rating.toFixed(1)} <span className="font-medium text-muted">· {profile.stats.ratings} {profile.stats.ratings === 1 ? "rating" : "ratings"}</span></> : <span className="font-medium text-muted">No ratings yet</span>}</p>
+          </div>
+          <div className="grid grid-cols-3 divide-x divide-line border-t border-line text-center">
+            {([["Total rides", String(profile.stats.rides)], ["Today", String(profile.stats.today)], ["Rating", profile.stats.rating !== null ? profile.stats.rating.toFixed(1) : "–"]] as const).map(([label, value]) => (
+              <div key={label} className="px-2 py-3"><p className="font-display text-title font-bold tabular">{value}</p><p className="text-label font-semibold text-muted">{label}</p></div>
+            ))}
+          </div>
         </section>
-      )}
+
+        <VerificationCard initial={initialVerification} hasPhoto={!!profile.photoUrl} />
+
+        {editing ? <ProfileForm profile={profile} onSaved={(p) => { setProfile((old) => ({ ...old, ...p })); setEditing(false); }} />
+          : <button type="button" onClick={() => setEditing(true)} className="mt-4 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-line bg-surface text-body font-semibold"><Camera className="size-4" aria-hidden="true" />Edit photo and vehicle</button>}
+
+        <form action={signOutAction}><button className="mt-3 flex min-h-12 w-full items-center justify-center rounded-2xl border border-line bg-surface text-body font-semibold text-danger">Sign out</button></form>
+      </>}
+
+      {/* Bottom tabs: the work, and me */}
+      <nav aria-label="Rider navigation" className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface pb-[env(safe-area-inset-bottom)]">
+        <div className="mx-auto grid max-w-xl grid-cols-2">
+          {([["rides", Bike, "Rides", live.length], ["me", UserRound, "Me", 0]] as const).map(([key, Icon, label, badge]) => (
+            <button key={key} type="button" aria-current={tab === key ? "page" : undefined} onClick={() => { setTab(key); window.scrollTo({ top: 0 }); }} className={`flex min-h-16 flex-col items-center justify-center gap-1 text-caption font-semibold ${tab === key ? "text-brand-strong" : "text-muted"}`}>
+              <span className={`relative grid h-7 w-14 place-items-center rounded-full ${tab === key ? "bg-brand-soft" : ""}`}><Icon className="size-5" aria-hidden="true" />{badge > 0 && <span className="absolute -top-1 right-1 grid min-w-4 place-items-center rounded-full bg-brand px-1 text-[10px] leading-4 font-bold text-brand-on">{badge}</span>}</span>
+              {label}
+            </button>
+          ))}
+        </div>
+      </nav>
     </main>
   );
 }
@@ -169,14 +210,7 @@ function JobCard({ job, pickup, pending, act, here, photoUrl }: { job: Job; pick
         </ul>
       )}
 
-      <div className="m-4 flex items-center justify-between gap-3 rounded-2xl border border-line p-3">
-        <div>
-          <p className="text-label text-muted">{job.paid ? "Paid online / recorded" : "Collect cash"}</p>
-          <p className="font-display text-title font-bold leading-none tabular">{money(job.totalPaise)}</p>
-        </div>
-        {job.paid ? <span className="inline-flex items-center gap-1 rounded-full bg-[var(--state-available-soft)] px-3 py-1 text-caption font-bold text-[var(--state-available-text)]"><Check className="size-3.5" aria-hidden="true" />Paid</span>
-          : onWay && <button type="button" disabled={pending} onClick={() => { if (window.confirm(`Collected ${money(job.totalPaise)} in cash?`)) act(() => riderCashAction(job.id, `cash-${job.id}`)); }} className="inline-flex min-h-11 items-center gap-2 rounded-2xl bg-ink px-4 text-body font-bold text-white disabled:opacity-50"><Banknote className="size-4" aria-hidden="true" />Cash received</button>}
-      </div>
+      <PayBox job={job} onWay={onWay} pending={pending} act={act} />
 
       <div className="px-4 pb-4">
         {!onWay ? (
@@ -184,12 +218,132 @@ function JobCard({ job, pickup, pending, act, here, photoUrl }: { job: Job; pick
             <Package className="size-5" aria-hidden="true" />{job.kitchenReady ? "Picked up · start delivery" : "Wait for the kitchen"}
           </button>
         ) : (
-          <button type="button" disabled={pending || !job.paid} onClick={() => act(() => riderDeliveredAction(job.id))} className="flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[var(--state-available)] text-button font-bold text-white disabled:bg-line disabled:text-muted">
-            <CircleCheck className="size-5" aria-hidden="true" />{job.paid ? "Delivered" : "Take cash first"}
-          </button>
+          <DeliverWithPin job={job} pending={pending} act={act} />
         )}
       </div>
     </article>
+  );
+}
+
+/** Money at the door: QR first (Cashfree confirms by itself; the restaurant's UPI needs a look), cash, or a reported problem */
+function PayBox({ job, onWay, pending, act }: { job: Job; onWay: boolean; pending: boolean; act: (w: () => Promise<{ ok: boolean; error?: string }>) => void }) {
+  const [mode, setMode] = useState<"idle" | "qr" | "issue">("idle");
+  const [qr, setQr] = useState<RiderQr | null>(null);
+  const [qrImage, setQrImage] = useState<string | null>(null);
+  const [state, setState] = useState<"loading" | "waiting" | "paid" | "failed">("loading");
+  const [error, setError] = useState<string | null>(null);
+  const [utr, setUtr] = useState("");
+  const [issueMethod, setIssueMethod] = useState<"cash" | "upi">("cash");
+  const [note, setNote] = useState("");
+
+  const openQr = async () => {
+    setMode("qr"); setError(null); setState("loading"); setQr(null); setQrImage(null);
+    const r = await riderQrAction(job.id);
+    if (!r.ok) { setError(r.error); setState("failed"); return; }
+    setQr(r.data);
+    if (r.data.kind === "paid") { setState("paid"); act(async () => ({ ok: true })); return; }
+    setState("waiting");
+    const link = r.data.link;
+    if (r.data.kind === "gateway" && r.data.image) setQrImage(r.data.image);
+    else if (link) setQrImage(await import("qrcode").then((q) => q.toDataURL(link, { margin: 1, width: 320 })));
+  };
+
+  // Cashfree QR: ask every 3 seconds until it is paid; the screen turns green on its own
+  const paymentId = qr?.kind === "gateway" ? qr.paymentId : null;
+  const actRef = useRef(act);
+  useEffect(() => { actRef.current = act; });
+  useEffect(() => {
+    if (!paymentId || state !== "waiting") return;
+    let live = true;
+    const tick = async () => {
+      const r = await riderQrStatusAction(job.id, paymentId);
+      if (!live || !r.ok) return;
+      if (r.data.status === "paid") { setState("paid"); navigator.vibrate?.([80, 60, 160]); actRef.current(async () => ({ ok: true })); }
+      if (r.data.status === "failed") { setState("failed"); setError("The payment failed. Make a new QR, or take cash."); }
+    };
+    const t = window.setInterval(() => void tick(), 3000);
+    return () => { live = false; window.clearInterval(t); };
+  }, [paymentId, state, job.id]);
+
+  if (job.paid) return (
+    <div className="m-4 flex items-center justify-between gap-3 rounded-2xl border border-[var(--state-available)]/40 bg-[var(--state-available-soft)] p-3">
+      <div><p className="text-label text-[var(--state-available-text)]">Payment done</p><p className="font-display text-title font-bold leading-none tabular">{money(job.totalPaise)}</p></div>
+      <span className="inline-flex items-center gap-1 rounded-full bg-[var(--state-available)] px-3 py-1 text-caption font-bold text-white"><Check className="size-3.5" aria-hidden="true" />Paid</span>
+      {job.paymentIssue && <p className="basis-full text-caption text-[var(--state-held-text)]">Issue noted: {job.paymentIssue}</p>}
+    </div>
+  );
+
+  return (
+    <div className="m-4 rounded-2xl border border-line p-3">
+      <div className="flex items-center justify-between gap-3">
+        <div><p className="text-label text-muted">Collect from customer</p><p className="font-display text-title font-bold leading-none tabular">{money(job.totalPaise)}</p></div>
+        {!onWay && <span className="text-caption text-muted">After pick up</span>}
+      </div>
+      {onWay && mode === "idle" && (
+        <div className="mt-3 grid gap-2">
+          <button type="button" disabled={pending} onClick={() => void openQr()} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-ink text-body font-bold text-white disabled:opacity-50"><QrCode className="size-5" aria-hidden="true" />Show payment QR</button>
+          <button type="button" disabled={pending} onClick={() => { if (window.confirm(`Collected ${money(job.totalPaise)} in cash?`)) act(() => riderCashAction(job.id, `cash-${job.id}`)); }} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-line text-body font-bold disabled:opacity-50"><Banknote className="size-5" aria-hidden="true" />Cash received</button>
+          <button type="button" onClick={() => { setMode("issue"); setError(null); }} className="min-h-10 text-caption font-semibold text-muted underline underline-offset-2">Payment problem?</button>
+        </div>
+      )}
+      {onWay && mode === "qr" && (
+        <div className="mt-3 grid justify-items-center gap-3 text-center">
+          {state === "paid" ? (
+            <div className="grid w-full justify-items-center gap-2 rounded-2xl bg-[var(--state-available-soft)] p-5 text-[var(--state-available-text)]">
+              <span className="grid size-14 place-items-center rounded-full bg-[var(--state-available)] text-white"><Check className="size-8" aria-hidden="true" /></span>
+              <p className="text-section font-bold">Payment successful</p><p className="text-caption">{money(job.totalPaise)} received. Now take the PIN and finish.</p>
+            </div>
+          ) : (
+            <>
+              {/* QR images come as data URLs */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              {qrImage ? <img src={qrImage} alt="Payment QR" className="size-60 rounded-2xl bg-white p-2" /> : <div className="grid size-60 place-items-center rounded-2xl bg-paper">{state === "loading" ? <Loader2 className="size-8 animate-spin text-muted" aria-hidden="true" /> : <QrCode className="size-10 text-muted" aria-hidden="true" />}</div>}
+              {qr?.kind === "gateway" && state === "waiting" && <p className="inline-flex items-center gap-2 text-caption font-semibold text-muted"><Loader2 className="size-4 animate-spin" aria-hidden="true" />Waiting for payment… it turns green by itself</p>}
+              {qr?.kind === "upi" && <>
+                <p className="text-caption text-muted">Pays to {qr.upiId}. Check the customer&apos;s screen shows <b>{money(qr.amountPaise)}</b> paid.</p>
+                <input value={utr} onChange={(e) => setUtr(e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, ""))} maxLength={40} inputMode="text" placeholder="UPI reference / UTR (optional)" className="min-h-11 w-full rounded-xl border border-line bg-surface px-3 text-body" />
+                <button type="button" disabled={pending} onClick={() => act(() => riderUpiReceivedAction(job.id, utr))} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[var(--state-available)] text-body font-bold text-white disabled:opacity-50"><Check className="size-5" aria-hidden="true" />UPI received</button>
+              </>}
+            </>
+          )}
+          {error && <p role="alert" className="text-caption font-semibold text-danger">{error}</p>}
+          {state !== "paid" && <div className="flex w-full gap-2">
+            <button type="button" onClick={() => setMode("idle")} className="min-h-11 flex-1 rounded-2xl border border-line text-caption font-semibold">Back</button>
+            <button type="button" onClick={() => { setMode("issue"); setError(null); }} className="min-h-11 flex-1 rounded-2xl border border-line text-caption font-semibold text-[var(--state-held-text)]">Payment problem?</button>
+          </div>}
+        </div>
+      )}
+      {onWay && mode === "issue" && (
+        <div className="mt-3 grid gap-3">
+          <p className="flex items-start gap-2 rounded-xl bg-[var(--state-held-soft)] p-3 text-caption text-[var(--state-held-text)]"><AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />Take {money(job.totalPaise)} another way and write what happened. The manager will see it.</p>
+          <div className="grid grid-cols-2 gap-2">{([["cash", "Took cash"], ["upi", "UPI to restaurant"]] as const).map(([v, label]) => <button key={v} type="button" aria-pressed={issueMethod === v} onClick={() => setIssueMethod(v)} className={`min-h-11 rounded-xl border text-caption font-bold ${issueMethod === v ? "border-ink bg-ink text-white" : "border-line"}`}>{label}</button>)}</div>
+          <textarea value={note} onChange={(e) => setNote(e.target.value)} maxLength={280} rows={3} placeholder="What went wrong? e.g. QR not loading, customer's UPI app failed" className="w-full rounded-xl border border-line bg-surface p-3 text-body" />
+          <div className="flex gap-2">
+            <button type="button" onClick={() => setMode("idle")} className="min-h-12 flex-1 rounded-2xl border border-line text-body font-semibold">Back</button>
+            <button type="button" disabled={pending || note.trim().length < 5} onClick={() => act(() => riderPaymentIssueAction(job.id, issueMethod, note))} className="min-h-12 flex-[2] rounded-2xl bg-ink text-body font-bold text-white disabled:opacity-50">Save · payment taken</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** "Delivered" needs the customer's 4-digit PIN, so food never goes to the wrong door */
+function DeliverWithPin({ job, pending, act }: { job: Job; pending: boolean; act: (w: () => Promise<{ ok: boolean; error?: string }>) => void }) {
+  const [pin, setPin] = useState("");
+  const ready = job.paid && (!job.hasPin || pin.length === 4);
+  return (
+    <div className="grid gap-2">
+      {job.hasPin && (
+        <label className="grid gap-1.5 text-caption font-semibold text-muted">
+          Ask the customer for their delivery PIN
+          <input value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))} inputMode="numeric" autoComplete="one-time-code" placeholder="• • • •" aria-label="Delivery PIN" className="min-h-14 w-full rounded-2xl border border-line bg-surface text-center font-display text-title font-bold tracking-[0.6em] tabular" />
+        </label>
+      )}
+      <button type="button" disabled={pending || !ready} onClick={() => act(() => riderDeliveredAction(job.id, pin))} className="flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[var(--state-available)] text-button font-bold text-white disabled:bg-line disabled:text-muted">
+        <CircleCheck className="size-5" aria-hidden="true" />{!job.paid ? "Take payment first" : job.hasPin && pin.length < 4 ? "Enter PIN to finish" : "Delivered"}
+      </button>
+    </div>
   );
 }
 

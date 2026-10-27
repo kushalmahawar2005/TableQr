@@ -54,7 +54,8 @@ export async function getOutletSettings(staff: Staff): Promise<OutletSettings> {
   ]);
   const paymentGateway = await outletPaymentGatewayStatus(staff.tenantId, staff.outletId);
   return {
-    deliveryPolicy: readDeliveryPolicy(outlet.deliveryPolicy), deliveryAvailable: features.delivery,
+    // Delivery not set up yet: start on the restaurant's own Cashfree when it is connected
+    deliveryPolicy: outlet.deliveryPolicy ? readDeliveryPolicy(outlet.deliveryPolicy) : { ...readDeliveryPolicy(null), paymentMode: paymentGateway.configured && paymentGateway.available ? "gateway" : "cod" }, deliveryAvailable: features.delivery,
     guestOnlinePaymentAvailable: paymentGateway.available, bookingGatewayAvailable: paymentGateway.available, paymentGateway,
     name: outlet.name, code: outlet.code, city: outlet.city, address: outlet.address, gstin: outlet.gstin, fssai: outlet.fssai, timezone: outlet.timezone, logoUrl: brand?.logoUrl ?? null,
     sessionMode: outlet.sessionMode, autoAcceptOrders: outlet.autoAcceptOrders, guestOnlinePayments: outlet.guestOnlinePayments, serviceChargeBp: outlet.serviceChargeBp, tipPresetsBp: outlet.tipPresetsBp,

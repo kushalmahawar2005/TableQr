@@ -4,62 +4,80 @@ import { Cancel01Icon, Download04Icon, Share08Icon } from "@hugeicons/core-free-
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useEffect, useState } from "react";
 
-// "Install the app" card for staff phones. Android and desktop Chrome hand us an install prompt;
-// iPhones never do, so they get the two steps (Share, then Add to Home Screen). Hidden once the
-// app is installed, and for a week after someone closes it.
+// "Install the app" card. Chrome, Edge and Samsung Internet hand us an install prompt only while the
+// app is NOT installed, so on those browsers the card shows only when that prompt arrives: someone
+// who already installed it never sees the card, even when they open the link in the browser.
+// iPhones never send a prompt, so they get the two steps (Share, then Add to Home Screen). Never
+// shown inside the installed app or the Android rider app, and hidden for a while after "Not now".
 
 type InstallEvent = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: "accepted" | "dismissed" }> };
 const HIDE_KEY = "tq_install_hidden_until";
 
-function hiddenForNow() {
+// The prompt can arrive before React is ready; catch it as soon as this file loads
+let earlyPrompt: InstallEvent | null = null;
+if (typeof window !== "undefined") {
+  window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); earlyPrompt = e as InstallEvent; });
+  window.addEventListener("appinstalled", () => { earlyPrompt = null; });
+}
+
+/** Already running as the app: the installed web app, or the Android app's built-in browser */
+function runningAsApp() {
+  const native = !!(window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform?.();
+  // Android app screens (WebView) carry "; wv)" in their user agent; Chrome itself never does
+  const webView = /; wv\)/.test(navigator.userAgent);
+  return native || webView || window.matchMedia("(display-mode: standalone)").matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
+}
+
+function hiddenForNow(key = HIDE_KEY) {
   try {
-    return Number(localStorage.getItem(HIDE_KEY) ?? 0) > Date.now();
+    return Number(localStorage.getItem(key) ?? 0) > Date.now();
   } catch {
     return false;
   }
 }
 
-export function InstallApp({ className = "", name = "TableQR", logoUrl = null, compact = false }: { className?: string; name?: string; logoUrl?: string | null; compact?: boolean }) {
+export function InstallApp({ className = "", name = "TableQR", logoUrl = null, compact = false, title, blurb, guest = false, downloadHref }: { className?: string; name?: string; logoUrl?: string | null; compact?: boolean; title?: string; blurb?: string; /** A customer page: its own "not now", and only for a day */ guest?: boolean; /** A native app to download instead of installing this site (the rider's Android app) */ downloadHref?: string }) {
+  const hideKey = guest ? "tq_guest_install_hidden_until" : HIDE_KEY;
   const [prompt, setPrompt] = useState<InstallEvent | null>(null);
   const [ios, setIos] = useState(false);
   const [show, setShow] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
 
   useEffect(() => {
-    const installed = window.matchMedia("(display-mode: standalone)").matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
-    if (installed || hiddenForNow()) return;
+    if (runningAsApp() || hiddenForNow(hideKey)) return;
     const onPrompt = (e: Event) => {
       e.preventDefault();
       setPrompt(e as InstallEvent);
       setShow(true);
     };
-    const onInstalled = () => setShow(false);
+    const onInstalled = () => { setPrompt(null); setShow(false); };
     window.addEventListener("beforeinstallprompt", onPrompt);
     window.addEventListener("appinstalled", onInstalled);
-    // Keep the install entry visible even if Chromium fired before React hydrated, or the
-    // browser does not expose a prompt event (desktop Safari and some managed browsers).
-    // The click then gives browser-specific instructions instead of silently hiding the feature.
-    const showTimer = window.setTimeout(() => setShow(true), 0);
-    // iPhone and iPad Safari: no prompt event, so explain the Share menu instead
+    // Caught before React was ready
+    const caught = earlyPrompt;
+    // Browsers with no install prompt (iPhone, Safari, Firefox) cannot say whether the app is
+    // installed, so they get the card with the manual steps; prompt browsers wait for the prompt
+    const promptBrowser = "onbeforeinstallprompt" in window;
     const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-    if (isIos) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- the device is only known in the browser
-      setIos(true);
-      setShow(true);
-    }
+    queueMicrotask(() => {
+      // A download link works on every browser; it only hides inside the app
+      if (downloadHref) setShow(true);
+      else if (caught) { setPrompt(caught); setShow(true); }
+      else if (isIos) { setIos(true); setShow(true); }
+      else if (!promptBrowser) setShow(true);
+    });
     return () => {
       window.removeEventListener("beforeinstallprompt", onPrompt);
       window.removeEventListener("appinstalled", onInstalled);
-      window.clearTimeout(showTimer);
     };
-  }, []);
+  }, [hideKey, downloadHref]);
 
   if (!show) return null;
 
   const close = () => {
     setShow(false);
     try {
-      localStorage.setItem(HIDE_KEY, String(Date.now() + 7 * 86_400_000));
+      localStorage.setItem(hideKey, String(Date.now() + (guest ? 1 : 7) * 86_400_000));
     } catch {
       // Storage blocked: it shows again next time, which is fine
     }
@@ -86,18 +104,26 @@ export function InstallApp({ className = "", name = "TableQR", logoUrl = null, c
             <img src={logoUrl} alt="" className="size-full object-contain" />
           ) : name.trim().slice(0, 1).toUpperCase() || "T"}
         </span>
-        <p className={`min-w-0 flex-1 break-words font-semibold text-ink ${compact ? "text-caption leading-snug" : "text-body leading-snug"}`}>Install {name} on this phone</p>
+        <p className={`min-w-0 flex-1 break-words font-semibold text-ink ${compact ? "text-caption leading-snug" : "text-body leading-snug"}`}>{title ?? `Install ${name} on this phone`}</p>
         <button type="button" onClick={close} aria-label="Not now" className={`grid shrink-0 place-items-center rounded-input text-muted hover:bg-ink/5 hover:text-ink ${compact ? "size-7" : "size-9"}`}>
           <HugeiconsIcon icon={Cancel01Icon} size={18} aria-hidden />
         </button>
       </div>
-      {ios ? (
+      {downloadHref ? (
+        <>
+          <p className={`mt-2 text-muted ${small}`}>{blurb ?? "Get the Android app for live location and delivery alerts."}</p>
+          <a href={downloadHref} className={`mt-2.5 inline-flex w-full items-center justify-center gap-2 whitespace-nowrap rounded-input bg-ink px-3.5 font-semibold text-white hover:bg-ink/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink ${compact ? "min-h-8 px-2 text-caption" : "min-h-10 text-body"}`}>
+            <HugeiconsIcon icon={Download04Icon} size={18} aria-hidden className="shrink-0" />
+            Download app
+          </a>
+        </>
+      ) : ios ? (
         <p className={`mt-2 text-muted ${small}`}>
           Tap <HugeiconsIcon icon={Share08Icon} size={14} className="inline align-[-2px]" aria-label="Share" /> Share, then <span className="font-semibold text-ink">Add to Home Screen</span>.
         </p>
       ) : (
         <>
-          <p className={`mt-2 text-muted ${small}`}>Opens like an app, full screen, straight from your home screen.</p>
+          <p className={`mt-2 text-muted ${small}`}>{blurb ?? "Opens like an app, full screen, straight from your home screen."}</p>
           <button type="button" onClick={() => void install()} className={`mt-2.5 inline-flex w-full items-center justify-center gap-2 whitespace-nowrap rounded-input bg-ink px-3.5 font-semibold text-white hover:bg-ink/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink ${compact ? "min-h-8 px-2 text-caption" : "min-h-10 text-body"}`}>
             <HugeiconsIcon icon={Download04Icon} size={18} aria-hidden className="shrink-0" />
             Install app

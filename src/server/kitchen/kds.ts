@@ -4,7 +4,8 @@ import { db } from "@/db";
 import * as s from "@/db/schema";
 import { AppError } from "../errors";
 import { staffRealtimeToken, topics } from "../realtime/token";
-import type { StaffSession } from "../staff/auth";
+import { verifyStaffPin, type StaffSession } from "../staff/auth";
+import { changeWaiterLine } from "../staff/waiter-mutations";
 import type { StaffContext } from "../staff/context";
 import { acceptTicket, bumpLine, bumpTicket, recallTicket, setOutOfStock, startTicket } from "./actions";
 import { kitchenStations, type KdsDevice } from "./device";
@@ -134,4 +135,24 @@ export async function kdsSearch(device: KdsDevice, q: string) {
 /** Realtime for a kitchen screen: kitchen tickets and menu availability only */
 export function kdsRealtimeToken(device: KdsDevice) {
   return staffRealtimeToken({ tenantId: device.tenantId, outletId: device.outletId, userId: device.deviceId }, [topics.kitchen, topics.menu]);
+}
+
+/**
+ * Cancel an item from the kitchen screen, even after it was accepted (guest left, wrong order, ran
+ * out mid-cook). The screen is a shared device, so a manager or owner confirms with their PIN each
+ * time; the reason goes on the void, the ticket and the bill update like any other void.
+ */
+export async function kdsCancelLine(device: KdsDevice, input: { lineId: string; reason: string; phone: string; pin: string }, now = new Date()) {
+  const reason = String(input.reason ?? "").trim().replace(/\s+/g, " ").slice(0, 200);
+  if (reason.length < 3) throw new AppError("invalid_state", "Choose or write why it is cancelled.");
+  const who = await verifyStaffPin({ outletCode: device.outlet.code, phone: String(input.phone ?? ""), pin: String(input.pin ?? ""), now });
+  if (who.scope.tenantId !== device.tenantId || who.scope.outletId !== device.outletId || !who.roles.some((r) => r === "manager" || r === "owner")) {
+    throw new AppError("forbidden", "A manager or the owner of this outlet must approve a cancel.");
+  }
+  const [line] = await db.select({ sessionId: s.orderLines.sessionId }).from(s.orderLines)
+    .innerJoin(s.orders, and(eq(s.orders.tenantId, s.orderLines.tenantId), eq(s.orders.id, s.orderLines.orderId)))
+    .where(and(eq(s.orderLines.tenantId, device.tenantId), eq(s.orders.outletId, device.outletId), eq(s.orderLines.id, String(input.lineId))));
+  if (!line) throw new AppError("not_found", "This item is not on this outlet's orders.");
+  const approver: StaffSession = { tenantId: device.tenantId, outletId: device.outletId, userId: who.user.id, sessionId: "kds", name: who.user.name, roles: who.roles, outlet: { code: device.outlet.code, name: device.outlet.name, timezone: device.outlet.timezone }, expiresAt: now.getTime() + 60_000 };
+  await changeWaiterLine(approver, { sessionId: line.sessionId, lineId: String(input.lineId), reason: `Kitchen: ${reason}` }, now, ["manager", "owner"]);
 }

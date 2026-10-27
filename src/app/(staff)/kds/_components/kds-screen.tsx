@@ -2,6 +2,8 @@
 import {
   ArrowTurnBackwardIcon,
   Cancel01Icon,
+  FullScreenIcon,
+  MinimizeScreenIcon,
   PackageRemoveIcon,
   Search01Icon,
   Settings02Icon,
@@ -11,6 +13,7 @@ import {
   WifiOff01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { speak, spokenPlace } from "@/lib/voice-alert";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { Lang } from "@/lib/i18n";
@@ -84,6 +87,7 @@ function KdsBoardScreen(props: { initial: KdsBoard; device: KdsDeviceView; realt
   const [busyLines, setBusyLines] = useState<ReadonlySet<string>>(new Set());
   const [leaving, setLeaving] = useState<ReadonlySet<string>>(new Set(preview?.leaving ?? []));
   const [panel, setPanel] = useState<"stock" | "settings" | null>(preview?.panel ?? null);
+  const [cancelFor, setCancelFor] = useState<{ lineId: string; label: string } | null>(null);
   const [toast, setToast] = useState<string | null>(preview?.toast ?? null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -129,9 +133,20 @@ function KdsBoardScreen(props: { initial: KdsBoard; device: KdsDeviceView; realt
       if (sound === "on") {
         if (heard.late.length) playLate();
         else playNewTicket();
+        // Then say it: "New order, table 1: 2 Paneer Butter Masala" or "Table 1 order is late"
+        const card = cards.find((x) => x.ticketId === (heard.late[0] ?? heard.arrived[0]));
+        if (card) {
+          const place = spokenPlace(card.tableCodes[0] ?? "", lang);
+          const items = card.lines.filter((l) => !l.otherStation).slice(0, 3).map((l) => `${l.qty} ${lang === "hi" && l.nameHi ? l.nameHi : l.nameEn}`).join(", ");
+          const line = heard.late.length
+            ? (lang === "hi" ? `${place} का ऑर्डर लेट हो रहा है` : `${place} order is running late`)
+            : (lang === "hi" ? `${place} पर नया ऑर्डर: ${items}` : `New order for ${place}: ${items}`);
+          // After the chime has played
+          setTimeout(() => speak(line, lang), 900);
+        }
       }
     }
-  }, [cards, board.station, preview, sound, autoKot, printer]);
+  }, [cards, board.station, preview, sound, autoKot, printer, lang]);
 
   function say(message: string) {
     clearTimeout(toastTimer.current);
@@ -214,13 +229,14 @@ function KdsBoardScreen(props: { initial: KdsBoard; device: KdsDeviceView; realt
       onAction={onAction}
       onBumpLine={onBumpLine}
       onPrint={() => void printer.print({ kind: "kot", subject: { type: "ticket", id: card.ticketId }, build: (paper) => kotHtml([card], paper) })}
+      onCancelLine={preview ? undefined : (_card, line) => setCancelFor({ lineId: line.id, label: `${line.qty}× ${lang === "hi" && line.nameHi ? line.nameHi : line.nameEn}` })}
     />
   );
 
   const stations = device.expeditor ? [null, ...board.stations] : [device.station];
 
   return (
-    <div lang={lang} className={`flex min-h-0 flex-col bg-kds-bg font-sans text-kds-text ${props.embedded ? "h-[calc(100dvh-7.5rem)] sm:h-[calc(100dvh-3.5rem)]" : "h-dvh"}`}>
+    <div id="kds-root" lang={lang} className={`flex min-h-0 flex-col bg-kds-bg font-sans text-kds-text [&:fullscreen]:h-dvh ${props.embedded ? "h-[calc(100dvh-7.5rem)] sm:h-[calc(100dvh-3.5rem)]" : "h-dvh"}`}>
       <Header
         c={c}
         embedded={props.embedded}
@@ -305,6 +321,7 @@ function KdsBoardScreen(props: { initial: KdsBoard; device: KdsDeviceView; realt
       {panel === "stock" && (
         <StockPanel c={c} lang={lang} board={board} offline={offline} preview={preview} onClose={() => setPanel(null)} say={say} guarded={guarded} refresh={sync.refresh} />
       )}
+      {cancelFor && <CancelLineDialog c={c} item={cancelFor} needsPin={actions.cancelNeedsPin} onClose={() => setCancelFor(null)} onDone={async () => { setCancelFor(null); say(c.cancelled); await sync.refresh(); }} cancel={actions.cancelLine} />}
       {panel === "settings" && <SettingsPanel c={c} device={device} stations={board.stations} preview={!!preview} soundPref={soundPref} onClose={() => setPanel(null)} />}
     </div>
   );
@@ -365,6 +382,7 @@ function Header(props: {
         {props.autoKot ? c.autoKotOn : c.autoKotOff}
       </button>
       <KotPaperButton label={c.paper} />
+      <FullScreenButton c={c} />
       <span role="status" aria-label={connLabel} className={`flex shrink-0 items-center gap-2 whitespace-nowrap text-[18px] font-semibold ${connTone}`}>
         <HugeiconsIcon icon={conn === "offline" ? WifiOff01Icon : Wifi01Icon} size={22} aria-hidden />
         <span className={`hidden ${props.embedded ? "xl:inline" : "sm:inline"}`}>{connLabel}</span>
@@ -375,6 +393,25 @@ function Header(props: {
         </button>
       )}
     </header>
+  );
+}
+
+/** The kitchen board alone on the whole screen: no sidebar, no browser bars. Esc or the button brings them back. */
+function FullScreenButton({ c }: { c: KdsCopy }) {
+  const full = useSyncExternalStore(
+    (on) => { document.addEventListener("fullscreenchange", on); return () => document.removeEventListener("fullscreenchange", on); },
+    () => !!document.fullscreenElement,
+    () => false,
+  );
+  const toggle = () => {
+    if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+    else void document.getElementById("kds-root")?.requestFullscreen().catch(() => {});
+  };
+  return (
+    <button type="button" onClick={toggle} aria-pressed={full} aria-label={full ? c.exitFullScreen : c.fullScreen} title={full ? c.exitFullScreen : c.fullScreen} className="flex h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-lg bg-kds-card px-3 text-[18px] font-semibold sm:h-12 sm:px-4">
+      <HugeiconsIcon icon={full ? MinimizeScreenIcon : FullScreenIcon} size={22} aria-hidden />
+      <span className="hidden 2xl:inline">{full ? c.exitFullScreen : c.fullScreen}</span>
+    </button>
   );
 }
 
@@ -450,6 +487,49 @@ function Drawer({ title, onClose, c, children }: { title: string; onClose: () =>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-5">{children}</div>
       </section>
+    </div>
+  );
+}
+
+/** Cancel one item after accept: pick or write a reason; on a shared kitchen screen a manager types their phone and PIN */
+function CancelLineDialog({ c, item, needsPin, onClose, onDone, cancel }: { c: KdsCopy; item: { lineId: string; label: string }; needsPin: boolean; onClose: () => void; onDone: () => Promise<void>; cancel: KdsActions["cancelLine"] }) {
+  const [reason, setReason] = useState("");
+  const [other, setOther] = useState("");
+  const [phone, setPhone] = useState("");
+  const [pin, setPin] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const why = reason === "other" ? other.trim() : reason;
+  const ready = why.length >= 3 && (!needsPin || (phone.replace(/\D/g, "").length >= 10 && pin.length >= 4));
+  const submit = async () => {
+    setBusy(true); setError(null);
+    const r = await cancel(item.lineId, why, phone, pin);
+    setBusy(false);
+    if (r.ok) await onDone(); else setError(r.message);
+  };
+  const field = "h-12 w-full rounded-lg border border-kds-line bg-kds-bg px-3 text-[20px] text-kds-text";
+  return (
+    <div role="dialog" aria-modal="true" aria-labelledby="kds-cancel-title" className="fixed inset-0 z-40 grid place-items-center bg-black/60 p-4" onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}>
+      <div className="w-full max-w-lg rounded-2xl bg-kds-card p-5 text-kds-text shadow-2xl">
+        <h2 id="kds-cancel-title" className="font-display text-[26px] font-bold">{c.cancelTitle(item.label)}</h2>
+        <p className="mt-4 text-[18px] font-semibold text-kds-muted">{c.cancelWhy}</p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {[...c.cancelReasons, "other"].map((r) => <button key={r} type="button" aria-pressed={reason === r} onClick={() => setReason(r)} className={`min-h-12 rounded-lg border px-4 text-[18px] font-semibold ${reason === r ? "border-kds-text bg-kds-text text-kds-bg" : "border-kds-line"}`}>{r === "other" ? c.cancelOther : r}</button>)}
+        </div>
+        {reason === "other" && <input autoFocus value={other} onChange={(e) => setOther(e.target.value)} maxLength={180} className={`${field} mt-3`} aria-label={c.cancelOther} />}
+        {needsPin && <>
+          <p className="mt-5 text-[18px] font-semibold text-kds-muted">{c.cancelManager}</p>
+          <div className="mt-2 grid grid-cols-[1fr_9rem] gap-2">
+            <input value={phone} onChange={(e) => setPhone(e.target.value.replace(/[^\d+ ]/g, "").slice(0, 15))} inputMode="tel" autoComplete="off" placeholder={c.cancelPhone} aria-label={c.cancelPhone} className={field} />
+            <input value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" type="password" autoComplete="off" placeholder={c.cancelPin} aria-label={c.cancelPin} className={field} />
+          </div>
+        </>}
+        {error && <p role="alert" className="mt-3 text-[18px] font-semibold text-kds-late">{error}</p>}
+        <div className="mt-5 grid grid-cols-2 gap-2">
+          <button type="button" onClick={onClose} className="h-14 rounded-lg bg-kds-line text-[20px] font-semibold">{c.cancelKeep}</button>
+          <button type="button" disabled={!ready || busy} onClick={() => void submit()} className="h-14 rounded-lg bg-kds-late text-[20px] font-bold text-white disabled:opacity-40">{busy ? "…" : c.cancelConfirm}</button>
+        </div>
+      </div>
     </div>
   );
 }

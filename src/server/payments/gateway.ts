@@ -37,6 +37,8 @@ export interface PaymentGateway {
     customer?: { id?: string; phone?: string | null; name?: string | null; email?: string | null };
   }): Promise<{ gatewayRef: string }>;
   checkout(input: CheckoutInput): Checkout | Promise<Checkout>;
+  /** A UPI QR for an order, for a customer to scan in person (the rider at the door). An image data URL or a upi:// link. */
+  upiQr?(gatewayRef: string): Promise<{ image?: string; link?: string }>;
   fetchStatus(gatewayRef: string): Promise<{ status: GatewayStatus; amountPaise: number; currency?: string; gatewayPaymentId?: string; reason?: string }>;
   refund(input: { gatewayRef: string; gatewayPaymentId: string; amountPaise: number; refundId: string }): Promise<{ gatewayRefundId: string; status: "pending" | "success" | "failed" }>;
   /** Where a refund stands at the gateway; used to settle a refund whose webhook was missed */
@@ -182,6 +184,22 @@ export class CashfreeGateway implements PaymentGateway {
     return { provider: "cashfree", kind: "cashfree", mode: this.mode, paymentSessionId: order.payment_session_id };
   }
 
+  async upiQr(gatewayRef: string) {
+    const order = await this.call<{ payment_session_id: string }>(`/orders/${encodeURIComponent(gatewayRef)}`, { method: "GET" });
+    if (!order.payment_session_id) throw new Error("Cashfree did not return a payment session");
+    const pay = await this.call<{ data?: { payload?: Record<string, unknown> | null; url?: string | null } }>("/orders/sessions", {
+      method: "POST",
+      body: { payment_session_id: order.payment_session_id, payment_method: { upi: { channel: "qrcode" } } },
+    });
+    // Cashfree returns the QR as a base64 image in the payload; some accounts send the upi:// intent instead
+    const values = [...Object.values(pay.data?.payload ?? {}), pay.data?.url].filter((v): v is string => typeof v === "string");
+    const raw = values.find((v) => v.startsWith("data:image/") || (v.length > 200 && /^[A-Za-z0-9+/=\s]+$/.test(v)));
+    const image = raw && !raw.startsWith("data:") ? `data:image/png;base64,${raw.replace(/\s/g, "")}` : raw;
+    const link = values.find((v) => v.startsWith("upi://"));
+    if (!image && !link) throw new Error("Cashfree did not return a UPI QR. Is UPI QR enabled on this Cashfree account?");
+    return { image, link };
+  }
+
   async fetchStatus(gatewayRef: string) {
     const payments = await this.call<Array<{
       cf_payment_id: string | number;
@@ -302,6 +320,11 @@ class MockGateway implements PaymentGateway {
       action: "/pay/mock",
       fields: { ref: input.gatewayRef, amount: String(input.amountPaise), method: input.method, callback: input.callbackUrl },
     };
+  }
+
+  async upiQr(gatewayRef: string) {
+    const o = this.orders.get(gatewayRef);
+    return { link: `upi://pay?pa=mock@upi&pn=TableQR%20Mock&am=${((o?.amountPaise ?? 0) / 100).toFixed(2)}&tr=${encodeURIComponent(gatewayRef)}` };
   }
 
   async fetchStatus(gatewayRef: string) {

@@ -64,7 +64,7 @@ export function WaitlistScreen({ entries, outlet, outletCode, freeTables, canMan
     run(() => addWaitlistAction({ name: String(f.get("name") ?? ""), phone: String(f.get("phone") ?? ""), partySize: size, quotedMinutes: quote, notes: String(f.get("notes") ?? "") }), () => { setAdding(false); setSize(2); setQuote(20); });
   };
 
-  const copyLink = async () => { try { await navigator.clipboard.writeText(`${(process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "") || window.location.origin}/r/${outletCode}/waitlist`); setCopied(true); setTimeout(() => setCopied(false), 1800); } catch { setCopied(false); } };
+  const copyLink = async () => { try { await navigator.clipboard.writeText(`${(process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "") || window.location.origin}/r/${outletCode}`); setCopied(true); setTimeout(() => setCopied(false), 1800); } catch { setCopied(false); } };
 
   const waited = (e: Entry) => Math.max(0, Math.floor((now - e.joinedAt) / 60_000));
   const avg = entries.length ? Math.round(entries.reduce((n, e) => n + waited(e), 0) / entries.length) : 0;

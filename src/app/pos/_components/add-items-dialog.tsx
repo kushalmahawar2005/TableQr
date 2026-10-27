@@ -10,6 +10,7 @@ import * as pos from "@/server/staff/pos-actions";
 import type { PosBillDetail } from "@/server/staff/pos-read";
 import type { WaiterMenu } from "@/server/staff/waiter-read";
 import { isRoomCode } from "@/domain/rooms";
+import { isDeliveryTable } from "@/domain/delivery";
 
 type Line = { key: string; item: WaiterMenu[number]; qty: number; mods: string[]; parcel: boolean };
 const rs = (paise: number) => `₹${(paise / 100).toLocaleString("en-IN", { minimumFractionDigits: paise % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
@@ -82,7 +83,7 @@ export function AddItemsDialog({ detail, open, hi, onClose, onPlaced }: { detail
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="no-scrollbar max-h-[92dvh] gap-3 overflow-y-auto p-5 sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle className="font-display text-title font-bold">{L("Add items", "आइटम जोड़ें")} · {detail.takeaway ? L("Takeaway", "पार्सल") : (isRoomCode(detail.tableCode) ? "" : L("Table", "टेबल"))} {detail.tableCode}</DialogTitle>
+          <DialogTitle className="font-display text-title font-bold">{L("Add items", "आइटम जोड़ें")} · {isDeliveryTable(detail.tableCode) ? L("Delivery", "डिलीवरी") : <>{detail.takeaway ? L("Takeaway", "पार्सल") : (isRoomCode(detail.tableCode) ? "" : L("Table", "टेबल"))} {detail.tableCode}</>}</DialogTitle>
           <DialogDescription>{detail.status === "bill_requested" ? L("Unmarked items are handed over at the counter. Parcel items are sent to the kitchen to be packed and added to this bill.", "बिना पार्सल वाले आइटम काउंटर पर दिए जाएँगे। पार्सल आइटम पैक होने के लिए किचन में जाएँगे और इसी बिल में जुड़ेंगे।") : L("These go to the kitchen and are added to the bill. Mark an item as parcel to have it packed.", "ये किचन को जाएँगे और बिल में जुड़ेंगे। पैक कराने के लिए पार्सल चुनें।")}</DialogDescription>
         </DialogHeader>
 

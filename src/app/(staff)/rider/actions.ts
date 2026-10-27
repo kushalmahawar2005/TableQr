@@ -5,6 +5,9 @@ import { myVerification, submitRiderDocuments } from "@/server/delivery/rider-do
 import { staffFor } from "@/server/staff/request";
 import { staffRealtimeToken, topics } from "@/server/realtime/token";
 import { deliveryStaffRoles } from "@/server/delivery/staff";
+import { riderPaymentIssue, riderQr, riderQrStatus, riderUpiReceived } from "@/server/delivery/rider-pay";
+import { requestOrigin } from "@/server/request-host";
+import { headers } from "next/headers";
 
 async function run<T>(roles: Parameters<typeof staffFor>[0], work: (staff: Awaited<ReturnType<typeof staffFor>>) => Promise<T>) {
   try { return { ok: true as const, data: await work(await staffFor(roles)) }; }
@@ -14,7 +17,7 @@ async function run<T>(roles: Parameters<typeof staffFor>[0], work: (staff: Await
 export async function riderJobsAction() { return run(["rider"], (s) => riderJobs(s)); }
 export async function riderPickUpAction(id: string) { return run(["rider"], (s) => riderPickUp(s, id)); }
 export async function riderCashAction(id: string, requestId: string) { return run(["rider"], (s) => riderCollectCash(s, id, requestId)); }
-export async function riderDeliveredAction(id: string) { return run(["rider"], (s) => riderDelivered(s, id)); }
+export async function riderDeliveredAction(id: string, pin: string) { return run(["rider"], (s) => riderDelivered(s, id, String(pin ?? ""))); }
 export async function riderOnlineAction(online: boolean) { return run(["rider"], (s) => riderSetOnline(s, !!online)); }
 export async function riderProfileAction() { return run(["rider"], (s) => riderProfile(s)); }
 export async function riderSaveProfileAction(form: FormData) {
@@ -44,3 +47,8 @@ export async function submitDocumentsAction(form: FormData) {
     return submitRiderDocuments(s, { last4: String(form.get("last4") ?? ""), consent: form.get("consent") === "on", front: await file("front"), back: await file("back") });
   });
 }
+/** Payment at the door: a QR, its status, UPI checked by hand, or money taken another way with a note */
+export async function riderQrAction(id: string) { return run(["rider"], async (s) => riderQr(s, String(id), requestOrigin(await headers()))); }
+export async function riderQrStatusAction(id: string, paymentId: string) { return run(["rider"], (s) => riderQrStatus(s, String(id), String(paymentId))); }
+export async function riderUpiReceivedAction(id: string, reference: string) { return run(["rider"], (s) => riderUpiReceived(s, String(id), String(reference ?? ""))); }
+export async function riderPaymentIssueAction(id: string, method: "cash" | "upi", note: string) { return run(["rider"], (s) => riderPaymentIssue(s, String(id), { method, note: String(note ?? "") })); }

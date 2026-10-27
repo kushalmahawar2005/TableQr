@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useGuestBase } from "@/lib/guest-base";
 import { useRouter } from "next/navigation";
 import { arriveBookingAction, cancelBookingAction, lateBookingAction, rescheduleBookingAction } from "../../actions";
 
@@ -13,6 +14,7 @@ const outletLocalParts = (timestamp: number, timezone: string) => {
 };
 
 export function ManageBookingClient({ outletCode, token, booking, timezone, hindi: initialHindi = false }: { outletCode: string; token: string; timezone: string; hindi?: boolean; booking: Booking }) {
+  const base = useGuestBase(outletCode);
   const router = useRouter();
   const [hindi, setHindi] = useState(initialHindi);
   const [message, setMessage] = useState("");
@@ -24,7 +26,7 @@ export function ManageBookingClient({ outletCode, token, booking, timezone, hind
   const setLanguage = () => {
     const next = !hindi;
     setHindi(next);
-    router.replace(`/r/${encodeURIComponent(outletCode)}/book/manage/${encodeURIComponent(token)}?lang=${next ? "hi" : "en"}`, { scroll: false });
+    router.replace(`${base}/book/manage/${encodeURIComponent(token)}?lang=${next ? "hi" : "en"}`, { scroll: false });
   };
   const cancel = async () => {
     setBusy(true);

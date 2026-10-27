@@ -52,12 +52,12 @@ afterAll(async () => {
 });
 
 describe("clear table", () => {
-  it("frees a paid table straight away, without a cleaning step", async () => {
+  it("a paid table waits in Needs cleaning, then Clear table frees it", async () => {
     const g = await seatAndOrder("T1", "cv-a");
     await requestBill({ tenantId: g.tenantId, outletId: g.outletId, sessionId: g.sessionId });
     const [bill] = await env.db.select().from(s.bills).where(eq(s.bills.sessionId, g.sessionId));
     await settleAtCounter(manager, { sessionId: g.sessionId, method: "cash", receivedPaise: bill.totalPaise });
-    expect(await stateOf("T1")).toBe("paid");
+    expect(await stateOf("T1")).toBe("needs_cleaning");
     await markReady(host, env.demo.tableIds.T1);
     expect(await stateOf("T1")).toBe("available");
   });

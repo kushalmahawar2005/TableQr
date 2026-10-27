@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { BackToReports } from "../../_components/back-to-reports";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import type { SalesDetail } from "@/server/staff/sales-detail";
@@ -44,6 +45,7 @@ export function ItemsScreen({ report: r, outletName }: { report: SalesDetail; ou
 
   return (
     <main id="items-report-print" className="mx-auto w-full max-w-[1200px] px-4 py-5 text-ink sm:px-6 lg:px-8 lg:py-7 print:max-w-none print:p-0">
+      <BackToReports />
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-caption font-semibold text-muted">{outletName}</p>

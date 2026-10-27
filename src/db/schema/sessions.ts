@@ -125,6 +125,8 @@ export const participants = mysqlTable(
     sessionId: ref("session_id").notNull(),
     guestId: ref("guest_id"),
     displayName: varchar("display_name", { length: 40 }).notNull(),
+    /** A room guest's phone, typed at their first order instead of an OTP (they are already checked in) */
+    contactPhone: varchar("contact_phone", { length: 15 }),
     /** Random id kept in a cookie so the same phone rejoins as the same person */
     deviceId: varchar("device_id", { length: 64 }),
     /** Set when a waiter orders for a guest without a phone */

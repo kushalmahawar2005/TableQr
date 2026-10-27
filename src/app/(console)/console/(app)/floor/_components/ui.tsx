@@ -88,7 +88,7 @@ export function Dialog({ title, onClose, children, closeLabel, wide = false }: {
         onClose();
       }}
       aria-labelledby="s1-dialog-title"
-      className={`m-auto w-[calc(100%-32px)] ${wide ? "max-w-xl" : "max-w-md"} rounded-card border border-line bg-surface p-0 text-ink shadow-[var(--shadow-modal)] backdrop:bg-black/55`}
+      className={`m-auto w-[calc(100%-32px)] ${wide ? "max-w-xl" : "max-w-md"} overflow-hidden rounded-card border border-line bg-surface p-0 text-ink shadow-[var(--shadow-modal)] backdrop:bg-black/55`}
     >
       <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-3.5">
         <h2 id="s1-dialog-title" className="font-display text-section font-bold">
@@ -98,7 +98,8 @@ export function Dialog({ title, onClose, children, closeLabel, wide = false }: {
           <HugeiconsIcon icon={Cancel01Icon} size={20} aria-hidden />
         </button>
       </div>
-      <div className="max-h-[70dvh] overflow-y-auto px-5 py-4">{children}</div>
+      {/* The only scrolling part: one thin bar, never a second one on the dialog itself */}
+      <div className="max-h-[75dvh] overflow-y-auto overscroll-contain px-5 py-4 [scrollbar-width:thin]">{children}</div>
     </dialog>
   );
 }

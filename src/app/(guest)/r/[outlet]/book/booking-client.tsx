@@ -1,6 +1,7 @@
 "use client";
 
 import { Alert02Icon, ArrowLeft01Icon, Calendar03Icon, CheckmarkCircle02Icon, Clock01Icon, MinusSignIcon, PartyIcon, PlusSignIcon, Sofa01Icon, Timer02Icon, UserGroupIcon } from "@hugeicons/core-free-icons";
+import { useGuestBase } from "@/lib/guest-base";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
@@ -48,6 +49,7 @@ function Card({ icon, title, aside, children }: { icon: IconSvgElement; title: R
 const field = "min-h-12 w-full rounded-2xl border border-line/70 bg-paper px-4 text-body text-ink outline-none placeholder:text-muted/80 focus:border-brand focus:bg-surface focus:shadow-[0_0_0_3px_var(--brand-soft)]";
 
 export function BookingClient({ outletCode, zones, timezone, today, freeCancellationMinutes, hindi: initialHindi = false }: { outletCode: string; zones: { id: string; name: string }[]; timezone: string; today: string; freeCancellationMinutes: number; hindi?: boolean }) {
+  const base = useGuestBase(outletCode);
   const router = useRouter();
   const [hindi, setHindi] = useState(initialHindi);
   const t = (en: string, hi: string) => hindi ? hi : en;
@@ -85,7 +87,7 @@ export function BookingClient({ outletCode, zones, timezone, today, freeCancella
       const requestId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
       const holdToken = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
       const result = await holdAction(outletCode, { date, startAt: selected, partySize: party, requestId, holdToken, zoneId: zoneId || null });
-      if (result.ok) router.push(`/r/${encodeURIComponent(outletCode)}/book/details?token=${encodeURIComponent(String(result.data.manageToken))}&ref=${encodeURIComponent(String(result.data.publicReference ?? ""))}&lang=${lang}`);
+      if (result.ok) router.push(`${base}/book/details?token=${encodeURIComponent(String(result.data.manageToken))}&ref=${encodeURIComponent(String(result.data.publicReference ?? ""))}&lang=${lang}`);
       else setError(result.message);
     } catch {
       setError(t("Could not hold this time. Check your connection and try again.", "यह समय बुक नहीं हो पाया। कनेक्शन जाँचकर फिर कोशिश करें।"));
@@ -108,11 +110,11 @@ export function BookingClient({ outletCode, zones, timezone, today, freeCancella
     return { week: d === dates[0] ? t("Today", "आज") : d === dates[1] ? t("Tomorrow", "कल") : f({ weekday: "short" }), day: f({ day: "numeric" }), month: f({ month: "short" }) };
   };
   const selectedLabel = selected != null ? new Intl.DateTimeFormat(hindi ? "hi-IN-u-nu-latn" : "en-IN", { timeZone: timezone, weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }).format(new Date(selected)) : null;
-  const switchLanguage = (next: boolean) => { if (next === hindi) return; setHindi(next); router.replace(`/r/${encodeURIComponent(outletCode)}/book?lang=${next ? "hi" : "en"}`, { scroll: false }); };
+  const switchLanguage = (next: boolean) => { if (next === hindi) return; setHindi(next); router.replace(`${base}/book?lang=${next ? "hi" : "en"}`, { scroll: false }); };
 
   return <main lang={lang} className="flex min-h-dvh w-full min-w-0 flex-col pt-5 pb-32 text-ink">
     <div className="flex items-center justify-between gap-3">
-      <Link href={`/r/${encodeURIComponent(outletCode)}`} className="relative -ml-1 inline-flex items-center gap-0.5 rounded-full px-1 py-0.5 text-caption font-semibold text-muted before:absolute before:-inset-2.5 hover:text-ink focus-visible:outline-2 focus-visible:outline-brand">
+      <Link href={`${base}`} className="relative -ml-1 inline-flex items-center gap-0.5 rounded-full px-1 py-0.5 text-caption font-semibold text-muted before:absolute before:-inset-2.5 hover:text-ink focus-visible:outline-2 focus-visible:outline-brand">
         <HugeiconsIcon icon={ArrowLeft01Icon} size={16} strokeWidth={2} aria-hidden />{t("Back", "वापस")}
       </Link>
       <div role="group" aria-label={t("Language", "भाषा")} className="flex rounded-full border border-line/70 bg-surface p-0.5 text-caption font-semibold shadow-[0_1px_3px_rgb(31_41_55/0.05)]">

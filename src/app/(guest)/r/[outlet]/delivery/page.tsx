@@ -1,4 +1,5 @@
 import { restaurantApp, restaurantAppMetadata } from "@/server/guest/restaurant-app";
+import { guestBase } from "@/server/guest/guest-base";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -26,7 +27,9 @@ export default async function DeliveryPage({ params, searchParams }: { params: P
       if (status.status !== "draft" || status.paymentStatus !== "none") initialStatus = status;
     } catch (error) { if (!(error instanceof AppError)) throw error; }
   }
-  if (initialStatus) return <DeliveryScreen outletCode={outlet} initialStatus={initialStatus} hindi={lang === "hi"} realtimeUrl={process.env.REALTIME_URL?.replace(/^http/, "ws") ?? null} />;
+  const app = await restaurantApp(outlet);
+  const installable = app ? { name: app.name, logoUrl: app.logoUrl } : null;
+  if (initialStatus) return <DeliveryScreen outletCode={outlet} installable={installable} initialStatus={initialStatus} hindi={lang === "hi"} realtimeUrl={process.env.REALTIME_URL?.replace(/^http/, "ws") ?? null} />;
   let data: Awaited<ReturnType<typeof deliveryMenu>> | undefined;
   let menuError: string | undefined;
   try {
@@ -37,6 +40,6 @@ export default async function DeliveryPage({ params, searchParams }: { params: P
     if (error.code === "not_found" || error.code === "outlet_unavailable") notFound();
     menuError = error.message;
   }
-  if (menuError) return <main className="py-10"><Link href={`/r/${encodeURIComponent(outlet)}`} className="text-brand-strong">← Restaurant</Link><h1 className="mt-6 text-2xl font-bold">Delivery</h1><p className="mt-3 text-muted">{menuError}</p></main>;
-  return <DeliveryScreen outletCode={outlet} data={data} hindi={lang === "hi"} realtimeUrl={process.env.REALTIME_URL?.replace(/^http/, "ws") ?? null} />;
+  if (menuError) return <main className="py-10"><Link href={`${await guestBase(outlet)}`} className="text-brand-strong">← Restaurant</Link><h1 className="mt-6 text-2xl font-bold">Delivery</h1><p className="mt-3 text-muted">{menuError}</p></main>;
+  return <DeliveryScreen outletCode={outlet} installable={installable} data={data} hindi={lang === "hi"} realtimeUrl={process.env.REALTIME_URL?.replace(/^http/, "ws") ?? null} />;
 }

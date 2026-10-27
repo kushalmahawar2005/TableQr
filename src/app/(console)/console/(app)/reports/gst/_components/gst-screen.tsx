@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { BackToReports } from "../../_components/back-to-reports";
 import { useRouter } from "next/navigation";
 import { invoicesCsv, ratesCsv, shiftMonth } from "@/domain/gst";
 import type { GstReport } from "@/server/staff/gst-report";
@@ -39,6 +40,7 @@ export function GstScreen({ report: r }: { report: GstReport }) {
 
   return (
     <main id="gst-report-print" className="mx-auto w-full max-w-[1000px] px-4 py-5 text-ink sm:px-6 lg:px-8 lg:py-7 print:max-w-none print:p-0">
+      <BackToReports />
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-caption font-semibold text-muted">{r.outlet.name}{r.outlet.gstin ? ` · GSTIN ${r.outlet.gstin}` : ""}</p>

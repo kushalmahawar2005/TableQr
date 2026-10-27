@@ -80,7 +80,7 @@ describe("realtime events", () => {
     await settleAtCounter(staff, { sessionId: guest.sessionId, method: "cash" });
     // G8/G9 phones also hear that a payment landed and that the table closed
     expect(flat()).toEqual(["session bill.updated", "session payment.updated", "session session.closed", "floor table.state_changed", "floor floor.session_updated"]);
-    expect(sent[0].events[3].data).toMatchObject({ state: "paid" });
+    expect(sent[0].events[3].data).toMatchObject({ state: "needs_cleaning" });
   });
 });
 

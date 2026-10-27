@@ -24,6 +24,7 @@ import {
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import {
   ArrowRight,
+  Camera,
   ChevronDown,
   CreditCard,
   LogOut,
@@ -45,6 +46,8 @@ import { InstallApp } from "@/components/install-app";
 import { NotificationPermissionOnboarding } from "@/components/notification-permission-onboarding";
 import type { Lang } from "@/lib/i18n";
 import { signOutAction } from "../../login/actions";
+import { shrinkPhotoFile } from "@/lib/shrink-photo";
+import { myPhotoAction, saveMyPhotoAction } from "./profile-actions";
 import { startTour } from "./guide/copy";
 import { NotificationBell } from "./notification-bell";
 import { switchOutletAction } from "./outlet-actions";
@@ -157,7 +160,7 @@ export function StaffShell({
   }, [folded]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key.toLowerCase() === "b" && (e.metaKey || e.ctrlKey)) {
+      if (e.key?.toLowerCase() === "b" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         setFolded((v) => !v);
       }
@@ -639,6 +642,21 @@ function UserProfileDropdown({
 }) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  // The signed-in person's own photo: shown on the avatar, changed from this menu
+  const [photo, setPhoto] = useState<string | null>(null);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const photoInput = useRef<HTMLInputElement>(null);
+  useEffect(() => { if (!preview) void myPhotoAction().then(setPhoto, () => {}); }, [preview]);
+  const uploadPhoto = async (file: File | undefined) => {
+    if (!file) return;
+    setPhotoBusy(true); setPhotoError(null);
+    const form = new FormData();
+    form.set("photo", await shrinkPhotoFile(file));
+    const r = await saveMyPhotoAction(form);
+    setPhotoBusy(false);
+    if (r.ok) setPhoto(r.photoUrl); else setPhotoError(r.error);
+  };
 
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
@@ -666,9 +684,11 @@ function UserProfileDropdown({
         aria-label="User menu"
         className="flex h-11 items-center gap-2.5 rounded-xl px-2 text-left hover:bg-ink/5 focus-visible:outline-2 focus-visible:outline-forest transition-all cursor-pointer"
       >
-        <div className="grid size-9.5 shrink-0 place-items-center rounded-full bg-forest text-xs font-bold text-white shadow-xs">
-          {initials}
-        </div>
+        {photo
+          // Staff photos live in the photo bucket, so this stays a plain image
+          // eslint-disable-next-line @next/next/no-img-element
+          ? <img src={photo} alt="" className="size-9.5 shrink-0 rounded-full object-cover shadow-xs" />
+          : <div className="grid size-9.5 shrink-0 place-items-center rounded-full bg-forest text-xs font-bold text-white shadow-xs">{initials}</div>}
         <div className="hidden min-w-0 sm:block">
           <div className="flex items-center gap-1">
             <span className="truncate text-xs font-bold leading-tight text-ink">
@@ -691,6 +711,17 @@ function UserProfileDropdown({
             </p>
           </div>
           <div className="py-1">
+            <button
+              type="button"
+              disabled={photoBusy || preview}
+              onClick={() => photoInput.current?.click()}
+              className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-medium text-ink hover:bg-paper disabled:opacity-60"
+            >
+              <Camera className="size-3.5 text-muted" aria-hidden="true" />
+              <span>{photoBusy ? (lang === "hi" ? "फ़ोटो लग रही है…" : "Saving photo…") : photo ? (lang === "hi" ? "फ़ोटो बदलें" : "Change photo") : (lang === "hi" ? "अपनी फ़ोटो लगाएँ" : "Add your photo")}</span>
+            </button>
+            <input ref={photoInput} type="file" accept="image/*" className="hidden" onChange={(e) => void uploadPhoto(e.target.files?.[0])} />
+            {photoError && <p role="alert" className="px-3 pb-1 text-[11px] font-semibold text-danger">{photoError}</p>}
             <Link
               href="/console/settings"
               onClick={() => setOpen(false)}

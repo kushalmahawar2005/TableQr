@@ -60,7 +60,7 @@ export default async function G5Preview(props: PageProps<"/dev/g5">) {
     renderedAt: 0,
     outlet: { code: outlet.code, name: outlet.name, logoUrl: null, accentColor: outlet.accentColor },
     table: { code: "T12" },
-    session: { key: "dev", people: 3, status: "open", orderingLocked: false, hostName: "Aarav", verified: true, needsName: false, ...over },
+    session: { key: "dev", people: 3, status: "open", orderingLocked: false, hostName: "Aarav", verified: true, needsName: false, roomContact: null, ...over },
     mine,
     myCount: mine.reduce((a, l) => a + l.qty, 0),
     subtotalPaise: mine.reduce((a, l) => a + (l.reason ? 0 : (l.linePaise ?? 0)), 0),

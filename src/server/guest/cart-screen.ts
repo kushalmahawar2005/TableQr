@@ -1,5 +1,9 @@
 import "server-only";
+import { and, eq } from "drizzle-orm";
+import { db } from "@/db";
+import * as s from "@/db/schema";
 import { isPlaceholderName } from "@/domain/guest-name";
+import { ROOM_CLASS } from "@/domain/rooms";
 import { getCart } from "./cart";
 import { guestContextForDevice } from "./menu-screen";
 
@@ -13,6 +17,15 @@ export async function getCartScreen(outletCode: string, shortCode: string, devic
   const cart = await getCart(ctx, now);
 
   const me = open.people.find((p) => p.id === ctx.participantId)!;
+  const [[roomStay], [mine0]] = await Promise.all([
+    t.table.tableClass === ROOM_CLASS
+      ? db.select({ guestName: s.roomStays.guestName, guestPhone: s.roomStays.guestPhone }).from(s.rooms)
+          .innerJoin(s.roomStays, and(eq(s.roomStays.tenantId, s.rooms.tenantId), eq(s.roomStays.roomId, s.rooms.id), eq(s.roomStays.openKey, s.rooms.id), eq(s.roomStays.status, "open")))
+          .where(and(eq(s.rooms.tenantId, ctx.tenantId), eq(s.rooms.tableId, t.table.id), eq(s.rooms.isActive, true))).limit(1)
+      : Promise.resolve([] as { guestName: string; guestPhone: string | null }[]),
+    db.select({ contactPhone: s.participants.contactPhone }).from(s.participants).where(and(eq(s.participants.tenantId, ctx.tenantId), eq(s.participants.id, ctx.participantId))),
+  ]);
+  const contactPhone = mine0?.contactPhone ?? null;
   const host = open.people.find((p) => p.id === open.session.hostParticipantId);
 
   const line = (l: (typeof cart.table)[number]) => ({
@@ -58,9 +71,12 @@ export async function getCartScreen(outletCode: string, shortCode: string, devic
       status: open.session.status,
       orderingLocked: open.session.orderingLocked,
       hostName: host && !isPlaceholderName(host.displayName) ? host.displayName : null,
-      verified: !!me.guestId,
+      // A checked-in room guest orders with a name and phone, no OTP
+      verified: !!me.guestId || !!roomStay,
       /** Open mode asks for a first name at the first order */
       needsName: open.session.mode === "open" && isPlaceholderName(me.displayName),
+      /** Room guest without a saved name and phone yet: asked in the cart, prefilled from check-in */
+      roomContact: roomStay && !me.guestId && (isPlaceholderName(me.displayName) || !contactPhone) ? { name: isPlaceholderName(me.displayName) ? roomStay.guestName : me.displayName, phone: contactPhone ?? roomStay.guestPhone ?? "" } : null,
     },
     mine,
     myCount: mine.reduce((n, l) => n + l.qty, 0),

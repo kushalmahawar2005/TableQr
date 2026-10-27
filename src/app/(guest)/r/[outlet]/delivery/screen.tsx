@@ -1,5 +1,6 @@
 "use client";
 import { ArrowLeft01Icon, Call02Icon, Cancel01Icon, CheckmarkCircle02Icon, ChefHatIcon, DeliveryTruck01Icon, FilterHorizontalIcon, Location01Icon, MinusSignIcon, PackageIcon, PlusSignIcon, Search01Icon, ShoppingBasket01Icon, UserIcon } from "@hugeicons/core-free-icons";
+import { useGuestBase } from "@/lib/guest-base";
 import { HugeiconsIcon } from "@hugeicons/react";
 import Link from "next/link";
 import Image from "next/image";
@@ -12,6 +13,7 @@ import { priceLine } from "@/domain/pricing";
 import { openCheckout } from "@/lib/payments/checkout";
 import { OutletLogo } from "../t/[table]/_components/outlet-logo";
 import { LiveMap } from "@/components/live-map";
+import { InstallApp } from "@/components/install-app";
 import { distanceKm, etaMinutes } from "@/domain/delivery";
 import { g3Copy } from "../t/[table]/menu/_copy";
 import { CategoryBar } from "../t/[table]/menu/_components/category-bar";
@@ -19,7 +21,7 @@ import { FilterBar } from "../t/[table]/menu/_components/filter-bar";
 import { Thumb, VegMark } from "../t/[table]/menu/_components/menu-row";
 import { connectRealtime } from "@/lib/realtime-client";
 import { enableGuestPush, guestPushSupported } from "@/lib/guest-push-client";
-import { claimManualQrDeliveryAction, deliveryPushAction, deliveryStatusAction, deliveryTokenAction, pushKeyAction, pincodeAction, placeDeliveryAction, quoteDeliveryAction, resendDeliveryAction, startDeliveryAction, startDeliveryPaymentAction, verifyDeliveryAction } from "./actions";
+import { claimManualQrDeliveryAction, deliveryPushAction, deliveryStatusAction, deliveryTokenAction, pushKeyAction, pincodeAction, placeAction, placeDeliveryAction, rateRiderAction, quoteDeliveryAction, resendDeliveryAction, startDeliveryAction, startDeliveryPaymentAction, verifyDeliveryAction } from "./actions";
 
 type Menu = Awaited<ReturnType<typeof deliveryMenu>>;
 type Quote = Awaited<ReturnType<typeof priceDeliveryCart>>;
@@ -39,7 +41,8 @@ const money = (paise: number) => `₹${(paise / 100).toLocaleString("en-IN", { m
 const control = "min-h-12 w-full rounded-2xl border border-line/70 bg-surface px-4 text-ink outline-none focus:border-brand focus:shadow-[0_0_0_3px_var(--brand-soft)]";
 const button = "min-h-13 w-full rounded-2xl bg-brand px-4 font-bold text-brand-on shadow-[0_8px_20px_-6px_var(--brand-border)] disabled:opacity-50 disabled:shadow-none";
 
-export function DeliveryScreen({ outletCode, data, initialStatus, hindi: initialHindi = false, realtimeUrl = null }: { outletCode: string; data?: Menu; initialStatus?: Status; hindi?: boolean; realtimeUrl?: string | null }) {
+export function DeliveryScreen({ outletCode, data, initialStatus, hindi: initialHindi = false, realtimeUrl = null, installable = null }: { outletCode: string; data?: Menu; initialStatus?: Status; hindi?: boolean; realtimeUrl?: string | null; installable?: { name: string; logoUrl: string | null } | null }) {
+  const base = useGuestBase(outletCode);
   const [hindi, setHindi] = useState(initialHindi);
   const t = (en: string, hi: string) => hindi ? hi : en;
   const [cart, setCart] = useState<DeliveryCartLine[]>([]);
@@ -114,6 +117,8 @@ export function DeliveryScreen({ outletCode, data, initialStatus, hindi: initial
       }));
     }
     setStep("address");
+    // Already on the details page: bring the order summary into view so the tap visibly does something
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
   /** Six digits fill the city and offer the areas in that pincode */
   function changePincode(value: string) {
@@ -163,13 +168,13 @@ export function DeliveryScreen({ outletCode, data, initialStatus, hindi: initial
   const statusMessage = !status ? "" : status.status === "draft" && status.paymentStatus === "pending" && status.paymentMode === "manual_qr" ? t("Payment reference submitted · waiting for restaurant verification", "पेमेंट रेफरेंस भेज दिया · रेस्टोरेंट की पुष्टि का इंतज़ार") : status.status === "draft" && status.paymentStatus === "pending" ? t("Checking your payment securely…", "आपका पेमेंट सुरक्षित रूप से जाँचा जा रहा है…") : status.status === "draft" && status.paymentStatus.startsWith("refund") ? t("Payment received · refund in progress", "पेमेंट मिला · रिफंड चल रहा है") : status.status === "draft" && status.paymentStatus === "failed" ? t("Payment was not completed. No order was placed.", "पेमेंट पूरा नहीं हुआ। ऑर्डर नहीं हुआ।") : status.status === "placed" ? t(status.kitchenStatus === "ready" || status.kitchenStatus === "served" ? "Packed · awaiting dispatch" : "Restaurant is preparing your order", status.kitchenStatus === "ready" || status.kitchenStatus === "served" ? "पैक हो गया · भेजने की तैयारी" : "रेस्टोरेंट आपका ऑर्डर तैयार कर रहा है") : status.status === "dispatched" ? t("Your order is on the way", "आपका ऑर्डर रास्ते में है") : status.status === "delivered" ? t("Delivered", "डिलीवर हो गया") : status.status === "cancelled" ? t("Cancelled", "रद्द किया गया") : t("Complete payment to continue", "जारी रखने के लिए पेमेंट पूरा करें");
   return <main lang={hindi ? "hi" : "en"} className="flex w-full min-w-0 flex-col pt-5 pb-[calc(7rem+env(safe-area-inset-bottom))] text-ink">
     <header className="flex items-center gap-2.5">
-      {data ? <Link href={`/r/${encodeURIComponent(outletCode)}`} aria-label={t("Back to restaurant", "रेस्टोरेंट पर वापस")} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl focus-visible:outline-2 focus-visible:outline-brand">
+      {data ? <Link href={`${base}`} aria-label={t("Back to restaurant", "रेस्टोरेंट पर वापस")} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl focus-visible:outline-2 focus-visible:outline-brand">
         <OutletLogo name={data.outlet.name} logoUrl={data.outlet.logoUrl} size={44} />
         <span className="min-w-0">
           <span className="block truncate font-display text-section leading-tight font-bold">{data.outlet.name}</span>
           <span className="block text-caption text-muted">{t("Home delivery", "घर पर डिलीवरी")} · {data.outlet.policy.estimatedMinutes} {t("min", "मिनट")}</span>
         </span>
-      </Link> : <Link href={`/r/${encodeURIComponent(outletCode)}`} className="flex-1 text-caption font-semibold text-muted">← {t("Restaurant", "रेस्टोरेंट")}</Link>}
+      </Link> : <Link href={`${base}`} className="flex-1 text-caption font-semibold text-muted">← {t("Restaurant", "रेस्टोरेंट")}</Link>}
       <div role="group" aria-label={t("Language", "भाषा")} className="flex shrink-0 rounded-full border border-line/70 bg-surface p-0.5 text-caption font-semibold shadow-[0_1px_3px_rgb(31_41_55/0.05)]">
         {([[false, "EN"], [true, "HI"]] as const).map(([hi, label]) => <button key={label} type="button" aria-pressed={hindi === hi} onClick={() => setHindi(hi)} className={`min-h-9 min-w-10 rounded-full px-2.5 transition-colors ${hindi === hi ? "bg-ink text-white" : "text-muted hover:text-ink"}`}>{label}</button>)}
       </div>
@@ -179,8 +184,9 @@ export function DeliveryScreen({ outletCode, data, initialStatus, hindi: initial
       </button>}
     </header>
     {error && <p role="alert" className="mt-4 rounded-2xl border border-danger/20 bg-[var(--state-seated-soft)] p-4 text-caption font-semibold text-danger">{error}</p>}
-    {status ? <StatusView outletCode={outletCode} status={status} hindi={hindi} pending={pending} statusMessage={statusMessage} onPay={() => run(payDelivery)} onRefresh={() => run(loadStatus)} newOrderHref={`/r/${encodeURIComponent(outletCode)}/delivery?new=1&lang=${hindi ? "hi" : "en"}`} /> : <>
+    {status ? <><StatusView outletCode={outletCode} status={status} hindi={hindi} pending={pending} statusMessage={statusMessage} onPay={() => run(payDelivery)} onRefresh={() => run(loadStatus)} newOrderHref={`${base}/delivery?new=1&lang=${hindi ? "hi" : "en"}`} />{installable && <InstallApp guest className="mt-4" name={installable.name} logoUrl={installable.logoUrl} title={t("Install our app", "हमारा ऐप इंस्टॉल करें")} blurb={t(`Track this order and order again from ${installable.name} in one tap.`, `इस ऑर्डर को ट्रैक करें और ${installable.name} से एक टैप में दोबारा ऑर्डर करें।`)} />}</> : <>
     {step === "menu" && data && <>
+      {installable && <InstallApp guest compact className="mt-4" name={installable.name} logoUrl={installable.logoUrl} title={t("Install our app", "हमारा ऐप इंस्टॉल करें")} blurb={t("Order faster next time and track your delivery live.", "अगली बार जल्दी ऑर्डर करें और डिलीवरी लाइव ट्रैक करें।")} />}
       <div className="mt-5">
         <h1 className="font-display text-[1.625rem] leading-tight font-bold tracking-tight">{t("What are you craving?", "आज क्या खाने का मन है?")}</h1>
         <p className="mt-1 text-body text-muted">{t(`Freshly prepared, delivered in about ${data.outlet.policy.estimatedMinutes} minutes. ${data.outlet.policy.paymentMode === "gateway" ? "Pay securely before preparation." : data.outlet.policy.paymentMode === "manual_qr" ? "Pay using the restaurant QR." : "Pay when your order arrives."}`, `ताज़ा तैयार, लगभग ${data.outlet.policy.estimatedMinutes} मिनट में डिलीवरी। ${data.outlet.policy.paymentMode === "gateway" ? "तैयारी से पहले सुरक्षित पेमेंट करें।" : data.outlet.policy.paymentMode === "manual_qr" ? "रेस्टोरेंट QR से पेमेंट करें।" : "ऑर्डर मिलने पर भुगतान करें।"}`)}</p>
@@ -268,8 +274,8 @@ export function DeliveryScreen({ outletCode, data, initialStatus, hindi: initial
               </div>
             </li>)}
           </ul>
-          {policy && <p className="mt-1 border-t border-line/70 pt-2.5 text-caption text-muted">{policy.freeDeliveryAbovePaise !== null && cartPaise >= policy.freeDeliveryAbovePaise ? <span className="font-semibold text-success">{t("Free delivery on this order", "इस ऑर्डर पर डिलीवरी मुफ़्त")}</span> : <>{t("Delivery", "डिलीवरी")} {policy.deliveryFeePaise ? money(policy.deliveryFeePaise) : t("free", "मुफ़्त")}{policy.freeDeliveryAbovePaise !== null && policy.deliveryFeePaise > 0 && <> · {t(`free above ${money(policy.freeDeliveryAbovePaise)}`, `${money(policy.freeDeliveryAbovePaise)} से ऊपर मुफ़्त`)}</>}</>}</p>}
-          {belowMinimum && <p role="alert" className="mt-2 rounded-xl bg-[var(--state-held-soft)] px-3 py-2 text-caption font-semibold text-[var(--state-held-text)]">{t(`Minimum order is ${money(policy!.minimumOrderPaise)}. Add ${money(policy!.minimumOrderPaise - cartPaise)} more.`, `कम से कम ${money(policy!.minimumOrderPaise)} का ऑर्डर ज़रूरी है। ${money(policy!.minimumOrderPaise - cartPaise)} और जोड़ें।`)}</p>}
+          {policy && <OrderGoals hindi={hindi} cartPaise={cartPaise} minimumPaise={policy.minimumOrderPaise} freeAbovePaise={policy.freeDeliveryAbovePaise} feePaise={policy.deliveryFeePaise} />}
+          <button type="button" disabled={pending} onClick={() => { setStep("menu"); setQuote(null); }} className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-brand/50 px-4 text-caption font-bold text-brand-strong hover:bg-brand-soft/40 disabled:opacity-60"><HugeiconsIcon icon={PlusSignIcon} size={16} strokeWidth={2} aria-hidden />{t("Add more items", "और आइटम जोड़ें")}</button>
         </FormCard>
 
         <FormCard icon={UserIcon} title={t("Contact", "संपर्क")}>
@@ -298,7 +304,13 @@ export function DeliveryScreen({ outletCode, data, initialStatus, hindi: initial
                 return <button key={area} type="button" aria-pressed={on} onClick={() => setAddress(current => ({ ...current, locality: value }))} className={`min-h-9 rounded-full border px-3.5 text-caption font-semibold transition-colors ${on ? "border-brand bg-brand text-brand-on" : "border-line/70 bg-surface text-ink hover:border-ink/30"}`}>{area}</button>;
               })}</div>
             </div>}
-            <ExactPin hindi={hindi} address={address} onPin={(p) => setAddress(current => ({ ...current, ...p }))} />
+            <ExactPin hindi={hindi} address={address} onPin={(p) => setAddress(current => ({ ...current, ...p }))} onPlace={(place) => {
+              // The server sends a pincode only once India Post confirms it
+              const trusted = !!place.pincode;
+              if (trusted) changePincode(place.pincode);
+              setAddress(current => ({ ...current, locality: place.locality || current.locality, line: place.line || current.line }));
+              return trusted || !!address.pincode;
+            }} />
             <label className="block text-caption font-semibold text-muted">{t("Area and city", "इलाका और शहर")}<input required maxLength={100} autoComplete="address-level2" className={`${control} mt-1.5 bg-paper`} value={address.locality} onChange={event => setAddress(current => ({ ...current, locality: event.target.value }))} /></label>
             <label className="block text-caption font-semibold text-muted">{t("House / flat, building and street", "घर / फ्लैट, बिल्डिंग और सड़क")}<input required maxLength={200} autoComplete="street-address" className={`${control} mt-1.5 bg-paper`} value={address.line} onChange={event => setAddress(current => ({ ...current, line: event.target.value }))} /></label>
             <label className="block text-caption font-semibold text-muted">{t("Delivery instructions (optional)", "डिलीवरी निर्देश (वैकल्पिक)")}<input maxLength={200} autoComplete="off" placeholder={t("e.g. Ring the bell, near the temple", "जैसे घंटी बजाएँ, मंदिर के पास")} className={`${control} mt-1.5 bg-paper`} value={address.instructions} onChange={event => setAddress(current => ({ ...current, instructions: event.target.value }))} /></label>
@@ -376,15 +388,22 @@ function StatusView({ status, hindi, pending, statusMessage, onPay, onRefresh, n
         : <p className="mt-2 text-caption text-muted">{t("Your rider is on the way. The map updates by itself.", "राइडर रास्ते में है। नक्शा अपने आप अपडेट होता है।")}</p>}
     </section>}
 
+    {status.deliveryPin && <section className={`${card} flex items-center justify-between gap-4 border-brand/40 bg-brand-soft/40`}>
+      <div className="min-w-0"><p className="text-caption font-bold text-brand-strong">{t("Delivery PIN", "डिलीवरी PIN")}</p><p className="text-caption text-muted">{t("Tell this to the rider when your food arrives. Do not share it before.", "खाना पहुँचने पर राइडर को यह बताएँ। पहले किसी को न बताएँ।")}</p></div>
+      <p className="shrink-0 font-display text-[2rem] leading-none font-bold tracking-[0.25em] tabular text-ink" aria-label={t(`PIN ${status.deliveryPin.split("").join(" ")}`, `PIN ${status.deliveryPin.split("").join(" ")}`)}>{status.deliveryPin}</p>
+    </section>}
+
     {status.courierName && ["dispatched", "delivered"].includes(status.status) && <section className={`${card} flex items-center gap-3`}>
       {status.courierPhotoUrl
         // Rider photos live in the photo bucket, so this stays a plain image
         // eslint-disable-next-line @next/next/no-img-element
         ? <img src={status.courierPhotoUrl} alt="" className="size-12 shrink-0 rounded-full object-cover" />
         : <span className="grid size-12 shrink-0 place-items-center rounded-full bg-brand-soft text-brand-strong"><HugeiconsIcon icon={DeliveryTruck01Icon} size={21} aria-hidden /></span>}
-      <div className="min-w-0 flex-1"><p className="text-caption text-muted">{t("Your delivery rider", "आपका डिलीवरी राइडर")}</p><p className="text-body font-bold">{status.courierName}{status.courierVerified && <span className="ml-1.5 inline-flex items-center gap-0.5 rounded-full bg-[var(--state-available-soft)] px-1.5 py-0.5 align-middle text-label font-bold text-[var(--state-available-text)]">✓ {t("Verified", "सत्यापित")}</span>}</p>{status.courierVehicleNo && <p className="text-caption font-semibold tracking-wide text-muted">{status.courierVehicleNo}</p>}</div>
+      <div className="min-w-0 flex-1"><p className="text-caption text-muted">{t("Your delivery rider", "आपका डिलीवरी राइडर")}</p><p className="text-body font-bold">{status.courierName}{status.courierVerified && <span className="ml-1.5 inline-flex items-center gap-0.5 rounded-full bg-[var(--state-available-soft)] px-1.5 py-0.5 align-middle text-label font-bold text-[var(--state-available-text)]">✓ {t("Verified", "सत्यापित")}</span>}</p>{status.courierVehicleNo && <p className="text-caption font-semibold tracking-wide text-muted">{status.courierVehicleNo}</p>}{status.courierRating && <p className="text-caption font-semibold text-ink"><span className="text-[var(--state-held)]">★</span> {status.courierRating.rating !== null ? `${status.courierRating.rating.toFixed(1)} (${status.courierRating.ratings})` : t("New rider", "नए राइडर")} · {t(`${status.courierRating.rides} deliveries`, `${status.courierRating.rides} डिलीवरी`)}</p>}</div>
       {status.courierPhone && <a href={`tel:${status.courierPhone}`} className="inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-brand px-4 text-caption font-bold text-brand-on shadow-[0_4px_12px_-2px_var(--brand-border)]"><HugeiconsIcon icon={Call02Icon} size={17} aria-hidden />{t("Call", "कॉल")}</a>}
     </section>}
+
+    {status.status === "delivered" && (status.canRate || status.myRating) && <RateRider outletCode={outletCode} hindi={hindi} name={status.courierName} given={status.myRating} />}
 
     {status.status === "draft" && status.paymentMode === "manual_qr" && status.paymentStatus === "pending" && <section className={`${card} space-y-2 text-caption`}>
       <p>{t("UPI reference", "UPI रेफरेंस")}: <strong className="font-mono">{status.manualPaymentReference}</strong></p>
@@ -413,15 +432,80 @@ function StatusView({ status, hindi, pending, statusMessage, onPay, onRefresh, n
       <div className="min-w-0"><p className="text-caption text-muted">{t("Delivering to", "यहाँ डिलीवरी")} {status.name ? `· ${status.name}` : ""}</p><p className="text-body">{status.address.line}, {status.address.locality} · {status.address.pincode}</p></div>
     </section>
 
-    <div className="flex items-center justify-between gap-3 px-1">
-      <button type="button" disabled={pending} onClick={onRefresh} className="text-caption font-semibold text-muted hover:text-ink">{pending ? t("Updating…", "अपडेट हो रहा है…") : t("Updates by itself · refresh now", "अपने आप अपडेट होता है · अभी देखें")}</button>
-      <Link href={newOrderHref} className="text-caption font-bold text-brand-strong">{t("Start another order", "नया ऑर्डर करें")}</Link>
+    {/* After delivery the next order is the main thing to do; while it is on its way it stays a quieter option */}
+    <Link href={newOrderHref} className={`flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl text-body font-bold ${status.status === "delivered" || status.status === "cancelled" ? "bg-brand text-brand-on shadow-[0_8px_20px_-6px_var(--brand-border)]" : "border border-brand/40 bg-surface text-brand-strong"}`}><HugeiconsIcon icon={PlusSignIcon} size={18} strokeWidth={2} aria-hidden />{t("Start another order", "नया ऑर्डर करें")}</Link>
+    <button type="button" disabled={pending} onClick={onRefresh} className="mx-auto block min-h-10 px-2 text-caption font-semibold text-muted hover:text-ink">{pending ? t("Updating…", "अपडेट हो रहा है…") : t("Updates by itself · refresh now", "अपने आप अपडेट होता है · अभी देखें")}</button>
+  </div>;
+}
+
+/** After delivery: one tap of stars for the rider, with an optional word */
+function RateRider({ outletCode, hindi, name, given }: { outletCode: string; hindi: boolean; name: string | null; given: number | null }) {
+  const t = (en: string, hi: string) => (hindi ? hi : en);
+  const [stars, setStars] = useState(given ?? 0);
+  const [note, setNote] = useState("");
+  const [done, setDone] = useState(given !== null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const labels = [t("Bad", "खराब"), t("Not good", "ठीक नहीं"), t("Okay", "ठीक"), t("Good", "अच्छा"), t("Excellent", "बहुत बढ़िया")];
+  if (done) return <section className="rounded-[22px] border border-line/70 bg-surface p-4 text-center">
+    <p className="text-[1.5rem] leading-none text-[var(--state-held)]" aria-label={t(`${stars} stars`, `${stars} स्टार`)}>{"★".repeat(stars)}<span className="text-ink/15">{"★".repeat(5 - stars)}</span></p>
+    <p className="mt-2 text-caption font-semibold text-success">{t("Thanks for rating your rider!", "राइडर को रेटिंग देने के लिए धन्यवाद!")}</p>
+  </section>;
+  return <section className="rounded-[22px] border border-line/70 bg-surface p-4">
+    <p className="text-body font-bold">{t(`How was ${name ?? "your rider"}?`, `${name ?? "राइडर"} कैसे थे?`)}</p>
+    <div role="radiogroup" aria-label={t("Rider rating", "राइडर रेटिंग")} className="mt-3 flex justify-center gap-1.5">
+      {[1, 2, 3, 4, 5].map((n) => <button key={n} type="button" role="radio" aria-checked={stars === n} aria-label={`${n} · ${labels[n - 1]}`} onClick={() => setStars(n)} className={`grid size-12 place-items-center rounded-xl text-[1.75rem] leading-none transition-transform active:scale-90 ${n <= stars ? "text-[var(--state-held)]" : "text-ink/15"}`}>★</button>)}
+    </div>
+    <p className="mt-1 h-5 text-center text-caption font-semibold text-muted">{stars ? labels[stars - 1] : ""}</p>
+    {stars > 0 && <>
+      <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={200} placeholder={t("Anything to add? (optional)", "कुछ कहना है? (वैकल्पिक)")} className="mt-2 min-h-11 w-full rounded-xl border border-line bg-paper px-3 text-body" />
+      {error && <p role="alert" className="mt-2 text-caption font-semibold text-danger">{error}</p>}
+      <button type="button" disabled={busy} onClick={() => { setBusy(true); setError(null); void rateRiderAction(outletCode, stars, note).then((r) => { setBusy(false); if (r.ok) setDone(true); else setError(r.message); }); }} className="mt-3 min-h-12 w-full rounded-2xl bg-brand text-body font-bold text-brand-on disabled:opacity-60">{busy ? t("Sending…", "भेज रहे हैं…") : t("Submit rating", "रेटिंग भेजें")}</button>
+    </>}
+  </section>;
+}
+
+/** One bar for the two goals a delivery cart chases: the minimum order, then free delivery */
+function OrderGoals({ hindi, cartPaise, minimumPaise, freeAbovePaise, feePaise }: { hindi: boolean; cartPaise: number; minimumPaise: number; freeAbovePaise: number | null; feePaise: number }) {
+  const t = (en: string, hi: string) => (hindi ? hi : en);
+  const free = feePaise > 0 && freeAbovePaise !== null ? freeAbovePaise : null;
+  const goals = [
+    ...(minimumPaise > 0 ? [{ at: minimumPaise, label: t("Min. order", "न्यूनतम ऑर्डर") }] : []),
+    ...(free !== null && free !== minimumPaise ? [{ at: free, label: t("Free delivery", "मुफ़्त डिलीवरी") }] : []),
+  ].sort((a, b) => a.at - b.at);
+  if (free !== null && free === minimumPaise && goals[0]) goals[0].label = t("Min. order · free delivery", "न्यूनतम · मुफ़्त डिलीवरी");
+  const fee = feePaise ? `${t("Delivery", "डिलीवरी")} ${money(feePaise)}` : t("Free delivery", "मुफ़्त डिलीवरी");
+  if (!goals.length) return <p className="mt-1 border-t border-line/70 pt-2.5 text-caption text-muted">{fee}</p>;
+  const belowMin = cartPaise < minimumPaise;
+  const freeDone = free === null || cartPaise >= free;
+  const message = belowMin
+    ? t(`Add ${money(minimumPaise - cartPaise)} more to place your order`, `ऑर्डर के लिए ${money(minimumPaise - cartPaise)} और जोड़ें`)
+    : !freeDone
+      ? t(`Add ${money(free! - cartPaise)} more for free delivery`, `मुफ़्त डिलीवरी के लिए ${money(free! - cartPaise)} और जोड़ें`)
+      : free !== null ? t("Free delivery unlocked", "मुफ़्त डिलीवरी मिल गई") : t("Ready to order", "ऑर्डर के लिए तैयार");
+  // One track per goal, sized by how far it reaches; each label sits under its own track, so none runs off the card
+  return <div className="mt-1 border-t border-line/70 pt-3" role="status">
+    <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+      <p className={`text-caption font-bold ${belowMin ? "text-[var(--state-held-text)]" : "text-success"}`}>{message}</p>
+      <p className="text-caption text-muted">{free !== null && cartPaise >= free ? <span className="line-through">{fee}</span> : fee}</p>
+    </div>
+    <div className="mt-2.5 flex gap-1" aria-hidden>
+      {goals.map((g, k) => {
+        const from = k ? goals[k - 1].at : 0, done = cartPaise >= g.at;
+        const fill = Math.max(0, Math.min(1, (cartPaise - from) / (g.at - from)));
+        return <div key={g.at} className="min-w-[5.5rem]" style={{ flexGrow: g.at - from, flexBasis: 0 }}>
+          <div className="h-2 overflow-hidden rounded-full bg-ink/10"><div className="h-full rounded-full bg-[var(--state-available)] transition-[width] duration-500" style={{ width: `${fill * 100}%` }} /></div>
+          <p className={`mt-1.5 text-right text-[11px] leading-tight ${done ? "font-semibold text-success" : "text-muted"}`}>
+            <span className="font-semibold tabular">{done ? "✓ " : ""}{money(g.at)}</span><br />{g.label}
+          </p>
+        </div>;
+      })}
     </div>
   </div>;
 }
 
 /** "Use my location", then a map whose pin the guest drags to their exact door */
-function ExactPin({ hindi, address, onPin }: { hindi: boolean; address: DeliveryAddress; onPin: (p: { lat: number; lng: number }) => void }) {
+function ExactPin({ hindi, address, onPin, onPlace }: { hindi: boolean; address: DeliveryAddress; onPin: (p: { lat: number; lng: number }) => void; onPlace: (place: { pincode: string; locality: string; line: string }) => boolean }) {
   const t = (en: string, hi: string) => (hindi ? hi : en);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -430,7 +514,12 @@ function ExactPin({ hindi, address, onPin }: { hindi: boolean; address: Delivery
     if (!("geolocation" in navigator)) { setError(t("This phone cannot share location.", "यह फ़ोन लोकेशन नहीं दे सकता।")); return; }
     setBusy(true); setError(null);
     navigator.geolocation.getCurrentPosition(
-      (pos) => { setBusy(false); onPin({ lat: pos.coords.latitude, lng: pos.coords.longitude }); },
+      (pos) => {
+        const p = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        onPin(p);
+        // Fill pincode, area and street from the location; the guest can still edit every field
+        void placeAction(p.lat, p.lng).then((place) => { setBusy(false); if (place) { if (!onPlace(place)) setError(t("Address filled from your location. Please type your pincode above.", "लोकेशन से पता भर दिया। कृपया ऊपर अपना पिनकोड लिखें।")); } else setError(t("Location found. Please type the address below.", "लोकेशन मिल गई। कृपया नीचे पता लिखें।")); }, () => setBusy(false));
+      },
       (err) => { setBusy(false); setError(err.code === err.PERMISSION_DENIED ? t("Allow location in your browser, or just type the address.", "ब्राउज़र में लोकेशन की अनुमति दें, या पता लिखें।") : t("Could not find you. Turn on GPS and try again.", "लोकेशन नहीं मिली। GPS चालू करके फिर कोशिश करें।")); },
       { enableHighAccuracy: true, timeout: 15_000 },
     );

@@ -39,15 +39,15 @@ describe("register arithmetic", () => {
 const day = (over: Partial<Register> = {}): Register => ({
   date: "2026-11-20", today: "2026-11-20", outletId: "o1", outlets: [{ id: "o1", name: "Spice Route" }],
   people: [
-    { id: "u1", name: "Rahul Verma", roles: ["waiter"], status: "present", note: null },
-    { id: "u2", name: "Priya Singh", roles: ["cashier"], status: "half_day", note: "doctor" },
-    { id: "u3", name: "Ramesh Yadav", roles: ["kitchen"], status: null, note: null },
+    { id: "u1", name: "Rahul Verma", photoUrl: null, roles: ["waiter"], status: "present", note: null },
+    { id: "u2", name: "Priya Singh", photoUrl: null, roles: ["cashier"], status: "half_day", note: "doctor" },
+    { id: "u3", name: "Ramesh Yadav", photoUrl: null, roles: ["kitchen"], status: null, note: null },
   ],
   counts: { present: 1, half_day: 1, absent: 0, leave: 0, week_off: 0, unmarked: 1 }, ...over,
 });
 const month = (): Month => ({
   month: "2026-11", dates: datesOfMonth("2026-11"), outletId: "o1", outlets: [{ id: "o1", name: "Spice Route" }], daysCounted: 20,
-  rows: [{ id: "u1", name: "Rahul Verma", roles: ["waiter"], counts: { present: 15, half_day: 2, absent: 1, leave: 1, week_off: 1, unmarked: 0, daysWorked: 16 }, days: datesOfMonth("2026-11").map((_, i) => (i === 0 ? "present" : i === 1 ? "half_day" : null)) }],
+  rows: [{ id: "u1", name: "Rahul Verma", photoUrl: null, roles: ["waiter"], counts: { present: 15, half_day: 2, absent: 1, leave: 1, week_off: 1, unmarked: 0, daysWorked: 16 }, days: datesOfMonth("2026-11").map((_, i) => (i === 0 ? "present" : i === 1 ? "half_day" : null)) }],
 });
 const render = (d: Register | null, m: Month | null) => renderToStaticMarkup(createElement(AttendanceScreen, { day: d, month: m }));
 

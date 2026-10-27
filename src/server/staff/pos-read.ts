@@ -23,7 +23,7 @@ async function recentlyPaid(staff: StaffSession) {
     .innerJoin(s.diningTables, and(eq(s.diningTables.tenantId, s.tableSessions.tenantId), eq(s.diningTables.id, s.tableSessions.tableId)))
     .where(and(eq(s.bills.tenantId, staff.tenantId), eq(s.bills.outletId, staff.outletId), eq(s.bills.status, "paid"), gte(s.bills.closedAt, new Date(Date.now() - 24 * 3600_000))))
     .orderBy(desc(s.bills.closedAt)).limit(20);
-  return rows.map(({ session, table, bill }) => ({ sessionId: session.id, tableCode: table.code, status: session.status, billStatus: bill.status as string | null, totalPaise: bill.totalPaise, paidPaise: bill.totalPaise, balancePaise: 0, partySize: session.partySize ?? 0, requestedAt: bill.requestedAt?.getTime() ?? null, pendingOnline: false, paymentMethods: [] as string[] }));
+  return rows.map(({ session, table, bill }) => ({ sessionId: session.id, tableCode: table.code, takeaway: table.tableClass === TAKEAWAY_CLASS, guestName: session.guestName, status: session.status, billStatus: bill.status as string | null, totalPaise: bill.totalPaise, paidPaise: bill.totalPaise, balancePaise: 0, partySize: session.partySize ?? 0, requestedAt: bill.requestedAt?.getTime() ?? null, pendingOnline: false, paymentMethods: [] as string[] }));
 }
 
 export async function posQueue(staff: StaffSession) {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle, ArrowLeft, Banknote, BellRing, Check, CreditCard, PackagePlus, Printer, ReceiptText, RotateCcw, Search, ShoppingBag, Trash2, Users, Wallet, WifiOff } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Banknote, Bike, BellRing, Check, CreditCard, PackagePlus, Printer, ReceiptText, RotateCcw, Search, ShoppingBag, Trash2, Users, Wallet, WifiOff } from "lucide-react";
 import type { PosBillDetail, PosQueue } from "@/server/staff/pos-read";
 import * as actions from "@/server/staff/pos-actions";
 import { connectRealtime } from "@/lib/realtime-client";
@@ -18,6 +18,7 @@ import { DISCOUNT_FREE_LIMIT_PERCENT, discountNeedsApproval } from "@/domain/dis
 import { RefundPanel } from "./refund-panel";
 import { billMessage, whatsappLink, whatsappNumber } from "@/domain/bill-message";
 import { isRoomCode } from "@/domain/rooms";
+import { isDeliveryTable } from "@/domain/delivery";
 
 type Card = { sessionId: string; tableCode: string; takeaway?: boolean; guestName?: string | null; status: string; totalPaise: number; paidPaise: number; balancePaise: number; partySize: number; requestedAt: number | null; pendingOnline: boolean; payAtCounter?: boolean; paidUpi?: boolean };
 type Sheet = { kind: "pay" } | { kind: "reopen" } | { kind: "void"; lineId: string } | null;
@@ -51,6 +52,11 @@ export function BillingScreen({ initial, realtimeUrl, embedded = false, openSess
   const settleKey = useRef<string | null>(null);
   const detailId = useRef<string | null>(null);
   const L = (en: string, h: string) => (hi ? h : en);
+  /** What staff call the order: a delivery or takeaway by kind (their internal codes mean nothing), a room by number, else the table */
+  const placeName = (code: string, takeaway?: boolean) => isDeliveryTable(code)
+    ? <><Bike className="mr-1.5 inline size-4 align-[-2px]" aria-hidden="true" />{L("Delivery", "डिलीवरी")}</>
+    : takeaway ? <><ShoppingBag className="mr-1.5 inline size-4 align-[-2px]" aria-hidden="true" />{L("Takeaway", "पार्सल")} {code}</>
+    : isRoomCode(code) ? code : `${L("Table", "टेबल")} ${code}`;
 
   useEffect(() => { detailId.current = detail?.sessionId ?? null; }, [detail]);
   // Standalone /pos: dialogs live on <body>, so the console tokens must be on <html> there too
@@ -100,9 +106,9 @@ export function BillingScreen({ initial, realtimeUrl, embedded = false, openSess
   // separate queue so “Bills waiting” and “To collect” only describe actual bills.
   const paymentQueue = dueAll.filter((c) => !c.takeaway || c.status === "bill_requested");
   const takeawayQueue = dueAll.filter((c) => c.takeaway && c.status !== "bill_requested");
-  const due = paymentQueue.filter((c) => `${c.tableCode} ${c.status}`.toLowerCase().includes(search.toLowerCase()));
+  const due = paymentQueue.filter((c) => `${c.tableCode} ${c.guestName ?? ""} ${c.status}`.toLowerCase().includes(search.toLowerCase()));
   const takeaways = takeawayQueue.filter((c) => `${c.tableCode} ${c.guestName ?? ""} ${c.status}`.toLowerCase().includes(search.toLowerCase()));
-  const paid = paidAll.filter((c) => c.tableCode.toLowerCase().includes(search.toLowerCase()));
+  const paid = paidAll.filter((c) => `${c.tableCode} ${c.guestName ?? ""}`.toLowerCase().includes(search.toLowerCase()));
   const toCollect = paymentQueue.reduce((n, c) => n + c.balancePaise, 0);
   const counterCount = dueAll.filter((c) => c.payAtCounter).length;
   const paidToday = paidAll.reduce((n, c) => n + c.totalPaise, 0);
@@ -189,7 +195,7 @@ export function BillingScreen({ initial, realtimeUrl, embedded = false, openSess
                   <li key={c.sessionId}>
                     <button type="button" onClick={() => open(c.sessionId)} aria-pressed={sel} className={`block w-full rounded-card border bg-surface p-4 text-left transition-colors hover:border-ink/30 focus-visible:outline-2 focus-visible:outline-brand ${sel ? "border-brand ring-2 ring-brand/30" : "border-line"}`}>
                       <div className="flex items-start justify-between gap-3">
-                        <div><p className="font-display text-section font-bold">{c.takeaway ? <><ShoppingBag className="mr-1.5 inline size-4 align-[-2px]" aria-hidden="true" />{L("Takeaway", "पार्सल")}</> : (isRoomCode(c.tableCode) ? "" : L("Table", "टेबल"))} {c.tableCode}{c.guestName ? <span className="ml-1.5 text-body font-semibold text-muted">· {c.guestName}</span> : null}</p><p className="mt-0.5 flex items-center gap-1.5 text-caption text-muted"><Users className="size-3.5" aria-hidden="true" />{c.partySize} {L("guests", "लोग")}{tab === "due" && mins !== null ? ` · ${L("bill asked", "बिल माँगा")} ${mins < 1 ? L("just now", "अभी") : `${mins} min`}` : ""}</p></div>
+                        <div><p className="font-display text-section font-bold">{placeName(c.tableCode, c.takeaway)}{c.guestName ? <span className="ml-1.5 text-body font-semibold text-muted">· {c.guestName}</span> : null}</p><p className="mt-0.5 flex items-center gap-1.5 text-caption text-muted">{isDeliveryTable(c.tableCode) ? L("Home delivery", "होम डिलीवरी") : <><Users className="size-3.5" aria-hidden="true" />{c.partySize} {L("guests", "लोग")}</>}{tab === "due" && mins !== null ? ` · ${L("bill asked", "बिल माँगा")} ${mins < 1 ? L("just now", "अभी") : `${mins} min`}` : ""}</p></div>
                         <p className="font-display text-section font-bold tabular">{tab === "due" ? rs(c.balancePaise) : tab === "takeaway" ? L("In progress", "तैयारी में") : rs(c.totalPaise)}</p>
                       </div>
                       <div className="mt-2 flex flex-wrap gap-1.5">
@@ -226,7 +232,7 @@ export function BillingScreen({ initial, realtimeUrl, embedded = false, openSess
                   <button type="button" className="mb-3 inline-flex items-center gap-1.5 text-body font-semibold text-muted hover:text-ink lg:hidden" onClick={() => setDetail(null)}><ArrowLeft className="size-4" aria-hidden="true" />{L("All bills", "सभी बिल")}</button>
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <h2 className="font-display text-title font-bold">{detail.takeaway ? L("Takeaway", "पार्सल") : (isRoomCode(detail.tableCode) ? "" : L("Table", "टेबल"))} {detail.tableCode}</h2>
+                      <h2 className="font-display text-title font-bold">{placeName(detail.tableCode, detail.takeaway)}</h2>
                       <p className="mt-0.5 flex flex-wrap items-center gap-2 text-body text-muted">
                         <span className={`rounded-full px-2.5 py-0.5 text-caption font-semibold ${isPaidBill ? "bg-[var(--state-paid-soft)] text-[var(--state-paid-text)]" : detail.status === "bill_requested" ? "bg-[var(--state-bill-soft)] text-[var(--state-bill-text)]" : "bg-[var(--state-seated-soft)] text-[var(--state-seated-text)]"}`}>{isPaidBill ? L("Paid", "भुगतान हुआ") : detail.status === "bill_requested" ? L("Bill asked", "बिल माँगा") : detail.takeaway ? L("Order in progress", "ऑर्डर जारी है") : L("Still eating", "अभी खा रहे हैं")}</span>
                         {detail.people.length > 0 && <span>{detail.people.map((p) => p.name).join(", ")}</span>}
@@ -244,7 +250,7 @@ export function BillingScreen({ initial, realtimeUrl, embedded = false, openSess
                         onSend={(phone) => void actions.rememberCustomerAction({ sessionId: detail.sessionId, phone, name: detail.people.find((p) => p.name && !/^guest\b/i.test(p.name))?.name ?? null })}
                         text={billMessage({
                           outlet: queue.identity.outlet,
-                          table: detail.tableCode,
+                          table: isDeliveryTable(detail.tableCode) ? L("Delivery", "डिलीवरी") : detail.tableCode,
                           kind: isPaidBill ? "receipt" : "bill",
                           phone: defaultWhatsAppPhone ? defaultWhatsAppPhone.slice(-10) : null,
                           date: detail.bill?.createdAt ?? null,
@@ -379,7 +385,7 @@ export function BillingScreen({ initial, realtimeUrl, embedded = false, openSess
               <>
                 <DialogHeader>
                   <DialogTitle className="font-display text-title font-bold">{sheet.kind === "pay" ? L("Take payment", "भुगतान लें") : sheet.kind === "reopen" ? L("Reopen the bill", "बिल फिर खोलें") : L("Remove this item", "यह आइटम हटाएँ")}</DialogTitle>
-                  <DialogDescription>{(isRoomCode(detail.tableCode) ? "" : L("Table", "टेबल"))} {detail.tableCode}</DialogDescription>
+                  <DialogDescription>{placeName(detail.tableCode, detail.takeaway)}{detail.guestName && isDeliveryTable(detail.tableCode) ? ` · ${detail.guestName}` : ""}</DialogDescription>
                 </DialogHeader>
 
                 {sheet.kind === "pay" && (

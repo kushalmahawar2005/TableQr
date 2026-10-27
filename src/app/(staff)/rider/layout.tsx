@@ -27,7 +27,7 @@ export default async function RiderLayout({ children }: LayoutProps<"/rider">) {
     // Room for the phone's status bar: the reported inset, or --app-top set by the screen inside the app
     <div className="pt-[max(env(safe-area-inset-top),var(--app-top,0px))]">
       <div className="mx-auto w-full max-w-xl px-4 pt-3 empty:hidden">
-        <InstallApp name={brand?.name ?? "TableQR"} logoUrl={brand?.logoUrl} />
+        <InstallApp name={brand?.name ?? "TableQR"} logoUrl={brand?.logoUrl} title="Get the Rider app" downloadHref="/download/rider" />
       </div>
       <div className="mx-auto w-full max-w-xl px-4">
         <NotificationPermissionOnboarding />

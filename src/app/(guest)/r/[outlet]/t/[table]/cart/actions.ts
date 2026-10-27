@@ -71,7 +71,7 @@ export async function restoreLineAction(outletCode: string, shortCode: string, s
 
 export type PlaceResult =
   | { ok: true; roundNo: number }
-  | { ok: false; error: Err | "items" | "cap" | "name_required" | "invalid_name" | "empty" | "prices" | "verification_required" };
+  | { ok: false; error: Err | "items" | "cap" | "name_required" | "invalid_name" | "phone_required" | "empty" | "prices" | "verification_required" };
 
 /** The reviewed prices from the phone, reduced to plain numbers; used only to compare */
 function cleanQuote(raw: unknown): Record<string, number> {
@@ -87,12 +87,12 @@ function cleanQuote(raw: unknown): Record<string, number> {
 export async function placeOrderAction(
   outletCode: string,
   shortCode: string,
-  input: { requestId: string; name?: string; note?: string; quote: Record<string, number> },
+  input: { requestId: string; name?: string; phone?: string; note?: string; quote: Record<string, number> },
 ): Promise<PlaceResult> {
   try {
     const ctx = await context(outletCode, shortCode);
     // Always compared: a missing or empty quote means nothing was reviewed, so prices must be confirmed
-    const res = await placeOrder(ctx, { requestId: String(input.requestId).slice(0, 64), name: input.name ? String(input.name) : undefined, note: input.note ? String(input.note) : undefined, quote: cleanQuote(input.quote) });
+    const res = await placeOrder(ctx, { requestId: String(input.requestId).slice(0, 64), name: input.name ? String(input.name) : undefined, phone: input.phone ? String(input.phone) : undefined, note: input.note ? String(input.note) : undefined, quote: cleanQuote(input.quote) });
     return { ok: true, roundNo: res.roundNo };
   } catch (err) {
     if (err instanceof AppError) {
@@ -105,6 +105,7 @@ export async function placeOrderAction(
           return { ok: false, error: "cap" };
         case "name_required":
         case "invalid_name":
+        case "phone_required":
           return { ok: false, error: err.code };
         case "cart_empty":
           return { ok: false, error: "empty" };

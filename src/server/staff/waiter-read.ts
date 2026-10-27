@@ -3,7 +3,7 @@ import { checkIn, myDuty } from "./duty";
 import { and, asc, eq, inArray, isNotNull, isNull, ne } from "drizzle-orm";
 import { db } from "@/db";
 import * as s from "@/db/schema";
-import { requireStaffRole, getWaiterTasks } from "./waiter";
+import { requireStaffRole, requireOwnVisit, getWaiterTasks } from "./waiter";
 import type { StaffSession } from "./auth";
 import { AppError } from "../errors";
 import { waiterCoverage } from "./waiter-coverage";
@@ -38,12 +38,15 @@ export async function waiterBoard(staff: StaffSession, now = new Date()) {
     const label = visit ? bindings.filter(b => b.sessionId === visit.id).sort((a,b) => Number(b.isPrimary)-Number(a.isPrimary)).map(b => tables.find(x => x.id === b.tableId)?.code).join(" + ") : t.code;
     return { id: t.id, code: t.code, label, assigned, shared, primary: mainId === t.id, state: t.state, sessionId: visit?.id ?? null, partySize: visit ? Math.max(visit.partySize ?? 0, people.filter(p => p.sessionId === visit.id).length) : 0, openedAt: visit?.openedAt.getTime() ?? null, expectedEndAt: visit?.expectedEndAt?.getTime() ?? null, orderingPaused: visit?.orderingLocked ?? false, readyCount: lines.filter(l => l.sessionId === visit?.id).reduce((n,l)=>n+l.qty,0), requestCount: tasks.requests.filter(r => r.tableCode === t.code).length, unpaidPaise: bills.some(b => b.sessionId === visit?.id) ? shares.filter(sh => sh.sessionId === visit?.id).reduce((n,sh)=>n+Math.max(0,sh.amount-sh.paid),0) : null };
   });
-  return { renderedAt: now.getTime(), identity: { name: staff.name, roles: staff.roles, outlet: staff.outlet.name, duty: duty.status }, requests: tasks.requests, ready: tasks.ready, tables: cards.filter(t => t.assigned && t.primary), unassignedTables: cards.filter(t => t.shared && t.primary), orderTables: cards.filter(t => t.sessionId && t.primary) };
+  // A plain waiter sees only their own tables; managers and owners see the whole floor
+  const supervisor = staff.roles.some(r => r === "manager" || r === "owner");
+  return { renderedAt: now.getTime(), identity: { name: staff.name, roles: staff.roles, outlet: staff.outlet.name, duty: duty.status }, requests: tasks.requests, ready: tasks.ready, tables: cards.filter(t => t.assigned && t.primary), unassignedTables: supervisor ? cards.filter(t => t.shared && t.primary) : [], orderTables: cards.filter(t => t.sessionId && t.primary && (supervisor || t.assigned)) };
 }
 export type WaiterBoard = Awaited<ReturnType<typeof waiterBoard>>;
 
 export async function waiterDetail(staff: StaffSession, sessionId: string) {
   await requireStaffRole(staff);
+  await requireOwnVisit(staff, sessionId);
   const [session] = await db.select().from(s.tableSessions).where(and(eq(s.tableSessions.tenantId, staff.tenantId), eq(s.tableSessions.outletId, staff.outletId), eq(s.tableSessions.id, sessionId)));
   if (!session) throw new AppError("not_found", "Table session not found in this outlet.");
   const [people, lines, requests, shares] = await Promise.all([

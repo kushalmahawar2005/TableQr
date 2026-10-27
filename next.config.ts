@@ -5,6 +5,8 @@ const nextConfig: NextConfig = {
   // A separate build folder for local load tests, so a running dev server is not disturbed
   ...(process.env.NEXT_DIST_DIR ? { distDir: process.env.NEXT_DIST_DIR } : {}),
   poweredByHeader: false,
+  // Dev only: let phones test the dev server through an ngrok tunnel (scripts and live reload)
+  allowedDevOrigins: ["*.ngrok-free.dev", "*.ngrok-free.app", "*.ngrok.app"],
   // This folder is the project root, even though a stray lockfile sits in the home folder
   turbopack: { root: path.resolve(import.meta.dirname) },
   // Menu photos come in through a Server Action, already shrunk in the browser to under ~1 MB;

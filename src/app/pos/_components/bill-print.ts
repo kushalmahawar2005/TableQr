@@ -1,4 +1,5 @@
 import { addressLine, mergeLines, taxRows } from "@/domain/invoice-view";
+import { isDeliveryTable } from "@/domain/delivery";
 import { paperSaved } from "@/lib/print/runtime";
 import { charsPerLine, dateTime, esc, profileFor, row, rs, thermalDocument, wrapRows, type PaperMm } from "@/lib/print/thermal";
 import type { PosBillDetail } from "@/server/staff/pos-read";
@@ -41,7 +42,7 @@ export function billHtml(d: PosBillDetail, outlet: string, kind: "bill" | "recei
     showInvoice ? row("Invoice No.", d.invoice!.number) : "",
     row("Date", dateTime(showInvoice ? d.invoice!.issuedAt : Date.now())),
     row("Order", d.takeaway ? "Takeaway" : "Dine-in"),
-    row(d.takeaway ? "Token" : "Table", d.tableCode),
+    isDeliveryTable(d.tableCode) ? row("Delivery", d.guestName ?? "Home delivery") : row(d.takeaway ? "Token" : "Table", d.tableCode),
     "<hr>",
   ].join("");
 
@@ -71,7 +72,7 @@ export function billHtml(d: PosBillDetail, outlet: string, kind: "bill" | "recei
   const estimateMm = 52 + rows * 5 + summaryRows * 5 + (payments ? 6 + paid.length * 5 : 0);
 
   return thermalDocument({
-    title: `${kind === "bill" ? "Bill" : "Receipt"} ${d.tableCode}`,
+    title: `${kind === "bill" ? "Bill" : "Receipt"} ${isDeliveryTable(d.tableCode) ? "Delivery" : d.tableCode}`,
     paper,
     css: `h1{font-size:${profile.fsLarge + 3}px;text-align:center;line-height:1.2;font-weight:700;margin-bottom:2px}
 .t{font-size:${profile.fsLarge}px;letter-spacing:.06em}

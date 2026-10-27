@@ -4,7 +4,7 @@ import { AppError } from "@/server/errors";
 import { KDS_COOKIE, KDS_DEVICE_DAYS, kdsSetupOptions, requireKdsDevice, revokeKdsDevice, setupKdsDevice, updateKdsDevice } from "@/server/kitchen/device";
 import { recordPrintJob } from "@/server/print/jobs";
 import { printSetup } from "@/server/print/printers";
-import { kdsAccept, kdsBoard, kdsOlder, kdsBumpLine, kdsBumpTicket, kdsRealtimeToken, kdsRecall, kdsSearch, kdsStart, kdsStock } from "@/server/kitchen/kds";
+import { kdsAccept, kdsBoard, kdsOlder, kdsBumpLine, kdsBumpTicket, kdsCancelLine, kdsRealtimeToken, kdsRecall, kdsSearch, kdsStart, kdsStock } from "@/server/kitchen/kds";
 
 // S2 server actions. The screen, its outlet and its station come from the httpOnly device cookie;
 // the client sends only ids and values. Setup and settings need a manager or owner PIN.
@@ -74,6 +74,8 @@ export const startAction = async (ticketId: string) => run(async () => kdsStart(
 export const bumpTicketAction = async (ticketId: string) => run(async () => kdsBumpTicket(await device(), ticketId));
 export const bumpLineAction = async (lineId: string) => run(async () => kdsBumpLine(await device(), lineId));
 export const recallAction = async (ticketId: string) => run(async () => kdsRecall(await device(), ticketId));
+/** Cancel one item, even after accept: a reason, and a manager or owner PIN */
+export const cancelLineAction = async (lineId: string, reason: string, phone: string, pin: string) => run(async () => kdsCancelLine(await device(), { lineId, reason, phone, pin }));
 export const stockAction = async (itemId: string, outOfStock: boolean) =>
   run(async () => {
     const res = await kdsStock(await device(), itemId, outOfStock === true);

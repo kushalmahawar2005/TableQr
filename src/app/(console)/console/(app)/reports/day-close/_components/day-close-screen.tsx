@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { BackToReports } from "../../_components/back-to-reports";
 import { usePrint } from "@/components/print/print-provider";
 import { PaperToggle } from "@/app/pos/_components/paper-toggle";
 import type { DayClose } from "@/server/staff/day-close";
@@ -47,6 +48,7 @@ export function DayCloseScreen({ report: r, outletName, today }: { report: DayCl
 
   return (
     <main className="mx-auto w-full max-w-[1000px] px-4 py-5 text-ink sm:px-6 lg:px-8 lg:py-7">
+      <BackToReports />
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-caption font-semibold text-muted">{outletName}</p>

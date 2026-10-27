@@ -38,7 +38,7 @@ import { announceAvailability } from "../staff/inventory-pro";
 const scopeOf = (ctx: GuestContext): BillScope => ({ tenantId: ctx.tenantId, outletId: ctx.outletId, sessionId: ctx.sessionId });
 
 /** After commit: phones at the table reload the bill; the floor map recolours the table */
-export function announceBill(scope: BillScope, tables?: { tableIds: string[]; state: "bill_requested" | "paid" | "seated" }, extra: RealtimeEvent[] = []) {
+export function announceBill(scope: BillScope, tables?: { tableIds: string[]; state: "bill_requested" | "paid" | "needs_cleaning" | "seated" }, extra: RealtimeEvent[] = []) {
   void publish(scope, [
     { topic: topics.session(scope.sessionId), type: "bill.updated" },
     ...extra,
@@ -303,7 +303,7 @@ type Verdict = { gatewayRef: string; status: "success" | "failed"; amountPaise: 
 export async function confirmPayment(paymentId: string, verdict: Verdict, now = new Date()) {
   const res = await db.transaction((tx) => confirmPaymentTx(tx, paymentId, verdict, now), LOCK_THEN_READ);
   if (res.scope) {
-    announceBill(res.scope, res.closedTableIds ? { tableIds: res.closedTableIds, state: "paid" } : undefined, [
+    announceBill(res.scope, res.closedTableIds ? { tableIds: res.closedTableIds, state: "needs_cleaning" } : undefined, [
       { topic: topics.session(res.scope.sessionId), type: "payment.updated", data: { paymentId } },
       ...(res.closedTableIds ? [{ topic: topics.session(res.scope.sessionId), type: "session.closed" }] : []),
       ...(res.alert ? [{ topic: topics.tasks, type: "payment.stuck", data: { paymentId, reason: res.alert } }] : []),
@@ -572,7 +572,7 @@ export async function settleAtCounter(
 ) {
   if (input.clientRequestId) {
     await requireStaffRole(ctx, allowedRoles);
-    if (!/^[a-zA-Z0-9_-]{8,64}$/.test(input.clientRequestId) || !["cash", "card"].includes(input.method)) throw new AppError("invalid_state", "Invalid settlement request.");
+    if (!/^[a-zA-Z0-9_-]{8,64}$/.test(input.clientRequestId) || !["cash", "card", "upi"].includes(input.method)) throw new AppError("invalid_state", "Invalid settlement request.");
     if (input.method === "cash" && (!Number.isSafeInteger(input.receivedPaise) || input.receivedPaise! < 0)) throw new AppError("invalid_state", "Enter the cash received.");
   }
   const scope = { tenantId: ctx.tenantId, outletId: ctx.outletId, sessionId: input.sessionId };
@@ -645,7 +645,7 @@ export async function settleAtCounter(
       closedTableIds: applied.closedTableIds,
     };
   }, LOCK_THEN_READ);
-  announceBill(scope, res.closedTableIds ? { tableIds: res.closedTableIds, state: "paid" } : undefined, [
+  announceBill(scope, res.closedTableIds ? { tableIds: res.closedTableIds, state: "needs_cleaning" } : undefined, [
     { topic: topics.session(scope.sessionId), type: "payment.updated", data: { paymentId: res.paymentId } },
     ...(res.closedTableIds ? [{ topic: topics.session(scope.sessionId), type: "session.closed" }] : []),
   ]);
@@ -811,9 +811,9 @@ async function closeBill(tx: Tx, bill: typeof s.bills.$inferSelect, now: Date): 
 
   await tx.update(s.bills).set({ status: "paid", closedAt: now }).where(and(eq(s.bills.tenantId, t), eq(s.bills.id, bill.id)));
   await tx.update(s.tableSessions).set({ status: "closed", openKey: null, closedAt: now }).where(and(eq(s.tableSessions.tenantId, t), eq(s.tableSessions.id, bill.sessionId)));
-  // Every table of the visit waits in Paid until staff mark it for cleaning (S1); the visit lets go
+  // Every table of the visit goes straight to Cleaning once paid; the visit lets go
   // of them now, so nothing open still claims a table that is about to be reset
-  const tableIds = await setVisitTablesState(tx, t, bill.sessionId, "paid", now);
+  const tableIds = await setVisitTablesState(tx, t, bill.sessionId, "needs_cleaning", now);
   await releaseVisitTables(tx, t, bill.sessionId, now);
   // A takeaway counter or a room has no table to clear away: it is free for the next order at once
   if (tableIds.length) {

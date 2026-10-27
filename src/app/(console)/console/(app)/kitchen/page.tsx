@@ -35,6 +35,8 @@ export default async function ConsoleKitchenPage() {
         recall: act.recallAction,
         stock: act.stockAction,
         search: act.searchAction,
+        cancelLine: act.cancelLineAction,
+        cancelNeedsPin: !staff.roles.some((r) => r === "manager" || r === "owner"),
       }}
     />
   );

@@ -66,6 +66,17 @@ export async function proxy(request: NextRequest) {
     }
   }
 
+  // The restaurant's installed app lives under /r/CODE/app, so its scope never covers the table QRs
+  // (/r/CODE/t/...): a dine-in guest scanning a table stays in the browser. The app's pages are the
+  // ordinary guest pages; they learn their link base from this header.
+  const app = !response && /^\/r\/([^/]+)\/app(\/.*)?$/.exec(request.nextUrl.pathname);
+  if (app && !(app[2] ?? "").startsWith("/t/") && app[2] !== "/app.webmanifest") {
+    const destination = request.nextUrl.clone();
+    destination.pathname = `/r/${app[1]}${app[2] ?? ""}`;
+    requestHeaders.set("x-guest-base", `/r/${app[1]}/app`);
+    response = NextResponse.rewrite(destination, { request: { headers: requestHeaders } });
+  }
+
   response ??= NextResponse.next({ request: { headers: requestHeaders } });
   response.headers.set("Content-Security-Policy", csp);
   return response;

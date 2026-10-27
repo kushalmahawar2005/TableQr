@@ -19,12 +19,18 @@ export const deliveryCheckouts = mysqlTable("delivery_checkouts", {
   courierName: varchar("courier_name", { length: 80 }), courierPhone: varchar("courier_phone", { length: 16 }), courierAssignedAt: at("courier_assigned_at"),
   /** The team rider carrying it; name and phone above stay as given, for a rider outside the team */
   courierUserId: ref("courier_user_id"), pickedUpAt: at("picked_up_at"), deliveredAt: at("delivered_at"),
+  /** Four digits the customer tells the rider at the door; set when the rider picks the food up */
+  deliveryPin: varchar("delivery_pin", { length: 4 }), pinAttempts: int("pin_attempts").notNull().default(0),
+  /** The rider took the money another way (QR glitch, wrong amount...) and said why; the manager follows up */
+  paymentIssue: varchar("payment_issue", { length: 300 }), paymentIssueAt: at("payment_issue_at"),
+  /** The customer's 1-5 stars for the rider, once delivered; feeds the rider's average */
+  riderRating: int("rider_rating"), riderRatingNote: varchar("rider_rating_note", { length: 200 }), riderRatedAt: at("rider_rated_at"),
   paymentStatus: mysqlEnum("payment_status", ["none", "pending", "paid", "failed", "refund_pending", "refunded", "refund_failed"]).notNull().default("none"),
   paymentFailureReason: varchar("payment_failure_reason", { length: 200 }), refundGatewayRef: varchar("refund_gateway_ref", { length: 100 }),
   refundStatus: mysqlEnum("refund_status", ["none", "pending", "success", "failed"]).notNull().default("none"),
   deliveryFeePaise: int("delivery_fee_paise").notNull().default(0), totalPaise: int("total_paise").notNull().default(0),
   expiresAt: at("expires_at").notNull(), createdAt: createdAt(), placedAt: at("placed_at"),
-}, t => [tenantKey("delivery_checkouts", t), uniqueIndex("delivery_token_uq").on(t.tokenHash), uniqueIndex("delivery_gateway_ref_uq").on(t.paymentProvider, t.gatewayRef), uniqueIndex("delivery_refund_gateway_ref_uq").on(t.paymentProvider, t.refundGatewayRef), uniqueIndex("delivery_manual_reference_uq").on(t.tenantId, t.manualPaymentReference), index("delivery_device_idx").on(t.tenantId, t.deviceId, t.createdAt), index("delivery_outlet_idx").on(t.outletId, t.status, t.createdAt), index("delivery_courier_idx").on(t.tenantId, t.courierUserId, t.status), index("delivery_payment_status_idx").on(t.tenantId, t.paymentStatus, t.createdAt), index("delivery_manual_pending_idx").on(t.tenantId, t.outletId, t.paymentMode, t.paymentStatus, t.manualPaymentClaimedAt), sameTenant("fk_delivery_outlet", t, t.outletId, outlets), sameTenant("fk_delivery_guest", t, t.guestId, guests), sameTenant("fk_delivery_session", t, t.sessionId, tableSessions)]);
+}, t => [tenantKey("delivery_checkouts", t), uniqueIndex("delivery_token_uq").on(t.tokenHash), uniqueIndex("delivery_gateway_ref_uq").on(t.paymentProvider, t.gatewayRef), uniqueIndex("delivery_refund_gateway_ref_uq").on(t.paymentProvider, t.refundGatewayRef), uniqueIndex("delivery_manual_reference_uq").on(t.tenantId, t.manualPaymentReference), index("delivery_device_idx").on(t.tenantId, t.deviceId, t.createdAt), index("delivery_outlet_idx").on(t.outletId, t.status, t.createdAt), index("delivery_courier_idx").on(t.tenantId, t.courierUserId, t.status), index("delivery_rider_rating_idx").on(t.tenantId, t.courierUserId, t.riderRating), index("delivery_payment_status_idx").on(t.tenantId, t.paymentStatus, t.createdAt), index("delivery_manual_pending_idx").on(t.tenantId, t.outletId, t.paymentMode, t.paymentStatus, t.manualPaymentClaimedAt), sameTenant("fk_delivery_outlet", t, t.outletId, outlets), sameTenant("fk_delivery_guest", t, t.guestId, guests), sameTenant("fk_delivery_session", t, t.sessionId, tableSessions)]);
 
 export const deliveryOtpChallenges = mysqlTable("delivery_otp_challenges", {
   id: id(), tenantId: tenantId(), outletId: ref("outlet_id").notNull(), checkoutId: ref("checkout_id").notNull(),

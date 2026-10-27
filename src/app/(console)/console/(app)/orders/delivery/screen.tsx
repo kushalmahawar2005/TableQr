@@ -212,6 +212,9 @@ function DeliveryCard({ row, now, pending, canAssignCourier, run, riders }: { ro
         {row.items.map((item, i) => <li key={i} className="flex items-center gap-3 border-b border-line px-3 py-2 last:border-b-0"><span className="min-w-8 rounded-md bg-ink/5 px-1.5 text-center text-caption font-bold tabular text-ink">{item.qty}×</span><span className="text-body text-ink">{item.name}</span></li>)}
       </ul>}
 
+      {row.paymentIssue && <p role="alert" className="rounded-input border border-[var(--state-held)]/40 bg-[var(--state-held-soft)] p-3 text-caption text-[var(--state-held-text)]"><b>Payment issue from rider:</b> {row.paymentIssue}</p>}
+      {row.status === "dispatched" && row.deliveryPin && <p className="text-caption text-muted">Delivery PIN (if the customer can&apos;t find it): <b className="font-mono text-ink">{row.deliveryPin}</b></p>}
+      {row.riderRating !== null && <p className="text-caption text-ink">Customer rated the rider <b className="text-[var(--state-held)]">{"★".repeat(row.riderRating)}</b>{row.riderRatingNote ? ` · “${row.riderRatingNote}”` : ""}</p>}
       {/* Rider: pick from the team (photo, free or busy), or type one from outside the team */}
       {row.courierName && !editRider ? <div className="flex flex-wrap items-center gap-3 rounded-input border border-line p-3">
         <RiderFace url={riders.find((r) => r.id === row.courierUserId)?.photoUrl ?? null} />

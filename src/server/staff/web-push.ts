@@ -1,12 +1,13 @@
 import "server-only";
 import { createHash } from "node:crypto";
 import webpush, { type PushSubscription as WebPushSubscription } from "web-push";
-import { and, eq, isNull, or } from "drizzle-orm";
+import { and, eq, inArray, isNull, or } from "drizzle-orm";
 import { db } from "@/db";
 import * as s from "@/db/schema";
 import { uuidv7 } from "@/db/id";
 import { rebalanceWaiterVisit, sessionOwner } from "./waiter-coverage";
 import type { StaffSession } from "./auth";
+import { tenantFeatures } from "../plan";
 
 export type PushSubscriptionInput = s.StaffPushSubscription;
 
@@ -63,10 +64,18 @@ export async function sendOutletPush(scope: { tenantId: string; outletId: string
     if (!config.enabled || !privateKey || !subject) return;
     const owner = audience ? await sessionOwner(scope, audience.sessionId) : null;
     const roles = await db.select({ id: s.users.id, duty: s.users.dutyStatus, role: s.staffRoles.role }).from(s.users).innerJoin(s.staffRoles, and(eq(s.staffRoles.tenantId, s.users.tenantId), eq(s.staffRoles.userId, s.users.id))).where(and(eq(s.users.tenantId, scope.tenantId), eq(s.users.isActive, true), or(isNull(s.staffRoles.outletId), eq(s.staffRoles.outletId, scope.outletId))));
-    const eligible = new Set(roles.filter(r => r.role === "owner" || r.role === "manager" || (r.role === "waiter" && r.duty === "on" && (!owner || r.id === owner)) || (r.role === "kitchen" && (!audience || audience.kind === "order"))).map(r => r.id));
+    // A plan without the waiter app or the kitchen display sends those roles nothing: a restaurant
+    // that moved down a plan must not keep ringing phones whose app no longer opens
+    const features = await tenantFeatures(scope.tenantId);
+    const appFor = (role: string) => (role === "waiter" ? features.waiterApp : role === "kitchen" ? features.kitchenDisplay : true);
+    const eligible = new Set(roles.filter(r => r.role === "owner" || r.role === "manager" || (r.role === "waiter" && features.waiterApp && r.duty === "on" && (!owner || r.id === owner)) || (r.role === "kitchen" && features.kitchenDisplay && (!audience || audience.kind === "order"))).map(r => r.id));
     const devices = await db.select({ userId: s.staffPushSubscriptions.userId, id: s.staffPushSubscriptions.id, subscription: s.staffPushSubscriptions.subscription })
       .from(s.staffPushSubscriptions)
       .where(and(eq(s.staffPushSubscriptions.tenantId, scope.tenantId), eq(s.staffPushSubscriptions.outletId, scope.outletId)));
+    // Phones of people whose every role lost its app on this plan are forgotten for good
+    const usable = new Set(roles.filter(r => appFor(r.role)).map(r => r.id));
+    const orphaned = devices.filter(d => !usable.has(d.userId)).map(d => d.id);
+    if (orphaned.length) await db.delete(s.staffPushSubscriptions).where(and(eq(s.staffPushSubscriptions.tenantId, scope.tenantId), inArray(s.staffPushSubscriptions.id, orphaned)));
     const recipients = devices.filter(device => eligible.has(device.userId));
     if (!recipients.length) return;
 

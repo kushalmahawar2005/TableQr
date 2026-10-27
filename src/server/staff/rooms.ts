@@ -13,6 +13,8 @@ import { openVisit, visitAt } from "../floor/visits";
 import { requireFeature, tenantFeatures } from "../plan";
 import { publish } from "../realtime/publish";
 import { audit } from "./audit";
+import { waiterCoverage } from "./waiter-coverage";
+import { topics } from "../realtime/token";
 import type { StaffSession } from "./auth";
 
 // Hotel rooms at one outlet: the room list, check-in and check-out, food for a room, and what
@@ -83,7 +85,7 @@ async function foodOf(tenantId: string, tableIds: string[], since: Map<string, D
   return out;
 }
 
-export async function getRooms(staff: Staff) {
+export async function getRooms(staff: Staff & { outlet?: Pick<StaffSession["outlet"], "code"> }) {
   await guard(staff);
   const [rows, stays, requests, features] = await Promise.all([
     db
@@ -114,6 +116,8 @@ export async function getRooms(staff: Staff) {
         floorLabel: room.floorLabel,
         status: room.status as RoomStatus,
         hasQr: !!shortCode,
+        /** The guest page behind the room's QR, so staff can open it to test */
+        guestPath: shortCode && staff.outlet ? `/r/${encodeURIComponent(staff.outlet.code)}/room/${encodeURIComponent(shortCode)}` : null,
         stay: stay
           ? {
               id: stay.id,
@@ -131,8 +135,16 @@ export async function getRooms(staff: Staff) {
       };
     })
     .sort((a, b) => a.number.localeCompare(b.number, undefined, { numeric: true }));
+  // Who looks after each room: the same shift assignment a table has, so the waiter app and alerts follow it
+  const coverage = await waiterCoverage(scopeOf(staff));
+  const roomTable = new Map(rows.map(({ room }) => [room.id, room.tableId]));
+  const waiterOf = (roomId: string) => {
+    const id = coverage.shifts.find((a) => a.tableId === roomTable.get(roomId))?.waiterUserId;
+    return id ? { id, name: coverage.owner(id)?.name ?? "Waiter" } : null;
+  };
   return {
-    rooms,
+    rooms: rooms.map((r) => ({ ...r, waiter: waiterOf(r.id) })),
+    waiters: coverage.waiters.map((w) => ({ id: w.id, name: w.name, onDuty: w.duty === "on" })),
     maxRooms: features.maxRooms,
     canManage: staff.roles.some((r) => (MANAGE as readonly string[]).includes(r)),
     canBill: canSee(staff, "billing"),
@@ -353,7 +365,7 @@ export async function finishRoomRequest(staff: Staff, requestId: string, now = n
 }
 
 /** Past stays, newest first, for the History tab */
-export async function stayHistory(staff: Staff, limit = 60) {
+export async function stayHistory(staff: Staff, limit = 300) {
   await guard(staff);
   const rows = await db
     .select({ id: s.roomStays.id, number: s.rooms.number, guestName: s.roomStays.guestName, guestPhone: s.roomStays.guestPhone, guests: s.roomStays.guests, checkInAt: s.roomStays.checkInAt, checkOutAt: s.roomStays.checkOutAt, tableId: s.rooms.tableId })
@@ -382,3 +394,29 @@ export async function stayHistory(staff: Staff, limit = 60) {
   }));
 }
 export type StayHistory = Awaited<ReturnType<typeof stayHistory>>;
+
+/** Give a room to a waiter (or nobody). The room's food tab follows: their app shows it and its requests ring for them. */
+export async function assignRoomWaiter(staff: Staff, roomId: string, waiterUserId: string | null, now = new Date()) {
+  await guard(staff);
+  if (!staff.userId) throw new AppError("forbidden", "Sign in again to assign a waiter.");
+  const room = await roomRow(db, staff, roomId);
+  if (waiterUserId) {
+    const [waiter] = await db.select({ id: s.users.id }).from(s.users)
+      .innerJoin(s.staffRoles, and(eq(s.staffRoles.tenantId, s.users.tenantId), eq(s.staffRoles.userId, s.users.id), eq(s.staffRoles.role, "waiter")))
+      .where(and(eq(s.users.tenantId, staff.tenantId), eq(s.users.id, String(waiterUserId)), eq(s.users.isActive, true))).limit(1);
+    if (!waiter) throw new AppError("not_found", "This waiter is not on your team.");
+  }
+  await db.transaction(async (tx) => {
+    await tx.update(s.waiterTableAssignments).set({ active: false, activeKey: null, releasedAt: now })
+      .where(and(eq(s.waiterTableAssignments.tenantId, staff.tenantId), eq(s.waiterTableAssignments.outletId, staff.outletId), eq(s.waiterTableAssignments.tableId, room.tableId), eq(s.waiterTableAssignments.active, true)));
+    if (waiterUserId) {
+      // A room stay runs for days, so the assignment lasts a week rather than one shift
+      await tx.insert(s.waiterTableAssignments).values({ tenantId: staff.tenantId, outletId: staff.outletId, tableId: room.tableId, waiterUserId: String(waiterUserId), assignedByUserId: staff.userId!, periodKey: now.toISOString().slice(0, 10), activeKey: room.tableId, expiresAt: new Date(now.getTime() + 7 * 86_400_000), assignedAt: now });
+    }
+    // The food tab open right now moves too
+    await tx.update(s.tableSessions).set({ waiterUserId: waiterUserId ? String(waiterUserId) : null })
+      .where(and(eq(s.tableSessions.tenantId, staff.tenantId), eq(s.tableSessions.tableId, room.tableId), ne(s.tableSessions.status, "closed")));
+    await audit(tx, staff, { action: "room.waiter_assigned", entity: "room", entityId: room.id, after: { waiterUserId }, now });
+  }, LOCK_THEN_READ);
+  await publish(scopeOf(staff), [{ topic: topics.floor, type: "waiter_assignment.changed", data: { tableIds: [room.tableId], waiterUserId } }, { topic: topics.tasks, type: "waiter_assignment.changed" }]);
+}

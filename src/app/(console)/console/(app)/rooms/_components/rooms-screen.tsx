@@ -5,10 +5,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Cancel01Icon, PlusSignIcon, PrinterIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { CalendarDays, Search, Users, Utensils, BedDouble, QrCode } from "lucide-react";
+import { CalendarDays, Search, Users, Utensils, BedDouble, QrCode, ExternalLink, Pencil, Trash2, UserRound } from "lucide-react";
 import { ROOM_REQUEST_LABEL, ROOM_STATUS_LABEL, type RoomStatus } from "@/domain/rooms";
 import type { RoomsData, StayHistory } from "@/server/staff/rooms";
-import { checkInAction, checkOutAction, foodTabAction, removeRoomAction, requestDoneAction, roomStatusAction, roomsAction, saveRoomAction } from "../actions";
+import { checkInAction, checkOutAction, foodTabAction, removeRoomAction, requestDoneAction, roomStatusAction, roomWaiterAction, roomsAction, saveRoomAction } from "../actions";
 
 // Rooms: the front desk's screen. Who is in which room, check-in and check-out, room food (taken
 // on Billing like any table) and what guests asked for from the room QR. Refreshes on its own.
@@ -66,6 +66,11 @@ export function RoomsScreen({ initial, history: initialHistory }: { initial: Roo
   const [tab, setTab] = useState<"rooms" | "history">("rooms");
   const [roomFilter, setRoomFilter] = useState<"all" | RoomStatus>("all");
   const [query, setQuery] = useState("");
+  // Past stays: search, one room, and how far back
+  const [histQuery, setHistQuery] = useState("");
+  const [histRoom, setHistRoom] = useState("all");
+  const [histPeriod, setHistPeriod] = useState<"today" | "7" | "30" | "all">("30");
+  const [opened] = useState(() => ({ now: Date.now(), dayStart: new Date().setHours(0, 0, 0, 0) }));
   const [panel, setPanel] = useState<Panel>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -210,7 +215,15 @@ export function RoomsScreen({ initial, history: initialHistory }: { initial: Roo
                     )}
                     <p className="mt-1 flex items-center gap-1.5 text-caption text-muted"><BedDouble size={14} aria-hidden />{[room.roomType, room.floorLabel].filter(Boolean).join(" · ") || "Room"}</p>
                   </div>
-                  <span className={`shrink-0 rounded-full px-2.5 py-1 text-caption font-semibold ${TONE[room.status]}`}>{ROOM_STATUS_LABEL[room.status].en}</span>
+                  <div className="flex shrink-0 flex-col items-end gap-2">
+                    <span className={`rounded-full px-2.5 py-1 text-caption font-semibold ${TONE[room.status]}`}>{ROOM_STATUS_LABEL[room.status].en}</span>
+                    {/* Small corner tools: open the guest page behind the QR, edit, remove */}
+                    <div className="flex gap-1">
+                      {room.guestPath && <a href={room.guestPath} target="_blank" rel="noreferrer" title="Open the guest page (test the QR)" aria-label={`Open Room ${room.number} guest page`} className={`grid size-8 place-items-center rounded-lg border border-line text-muted hover:bg-ink/5 hover:text-ink ${focus}`}><ExternalLink size={15} aria-hidden /></a>}
+                      {data.canManage && <button type="button" title="Edit room" aria-label={`Edit Room ${room.number}`} onClick={() => setPanel({ kind: "room", room })} className={`grid size-8 place-items-center rounded-lg border border-line text-muted hover:bg-ink/5 hover:text-ink ${focus}`}><Pencil size={15} aria-hidden /></button>}
+                      {data.canManage && <button type="button" title={room.stay ? "Check the guest out before deleting" : "Delete room"} aria-label={`Delete Room ${room.number}`} disabled={busy || !!room.stay} onClick={() => { if (window.confirm(`Delete Room ${room.number}? Its QR code will stop working.`)) void run(() => removeRoomAction(room.id), `Room ${room.number} removed. Its QR code no longer works.`); }} className={`grid size-8 place-items-center rounded-lg border border-line text-muted hover:border-danger/40 hover:bg-danger/5 hover:text-danger disabled:opacity-40 ${focus}`}><Trash2 size={15} aria-hidden /></button>}
+                    </div>
+                  </div>
                 </div>
 
                 {room.stay ? (
@@ -238,6 +251,16 @@ export function RoomsScreen({ initial, history: initialHistory }: { initial: Roo
                 ) : (
                   <div className="mt-4 flex flex-1 items-center gap-3 rounded-xl border border-dashed border-line bg-ink/[0.02] px-3 py-4 text-caption text-muted"><span className="grid size-9 shrink-0 place-items-center rounded-xl bg-surface text-brand"><QrCode size={18} aria-hidden /></span><span>{room.status === "cleaning" ? "Housekeeping is preparing this room." : room.status === "blocked" ? "This room is out of service." : room.hasQr ? "Ready for the next guest. Room QR is active after check-in." : "Ready for the next guest. QR code not set up."}</span></div>
                 )}
+
+                {/* Who serves this room: their waiter app shows it and its requests ring for them */}
+                <label className="mt-3 flex items-center gap-2 text-caption text-muted">
+                  <UserRound size={14} className="shrink-0" aria-hidden />
+                  <span className="shrink-0">Waiter</span>
+                  <select value={room.waiter?.id ?? ""} disabled={busy} aria-label={`Waiter for Room ${room.number}`} onChange={(e) => { const id = e.target.value || null; const who = data.waiters.find((w) => w.id === id)?.name; void run(() => roomWaiterAction(room.id, id), id ? `${who} now serves Room ${room.number}.` : `Room ${room.number} has no waiter now.`, false); }} className={`min-h-9 min-w-0 flex-1 rounded-lg border border-line bg-surface px-2 text-caption font-semibold text-ink ${focus}`}>
+                    <option value="">Not assigned</option>
+                    {data.waiters.map((w) => <option key={w.id} value={w.id}>{w.name}{w.onDuty ? "" : " (off duty)"}</option>)}
+                  </select>
+                </label>
 
                 <div className="mt-auto flex flex-wrap gap-1.5 pt-3">
                   {room.status === "occupied" && room.stay ? (
@@ -267,10 +290,27 @@ export function RoomsScreen({ initial, history: initialHistory }: { initial: Roo
           </>
         ))}
 
-      {tab === "history" && (
-        <section className={`${card} mt-4 overflow-hidden`} aria-label="Past stays">
+      {tab === "history" && (() => {
+        const since = histPeriod === "all" ? 0 : histPeriod === "today" ? opened.dayStart : opened.now - Number(histPeriod) * 86_400_000;
+        const q = histQuery.trim().toLowerCase();
+        const roomsInHistory = [...new Set(history.map((h) => h.number).filter((n) => !n.startsWith("x")))].sort();
+        const shown = history.filter((h) => (histRoom === "all" || h.number === histRoom)
+          && new Date(h.checkOutAt ?? h.checkInAt).getTime() >= since
+          && (!q || `${h.number} ${h.guestName} ${h.guestPhone ?? ""}`.toLowerCase().includes(q)));
+        return <>
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <label className="relative min-w-[200px] flex-1"><Search size={16} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted" aria-hidden /><input value={histQuery} onChange={(e) => setHistQuery(e.target.value)} placeholder="Search guest, phone or room" aria-label="Search past stays" className={`min-h-11 w-full rounded-xl border border-line bg-surface pr-3 pl-9 text-body ${focus}`} /></label>
+          <select value={histRoom} onChange={(e) => setHistRoom(e.target.value)} aria-label="Room" className={`min-h-11 rounded-xl border border-line bg-surface px-3 text-body ${focus}`}><option value="all">All rooms</option>{roomsInHistory.map((n) => <option key={n} value={n}>Room {n}</option>)}</select>
+          <div className="flex rounded-xl border border-line bg-surface p-1" role="group" aria-label="Period">
+            {([["today", "Today"], ["7", "7 days"], ["30", "30 days"], ["all", "All"]] as const).map(([k, label]) => <button key={k} type="button" aria-pressed={histPeriod === k} onClick={() => setHistPeriod(k)} className={`min-h-9 rounded-lg px-3 text-caption font-semibold ${histPeriod === k ? "bg-ink text-paper" : "text-muted hover:text-ink"} ${focus}`}>{label}</button>)}
+          </div>
+          <span className="text-caption text-muted">{shown.length} {shown.length === 1 ? "stay" : "stays"} · {rs(shown.reduce((n, h) => n + h.foodPaise, 0))} food</span>
+        </div>
+        <section className={`${card} mt-3 overflow-hidden`} aria-label="Past stays">
           {history.length === 0 ? (
             <p className="px-5 py-10 text-center text-body text-muted">No past stays yet.</p>
+          ) : shown.length === 0 ? (
+            <p className="px-5 py-10 text-center text-body text-muted">No stays match. <button type="button" className="font-semibold text-brand" onClick={() => { setHistQuery(""); setHistRoom("all"); setHistPeriod("all"); }}>Clear filters</button></p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[640px] text-left text-body">
@@ -284,7 +324,7 @@ export function RoomsScreen({ initial, history: initialHistory }: { initial: Roo
                   </tr>
                 </thead>
                 <tbody>
-                  {history.map((h) => (
+                  {shown.map((h) => (
                     <tr key={h.id} className="border-t border-line">
                       <td className="px-5 py-2.5 font-semibold text-ink">{h.number.startsWith("x") ? "Removed room" : h.number}</td>
                       <td className="px-3 py-2.5 text-ink">{h.guestName}<span className="block text-caption text-muted">{[h.guestPhone?.replace(/^\+91/, ""), `${h.guests} ${h.guests === 1 ? "guest" : "guests"}`].filter(Boolean).join(" · ")}</span></td>
@@ -298,7 +338,8 @@ export function RoomsScreen({ initial, history: initialHistory }: { initial: Roo
             </div>
           )}
         </section>
-      )}
+        </>;
+      })()}
 
       {panel?.kind === "room" && (
         <Sheet title={panel.room ? `Edit Room ${panel.room.number}` : "Add room"} onClose={close}>

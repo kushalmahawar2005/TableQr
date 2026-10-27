@@ -1,4 +1,5 @@
 import { restaurantApp, restaurantAppMetadata } from "@/server/guest/restaurant-app";
+import { guestBase } from "@/server/guest/guest-base";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -26,7 +27,7 @@ export default async function BookPage(props: PageProps<"/r/[outlet]/book">) {
     return (
       <main className="grid min-h-dvh place-items-center p-6 text-center text-ink">
         <div className="max-w-md">
-          <Link href={`/r/${encodeURIComponent(outlet)}`} className="mb-5 inline-flex min-h-11 items-center text-sm font-semibold text-brand-strong">← {hindi ? "रेस्टोरेंट पर वापस जाएँ" : "Back to restaurant"}</Link>
+          <Link href={`${await guestBase(outlet)}`} className="mb-5 inline-flex min-h-11 items-center text-sm font-semibold text-brand-strong">← {hindi ? "रेस्टोरेंट पर वापस जाएँ" : "Back to restaurant"}</Link>
           <h1 className="font-display text-title font-bold text-ink">Online booking is not available here</h1>
           <p className="mt-2 text-body text-muted">{hindi ? "टेबल बुक करने के लिए कृपया रेस्टोरेंट को कॉल करें।" : "Please call the restaurant to book a table."}</p>
         </div>

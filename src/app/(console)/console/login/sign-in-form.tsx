@@ -18,7 +18,7 @@ export function SignInForm({ outlet }: { outlet: string }) {
       <label className="mt-5 block text-body font-semibold text-ink">
         Outlet code
         <span className="mt-0.5 block text-caption font-normal text-muted">The short code for your restaurant, e.g. SPI42</span>
-        <input name="outlet" defaultValue={state.outlet} required autoCapitalize="characters" autoComplete="organization" placeholder="SPI42" className={`${field} font-mono uppercase`} />
+        <input name="outlet" defaultValue={state.outlet} required maxLength={12} pattern="[A-Za-z0-9]{2,12}" title="2-12 letters or numbers" onInput={(e) => { e.currentTarget.value = e.currentTarget.value.replace(/[^A-Za-z0-9]/g, ""); }} autoCapitalize="characters" autoComplete="organization" placeholder="SPI42" className={`${field} font-mono uppercase`} />
       </label>
       <label className="mt-3 block text-body font-semibold text-ink">
         Phone number

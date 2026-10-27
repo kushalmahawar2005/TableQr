@@ -1,6 +1,7 @@
 "use client";
 
-import { ArrowLeft01Icon, ArrowRight01Icon, Calendar03Icon, CheckmarkCircle02Icon, DeliveryTruck01Icon, Location01Icon, QrCodeIcon } from "@hugeicons/core-free-icons";
+import { ArrowLeft01Icon, ArrowRight01Icon, Calendar03Icon, CheckmarkCircle02Icon, DeliveryTruck01Icon, Location01Icon, QrCodeIcon, UserMultipleIcon } from "@hugeicons/core-free-icons";
+import { useGuestBase } from "@/lib/guest-base";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import Link from "next/link";
 import { useState, type CSSProperties, type ReactNode } from "react";
@@ -26,19 +27,20 @@ function rememberLanguage(lang: Lang) {
 
 /** The restaurant's own page (no table): a welcome, the language, then booking or delivery. */
 export function RestaurantHome({ data, initialLang = "en", installable = null }: { data: HomeData; initialLang?: Lang; installable?: { name: string; logoUrl: string | null } | null }) {
+  const base = useGuestBase(data.outlet.code);
   const [step, setStep] = useState<Step>("welcome");
   const [hindi, setHindi] = useState(initialLang === "hi");
   const { outlet, services } = data;
   const t = hindi
     ? {
         welcome: "स्वागत है", intro: "पार्टी के लिए टेबल बुक करें या घर पर खाना मँगाएँ।", next: "आगे बढ़ें", back: "वापस",
-        choose: "आप क्या करना चाहेंगे?", chooseNote: "नीचे से एक विकल्प चुनें।", booking: "पार्टी के लिए टेबल बुक करें", bookingHint: "तारीख, समय और मेहमानों की संख्या चुनें।",
+        choose: "आप क्या करना चाहेंगे?", chooseNote: "नीचे से एक विकल्प चुनें।", booking: "पार्टी के लिए टेबल बुक करें", bookingHint: "तारीख, समय और मेहमानों की संख्या चुनें।", waitlist: "वेटिंग लिस्ट में जुड़ें", waitlistHint: "अभी आ रहे हैं? लाइन में नाम लिखवाएँ, टेबल तैयार होने पर बताएँगे।",
         delivery: "घर पर डिलीवरी", deliveryHint: "मेन्यू चुनें और घर पर डिलीवरी मँगाएँ।", none: "ऑनलाइन बुकिंग और डिलीवरी अभी उपलब्ध नहीं हैं। टेबल या रूम QR स्कैन करें।",
         announcement: "घोषणा", step: (n: number) => `चरण ${n} / 3`, poweredBy: "TableQR द्वारा",
       }
     : {
         welcome: "Welcome to", intro: "Reserve a table for your party or order food for delivery.", next: "Continue", back: "Back",
-        choose: "How would you like to continue?", chooseNote: "Pick one to get started.", booking: "Reserve for a party", bookingHint: "Choose a date, time and party size.",
+        choose: "How would you like to continue?", chooseNote: "Pick one to get started.", booking: "Reserve for a party", bookingHint: "Choose a date, time and party size.", waitlist: "Join the waiting list", waitlistHint: "Coming now? Get in line and we will tell you when your table is ready.",
         delivery: "Home delivery", deliveryHint: "Choose your food and enter your delivery address.", none: "Online reservations and delivery are not available. Scan your table or room QR instead.",
         announcement: "Announcement", step: (n: number) => `Step ${n} of 3`, poweredBy: "Powered by TableQR",
       };
@@ -129,10 +131,13 @@ export function RestaurantHome({ data, initialLang = "en", installable = null }:
               <StepHeader back={t.back} onBack={() => setStep("language")} title={t.choose} note={t.chooseNote} />
               <div className="mt-4 grid gap-3">
                 {services.reservations && (
-                  <ServiceCard href={`/r/${encodeURIComponent(outlet.code)}/book?lang=${hindi ? "hi" : "en"}`} icon={Calendar03Icon} title={t.booking} hint={t.bookingHint} />
+                  <ServiceCard href={`${base}/book?lang=${hindi ? "hi" : "en"}`} icon={Calendar03Icon} title={t.booking} hint={t.bookingHint} />
+                )}
+                {services.reservations && (
+                  <ServiceCard href={`${base}/waitlist?lang=${hindi ? "hi" : "en"}`} icon={UserMultipleIcon} title={t.waitlist} hint={t.waitlistHint} />
                 )}
                 {services.delivery && (
-                  <ServiceCard href={`/r/${encodeURIComponent(outlet.code)}/delivery?lang=${hindi ? "hi" : "en"}`} icon={DeliveryTruck01Icon} title={t.delivery} hint={t.deliveryHint} />
+                  <ServiceCard href={`${base}/delivery?lang=${hindi ? "hi" : "en"}`} icon={DeliveryTruck01Icon} title={t.delivery} hint={t.deliveryHint} />
                 )}
               </div>
               {!services.delivery && !services.reservations && (
@@ -145,7 +150,7 @@ export function RestaurantHome({ data, initialLang = "en", installable = null }:
           )}
         </div>
       </section>
-      {installable && <div className="mt-4"><InstallApp name={installable.name} logoUrl={installable.logoUrl} /></div>}
+      {installable && <div className="mt-4"><InstallApp guest name={installable.name} logoUrl={installable.logoUrl} title={hindi ? "हमारा ऐप इंस्टॉल करें" : "Install our app"} blurb={hindi ? "टेबल बुक करें और खाना मँगाएँ, सीधे होम स्क्रीन से।" : "Book a table and order delivery straight from your home screen."} /></div>}
       <p className="mt-5 flex items-center justify-center gap-1.5 text-label text-muted">
         <HugeiconsIcon icon={QrCodeIcon} size={14} aria-hidden />
         {t.poweredBy}

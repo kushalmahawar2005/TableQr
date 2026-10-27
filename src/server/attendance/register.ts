@@ -35,20 +35,20 @@ export const localDate = (at: Date | number, timeZone: string) => new Intl.DateT
 
 async function roster(tenantId: string, outletId: string) {
   const rows = await db
-    .select({ id: s.users.id, name: s.users.name, role: s.staffRoles.role })
+    .select({ id: s.users.id, name: s.users.name, photoUrl: s.users.photoUrl, role: s.staffRoles.role })
     .from(s.staffRoles)
     .innerJoin(s.users, and(eq(s.users.tenantId, s.staffRoles.tenantId), eq(s.users.id, s.staffRoles.userId)))
     .where(and(eq(s.staffRoles.tenantId, tenantId), eq(s.users.isActive, true), or(isNull(s.staffRoles.outletId), eq(s.staffRoles.outletId, outletId))));
-  const people = new Map<string, { id: string; name: string; roles: string[] }>();
+  const people = new Map<string, { id: string; name: string; photoUrl: string | null; roles: string[] }>();
   for (const r of rows) {
-    const p = people.get(r.id) ?? { id: r.id, name: r.name, roles: [] };
+    const p = people.get(r.id) ?? { id: r.id, name: r.name, photoUrl: r.photoUrl, roles: [] };
     if (!p.roles.includes(r.role)) p.roles.push(r.role);
     people.set(r.id, p);
   }
   return [...people.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export type RegisterPerson = { id: string; name: string; roles: string[]; status: AttendanceStatus | null; note: string | null };
+export type RegisterPerson = { id: string; name: string; photoUrl: string | null; roles: string[]; status: AttendanceStatus | null; note: string | null };
 export type Register = {
   date: string;
   today: string;
@@ -132,7 +132,7 @@ export async function markAllPresent(staff: Staff, input: { date: string; outlet
   return open.length;
 }
 
-export type MonthRow = { id: string; name: string; roles: string[]; counts: MonthCounts; days: (AttendanceStatus | null)[] };
+export type MonthRow = { id: string; name: string; photoUrl: string | null; roles: string[]; counts: MonthCounts; days: (AttendanceStatus | null)[] };
 export type Month = { month: string; dates: string[]; outletId: string; outlets: { id: string; name: string }[]; rows: MonthRow[]; daysCounted: number };
 
 export async function getMonth(staff: Staff, input: { month?: string; outletId?: string } = {}, now = new Date()): Promise<Month> {
@@ -147,7 +147,7 @@ export async function getMonth(staff: Staff, input: { month?: string; outletId?:
   const marks = people.length ? await db.select().from(s.attendanceMarks).where(and(eq(s.attendanceMarks.tenantId, staff.tenantId), inArray(s.attendanceMarks.userId, people.map((p) => p.id)), between(s.attendanceMarks.markDate, dates[0], dates[dates.length - 1]))) : [];
   const rows = people.map((p) => {
     const mine = new Map(marks.filter((m) => m.userId === p.id).map((m) => [m.markDate, m.status]));
-    return { id: p.id, name: p.name, roles: p.roles, counts: monthCounts([...mine.entries()].filter(([d]) => d <= today).map(([, status]) => ({ status })), daysCounted), days: dates.map((d) => mine.get(d) ?? null) };
+    return { id: p.id, name: p.name, photoUrl: p.photoUrl, roles: p.roles, counts: monthCounts([...mine.entries()].filter(([d]) => d <= today).map(([, status]) => ({ status })), daysCounted), days: dates.map((d) => mine.get(d) ?? null) };
   });
   return { month, dates, outletId: outlet.id, outlets: outlet.outlets, rows, daysCounted };
 }
@@ -159,4 +159,25 @@ export async function monthCsv(staff: Staff, input: { month?: string; outletId?:
   const head = ["Name", "Role", ...STATUSES.map((x) => STATUS_LABEL[x]), "Not marked", "Days worked", ...m.dates.map((d) => d.slice(8))];
   const body = m.rows.map((r) => [r.name, r.roles.join(" / "), r.counts.present, r.counts.half_day, r.counts.absent, r.counts.leave, r.counts.week_off, r.counts.unmarked, r.counts.daysWorked, ...r.days.map((x) => (x ? short[x] : ""))]);
   return { month: m.month, csv: csvRows([head, ...body]) };
+}
+
+export type MyMonth = { today: string; todayStatus: AttendanceStatus | null; month: string; days: { date: string; status: AttendanceStatus | null }[]; counts: MonthCounts };
+
+/** A staff member's own register: today's mark and a month of days. Anyone may see their own. */
+export async function myAttendance(staff: Pick<StaffSession, "tenantId" | "userId" | "outlet">, input: { month?: string } = {}, now = new Date()): Promise<MyMonth> {
+  if (!staff.userId) throw new AppError("forbidden", "Sign in to see your attendance.");
+  const today = localDate(now, staff.outlet.timezone);
+  const month = isMonth(input.month) && input.month <= today.slice(0, 7) ? input.month : today.slice(0, 7);
+  const dates = datesOfMonth(month);
+  const marks = await db.select({ date: s.attendanceMarks.markDate, status: s.attendanceMarks.status }).from(s.attendanceMarks)
+    .where(and(eq(s.attendanceMarks.tenantId, staff.tenantId), eq(s.attendanceMarks.userId, staff.userId), between(s.attendanceMarks.markDate, dates[0], dates[dates.length - 1])));
+  const byDate = new Map(marks.map((m) => [m.date, m.status]));
+  const counted = dates.filter((d) => d <= today);
+  const [todayMark] = month === today.slice(0, 7) ? [byDate.get(today) ?? null] : await db.select({ status: s.attendanceMarks.status }).from(s.attendanceMarks)
+    .where(and(eq(s.attendanceMarks.tenantId, staff.tenantId), eq(s.attendanceMarks.userId, staff.userId), eq(s.attendanceMarks.markDate, today))).then((r) => [r[0]?.status ?? null]);
+  return {
+    today, todayStatus: todayMark, month,
+    days: dates.map((date) => ({ date, status: byDate.get(date) ?? null })),
+    counts: monthCounts(counted.flatMap((d) => (byDate.has(d) ? [{ status: byDate.get(d)! }] : [])), counted.length),
+  };
 }

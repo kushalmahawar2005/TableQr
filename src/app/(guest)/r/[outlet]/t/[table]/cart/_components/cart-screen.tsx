@@ -71,6 +71,11 @@ export function CartScreen({
   const [tab, setTab] = useState<"mine" | "table">(preview?.tab ?? "mine");
   // One note for the kitchen on this whole round, printed on its ticket
   const [orderNote, setOrderNote] = useState("");
+  // A checked-in room guest: name and phone instead of an OTP, filled from check-in when reception has them
+  const [roomName, setRoomName] = useState(session.roomContact?.name ?? "");
+  const [roomPhone, setRoomPhone] = useState((session.roomContact?.phone ?? "").replace(/\D/g, "").slice(-10));
+  const [contactError, setContactError] = useState<string | null>(null);
+  const hindi = lang === "hi";
   const [placing, setPlacing] = useState(!!preview?.placing);
   const [notice, setNotice] = useState<"failed" | "cap" | "items" | "prices" | null>(preview?.notice ?? null);
   const [toast, setToast] = useState<{ text: string; snapshot?: RemovedLine | null; lineId?: string } | null>(() => {
@@ -157,12 +162,17 @@ export function CartScreen({
       router.push(`${tablePath}/verify?next=cart`);
       return;
     }
+    if (session.roomContact) {
+      if (roomName.trim().length < 2) { setContactError(hindi ? "अपना नाम लिखें।" : "Add your name."); return; }
+      if (!/^[6-9]\d{9}$/.test(roomPhone)) { setContactError(hindi ? "10 अंकों का मोबाइल नंबर लिखें।" : "Add a 10-digit mobile number."); return; }
+      setContactError(null);
+    }
     setPlacing(true);
     setNotice(null);
     const id = requestId();
     let res: Awaited<ReturnType<typeof placeOrderAction>>;
     try {
-      res = await placeOrderAction(data.outlet.code, shortCode, { requestId: id, note: orderNote.trim() || undefined, quote: data.quote });
+      res = await placeOrderAction(data.outlet.code, shortCode, { requestId: id, note: orderNote.trim() || undefined, quote: data.quote, ...(session.roomContact ? { name: roomName.trim(), phone: roomPhone } : {}) });
     } catch {
       // The order may or may not have reached the kitchen; the same id makes a retry safe
       res = { ok: false, error: "failed" };
@@ -197,6 +207,13 @@ export function CartScreen({
       case "verification_required":
         router.push(`${tablePath}/verify?next=cart`);
         return;
+      case "name_required":
+      case "invalid_name":
+        setContactError(hindi ? "अपना नाम लिखें।" : "Add your name.");
+        break;
+      case "phone_required":
+        setContactError(hindi ? "10 अंकों का मोबाइल नंबर लिखें।" : "Add a 10-digit mobile number.");
+        break;
       case "blocked":
       case "empty":
         refresh();
@@ -302,6 +319,15 @@ export function CartScreen({
                     <HugeiconsIcon icon={InformationCircleIcon} size={14} aria-hidden />
                     {c.taxNote}
                   </p>
+
+                  {session.roomContact && (
+                    <div className="mt-5 grid gap-3 rounded-2xl border border-line bg-surface p-4">
+                      <p className="text-body font-semibold">{hindi ? "आपकी जानकारी" : "Your details"}<span className="block text-caption font-normal text-muted">{hindi ? "रूम में खाना पहुँचाने के लिए। OTP की ज़रूरत नहीं।" : "So we can bring the food to your room. No OTP needed."}</span></p>
+                      <TextField id="g5-room-name" label={hindi ? "नाम" : "Name"} value={roomName} maxLength={40} autoComplete="name" disabled={locked} onChange={(e) => setRoomName(e.target.value)} />
+                      <TextField id="g5-room-phone" label={hindi ? "मोबाइल नंबर" : "Mobile number"} value={roomPhone} inputMode="numeric" maxLength={10} autoComplete="tel-national" disabled={locked} onChange={(e) => setRoomPhone(e.target.value.replace(/\D/g, "").slice(0, 10))} />
+                      {contactError && <p role="alert" className="text-caption font-semibold text-danger">{contactError}</p>}
+                    </div>
+                  )}
 
                   <div className="mt-5">
                     <TextField

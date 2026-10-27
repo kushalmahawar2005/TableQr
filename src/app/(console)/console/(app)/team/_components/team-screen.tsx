@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Copy, KeyRound, Phone, Plus, Power, Search, Settings2, UserRound, X } from "lucide-react";
+import { Check, Copy, KeyRound, MessageCircle, Phone, Plus, Power, Search, Settings2, UserRound, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Label } from "@/components/ui/label";
@@ -104,7 +104,11 @@ export function TeamScreen({ initial, invitations: initialInvitations = [], canE
     });
   }
 
-  const loginText = (c: NonNullable<typeof created>) => `${outletName} (TableQR)\nComplete staff setup: ${c.inviteUrl}\nInvited phone: ${c.phone}\nRole: ${LABEL[c.role] ?? c.role}\nThis link expires in 7 days.`;
+  const loginText = (c: NonNullable<typeof created>) => `You're invited to join ${outletName} on TableQR as ${LABEL[c.role] ?? c.role}.\n\nOutlet: ${outletName}\nOutlet code: ${outletCode}\nInvited phone: ${c.phone}\n\nComplete staff setup: ${c.inviteUrl}\nThis link expires in 7 days.`;
+  const whatsappUrl = (c: NonNullable<typeof created>) => {
+    const digits = c.phone.replace(/\D/g, "");
+    return `https://wa.me/${digits.length === 10 ? `91${digits}` : digits}?text=${encodeURIComponent(loginText(c))}`;
+  };
   const roleInfo = ROLES.find((r) => r.id === role);
 
   return (
@@ -203,12 +207,14 @@ export function TeamScreen({ initial, invitations: initialInvitations = [], canE
                 <div className="rounded-2xl border border-line bg-surface p-4 text-sm">
                   <p className="font-display text-section font-bold">{created.phone} · {LABEL[created.role]}</p>
                   <dl className="mt-3 space-y-1.5">
+                    <div className="flex justify-between gap-3"><dt className="text-muted">Outlet</dt><dd className="text-right font-semibold">{outletName}</dd></div>
                     <div className="flex justify-between"><dt className="text-muted">Outlet code</dt><dd className="font-mono font-semibold">{outletCode}</dd></div>
                     <div className="flex justify-between"><dt className="text-muted">Phone</dt><dd className="font-mono font-semibold">{created.phone}</dd></div>
                     <div className="mt-2 break-all rounded-lg bg-ink/5 p-2 font-mono text-xs">{created.inviteUrl}</div>
                     <p className="mt-2 text-xs text-muted">Link expires {new Date(created.expiresAt).toLocaleString()}.</p>
                   </dl>
                 </div>
+                <a href={whatsappUrl(created)} target="_blank" rel="noreferrer noopener" className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-[#1f8f4e] bg-[#1f8f4e] text-sm font-semibold text-white hover:bg-[#1a7a43]"><MessageCircle className="size-4" aria-hidden="true" />Send on WhatsApp</a>
                 <div className="flex gap-2">
                   <button type="button" onClick={() => copy(loginText(created))} className="inline-flex h-12 flex-1 items-center justify-center gap-2 rounded-xl border border-line text-sm font-semibold hover:border-ink/40"><Copy className="size-4" aria-hidden="true" />Copy invite</button>
                   <button type="button" onClick={() => setAdding(false)} className="inline-flex h-12 flex-1 items-center justify-center rounded-xl border border-brand bg-brand text-sm font-semibold text-white hover:bg-brand-strong">Done</button>

@@ -120,7 +120,7 @@ describe("hotel rooms", () => {
     await setRoomStatus(owner(), room.id, "vacant");
   });
 
-  it("creates and routes a separate bill for every room order when per-order payment is selected", async () => {
+  it("per-order payment never parks the room in Bill requested: the guest keeps ordering and staff take payment", async () => {
     const room = await saveRoom(owner(), { number: "205", roomType: "Deluxe" });
     const code = await qrOf(room.id);
     await checkIn(owner(), room.id, { guestName: "Asha Guest", guests: 1, foodPay: "per_order" });
@@ -129,33 +129,29 @@ describe("hotel rooms", () => {
       const seated = await startOrJoinTable({ outletCode: "SRJ01", shortCode: code, deviceId });
       const ctx = await getGuestContext("SRJ01", code, seated.participantId, deviceId);
       await addCartLine(ctx, { itemId: env.demo.itemIds.Cola, qty: 1 });
-      const order = await placeOrder(ctx);
-      expect(order.roomBillRequest).toMatchObject({ requestId: expect.any(String), tableIds: [expect.any(String)] });
+      // Checked in without a phone, so the guest gives one at the order (no OTP)
+      const order = await placeOrder(ctx, { phone: "9876543210" });
       return { ctx, order };
     };
 
     const first = await placeRoomOrder("room-205-guest");
     let [session] = await env.db.select().from(s.tableSessions).where(eq(s.tableSessions.id, first.ctx.sessionId));
-    expect(session.status).toBe("bill_requested");
-    let [bill] = await env.db.select().from(s.bills).where(eq(s.bills.sessionId, first.ctx.sessionId));
-    expect(bill.subtotalPaise).toBe(first.order.subtotalPaise);
-    expect(bill.totalPaise).toBe(bill.subtotalPaise - bill.discountPaise + bill.taxPaise + bill.serviceChargePaise + bill.deliveryFeePaise + bill.tipPaise + bill.bookingCreditPaise + bill.roundOffPaise);
-    const firstTask = (await getWaiterTasks(owner())).requests.find((request) => request.sessionId === first.ctx.sessionId);
-    expect(firstTask?.kind).toBe("request_bill");
+    expect(session.status).toBe("open");
+    expect((await env.db.select().from(s.serviceRequests).where(eq(s.serviceRequests.sessionId, first.ctx.sessionId))).filter((r) => r.kind === "request_bill")).toHaveLength(0);
 
-    // Paying one order frees the room's food tab, while check-in remains active for another order.
-    await settleAtCounter({ tenantId: first.ctx.tenantId, outletId: first.ctx.outletId, userId: null }, { sessionId: first.ctx.sessionId, method: "cash", receivedPaise: bill.totalPaise });
-    expect((await getRoomPage("SRJ01", code, "room-205-guest")).kind).toBe("room");
+    // A second order goes on the same open tab
     const second = await placeRoomOrder("room-205-guest");
-    expect(second.ctx.sessionId).not.toBe(first.ctx.sessionId);
-    [session] = await env.db.select().from(s.tableSessions).where(eq(s.tableSessions.id, second.ctx.sessionId));
-    expect(session.status).toBe("bill_requested");
-    [bill] = await env.db.select().from(s.bills).where(eq(s.bills.sessionId, second.ctx.sessionId));
-    expect(bill.subtotalPaise).toBe(second.order.subtotalPaise);
-    expect(bill.totalPaise).toBe(bill.subtotalPaise - bill.discountPaise + bill.taxPaise + bill.serviceChargePaise + bill.deliveryFeePaise + bill.tipPaise + bill.bookingCreditPaise + bill.roundOffPaise);
-    expect((await env.db.select().from(s.serviceRequests).where(eq(s.serviceRequests.sessionId, second.ctx.sessionId))).filter((request) => request.kind === "request_bill")).toHaveLength(1);
+    expect(second.ctx.sessionId).toBe(first.ctx.sessionId);
 
-    await settleAtCounter({ tenantId: second.ctx.tenantId, outletId: second.ctx.outletId, userId: null }, { sessionId: second.ctx.sessionId, method: "cash", receivedPaise: bill.totalPaise });
+    // Staff take the payment when the food arrives; the stay stays checked in
+    await settleAtCounter({ tenantId: first.ctx.tenantId, outletId: first.ctx.outletId, userId: null }, { sessionId: first.ctx.sessionId, method: "cash" });
+    const [bill] = await env.db.select().from(s.bills).where(eq(s.bills.sessionId, first.ctx.sessionId));
+    expect(bill.status).toBe("paid");
+    expect(bill.subtotalPaise).toBe(first.order.subtotalPaise + second.order.subtotalPaise);
+    [session] = await env.db.select().from(s.tableSessions).where(eq(s.tableSessions.id, first.ctx.sessionId));
+    expect(session.status).toBe("closed");
+    expect((await getRoomPage("SRJ01", code, "room-205-guest")).kind).toBe("room");
+
     await checkOut(owner(), room.id);
     expect((await getRooms(owner())).rooms.find((entry) => entry.id === room.id)?.status).toBe("cleaning");
   });
