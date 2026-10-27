@@ -7,7 +7,7 @@ import { LOCK_THEN_READ } from "../db-types";
 import { AppError } from "../errors";
 import { lockSession, loadBillInputs, syncBill } from "../billing/bill";
 import { announceBill, requestBillInTransaction, reopenBill } from "../billing/payments";
-import { placeOrderTx, type StaffDraftLine } from "../guest/order";
+import { isOpenLine, placeOrderTx, type AnyDraftLine } from "../guest/order";
 import { publish } from "../realtime/publish";
 import { topics } from "../realtime/token";
 import { requireStaffRole } from "./waiter";
@@ -27,8 +27,8 @@ export async function managerApproval(staff: StaffSession, approval?: Approval, 
   if (result.scope.tenantId !== staff.tenantId || result.scope.outletId !== staff.outletId || !result.roles.some(r=>r === "manager" || r === "owner")) throw new AppError("forbidden", "An active manager at this outlet must approve.");
   return result.user.id;
 }
-export async function addPhonelessDiner(staff: StaffSession, sessionId: string, name = "", now = new Date()) {
-  await requireStaffRole(staff);
+export async function addPhonelessDiner(staff: StaffSession, sessionId: string, name = "", now = new Date(), roles: readonly StaffRole[] = ["waiter", "manager", "owner"]) {
+  await requireStaffRole(staff, roles);
   const checked = checkFirstName(String(name));
   if (!checked.ok) throw new AppError("invalid_state", "Enter the customer’s name before taking an order.");
   const result = await db.transaction(async tx=>{
@@ -43,9 +43,9 @@ export async function addPhonelessDiner(staff: StaffSession, sessionId: string, 
   await publish(staff,[{topic:topics.session(sessionId),type:"participant.joined"},{topic:topics.floor,type:"visit.updated"}]);
   return result;
 }
-export async function staffPlaceOrder(staff: StaffSession, input: {sessionId:string; tableId:string; participantId:string; clientRequestId:string; lines:StaffDraftLine[]},now=new Date()) {
-  await requireStaffRole(staff);
-  if (!/^[a-zA-Z0-9_-]{8,64}$/.test(input.clientRequestId) || !Array.isArray(input.lines) || !input.lines.length || input.lines.length>100 || input.lines.some(l=>typeof l.itemId !== "string" || !Number.isInteger(l.qty) || !Array.isArray(l.modifierIds) || l.modifierIds.some(m=>typeof m !== "string") || (l.personalForPickup !== undefined && typeof l.personalForPickup !== "boolean"))) throw new AppError("invalid_state","Invalid draft order.");
+export async function staffPlaceOrder(staff: StaffSession, input: {sessionId:string; tableId:string; participantId:string; clientRequestId:string; lines:AnyDraftLine[]},now=new Date(),roles:readonly StaffRole[]=["waiter","manager","owner"]) {
+  await requireStaffRole(staff, roles);
+  if (!/^[a-zA-Z0-9_-]{8,64}$/.test(input.clientRequestId) || !Array.isArray(input.lines) || !input.lines.length || input.lines.length>100 || input.lines.some(l=>(isOpenLine(l) ? typeof l.open !== "object" : (typeof l.itemId !== "string" || !Array.isArray(l.modifierIds) || l.modifierIds.some(m=>typeof m !== "string"))) || !Number.isInteger(l.qty) || (l.personalForPickup !== undefined && typeof l.personalForPickup !== "boolean"))) throw new AppError("invalid_state","Invalid draft order.");
   const [person] = await db.select({ name: s.participants.displayName }).from(s.participants).where(and(eq(s.participants.tenantId, staff.tenantId), eq(s.participants.sessionId, input.sessionId), eq(s.participants.id, input.participantId)));
   if (!person || isPlaceholderName(person.name) || !checkFirstName(person.name).ok) throw new AppError("invalid_state", "Enter the customer’s name before placing this order.");
   const [outlet] = await db.select().from(s.outlets).where(and(eq(s.outlets.tenantId,staff.tenantId),eq(s.outlets.id,staff.outletId)));
@@ -54,8 +54,8 @@ export async function staffPlaceOrder(staff: StaffSession, input: {sessionId:str
   if (!result.replayed) await sendOutletPush(staff, { title: "New table order", body: "A staff member sent a new order to the kitchen.", url: "/console", tag: `order-${result.orderId}` }, { sessionId: input.sessionId, kind: "order" });
   return result;
 }
-export async function waiterRequestBill(staff:StaffSession,sessionId:string,now=new Date()) {
-  await requireStaffRole(staff);
+export async function waiterRequestBill(staff:StaffSession,sessionId:string,now=new Date(),roles:readonly StaffRole[]=["waiter","manager","owner"]) {
+  await requireStaffRole(staff, roles);
   const scope={...staff,sessionId};
   const result=await db.transaction(async tx=>{const res=await requestBillInTransaction(tx,scope,now); await audit(tx,staff,{action:"waiter.request_bill",entity:"session",entityId:sessionId,now});return res;},LOCK_THEN_READ);
   announceBill(scope,{tableIds:result.tableIds,state:"bill_requested"});return result;

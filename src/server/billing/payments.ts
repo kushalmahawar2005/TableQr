@@ -803,7 +803,7 @@ async function closeBill(tx: Tx, bill: typeof s.bills.$inferSelect, now: Date): 
   });
 
   // What the dishes used comes off the stock, in this same transaction
-  await takeStockForBill(tx, t, outlet.id, bill.id, lines.map((l) => ({ itemId: l.itemId, qty: l.qty })));
+  await takeStockForBill(tx, t, outlet.id, bill.id, lines.flatMap((l) => (l.itemId ? [{ itemId: l.itemId, qty: l.qty }] : [])));
 
   await tx.update(s.bills).set({ status: "paid", closedAt: now }).where(and(eq(s.bills.tenantId, t), eq(s.bills.id, bill.id)));
   await tx.update(s.tableSessions).set({ status: "closed", openKey: null, closedAt: now }).where(and(eq(s.tableSessions.tenantId, t), eq(s.tableSessions.id, bill.sessionId)));

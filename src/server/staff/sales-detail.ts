@@ -87,11 +87,13 @@ export async function getSalesDetail(staff: Staff, input: { from?: string; to?: 
   // The same dish can appear under two names if it was renamed; one row per dish, latest name
   const byItem = new Map<string, { itemId: string; name: string; category: string; qty: number; grossPaise: number; orders: number }>();
   for (const r of items) {
-    const row = byItem.get(r.itemId) ?? { itemId: r.itemId, name: r.name, category: categoryOf.get(r.itemId) ?? "Other", qty: 0, grossPaise: 0, orders: 0 };
+    // Open items typed in at the POS have no dish: one row per name
+    const key = r.itemId ?? `open:${r.name}`;
+    const row = byItem.get(key) ?? { itemId: key, name: r.name, category: r.itemId ? (categoryOf.get(r.itemId) ?? "Other") : "Open items", qty: 0, grossPaise: 0, orders: 0 };
     row.qty += r.qty;
     row.grossPaise += r.gross;
     row.orders += r.orders;
-    byItem.set(r.itemId, row);
+    byItem.set(key, row);
   }
   const sold = [...byItem.values()].sort((a, b) => b.qty - a.qty || b.grossPaise - a.grossPaise);
   const totalGross = sold.reduce((n, r) => n + r.grossPaise, 0);

@@ -76,7 +76,8 @@ export const orderLines = mysqlTable(
     sessionId: ref("session_id").notNull(),
     /** The person this line belongs to for the split */
     participantId: ref("participant_id"),
-    itemId: ref("item_id").notNull(),
+    /** The dish; null for an open item the cashier typed in at the POS (name and price only) */
+    itemId: ref("item_id"),
     // Snapshots: later menu changes never alter an open table (PS 6.1)
     nameEn: varchar("name_en", { length: 100 }).notNull(),
     nameHi: varchar("name_hi", { length: 100 }),

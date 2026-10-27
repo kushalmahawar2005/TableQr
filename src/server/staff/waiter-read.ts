@@ -55,8 +55,8 @@ export async function waiterDetail(staff: StaffSession, sessionId: string) {
   return { sessionId, tableId: session.tableId, status: session.status, orderingPaused: session.orderingLocked, people: people.map(p=>({id:p.id,name:p.name,paidOut:!!p.paidOutAt})), lines, requests, shares: shares.map(sh=>({...sh,frozenAt:sh.frozenAt?.getTime()??null})) };
 }
 export type WaiterDetail = Awaited<ReturnType<typeof waiterDetail>>;
-export async function waiterMenu(staff: StaffSession, now = new Date()) {
-  await requireStaffRole(staff);
+export async function waiterMenu(staff: StaffSession, now = new Date(), roles?: Parameters<typeof requireStaffRole>[1]) {
+  await requireStaffRole(staff, roles);
   const [outlet] = await db.select().from(s.outlets).where(and(eq(s.outlets.tenantId, staff.tenantId), eq(s.outlets.id, staff.outletId)));
   const items = await loadItems(db, {...staff,brandId:outlet.brandId}, now);
   return items.map(x=>({id:x.item.id,name:x.item.nameEn,nameHi:x.item.nameHi,pricing:{...x.pricing,isAvailable:x.pricing.isAvailable && isWithinCategoryWindow(x.categoryWindow,outlet.timezone,now)}}));

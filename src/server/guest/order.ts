@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { uuidv7 } from "@/db/id";
 import * as s from "@/db/schema";
 import { checkFirstName, isPlaceholderName } from "@/domain/guest-name";
+import { OPEN_TAX_RATES } from "@/domain/gst";
 import { ROOM_CLASS } from "@/domain/rooms";
 import { priceLine, quoteKey, type PriceQuote } from "@/domain/pricing";
 import { LOCK_THEN_READ, type Tx } from "../db-types";
@@ -61,8 +62,13 @@ export async function placeOrder(ctx: GuestContext, input: PlaceInput = {}, now 
 }
 
 export type StaffDraftLine = { itemId: string; qty: number; modifierIds: string[]; note?: string; personalForPickup?: boolean };
+/** A dish that is not on the menu, typed in at the POS: its name, price per unit, station and tax are given, not looked up */
+export type OpenDraftLine = { open: { name: string; pricePaise: number; station: string; taxRateBp: number }; qty: number; note?: string; personalForPickup?: boolean };
+export type AnyDraftLine = StaffDraftLine | OpenDraftLine;
+export const isOpenLine = (l: AnyDraftLine): l is OpenDraftLine => "open" in l && !!l.open;
 
-type StaffOrder = { userId: string; lines: StaffDraftLine[] };
+
+type StaffOrder = { userId: string; lines: AnyDraftLine[] };
 
 /** Internal shared transaction; staff caller authenticates before providing staffDraft. */
 export function placeOrderTx(ctx: GuestContext, input: PlaceInput, now: Date, staffDraft?: StaffOrder) {
@@ -142,7 +148,18 @@ export async function placeOrderInTransaction(tx: Tx, ctx: GuestContext, input: 
         .where(and(eq(s.participants.tenantId, ctx.tenantId), eq(s.participants.id, ctx.participantId)));
     }
 
-    const cart = staffDraft ? staffDraft.lines.map((line, i) => {
+    // Open items skip the menu: they are priced from what the cashier typed and written as they are
+    const openLines = (staffDraft?.lines ?? []).filter(isOpenLine).map((line) => {
+      const name = String(line.open.name ?? "").trim().replace(/\s+/g, " ").slice(0, 100);
+      const pricePaise = Number(line.open.pricePaise);
+      const station = String(line.open.station ?? "").trim().slice(0, 30);
+      const taxRateBp = Number(line.open.taxRateBp);
+      if (name.length < 2 || !Number.isSafeInteger(pricePaise) || pricePaise < 100 || pricePaise > 10_000_000 || !station || !(OPEN_TAX_RATES as readonly number[]).includes(taxRateBp) || !Number.isInteger(line.qty) || line.qty < 1 || line.qty > 50) {
+        throw new AppError("invalid_state", "Check the open item: a name, a price of at least ₹1 and a quantity from 1 to 50.");
+      }
+      return { name, pricePaise, station, taxRateBp, qty: line.qty, note: line.note?.trim().slice(0, 140) || null, personalForPickup: line.personalForPickup === true };
+    });
+    const cart = staffDraft ? staffDraft.lines.filter((l): l is StaffDraftLine => !isOpenLine(l)).map((line, i) => {
       const legacyParcelNote = /^parcel$/i.test(line.note?.trim() ?? "");
       const personalForPickup = line.personalForPickup === true || legacyParcelNote;
       return { id: String(i), itemId: line.itemId, qty: line.qty, modifiers: line.modifierIds.map((modifierId) => ({ modifierId })), note: legacyParcelNote ? null : line.note?.trim().slice(0, 140) || null, sharedWith: null, personalForPickup };
@@ -156,12 +173,12 @@ export async function placeOrderInTransaction(tx: Tx, ctx: GuestContext, input: 
           eq(s.cartLines.participantId, ctx.participantId),
         ),
       );
-    if (cart.length === 0) throw new AppError("cart_empty", "Your cart is empty. Add a dish to place an order.");
+    if (cart.length === 0 && openLines.length === 0) throw new AppError("cart_empty", "Your cart is empty. Add a dish to place an order.");
 
     const itemIds = [...new Set(cart.map((l) => l.itemId))];
 
     // Lock portion counters before reading availability so two orders cannot take the last plate
-    await tx
+    if (itemIds.length) await tx
       .select({ id: s.outletItemOverrides.id })
       .from(s.outletItemOverrides)
       .where(
@@ -217,7 +234,7 @@ export async function placeOrderInTransaction(tx: Tx, ctx: GuestContext, input: 
         throw new AppError("price_changed", "Prices have changed. Please review your cart before placing the order.", { cartLineIds: changed.map((c) => c.line.id) });
       }
     }
-    const subtotalPaise = lines.reduce((sum, p) => sum + p.priced.linePaise, 0);
+    const subtotalPaise = lines.reduce((sum, p) => sum + p.priced.linePaise, 0) + openLines.reduce((sum, o) => sum + o.pricePaise * o.qty, 0);
 
     const [{ rounds }] = await tx
       .select({ rounds: sql<number>`count(*)` })
@@ -254,8 +271,8 @@ export async function placeOrderInTransaction(tx: Tx, ctx: GuestContext, input: 
       acceptedAt: outlet.autoAccept ? now : null,
     });
 
-    await tx.insert(s.orderLines).values(
-      lines.map(({ line, item, priced: p }) => ({
+    await tx.insert(s.orderLines).values([
+      ...lines.map(({ line, item, priced: p }) => ({
         tenantId: ctx.tenantId,
         orderId,
         sessionId: ctx.sessionId,
@@ -280,9 +297,33 @@ export async function placeOrderInTransaction(tx: Tx, ctx: GuestContext, input: 
         status: outlet.autoAccept ? ("accepted" as const) : ("placed" as const),
         createdAt: now,
       })),
-    );
+      ...openLines.map((o) => ({
+        tenantId: ctx.tenantId,
+        orderId,
+        sessionId: ctx.sessionId,
+        participantId: ctx.participantId,
+        itemId: null,
+        nameEn: o.name,
+        nameHi: null,
+        modifiers: [],
+        modifierChoices: [],
+        unitPricePaise: o.pricePaise,
+        qty: o.qty,
+        taxRateBp: o.taxRateBp,
+        station: o.station,
+        prepMinutes: 15,
+        allergensSnapshot: null,
+        isJainSnapshot: null,
+        spiceLevelSnapshot: null,
+        note: o.note,
+        sharedWith: null,
+        personalForPickup: o.personalForPickup,
+        status: outlet.autoAccept ? ("accepted" as const) : ("placed" as const),
+        createdAt: now,
+      })),
+    ]);
 
-    const stations = [...new Set(lines.map((p) => p.item.item.station))];
+    const stations = [...new Set([...lines.map((p) => p.item.item.station), ...openLines.map((o) => o.station)])];
     await tx.insert(s.tickets).values(
       stations.map((station) => ({ tenantId: ctx.tenantId, outletId: ctx.outletId, orderId, station, createdAt: now })),
     );
@@ -335,6 +376,6 @@ export async function placeOrderInTransaction(tx: Tx, ctx: GuestContext, input: 
       roomBillRequest = { requestId, tableIds: bill.tableIds };
     }
 
-    return { orderId, roundNo, status: outlet.autoAccept ? "accepted" as const : "placed" as const, subtotalPaise, stations, itemCount: lines.reduce((n, p) => n + p.line.qty, 0), soldOutItemIds, roomBillRequest, replayed: false };
+    return { orderId, roundNo, status: outlet.autoAccept ? "accepted" as const : "placed" as const, subtotalPaise, stations, itemCount: lines.reduce((n, p) => n + p.line.qty, 0) + openLines.reduce((n, o) => n + o.qty, 0), soldOutItemIds, roomBillRequest, replayed: false };
 
 }

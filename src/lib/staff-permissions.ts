@@ -16,6 +16,8 @@ export const consoleSectionRoles = {
   /** The kitchen board inside the console, on every plan (the separate wall screen is a plan feature) */
   kitchen: ["kitchen", "manager", "owner"],
   billing: ["cashier", "manager", "owner", "accountant", "reception"],
+  /** The POS terminal: punch an order for a table or a takeaway at the counter, then bill it */
+  pos: ["cashier", "manager", "owner", "reception"],
   menu: ["manager", "owner"],
   /** Stock and recipes */
   inventory: ["manager", "owner"],

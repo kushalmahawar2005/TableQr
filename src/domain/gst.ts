@@ -160,3 +160,6 @@ export function ratesCsv(rows: GstRateRow[]): string {
   const lines = rows.map((r) => [(r.rateBp / 100).toString(), r.invoices, rupees(r.taxablePaise), rupees(r.cgstPaise), rupees(r.sgstPaise), rupees(r.taxPaise)]);
   return [head, ...lines].map((l) => l.map(csvCell).join(",")).join("\n");
 }
+
+/** GST slabs, in basis points, an open item typed in at the POS may carry */
+export const OPEN_TAX_RATES = [0, 500, 1200, 1800, 2800] as const;

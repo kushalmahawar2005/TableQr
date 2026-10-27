@@ -1,0 +1,1 @@
+ALTER TABLE `order_lines` MODIFY COLUMN `item_id` char(36);

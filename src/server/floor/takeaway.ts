@@ -19,7 +19,7 @@ import { TAKEAWAY_CLASS } from "./takeaway-class";
 // bookings, QR codes or the table limit. Orders, the kitchen, the bill and payments work exactly
 // as for a table. A counter is reused once its order is paid; more are made when all are busy.
 
-export const takeawayRoles = ["owner", "manager", "cashier", "waiter"] as const;
+export const takeawayRoles = ["owner", "manager", "cashier", "waiter", "reception"] as const;
 
 /** Opens a takeaway order and returns its visit, ready for items */
 export async function startTakeaway(staff: StaffSession, input: { name?: string | null } = {}, now = new Date()) {

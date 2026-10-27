@@ -6,7 +6,6 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { priceLine } from "@/domain/pricing";
-import * as waiter from "@/app/(staff)/waiter/actions";
 import * as pos from "@/server/staff/pos-actions";
 import type { PosBillDetail } from "@/server/staff/pos-read";
 import type { WaiterMenu } from "@/server/staff/waiter-read";
@@ -32,7 +31,7 @@ export function AddItemsDialog({ detail, open, hi, onClose, onPlaced }: { detail
   useEffect(() => {
     if (!open || menu) return;
     let off = false;
-    waiter.menuAction().then((r) => { if (off) return; if (r.ok) setMenu(r.data); else setError(r.error); });
+    pos.menuAction().then((r) => { if (off) return; if (r.ok) setMenu(r.data); else setError(r.error); });
     return () => { off = true; };
   }, [open, menu]);
   const who = person || people[0]?.id || "";
@@ -65,7 +64,7 @@ export function AddItemsDialog({ detail, open, hi, onClose, onPlaced }: { detail
     try {
       let participantId = who;
       if (!participantId || newGuest.trim()) {
-        const d = await waiter.addDinerAction(detail.sessionId, newGuest.trim());
+        const d = await pos.addDinerAction(detail.sessionId, newGuest.trim());
         if (!d.ok) return setError(d.error);
         participantId = d.data.id;
       }

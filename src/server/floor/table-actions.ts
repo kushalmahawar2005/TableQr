@@ -52,8 +52,9 @@ async function setState(tx: Tx, scope: Scope, ids: string[], state: TableState, 
 }
 
 /** Seat a walk-in at a free table: an open visit with nobody in it until someone scans */
-export async function seatWalkIn(staff: FloorActor, input: { tableId: string; partySize: number; guestName?: string | null; endBy?: number | null }, now = new Date()) {
-  assertMay(staff, "floor.seat");
+export async function seatWalkIn(staff: FloorActor, input: { tableId: string; partySize: number; guestName?: string | null; endBy?: number | null }, now = new Date(), opts: { checkedByPos?: boolean } = {}) {
+  // The POS opens a table for its own billing roles and checks them itself (see staff/pos-terminal.ts)
+  if (!opts.checkedByPos) assertMay(staff, "floor.seat");
   const scope = scopeOf(staff);
   return run(staff, async (tx) => {
     const policy = await loadPolicy(tx, scope);

@@ -91,7 +91,8 @@ export async function repeatOrderRound(ctx: GuestContext, orderId: string, now =
     eq(s.orderLines.orderId, orderId),
     eq(s.orderLines.participantId, ctx.participantId),
   )).orderBy(asc(s.orderLines.id));
-  const eligible = previous.filter((line) => line.status !== "cancelled" && line.status !== "voided");
+  // Open items typed in at the POS are not on the menu, so they cannot be ordered again from the phone
+  const eligible = previous.filter((line): line is typeof line & { itemId: string } => line.status !== "cancelled" && line.status !== "voided" && !!line.itemId);
   if (!eligible.length) throw new AppError("not_found", "There are no repeatable items from your order in this round.");
 
   let added = 0;
@@ -165,7 +166,7 @@ function cancelOrderLineTx(ctx: GuestContext, lineId: string, now: Date) {
       .where(and(eq(s.orderLines.tenantId, ctx.tenantId), eq(s.orderLines.id, lineId)));
 
     // Give the portion back if the dish has a counter
-    const [restored] = await tx
+    const [restored] = !line.itemId ? [{ affectedRows: 0 }] : await tx
       .update(s.outletItemOverrides)
       .set({ portionsLeft: sql`${s.outletItemOverrides.portionsLeft} + ${line.qty}` })
       .where(

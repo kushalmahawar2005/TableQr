@@ -147,6 +147,8 @@ export async function topItems(scope: Scope, range: DayRange, limit = TOP_ITEMS)
         gte(s.orders.placedAt, range.start),
         lt(s.orders.placedAt, range.end),
         notInArray(s.orderLines.status, [...DEAD_LINES]),
+        // Open items typed in at the POS are not dishes on the menu
+        isNotNull(s.orderLines.itemId),
       ),
     )
     .groupBy(s.orderLines.itemId)

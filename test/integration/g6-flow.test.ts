@@ -268,7 +268,7 @@ describe("G6 order tracker and cancellation", () => {
     const chicken = placed.lines.find((l) => l.nameEn === "Butter Chicken")!;
     expect(cola.prepMinutes).toBe(1);
     expect(chicken.prepMinutes).toBe(18);
-    await env.db.update(s.menuItems).set({ prepMinutes: 60 }).where(eq(s.menuItems.id, cola.itemId));
+    await env.db.update(s.menuItems).set({ prepMinutes: 60 }).where(eq(s.menuItems.id, cola.itemId!));
     expect((await getOrderTracker(host, at(1.49))).rounds[0].isLate).toBe(false);
     expect((await getOrderTracker(host, at(1.5))).rounds[0]).toMatchObject({ isLate: true, lateAt: at(1.5).getTime() });
     await bumpLine(waiter, cola.id, at(2));

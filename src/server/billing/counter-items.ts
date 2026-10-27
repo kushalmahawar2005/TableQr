@@ -10,7 +10,7 @@ import { topics } from "../realtime/token";
 import { audit } from "../staff/audit";
 import type { StaffSession } from "../staff/auth";
 import { posRoles } from "../staff/pos-read";
-import type { StaffDraftLine } from "../guest/order";
+import type { AnyDraftLine } from "../guest/order";
 import { staffPlaceOrder, waiterRequestBill } from "../staff/waiter-mutations";
 import { requireStaffRole } from "../staff/waiter";
 import { lockSession, syncBill } from "./bill";
@@ -20,15 +20,16 @@ import { reopenBill } from "./payments";
 // directly; lines marked for pickup remain open on the kitchen ticket so they can be packed.
 // Once anyone has paid part of the bill, add them as a takeaway instead.
 
-export async function addItemsAtBilling(staff: StaffSession, input: { sessionId: string; tableId: string; participantId: string; clientRequestId: string; lines: StaffDraftLine[] }, now = new Date()) {
-  await requireStaffRole(staff, [...posRoles, "waiter"]);
+export async function addItemsAtBilling(staff: StaffSession, input: { sessionId: string; tableId: string; participantId: string; clientRequestId: string; lines: AnyDraftLine[] }, now = new Date()) {
+  const roles = [...posRoles, "waiter"] as const;
+  await requireStaffRole(staff, roles);
   const [session] = await db
     .select({ status: s.tableSessions.status })
     .from(s.tableSessions)
     .where(and(eq(s.tableSessions.tenantId, staff.tenantId), eq(s.tableSessions.outletId, staff.outletId), eq(s.tableSessions.id, String(input.sessionId))));
   if (!session) throw new AppError("not_found", "That table is not open here.");
   if (session.status === "closed") throw new AppError("invalid_state", "This bill is closed. Add the items as a new takeaway.", { reason: "closed" });
-  if (session.status === "open") return { ...(await staffPlaceOrder(staff, input, now)), atCounter: false };
+  if (session.status === "open") return { ...(await staffPlaceOrder(staff, input, now, roles)), atCounter: false };
 
   // The bill was asked for: only while nothing is paid yet
   const paid = await db
@@ -42,10 +43,10 @@ export async function addItemsAtBilling(staff: StaffSession, input: { sessionId:
   await reopenBill({ kind: "staff", ctx: staff, sessionId: String(input.sessionId) }, now);
   let placed;
   try {
-    placed = await staffPlaceOrder(staff, input, now);
+    placed = await staffPlaceOrder(staff, input, now, roles);
   } finally {
     // Whatever happened, the bill goes back to "asked for" so the counter can take the money
-    await waiterRequestBill(staff, String(input.sessionId), now);
+    await waiterRequestBill(staff, String(input.sessionId), now, roles);
   }
   const scope = { tenantId: staff.tenantId, outletId: staff.outletId, sessionId: String(input.sessionId) };
   await db.transaction(async (tx) => {

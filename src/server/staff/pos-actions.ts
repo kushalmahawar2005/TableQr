@@ -9,9 +9,10 @@ import { sendBillOnWhatsApp } from "../billing/send-bill";
 import { cancelTakeaway, startTakeaway } from "../floor/takeaway";
 import { recheckOnlinePayment, releaseStuckPayment } from "../billing/stuck-payment";
 import { addItemsAtBilling } from "../billing/counter-items";
-import type { StaffDraftLine } from "../guest/order";
+import type { AnyDraftLine } from "../guest/order";
 import { processRefund, reconcileRefund, requestRefund, type RefundInput } from "../billing/refunds";
-import { changeWaiterLine, managerApproval, waiterRequestBill, type Approval } from "./waiter-mutations";
+import { addPhonelessDiner, changeWaiterLine, managerApproval, waiterRequestBill, type Approval } from "./waiter-mutations";
+import { waiterMenu } from "./waiter-read";
 import { staffRealtimeToken, topics } from "../realtime/token";
 
 async function run<T>(work: (staff: Awaited<ReturnType<typeof staffFor>>) => Promise<T>) {
@@ -42,15 +43,18 @@ export async function checkRefundAction(refundId: string) {
 
 /** Guests are done but nobody asked for the bill (or the request got lost): the cashier closes the eating stage so the bill can be paid. */
 export async function requestBillAction(sessionId: string) {
-  return run(s => waiterRequestBill(s, String(sessionId)));
+  return run(s => waiterRequestBill(s, String(sessionId), new Date(), posRoles));
 }
 /** Discount on the whole bill: percent (1-100) or whole rupees, with a reason */
 export async function discountAction(input: { sessionId: string; kind: "percent" | "flat"; value: number; reason: string; approval?: Approval }) { return run((s) => setBillDiscount(s, input)); }
 export async function clearDiscountAction(sessionId: string) { return run((s) => clearBillDiscount(s, sessionId)); }
 /** Save the number a bill was sent to on WhatsApp in the customer list */
-export async function addItemsAction(input: { sessionId: string; tableId: string; participantId: string; clientRequestId: string; lines: StaffDraftLine[] }) { return run((s) => addItemsAtBilling(s, input)); }
+export async function addItemsAction(input: { sessionId: string; tableId: string; participantId: string; clientRequestId: string; lines: AnyDraftLine[] }) { return run((s) => addItemsAtBilling(s, input)); }
 export async function recheckPaymentAction(sessionId: string) { return run((s) => recheckOnlinePayment(s, sessionId)); }
 export async function releasePaymentAction(sessionId: string) { return run((s) => releaseStuckPayment(s, sessionId)); }
+/** The menu and a new diner for Add items, under the billing roles (the waiter app's own actions are for waiters) */
+export async function menuAction() { return run((s) => waiterMenu(s, new Date(), posRoles)); }
+export async function addDinerAction(sessionId: string, name: string) { return run((s) => addPhonelessDiner(s, String(sessionId), String(name ?? ""), new Date(), posRoles)); }
 export async function startTakeawayAction(name?: string | null) { return run((s) => startTakeaway(s, { name })); }
 export async function cancelTakeawayAction(sessionId: string) { return run((s) => cancelTakeaway(s, sessionId)); }
 export async function sendBillAction(input: { sessionId: string; phone: string }) { return run((s) => sendBillOnWhatsApp(s, input)); }

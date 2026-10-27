@@ -10,6 +10,7 @@ export const consoleSections = [
   { slug: "waitlist", label: "Waitlist", hi: "वेटलिस्ट" },
   { slug: "orders", label: "Orders", hi: "ऑर्डर" },
   { slug: "kitchen", label: "Kitchen", hi: "किचन" },
+  { slug: "pos", label: "POS", hi: "POS" },
   { slug: "billing", label: "Billing", hi: "बिलिंग" },
   { slug: "menu", label: "Menu", hi: "मेन्यू" },
   { slug: "inventory", label: "Inventory", hi: "स्टॉक" },
