@@ -49,7 +49,7 @@ export function AccessBanner({ access, canAsk, outlet }: { access: Access; canAs
           ? `Your ${what(access.reason)} ended on ${day(access.endsAt)}. Orders and billing stop on ${day(access.stopsAt)}.`
           : `Your ${what(access.reason)} ends on ${day(access.endsAt!)}.`}
       </span>
-      {canAsk && <><Link href="/console/plan" className="inline-flex min-h-9 items-center rounded-cta bg-white px-3 text-caption font-semibold text-ink">Pay now</Link><ContactTableQR compact message={`Hi TableQR, this is ${outlet}. Please renew our plan.`} /></>}
+      {canAsk && <><Link href="/console/plan" className="inline-flex min-h-9 items-center rounded-cta bg-white px-3 text-caption font-semibold text-[#1f2937]">Pay now</Link><ContactTableQR compact message={`Hi TableQR, this is ${outlet}. Please renew our plan.`} /></>}
     </div>
   );
 }
