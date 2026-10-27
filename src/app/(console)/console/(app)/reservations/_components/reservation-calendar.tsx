@@ -215,7 +215,7 @@ export function ReservationCalendar({ initial, realtimeUrl, preview = false, ini
             <button key={v} type="button" aria-pressed={data.view === v} className="min-h-10 rounded-[8px] px-3 text-body font-semibold text-muted aria-pressed:bg-ink aria-pressed:text-paper" onClick={() => change({ view: v })}>{v === "day" ? "Day" : "Week"}</button>
           ))}
         </div>
-        <form className="flex min-w-0 flex-1 gap-2 sm:max-w-md" onSubmit={(e) => { e.preventDefault(); change({ search: query.search }); }}>
+        <form className="order-last flex w-full min-w-0 gap-2 sm:order-none sm:w-auto sm:flex-1 sm:max-w-md" onSubmit={(e) => { e.preventDefault(); change({ search: query.search }); }}>
           <input aria-label="Search guest, phone or reference" placeholder="Search by name, phone or booking number" className={`${field} min-w-0 flex-1`} value={query.search} onChange={(e) => setQuery((q) => ({ ...q, search: e.target.value }))} />
         </form>
         <button type="button" aria-expanded={moreFilters} onClick={() => setMoreFilters((v) => !v)} className={`${plainButton} bg-surface`}>Filters{activeFilters ? ` (${activeFilters})` : ""}</button>

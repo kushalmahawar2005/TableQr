@@ -34,9 +34,9 @@ export function DashboardHeader({
       </div>
 
       <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:justify-start">
-        <div className="text-right">
+        <div className="text-left sm:text-right">
           <p className="text-xs font-semibold text-muted">{dayLabel(data.date, { weekday: "long", day: "numeric", month: "long" })}</p>
-          <p className="mt-0.5 flex items-center justify-end gap-1.5 text-[11px] font-medium text-muted tabular" aria-live="polite">
+          <p className="mt-0.5 flex items-center justify-start gap-1.5 text-[11px] font-medium text-muted tabular sm:justify-end" aria-live="polite">
             <span className={`size-1.5 shrink-0 rounded-full ${meta.dot}`} aria-hidden="true" />
             <span className={`font-semibold ${meta.text}`}>{meta.label}</span>
             <span aria-hidden="true">·</span>

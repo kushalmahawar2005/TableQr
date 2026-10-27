@@ -412,7 +412,7 @@ function TablesView({ L, now, zones, zone, setZone, tables, running, total, take
         {tables.length === 0 ? (
           <p className="mt-4 rounded-2xl border border-line bg-surface p-6 text-center text-body text-muted">{L("No tables yet. Add tables on the Floor, or bill as a takeaway.", "अभी कोई टेबल नहीं। फ़्लोर में टेबल जोड़ें, या पार्सल बिल बनाएँ।")}</p>
         ) : (
-          <div className="mt-4 grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(128px,1fr))]">
+          <div className="mt-4 grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(min(100%,150px),1fr))]">
             {tables.map((t) => {
               const v = t.visit;
               const asked = v?.status === "bill_requested";

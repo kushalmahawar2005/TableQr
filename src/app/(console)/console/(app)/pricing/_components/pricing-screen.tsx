@@ -154,12 +154,12 @@ export function PricingScreen({ initial, preview }: { initial: PricingData; prev
       )}
 
       <section aria-label="Filters" className="mt-6 space-y-3 rounded-2xl border border-line bg-surface/50 p-3 sm:p-4">
-        <div className="flex flex-wrap items-center gap-2.5">
-          <div className="relative min-w-0 flex-1 sm:max-w-sm">
+        <div className="flex flex-col items-stretch gap-2.5 sm:flex-row sm:flex-wrap sm:items-center">
+          <div className="relative w-full min-w-0 sm:w-auto sm:flex-1 sm:max-w-sm">
             <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" />
             <Input aria-label="Search dishes" className="h-11 rounded-xl pl-9" placeholder="Search dish or category" value={query} onChange={(e) => setQuery(e.target.value)} />
           </div>
-          <div className="flex gap-1.5">
+          <div className="flex w-full flex-wrap gap-1.5 sm:w-auto">
             <button type="button" className={chip(!overridesOnly)} onClick={() => setOverridesOnly(false)}>All</button>
             <button type="button" className={chip(overridesOnly)} onClick={() => setOverridesOnly(true)}>Changed here ({overrideCount})</button>
           </div>

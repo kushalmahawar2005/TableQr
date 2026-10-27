@@ -130,14 +130,14 @@ export function InventoryScreen({ initial, purchasing }: { initial: Inventory; p
           ))}
         </div>
         {tab === "stock" && (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
             {groups.length > 1 && (
-              <select value={group} onChange={(e) => setGroup(e.target.value)} aria-label="Shelf group" className={`${field} w-auto`}>
+              <select value={group} onChange={(e) => setGroup(e.target.value)} aria-label="Shelf group" className={`${field} w-full sm:w-auto`}>
                 <option value="all">All groups</option>
                 {groups.map((g) => <option key={g} value={g}>{g}</option>)}
               </select>
             )}
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search stock" aria-label="Search stock" className={`${field} max-w-56`} />
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search stock" aria-label="Search stock" className={`${field} w-full sm:w-56`} />
           </div>
         )}
       </div>

@@ -34,5 +34,5 @@ export default async function DashboardPage() {
   // Riders only matter where the plan has delivery
   const delivery = duty?.some((r) => r.roles.includes("rider")) ? (await tenantFeatures(staff.tenantId)).delivery : false;
   const dutyRows = duty && !delivery ? duty.filter((r) => !r.roles.includes("rider")) : duty;
-  return <DashboardScreen initial={data} initialTrend={trend} duty={dutyRows ? { rows: dutyRows, canChange } : undefined} setup={setup && <SetupChecklist lang={lang} steps={setup} />} realtimeUrl={process.env.REALTIME_URL?.replace(/^http/, "ws") ?? null} />;
+  return <DashboardScreen initial={data} initialTrend={trend} duty={dutyRows ? { rows: dutyRows, canChange } : undefined} setup={setup && <SetupChecklist key="setup-checklist" lang={lang} steps={setup} />} realtimeUrl={process.env.REALTIME_URL?.replace(/^http/, "ws") ?? null} />;
 }

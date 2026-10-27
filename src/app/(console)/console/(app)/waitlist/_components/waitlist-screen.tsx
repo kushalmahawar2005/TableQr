@@ -108,7 +108,7 @@ export function WaitlistScreen({ entries, outlet, outletCode, freeTables, canMan
         </div>
       </header>
 
-      <dl className="mt-5 grid grid-cols-3 gap-3">
+      <dl className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
         {[
           [Users, "Parties waiting", String(entries.length), "#c9482b"],
           [UserRound, "Guests in the queue", String(people), "#315e9e"],
@@ -116,7 +116,7 @@ export function WaitlistScreen({ entries, outlet, outletCode, freeTables, canMan
         ].map(([Icon, label, value, tone]) => {
           const I = Icon as typeof Users;
           return (
-            <div key={label as string} className="rounded-card border border-line bg-surface p-4">
+            <div key={label as string} className={`rounded-card border border-line bg-surface p-3 sm:p-4 ${label === "Average time waiting" ? "col-span-2 sm:col-span-1" : ""}`}>
               <div className="flex items-center justify-between"><dt className="text-caption font-semibold text-muted">{label as string}</dt><span className="grid size-8 place-items-center rounded-input" style={{ background: `color-mix(in srgb, ${tone} 14%, var(--surface))`, color: tone as string }}><I className="size-4" aria-hidden="true" /></span></div>
               <dd className="mt-1 font-display text-[26px] leading-8 font-bold tabular text-ink">{value as string}</dd>
             </div>

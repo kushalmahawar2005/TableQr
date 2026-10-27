@@ -81,10 +81,10 @@ export function ItemsScreen({ report: r, outletName }: { report: SalesDetail; ou
         </form>
       </div>
 
-      <section className="mt-5 grid grid-cols-3 gap-3 print:break-inside-avoid" aria-label="Totals">
+      <section className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 print:break-inside-avoid" aria-label="Totals">
         <div className={`${card} p-4`}><p className="text-caption font-semibold text-muted">Item sales</p><p className="mt-1 font-display text-[24px] font-bold tabular-nums">{rs(r.totals.grossPaise)}</p><p className="text-caption text-muted">Before discount and tax</p></div>
         <div className={`${card} p-4`}><p className="text-caption font-semibold text-muted">Items sold</p><p className="mt-1 font-display text-[24px] font-bold tabular-nums">{r.totals.qty}</p></div>
-        <div className={`${card} p-4`}><p className="text-caption font-semibold text-muted">Different dishes</p><p className="mt-1 font-display text-[24px] font-bold tabular-nums">{r.totals.dishes}</p><p className="text-caption text-muted">{r.notSold.length} on the menu did not sell</p></div>
+        <div className={`${card} col-span-2 p-4 sm:col-span-1`}><p className="text-caption font-semibold text-muted">Different dishes</p><p className="mt-1 font-display text-[24px] font-bold tabular-nums">{r.totals.dishes}</p><p className="text-caption text-muted">{r.notSold.length} on the menu did not sell</p></div>
       </section>
 
       <section className={`${card} mt-5 overflow-hidden`} aria-label="Every dish">

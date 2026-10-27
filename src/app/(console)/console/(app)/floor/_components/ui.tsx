@@ -36,14 +36,21 @@ export const STATE_STYLE: Record<string, { tone: string; soft: string; text: str
   blocked: { tone: "var(--state-blocked)", soft: "var(--state-blocked-soft)", text: "var(--state-blocked-text)", icon: LockIcon },
 };
 
-export function StateChip({ state, label, size = "md" }: { state: string; label: string; size?: "sm" | "md" | "lg" }) {
+export function StateChip({ state, label, size = "md", compactMobile = false }: { state: string; label: string; size?: "sm" | "md" | "lg"; compactMobile?: boolean }) {
   const st = STATE_STYLE[state] ?? STATE_STYLE.available;
+  const classes = size === "sm"
+    ? "px-1.5 py-px text-label"
+    : compactMobile
+      ? "gap-1 px-2 py-0.5 text-caption sm:gap-1.5 sm:px-3 sm:py-1 sm:text-body"
+      : size === "lg"
+        ? "gap-1.5 px-3 py-1 text-body"
+        : "px-2 py-0.5 text-caption";
   return (
     <span
-      className={`inline-flex shrink-0 items-center gap-1 rounded-full border font-semibold ${size === "sm" ? "px-1.5 py-px text-label" : size === "lg" ? "gap-1.5 px-3 py-1 text-body" : "px-2 py-0.5 text-caption"}`}
+      className={`inline-flex shrink-0 items-center gap-1 rounded-full border font-semibold ${classes}`}
       style={{ borderColor: st.tone, background: st.soft, color: st.text }}
     >
-      <HugeiconsIcon icon={st.icon} size={size === "sm" ? 11 : size === "lg" ? 16 : 13} aria-hidden />
+      <HugeiconsIcon icon={st.icon} size={compactMobile ? 13 : size === "sm" ? 11 : size === "lg" ? 16 : 13} className={compactMobile ? "size-[13px] sm:size-4" : undefined} aria-hidden />
       {label}
     </span>
   );

@@ -47,35 +47,43 @@ export function LiveFloor({ data }: { data: DashboardData }) {
   const tileClass = floorTileClass(n);
 
   return (
-    <section className="rounded-card border border-line bg-surface p-5" aria-label="Live Floor">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+    <section className="rounded-card border border-line bg-surface p-4 sm:p-5" aria-label="Live Floor">
+      <div className="grid gap-3 sm:flex sm:flex-wrap sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-center justify-between gap-3">
           <h2 className="font-display text-section font-bold text-ink">Live Floor</h2>
-          <div className="flex flex-wrap items-center gap-3 text-xs font-semibold text-ink">
-            <span className="inline-flex items-center gap-1.5">
-              <span className="size-2 rounded-full" style={{ backgroundColor: "var(--state-available)" }} aria-hidden="true" />
-              Available <strong className="tabular font-bold">{t.available}</strong>
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="size-2 rounded-full" style={{ backgroundColor: "var(--state-seated)" }} aria-hidden="true" />
-              Occupied <strong className="tabular font-bold">{t.seated + t.billRequested}</strong>
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="size-2 rounded-full" style={{ backgroundColor: "var(--state-reserved)" }} aria-hidden="true" />
-              Reserved <strong className="tabular font-bold">{t.reserved}</strong>
-            </span>
-            {t.blocked > 0 && (
-              <span className="inline-flex items-center gap-1.5">
-                <span className="size-2 rounded-full" style={{ backgroundColor: "var(--state-blocked)" }} aria-hidden="true" />
-                Blocked <strong className="tabular font-bold">{t.blocked}</strong>
-              </span>
-            )}
+          <div className="sm:hidden">
+            <Link href="/console/floor" className={viewAllClass}>
+              <span>View all</span>
+              <ChevronRight className="size-3.5 text-muted" aria-hidden="true" />
+            </Link>
           </div>
         </div>
-        <Link href="/console/floor" className={viewAllClass}>
-          <span>View all</span>
-          <ChevronRight className="size-3.5 text-muted" aria-hidden="true" />
-        </Link>
+        <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-ink">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-paper px-2.5 py-1.5">
+            <span className="size-2 rounded-full" style={{ backgroundColor: "var(--state-available)" }} aria-hidden="true" />
+            Available <strong className="tabular font-bold">{t.available}</strong>
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-paper px-2.5 py-1.5">
+            <span className="size-2 rounded-full" style={{ backgroundColor: "var(--state-seated)" }} aria-hidden="true" />
+            Occupied <strong className="tabular font-bold">{t.seated + t.billRequested}</strong>
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-paper px-2.5 py-1.5">
+            <span className="size-2 rounded-full" style={{ backgroundColor: "var(--state-reserved)" }} aria-hidden="true" />
+            Reserved <strong className="tabular font-bold">{t.reserved}</strong>
+          </span>
+          {t.blocked > 0 && (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-paper px-2.5 py-1.5">
+              <span className="size-2 rounded-full" style={{ backgroundColor: "var(--state-blocked)" }} aria-hidden="true" />
+              Blocked <strong className="tabular font-bold">{t.blocked}</strong>
+            </span>
+          )}
+        </div>
+        <div className="hidden sm:block">
+          <Link href="/console/floor" className={viewAllClass}>
+            <span>View all</span>
+            <ChevronRight className="size-3.5 text-muted" aria-hidden="true" />
+          </Link>
+        </div>
       </div>
 
       <div className="mt-4">

@@ -88,6 +88,8 @@ export type FloorSheet =
   | { kind: "waitlist_add"; error?: string }
   | { kind: "manage"; tableId: string; error?: string };
 
+const compactControl = `inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-line bg-surface px-2.5 text-caption font-semibold text-ink transition-colors hover:border-forest/30 hover:bg-paper sm:min-h-11 sm:px-3.5 sm:text-body ${focus}`;
+
 /** A frozen state for the /dev/s1 review board */
 export type FloorPreview = {
   offline?: boolean;
@@ -297,8 +299,8 @@ export function FloorScreen({
         </div>
       )}
       <header className="border-b border-line bg-surface">
-        <div className="mx-auto flex w-full max-w-[1760px] flex-col gap-2 px-4 py-3 sm:px-6">
-          <div className="flex flex-col gap-2 xl:flex-row xl:items-center">
+        <div className="mx-auto flex w-full max-w-[1760px] flex-col gap-2 px-4 py-2 sm:px-6 sm:py-3">
+          <div className="flex flex-wrap items-center gap-2 xl:flex-nowrap">
             <div className="flex min-w-0 items-center gap-3">
               <span
                 className="grid size-10 shrink-0 place-items-center rounded-xl bg-forest/10 text-forest"
@@ -342,8 +344,8 @@ export function FloorScreen({
               </div>
             </nav>
 
-            <div className="flex shrink-0 flex-wrap items-center gap-2">
-              {data.may.assignWaiter && <button type="button" disabled={disabled} className={btnLine} onClick={() => setAssignmentIds([])}>{lang === "hi" ? "वेटर असाइन करें" : "Assign waiters"}</button>}
+            <div className="flex w-full flex-wrap items-center gap-2 xl:w-auto">
+              {data.may.assignWaiter && <button type="button" aria-label={lang === "hi" ? "वेटर असाइन करें" : "Assign waiters"} disabled={disabled} className={compactControl} onClick={() => setAssignmentIds([])}><span className="sm:hidden">{lang === "hi" ? "वेटर" : "Assign"}</span><span className="hidden sm:inline">{lang === "hi" ? "वेटर असाइन करें" : "Assign waiters"}</span></button>}
               <div
                 role="group"
                 aria-label="View"
@@ -386,9 +388,11 @@ export function FloorScreen({
                 !preview && (
                   <Link
                     href="/console/floor/editor"
-                    className={`inline-flex min-h-11 items-center rounded-xl border border-line bg-surface px-4 text-body font-semibold text-ink transition-colors hover:border-forest/30 hover:bg-paper ${focus}`}
+                    aria-label={lang === "hi" ? "फ्लोर प्लान संपादित करें" : "Edit floor plan"}
+                    className={compactControl}
                   >
-                    Edit floor plan
+                    <span className="sm:hidden">Edit</span>
+                    <span className="hidden sm:inline">Edit floor plan</span>
                   </Link>
                 )}
             </div>
@@ -396,7 +400,7 @@ export function FloorScreen({
 
           <ul
             aria-label={c.legend}
-            className="no-scrollbar flex w-full gap-2 overflow-x-auto pb-0.5"
+            className="flex w-full flex-wrap gap-2 pb-0.5"
           >
             {(
               [
@@ -410,7 +414,7 @@ export function FloorScreen({
                 "blocked",
               ] as const
             ).map((st) => (
-              <li key={st} className="shrink-0">
+              <li key={st}>
                 <button
                   type="button"
                   aria-pressed={stateFilter === st}
@@ -426,6 +430,7 @@ export function FloorScreen({
                     state={st}
                     label={`${c.states[st]} ${counts(st)}`}
                     size="lg"
+                    compactMobile
                   />
                 </button>
               </li>
@@ -465,8 +470,8 @@ export function FloorScreen({
         </div>
       )}
 
-      <div className="mx-auto grid min-h-0 w-full max-w-[1760px] flex-1 grid-cols-1 sm:grid-cols-[minmax(0,1fr)_320px] lg:grid-cols-[minmax(0,1fr)_380px]">
-        <main className="min-h-[52dvh] min-w-0 overflow-auto sm:min-h-0">
+      <div className="mx-auto grid min-h-0 w-full max-w-[1760px] flex-none grid-cols-1 sm:flex-1 sm:grid-cols-[minmax(0,1fr)_320px] lg:grid-cols-[minmax(0,1fr)_380px]">
+        <main className="min-h-0 min-w-0 sm:overflow-auto">
           <FloorMap
             data={data}
             c={c}
@@ -493,7 +498,7 @@ export function FloorScreen({
             }}
           />
         </main>
-        <aside className="flex min-h-[320px] flex-col border-t border-line bg-surface sm:min-h-0 sm:border-l sm:border-t-0">
+        <aside className="flex min-h-0 flex-col border-t border-line bg-surface sm:border-l sm:border-t-0">
           <div
             role="tablist"
             aria-label={c.title}

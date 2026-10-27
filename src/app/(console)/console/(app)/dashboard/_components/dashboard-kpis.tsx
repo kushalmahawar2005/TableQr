@@ -1,4 +1,4 @@
-import { Bike, Calendar, CreditCard, FileText, Receipt, Wallet } from "lucide-react";
+import { Calendar, CreditCard, FileText, Receipt, Wallet } from "lucide-react";
 import Link from "next/link";
 import type { DashboardData, RevenueTrend } from "@/server/staff/dashboard";
 import { Delta, dayLabel, focusRing, money } from "./dashboard-shared";
@@ -13,9 +13,9 @@ export function DashboardKpis({ data, trend }: { data: DashboardData; trend: Rev
   const preparingCount = (data.operations.kitchenOrders || []).filter((o) => o.status === "preparing").length;
   const readyCount = (data.operations.kitchenOrders || []).filter((o) => o.status === "ready").length;
 
-  const card = `group relative flex min-h-[156px] flex-col justify-between rounded-2xl border border-line bg-surface p-4 shadow-[0_1px_2px_rgba(25,37,30,0.035)] transition-all duration-200 hover:-translate-y-0.5 hover:border-forest/30 hover:shadow-[0_8px_24px_rgba(25,37,30,0.07)] sm:min-h-[168px] sm:p-5 ${focusRing}`;
+  const card = `group relative flex min-h-[140px] flex-col justify-between rounded-2xl border border-line bg-surface p-3 shadow-[0_1px_2px_rgba(25,37,30,0.035)] transition-all duration-200 hover:-translate-y-0.5 hover:border-forest/30 hover:shadow-[0_8px_24px_rgba(25,37,30,0.07)] sm:min-h-[168px] sm:p-5 ${focusRing}`;
   const iconBox = "grid size-9 shrink-0 place-items-center rounded-xl";
-  const footer = "mt-3 flex min-h-7 items-center justify-between gap-2 border-t border-[var(--dashboard-footer-line)] pt-2.5";
+  const footer = "mt-2 flex min-h-6 items-center justify-between gap-2 border-t border-[var(--dashboard-footer-line)] pt-2 sm:mt-3 sm:min-h-7 sm:pt-2.5";
   const deltaBadge = "inline-flex shrink-0 items-center rounded-full bg-[var(--dashboard-badge)] px-2.5 py-1 [&>span]:text-[11px] [&>span]:leading-tight [&>span]:whitespace-nowrap";
 
   return (
@@ -29,7 +29,7 @@ export function DashboardKpis({ data, trend }: { data: DashboardData; trend: Rev
           <div className="mt-2 flex min-w-0 items-end justify-between gap-3">
             <div className="min-w-0">
               <p className="font-display text-[30px] font-bold leading-none tracking-tight text-ink tabular sm:text-[34px]">{money(k.revenue.today)}</p>
-              <p className="mt-2 text-xs font-medium text-muted">Money from paid bills</p>
+              <p className="mt-1 text-xs font-medium text-muted sm:mt-2">Money from paid bills</p>
             </div>
             <RevenueSparkline trend={trend} />
           </div>
@@ -46,25 +46,23 @@ export function DashboardKpis({ data, trend }: { data: DashboardData; trend: Rev
           </div>
           <div className="mt-2">
             <p className="font-display text-[30px] font-bold leading-none tracking-tight text-ink tabular sm:text-[32px]">{k.orders.today}</p>
-            <p className="mt-2 min-h-8 text-xs font-medium leading-4 text-muted">
+            <p className="mt-1 min-h-7 text-xs font-medium leading-4 text-muted sm:mt-2 sm:min-h-8">
               {preparingCount > 0 || readyCount > 0 ? `${preparingCount} preparing · ${readyCount} ready` : k.orders.today > 0 ? "Active orders placed" : "No active orders"}
             </p>
           </div>
           <div className={footer}><span className="whitespace-nowrap text-[10px] font-medium text-muted">Yesterday</span><span className={deltaBadge}><Delta today={k.orders.today} yesterday={k.orders.yesterday} compact /></span></div>
         </Link>
 
-        <Link href="/console/orders?view=delivery" className={`${card} xl:col-span-1`}>
+        <Link href="/console/billing" className={`${card} xl:col-span-1`}>
           <div className="flex items-center justify-between gap-2">
-            <p className="text-[12px] font-semibold leading-4 text-muted sm:text-[13px]">Delivery Orders</p>
-            <span className={`${iconBox} bg-terracotta/10 text-terracotta`} aria-hidden="true"><Bike className="size-[18px]" /></span>
+            <p className="text-[12px] font-semibold leading-4 text-muted sm:text-[13px]">Unpaid Bills</p>
+            <span className={`${iconBox} bg-terracotta/10 text-terracotta`} aria-hidden="true"><Receipt className="size-[18px]" /></span>
           </div>
           <div className="mt-2">
-            <p className="font-display text-[30px] font-bold leading-none tracking-tight text-ink tabular sm:text-[32px]">{k.delivery.active}</p>
-            <p className="mt-2 min-h-8 text-xs font-medium leading-4 text-muted">
-              {k.delivery.active ? `${k.delivery.onTheWay} on the way${k.delivery.cashToCollectPaise ? ` · ${money(k.delivery.cashToCollectPaise)} cash` : ""}` : "No delivery running"}
-            </p>
+            <p className="font-display text-[26px] font-bold leading-none tracking-tight text-ink tabular sm:text-[30px]">{money(k.outstandingPaise)}</p>
+            <p className="mt-1 min-h-7 text-xs font-medium leading-4 text-muted sm:mt-2 sm:min-h-8">Total amount due</p>
           </div>
-          <div className={`${footer} justify-start`}><span className="text-[11px] font-medium text-muted">{k.delivery.deliveredToday} delivered today</span></div>
+          <div className={`${footer} justify-start`}><span className="text-[11px] font-medium text-muted">Across open bills</span></div>
         </Link>
 
         <Link href="/console/floor" className={`${card} xl:col-span-1`}>
@@ -76,7 +74,7 @@ export function DashboardKpis({ data, trend }: { data: DashboardData; trend: Rev
             <p className="font-display text-[30px] font-bold leading-none tracking-tight text-ink tabular sm:text-[32px]">
             {k.openTables.open} <span className="text-base font-semibold text-muted">/ {k.openTables.total}</span>
             </p>
-            <div className="mt-3 flex items-center gap-2">
+            <div className="mt-2 flex items-center gap-2 sm:mt-3">
               <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-line" role="img" aria-label={`${tablePct}% of tables in use`}>
               <div className="h-full rounded-full bg-forest transition-all duration-500" style={{ width: `${Math.min(100, tablePct)}%` }} />
               </div>
@@ -86,14 +84,14 @@ export function DashboardKpis({ data, trend }: { data: DashboardData; trend: Rev
           <div className={`${footer} justify-start`}><span className="text-[11px] font-medium text-muted">Current floor occupancy</span></div>
         </Link>
 
-        <Link href="/console/billing" className={`${card} col-span-2 xl:col-span-1`}>
+        <Link href="/console/billing" className={`${card} xl:col-span-1`}>
           <div className="flex items-center justify-between gap-2">
             <p className="text-sm font-semibold text-muted">Average Bill</p>
             <span className={`${iconBox} bg-sage text-forest`} aria-hidden="true"><CreditCard className="size-[18px]" /></span>
           </div>
           <div className="mt-2">
             <p className="font-display text-[30px] font-bold leading-none tracking-tight text-ink tabular sm:text-[32px]">{money(k.averageBill.today)}</p>
-            <p className="mt-2 min-h-8 text-xs font-medium leading-4 text-muted">Per paid bill</p>
+            <p className="mt-1 min-h-7 text-xs font-medium leading-4 text-muted sm:mt-2 sm:min-h-8">Per paid bill</p>
           </div>
           <div className={footer}><span className="whitespace-nowrap text-[10px] font-medium text-muted">Yesterday</span><span className={deltaBadge}><Delta today={k.averageBill.today} yesterday={k.averageBill.yesterday} compact /></span></div>
         </Link>
