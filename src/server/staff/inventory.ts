@@ -1,13 +1,15 @@
 import "server-only";
-import { and, asc, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { uuidv7 } from "@/db/id";
 import * as s from "@/db/schema";
 import { isLow, toMilli, usage, type StockUnit } from "@/domain/inventory";
+import { STOCK_LIBRARY_BY_NAME } from "@/domain/stock-library";
 import type { Tx } from "../db-types";
 import { AppError } from "../errors";
 import { requireFeature } from "../plan";
 import type { StaffSession } from "./auth";
+import { announceAvailability, syncStockSoldOut } from "./inventory-pro";
 
 // Inventory at one outlet: stock items, the recipe of each dish, and every change to stock.
 // A paid bill takes what its dishes used (see takeStockForBill); people add purchases, wastage and
@@ -23,8 +25,8 @@ async function guard(staff: Staff) {
 
 export async function getInventory(staff: Staff) {
   await guard(staff);
-  const [[outlet], items, recipes, moves] = await Promise.all([
-    db.select({ brandId: s.outlets.brandId }).from(s.outlets).where(and(eq(s.outlets.tenantId, staff.tenantId), eq(s.outlets.id, staff.outletId))),
+  const [[outlet], items, recipes, moves, prep, heldDishes] = await Promise.all([
+    db.select({ brandId: s.outlets.brandId, stockSoldOut: s.outlets.stockSoldOut }).from(s.outlets).where(and(eq(s.outlets.tenantId, staff.tenantId), eq(s.outlets.id, staff.outletId))),
     db.select().from(s.stockItems).where(and(eq(s.stockItems.tenantId, staff.tenantId), eq(s.stockItems.outletId, staff.outletId))).orderBy(asc(s.stockItems.name)),
     db.select({ itemId: s.recipeLines.itemId, stockItemId: s.recipeLines.stockItemId, qtyMilli: s.recipeLines.qtyMilli }).from(s.recipeLines).where(and(eq(s.recipeLines.tenantId, staff.tenantId), eq(s.recipeLines.outletId, staff.outletId))),
     db
@@ -34,6 +36,8 @@ export async function getInventory(staff: Staff) {
       .where(and(eq(s.stockMoves.tenantId, staff.tenantId), eq(s.stockMoves.outletId, staff.outletId)))
       .orderBy(desc(s.stockMoves.createdAt))
       .limit(150),
+    db.select({ prepItemId: s.prepLines.prepItemId, stockItemId: s.prepLines.stockItemId, qtyMilli: s.prepLines.qtyMilli }).from(s.prepLines).where(and(eq(s.prepLines.tenantId, staff.tenantId), eq(s.prepLines.outletId, staff.outletId))),
+    db.select({ itemId: s.outletItemOverrides.itemId }).from(s.outletItemOverrides).where(and(eq(s.outletItemOverrides.tenantId, staff.tenantId), eq(s.outletItemOverrides.outletId, staff.outletId), eq(s.outletItemOverrides.soldOutByStock, true))),
   ]);
   const dishes = outlet
     ? await db
@@ -47,17 +51,20 @@ export async function getInventory(staff: Staff) {
   return {
     items: active.map((i) => ({
       id: i.id, name: i.name, unit: i.unit as StockUnit, qtyMilli: i.qtyMilli, lowMilli: i.lowMilli, costPaise: i.costPaise, low: isLow(i),
+      category: i.category, packName: i.packName, packMilli: i.packMilli, isPrep: i.isPrep,
       usedIn: recipes.filter((r) => r.stockItemId === i.id).length,
+      prep: prep.filter((p) => p.prepItemId === i.id).map((p) => ({ stockItemId: p.stockItemId, qtyMilli: p.qtyMilli })),
     })),
     stockValuePaise: active.reduce((n, i) => n + (i.costPaise && i.qtyMilli > 0 ? Math.round((i.costPaise * i.qtyMilli) / 1000) : 0), 0),
-    dishes: dishes.map((d) => ({ ...d, recipe: recipes.filter((r) => r.itemId === d.id).map((r) => ({ stockItemId: r.stockItemId, qtyMilli: r.qtyMilli })) })),
+    stockSoldOut: !!outlet?.stockSoldOut,
+    dishes: dishes.map((d) => ({ ...d, heldByStock: heldDishes.some((h) => h.itemId === d.id), recipe: recipes.filter((r) => r.itemId === d.id).map((r) => ({ stockItemId: r.stockItemId, qtyMilli: r.qtyMilli })) })),
     moves: moves.map((m) => ({ ...m, createdAt: m.createdAt.getTime(), by: m.by ?? null })),
   };
 }
 export type Inventory = Awaited<ReturnType<typeof getInventory>>;
 
 /** Add a stock item, or change its name, unit, alert level or price */
-export async function saveStockItem(staff: Staff, input: { id?: string | null; name: string; unit: string; low: string; cost: string }) {
+export async function saveStockItem(staff: Staff, input: { id?: string | null; name: string; unit: string; low: string; cost: string; category?: string; packName?: string; packSize?: string; isPrep?: boolean }) {
   await guard(staff);
   const name = String(input.name ?? "").trim().replace(/\s+/g, " ").slice(0, 80);
   if (name.length < 2) throw bad("Enter the item's name, like Paneer or Milk.");
@@ -69,15 +76,21 @@ export async function saveStockItem(staff: Staff, input: { id?: string | null; n
   const costPaise = costText === "" ? null : Math.round(Number(costText) * 100);
   if (costPaise !== null && (!Number.isFinite(costPaise) || costPaise < 0 || costPaise > 100_000_000)) throw bad("Enter the price as a number, or leave it empty.");
   const unit = input.unit as StockUnit;
+  const category = String(input.category ?? "").trim().replace(/\s+/g, " ").slice(0, 40) || null;
+  const packName = String(input.packName ?? "").trim().replace(/\s+/g, " ").slice(0, 20) || null;
+  const packText = String(input.packSize ?? "").trim();
+  const packMilli = packName && packText !== "" ? toMilli(packText) : null;
+  if (packName && (packMilli === null || packMilli <= 0)) throw bad(`Enter how many ${unit} are in one ${packName}.`);
+  const extra = { category, packName: packMilli ? packName : null, packMilli: packMilli || null, isPrep: !!input.isPrep };
   try {
     if (input.id) {
       const [row] = await db.select({ id: s.stockItems.id }).from(s.stockItems).where(and(eq(s.stockItems.tenantId, staff.tenantId), eq(s.stockItems.outletId, staff.outletId), eq(s.stockItems.id, input.id)));
       if (!row) throw bad("This stock item was not found.");
-      await db.update(s.stockItems).set({ name, unit, lowMilli, costPaise }).where(and(eq(s.stockItems.tenantId, staff.tenantId), eq(s.stockItems.outletId, staff.outletId), eq(s.stockItems.id, input.id)));
+      await db.update(s.stockItems).set({ name, unit, lowMilli, costPaise, ...extra }).where(and(eq(s.stockItems.tenantId, staff.tenantId), eq(s.stockItems.outletId, staff.outletId), eq(s.stockItems.id, input.id)));
       return { id: input.id };
     }
     const id = uuidv7();
-    await db.insert(s.stockItems).values({ id, tenantId: staff.tenantId, outletId: staff.outletId, name, unit, lowMilli, costPaise });
+    await db.insert(s.stockItems).values({ id, tenantId: staff.tenantId, outletId: staff.outletId, name, unit, lowMilli, costPaise, ...extra });
     return { id };
   } catch (err) {
     if (err instanceof Error && /Duplicate entry/.test(err.message + String((err as { cause?: unknown }).cause ?? ""))) throw bad(`${name} is already in your stock list.`);
@@ -85,11 +98,41 @@ export async function saveStockItem(staff: Staff, input: { id?: string | null; n
   }
 }
 
+/**
+ * Add many items from the stock library at once. Items already on the list (by name, even if they
+ * were removed earlier) are left as they are; a removed one comes back.
+ */
+export async function addFromLibrary(staff: Staff, names: string[]) {
+  await guard(staff);
+  const picked = [...new Set((names ?? []).map(String))].map((n) => STOCK_LIBRARY_BY_NAME.get(n)).filter((x) => !!x);
+  if (!picked.length) throw bad("Tick at least one item from the list.");
+  if (picked.length > 200) throw bad("Add at most 200 items at a time.");
+  return db.transaction(async (tx) => {
+    const existing = await tx.select({ id: s.stockItems.id, name: s.stockItems.name, isActive: s.stockItems.isActive }).from(s.stockItems)
+      .where(and(eq(s.stockItems.tenantId, staff.tenantId), eq(s.stockItems.outletId, staff.outletId), inArray(s.stockItems.name, picked.map((p) => p.name))));
+    const byName = new Map(existing.map((e) => [e.name.toLowerCase(), e]));
+    let added = 0;
+    let skipped = 0;
+    for (const p of picked) {
+      const old = byName.get(p.name.toLowerCase());
+      if (old) {
+        if (!old.isActive) { await tx.update(s.stockItems).set({ isActive: true }).where(and(eq(s.stockItems.tenantId, staff.tenantId), eq(s.stockItems.id, old.id))); added++; }
+        else skipped++;
+        continue;
+      }
+      await tx.insert(s.stockItems).values({ id: uuidv7(), tenantId: staff.tenantId, outletId: staff.outletId, name: p.name, unit: p.unit, category: p.group, packName: p.pack?.name ?? null, packMilli: p.pack ? p.pack.size * 1000 : null });
+      added++;
+    }
+    return { added, skipped };
+  });
+}
+
 /** Take an item off the stock list; its history stays */
 export async function removeStockItem(staff: Staff, id: string) {
   await guard(staff);
   await db.transaction(async (tx) => {
     await tx.delete(s.recipeLines).where(and(eq(s.recipeLines.tenantId, staff.tenantId), eq(s.recipeLines.outletId, staff.outletId), eq(s.recipeLines.stockItemId, id)));
+    await tx.delete(s.prepLines).where(and(eq(s.prepLines.tenantId, staff.tenantId), eq(s.prepLines.outletId, staff.outletId), or(eq(s.prepLines.stockItemId, id), eq(s.prepLines.prepItemId, id))));
     await tx.update(s.stockItems).set({ isActive: false }).where(and(eq(s.stockItems.tenantId, staff.tenantId), eq(s.stockItems.outletId, staff.outletId), eq(s.stockItems.id, id)));
   });
 }
@@ -104,7 +147,7 @@ export async function moveStock(staff: Staff, input: { stockItemId: string; kind
   const costPaise = input.kind === "purchase" && costText !== "" ? Math.round(Number(costText) * 100) : null;
   if (costPaise !== null && (!Number.isFinite(costPaise) || costPaise < 0)) throw bad("Enter what it cost, as a number.");
   const note = String(input.note ?? "").trim().slice(0, 140) || null;
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     const [item] = await tx.select().from(s.stockItems).where(and(eq(s.stockItems.tenantId, staff.tenantId), eq(s.stockItems.outletId, staff.outletId), eq(s.stockItems.id, input.stockItemId), eq(s.stockItems.isActive, true))).for("update");
     if (!item) throw bad("This stock item was not found.");
     const delta = input.kind === "purchase" ? qty : input.kind === "wastage" ? -qty : qty - item.qtyMilli;
@@ -115,8 +158,10 @@ export async function moveStock(staff: Staff, input: { stockItemId: string; kind
       ...(costPaise !== null && qty > 0 ? { costPaise: Math.round((costPaise * 1000) / qty) } : {}),
     }).where(and(eq(s.stockItems.tenantId, staff.tenantId), eq(s.stockItems.outletId, staff.outletId), eq(s.stockItems.id, item.id)));
     await tx.insert(s.stockMoves).values({ tenantId: staff.tenantId, outletId: staff.outletId, stockItemId: item.id, kind: input.kind, qtyMilli: delta, costPaise, note, byUserId: staff.userId });
-    return { qtyMilli: next };
+    return { qtyMilli: next, changed: await syncStockSoldOut(tx, { tenantId: staff.tenantId, outletId: staff.outletId }, [item.id]) };
   });
+  await announceAvailability({ tenantId: staff.tenantId, outletId: staff.outletId }, result.changed);
+  return { qtyMilli: result.qtyMilli };
 }
 
 /** What one plate of a dish uses; replaces the dish's whole recipe */
@@ -150,7 +195,7 @@ export async function setRecipe(staff: Staff, itemId: string, lines: { stockItem
  * own transaction, so stock moves only if the bill really closes. Dishes without a recipe use nothing.
  */
 export async function takeStockForBill(tx: Tx, tenantId: string, outletId: string, billId: string, sold: { itemId: string; qty: number }[]) {
-  if (!sold.length) return;
+  if (!sold.length) return [];
   const recipes = await tx
     .select({ itemId: s.recipeLines.itemId, stockItemId: s.recipeLines.stockItemId, qtyMilli: s.recipeLines.qtyMilli })
     .from(s.recipeLines)
@@ -160,6 +205,8 @@ export async function takeStockForBill(tx: Tx, tenantId: string, outletId: strin
     await tx.update(s.stockItems).set({ qtyMilli: sql`${s.stockItems.qtyMilli} - ${milli}` }).where(and(eq(s.stockItems.tenantId, tenantId), eq(s.stockItems.id, stockItemId)));
     await tx.insert(s.stockMoves).values({ tenantId, outletId, stockItemId, kind: "sale", qtyMilli: -milli, billId });
   }
+  // Dishes whose ingredient just ran out; the caller announces them once the bill commits
+  return syncStockSoldOut(tx, { tenantId, outletId }, [...used.keys()]);
 }
 
 /** Items at or below their alert level, for the dashboard */

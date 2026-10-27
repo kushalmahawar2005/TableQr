@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { canSee } from "@/lib/staff-permissions";
 import { tenantFeatures } from "@/server/plan";
 import { getInventory } from "@/server/staff/inventory";
+import { getPurchasing } from "@/server/staff/inventory-pro";
 import { currentStaff } from "@/server/staff/request";
 import { FeatureLocked } from "../_components/feature-locked";
 import { InventoryScreen } from "./_components/inventory-screen";
@@ -21,5 +22,6 @@ export default async function InventoryPage() {
     );
   }
   if (!(await tenantFeatures(staff.tenantId)).inventory) return <FeatureLocked feature="inventory" />;
-  return <InventoryScreen initial={await getInventory(staff)} />;
+  const [initial, purchasing] = await Promise.all([getInventory(staff), getPurchasing(staff)]);
+  return <InventoryScreen initial={initial} purchasing={purchasing} />;
 }

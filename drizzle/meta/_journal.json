@@ -449,6 +449,13 @@
       "when": 1793079537109,
       "tag": "0063_pos_open_items",
       "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "5",
+      "when": 1793082929962,
+      "tag": "0064_inventory_pro",
+      "breakpoints": true
     }
   ]
 }

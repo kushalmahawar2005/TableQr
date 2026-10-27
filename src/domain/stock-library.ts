@@ -1,0 +1,175 @@
+import type { StockUnit } from "./inventory";
+
+// Raw materials most Indian restaurant kitchens buy, so an owner can tick what they keep instead of
+// typing each one. Only names, units, groups and common pack sizes: nothing about how much a dish
+// uses, which differs from kitchen to kitchen. Names are as a supplier's bill would write them.
+
+export type StockLibraryItem = { name: string; unit: StockUnit; pack?: { name: string; size: number } };
+export type StockLibraryGroup = { group: string; items: StockLibraryItem[] };
+
+export const STOCK_LIBRARY: StockLibraryGroup[] = [
+  {
+    group: "Dairy",
+    items: [
+      { name: "Milk", unit: "l" },
+      { name: "Paneer", unit: "kg" },
+      { name: "Curd", unit: "kg" },
+      { name: "Butter", unit: "kg" },
+      { name: "Fresh cream", unit: "l" },
+      { name: "Ghee", unit: "l" },
+      { name: "Cheese", unit: "kg" },
+      { name: "Mozzarella", unit: "kg" },
+      { name: "Khoya", unit: "kg" },
+      { name: "Eggs", unit: "pcs", pack: { name: "tray", size: 30 } },
+    ],
+  },
+  {
+    group: "Vegetables",
+    items: [
+      { name: "Onion", unit: "kg" },
+      { name: "Tomato", unit: "kg" },
+      { name: "Potato", unit: "kg" },
+      { name: "Ginger", unit: "kg" },
+      { name: "Garlic", unit: "kg" },
+      { name: "Green chilli", unit: "kg" },
+      { name: "Capsicum", unit: "kg" },
+      { name: "Cauliflower", unit: "kg" },
+      { name: "Cabbage", unit: "kg" },
+      { name: "Carrot", unit: "kg" },
+      { name: "Peas", unit: "kg" },
+      { name: "Spinach", unit: "kg" },
+      { name: "Mushroom", unit: "kg" },
+      { name: "Cucumber", unit: "kg" },
+      { name: "Lemon", unit: "pcs" },
+      { name: "Coriander leaves", unit: "kg" },
+      { name: "Mint leaves", unit: "kg" },
+      { name: "Curry leaves", unit: "kg" },
+      { name: "Baby corn", unit: "kg" },
+      { name: "Beans", unit: "kg" },
+    ],
+  },
+  {
+    group: "Meat & fish",
+    items: [
+      { name: "Chicken (curry cut)", unit: "kg" },
+      { name: "Chicken (boneless)", unit: "kg" },
+      { name: "Mutton", unit: "kg" },
+      { name: "Fish", unit: "kg" },
+      { name: "Prawns", unit: "kg" },
+      { name: "Keema", unit: "kg" },
+    ],
+  },
+  {
+    group: "Grains & flour",
+    items: [
+      { name: "Basmati rice", unit: "kg", pack: { name: "bag", size: 25 } },
+      { name: "Regular rice", unit: "kg", pack: { name: "bag", size: 25 } },
+      { name: "Atta", unit: "kg", pack: { name: "bag", size: 10 } },
+      { name: "Maida", unit: "kg", pack: { name: "bag", size: 25 } },
+      { name: "Besan", unit: "kg" },
+      { name: "Sooji", unit: "kg" },
+      { name: "Poha", unit: "kg" },
+      { name: "Cornflour", unit: "kg" },
+      { name: "Noodles", unit: "kg" },
+      { name: "Pasta", unit: "kg" },
+      { name: "Bread", unit: "pcs" },
+      { name: "Burger buns", unit: "pcs" },
+      { name: "Pizza base", unit: "pcs" },
+    ],
+  },
+  {
+    group: "Pulses",
+    items: [
+      { name: "Toor dal", unit: "kg" },
+      { name: "Moong dal", unit: "kg" },
+      { name: "Chana dal", unit: "kg" },
+      { name: "Urad dal", unit: "kg" },
+      { name: "Masoor dal", unit: "kg" },
+      { name: "Whole urad (black)", unit: "kg" },
+      { name: "Rajma", unit: "kg" },
+      { name: "Kabuli chana", unit: "kg" },
+    ],
+  },
+  {
+    group: "Oil",
+    items: [
+      { name: "Refined oil", unit: "l", pack: { name: "tin", size: 15 } },
+      { name: "Mustard oil", unit: "l", pack: { name: "tin", size: 15 } },
+      { name: "Olive oil", unit: "l" },
+    ],
+  },
+  {
+    group: "Spices",
+    items: [
+      { name: "Salt", unit: "kg" },
+      { name: "Red chilli powder", unit: "kg" },
+      { name: "Kashmiri chilli powder", unit: "kg" },
+      { name: "Turmeric powder", unit: "kg" },
+      { name: "Coriander powder", unit: "kg" },
+      { name: "Cumin seeds", unit: "kg" },
+      { name: "Garam masala", unit: "kg" },
+      { name: "Kasuri methi", unit: "kg" },
+      { name: "Black pepper", unit: "kg" },
+      { name: "Mustard seeds", unit: "kg" },
+      { name: "Bay leaf", unit: "kg" },
+      { name: "Cardamom", unit: "kg" },
+      { name: "Cloves", unit: "kg" },
+      { name: "Cinnamon", unit: "kg" },
+      { name: "Chaat masala", unit: "kg" },
+      { name: "Tandoori masala", unit: "kg" },
+      { name: "Biryani masala", unit: "kg" },
+      { name: "Hing", unit: "kg" },
+      { name: "Ajwain", unit: "kg" },
+    ],
+  },
+  {
+    group: "Sauces & pantry",
+    items: [
+      { name: "Sugar", unit: "kg" },
+      { name: "Tomato ketchup", unit: "kg" },
+      { name: "Soy sauce", unit: "l" },
+      { name: "Vinegar", unit: "l" },
+      { name: "Green chilli sauce", unit: "l" },
+      { name: "Red chilli sauce", unit: "l" },
+      { name: "Mayonnaise", unit: "kg" },
+      { name: "Tomato puree", unit: "kg" },
+      { name: "Cashew", unit: "kg" },
+      { name: "Almonds", unit: "kg" },
+      { name: "Raisins", unit: "kg" },
+      { name: "Honey", unit: "kg" },
+      { name: "Tea leaves", unit: "kg" },
+      { name: "Coffee powder", unit: "kg" },
+      { name: "Food colour", unit: "g" },
+    ],
+  },
+  {
+    group: "Drinks (bottled)",
+    items: [
+      { name: "Coca-Cola 250 ml", unit: "pcs", pack: { name: "crate", size: 24 } },
+      { name: "Sprite 250 ml", unit: "pcs", pack: { name: "crate", size: 24 } },
+      { name: "Thums Up 250 ml", unit: "pcs", pack: { name: "crate", size: 24 } },
+      { name: "Water bottle 1 L", unit: "pcs", pack: { name: "box", size: 12 } },
+      { name: "Water bottle 500 ml", unit: "pcs", pack: { name: "box", size: 24 } },
+      { name: "Soda", unit: "pcs", pack: { name: "crate", size: 24 } },
+      { name: "Juice pack", unit: "pcs" },
+      { name: "Ice cream (tub)", unit: "l" },
+      { name: "Ice", unit: "kg" },
+    ],
+  },
+  {
+    group: "Packing & disposables",
+    items: [
+      { name: "Parcel container 500 ml", unit: "pcs", pack: { name: "packet", size: 50 } },
+      { name: "Parcel container 750 ml", unit: "pcs", pack: { name: "packet", size: 50 } },
+      { name: "Carry bag", unit: "pcs", pack: { name: "packet", size: 100 } },
+      { name: "Aluminium foil", unit: "pcs" },
+      { name: "Tissue paper", unit: "pcs", pack: { name: "packet", size: 100 } },
+      { name: "Paper cups", unit: "pcs", pack: { name: "packet", size: 50 } },
+      { name: "Spoons (disposable)", unit: "pcs", pack: { name: "packet", size: 100 } },
+      { name: "LPG cylinder", unit: "pcs" },
+    ],
+  },
+];
+
+/** Every library item by its name, for adding the ones an owner ticked */
+export const STOCK_LIBRARY_BY_NAME = new Map(STOCK_LIBRARY.flatMap((g) => g.items.map((i) => [i.name, { ...i, group: g.group }] as const)));

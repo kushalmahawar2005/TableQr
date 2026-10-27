@@ -86,6 +86,8 @@ export const outletItemOverrides = mysqlTable(
     soldOutUntil: at("sold_out_until"),
     /** "Only 12 left": switches the item off at zero */
     portionsLeft: int("portions_left"),
+    /** Switched off by inventory because an ingredient ran out; switched back on when it is restocked */
+    soldOutByStock: boolean("sold_out_by_stock").notNull().default(false),
     updatedAt: updatedAt(),
   },
   (t) => [

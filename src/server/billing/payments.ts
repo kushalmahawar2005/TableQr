@@ -24,6 +24,7 @@ import { nextInvoiceNumber } from "./invoice-number";
 import { releaseVisitTables, setVisitTablesState, tableStateEvents, visitChanged } from "../floor/assignments";
 import { requireFeature } from "../plan";
 import { takeStockForBill } from "../staff/inventory";
+import { announceAvailability } from "../staff/inventory-pro";
 
 // Paying the bill (PS 3.6, 3.8, 6.2, 6.4). Rules that keep money right:
 // - amounts come from the server; the phone only says whose shares and how much tip
@@ -803,7 +804,10 @@ async function closeBill(tx: Tx, bill: typeof s.bills.$inferSelect, now: Date): 
   });
 
   // What the dishes used comes off the stock, in this same transaction
-  await takeStockForBill(tx, t, outlet.id, bill.id, lines.flatMap((l) => (l.itemId ? [{ itemId: l.itemId, qty: l.qty }] : [])));
+  const soldOut = await takeStockForBill(tx, t, outlet.id, bill.id, lines.flatMap((l) => (l.itemId ? [{ itemId: l.itemId, qty: l.qty }] : [])));
+  // Dishes whose ingredient ran out with this bill. The bill's transaction has many callers and no
+  // after-commit hook, so the menus are told a moment later, once it has committed
+  if (soldOut.length) setTimeout(() => void announceAvailability({ tenantId: t, outletId: outlet.id }, soldOut).catch(() => {}), 1000);
 
   await tx.update(s.bills).set({ status: "paid", closedAt: now }).where(and(eq(s.bills.tenantId, t), eq(s.bills.id, bill.id)));
   await tx.update(s.tableSessions).set({ status: "closed", openKey: null, closedAt: now }).where(and(eq(s.tableSessions.tenantId, t), eq(s.tableSessions.id, bill.sessionId)));
