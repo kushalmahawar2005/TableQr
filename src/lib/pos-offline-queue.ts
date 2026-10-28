@@ -21,7 +21,7 @@ type StoredOrder = OfflinePosOrder & { key: string; outletId: string };
 
 // Persisted identity stays stable through the display-name change so unsynced KOTs are never orphaned.
 const DB_NAME = "tableqr-pos-offline-v1";
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 const LEGACY_QUEUE_PREFIX = "tq_pos_offline_orders_v1:";
 
 let database: Promise<IDBDatabase> | null = null;
@@ -39,6 +39,7 @@ function openDatabase() {
         orders.createIndex("outletId", "outletId", { unique: false });
       }
       if (!db.objectStoreNames.contains("meta")) db.createObjectStore("meta", { keyPath: "key" });
+      if (!db.objectStoreNames.contains("locks")) db.createObjectStore("locks", { keyPath: "key" });
     };
     request.onsuccess = () => {
       request.result.onversionchange = () => request.result.close();
@@ -123,6 +124,116 @@ export async function buildOfflinePosRecoveryFile(outletId: string) {
     orderCount: orders.length,
     orders,
   }, null, 2);
+}
+
+/** Import only a matching outlet's recovery file, preserving existing requests and rejecting ID collisions. */
+export async function importOfflinePosRecoveryFile(outletId: string, raw: string) {
+  let parsed: unknown;
+  try { parsed = JSON.parse(raw); }
+  catch { throw new Error("This recovery file is not valid JSON."); }
+  if (!parsed || typeof parsed !== "object") throw new Error("This is not a Tableeqr POS recovery file.");
+  const file = parsed as { format?: unknown; version?: unknown; outletId?: unknown; orders?: unknown };
+  if (file.format !== "tableeqr-pos-offline-recovery" || file.version !== 1 || file.outletId !== outletId || !Array.isArray(file.orders)) {
+    throw new Error("This recovery file belongs to a different outlet or uses an unsupported format.");
+  }
+  if (file.orders.length > 5000) throw new Error("This recovery file contains too many orders to restore safely.");
+  const orders = file.orders.map(validateRecoveryOrder);
+  if (new Set(orders.map((order) => order.id)).size !== orders.length) throw new Error("This recovery file contains duplicate request IDs.");
+
+  const db = await openDatabase();
+  const tx = db.transaction("orders", "readwrite");
+  const store = tx.objectStore("orders");
+  let imported = 0;
+  let collision: string | null = null;
+  let checked = 0;
+  const currentOrders = new Map<string, StoredOrder | undefined>();
+  if (orders.length) for (const order of orders) {
+    const get = store.get(`${outletId}:${order.id}`) as IDBRequest<StoredOrder | undefined>;
+    get.onsuccess = () => {
+      currentOrders.set(order.id, get.result);
+      checked++;
+      if (checked !== orders.length) return;
+      for (const candidate of orders) {
+        const current = currentOrders.get(candidate.id);
+        if (current && stableJson(toOfflinePosOrder(current)) !== stableJson(candidate)) {
+          collision = candidate.id;
+          break;
+        }
+      }
+      if (collision) return;
+      for (const candidate of orders) if (!currentOrders.get(candidate.id)) {
+        store.put({ ...candidate, key: `${outletId}:${candidate.id}`, outletId } satisfies StoredOrder);
+        imported++;
+      }
+    };
+  }
+  await transactionDone(tx);
+  if (collision) throw new Error(`Request ID ${collision} already exists here with different order details. Nothing from this file was imported.`);
+  return { imported, total: orders.length };
+}
+
+function validateRecoveryOrder(value: unknown): OfflinePosOrder {
+  if (!value || typeof value !== "object") throw new Error("The recovery file contains an invalid order.");
+  const order = value as Partial<OfflinePosOrder>;
+  if (typeof order.id !== "string" || !/^[a-zA-Z0-9_-]{8,64}$/.test(order.id)
+    || !Number.isSafeInteger(order.createdAt) || typeof order.staffUserId !== "string" || !order.staffUserId
+    || !order.current || typeof order.current !== "object" || typeof order.current.code !== "string"
+    || typeof order.current.takeaway !== "boolean" || !Number.isSafeInteger(order.current.seats)
+    || typeof order.guestName !== "string" || !Number.isSafeInteger(order.partySize)
+    || !Array.isArray(order.lines) || order.lines.length < 1 || order.lines.length > 100) {
+    throw new Error("The recovery file contains an invalid order.");
+  }
+  for (const line of order.lines) {
+    if (!line || typeof line !== "object" || !Number.isSafeInteger(line.qty) || line.qty < 1 || line.qty > 99) throw new Error("The recovery file contains an invalid order line.");
+    if ("itemId" in line) {
+      if (typeof line.itemId !== "string" || !Array.isArray(line.modifierIds) || line.modifierIds.some((id) => typeof id !== "string")) throw new Error("The recovery file contains an invalid menu item.");
+    } else if (!line.open || typeof line.open.name !== "string" || !Number.isSafeInteger(line.open.pricePaise) || !Number.isSafeInteger(line.open.taxRateBp) || typeof line.open.station !== "string") {
+      throw new Error("The recovery file contains an invalid open item.");
+    }
+  }
+  return order as OfflinePosOrder;
+}
+
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  if (value && typeof value === "object") return `{${Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, child]) => `${JSON.stringify(key)}:${stableJson(child)}`).join(",")}}`;
+  return JSON.stringify(value);
+}
+
+const SYNC_LOCK_MS = 30_000;
+const SYNC_LOCK_HEARTBEAT_MS = 10_000;
+
+/** IndexedDB's read/write transaction makes this lease exclusive across same-origin POS tabs. */
+export async function withOfflinePosSyncLock<T>(outletId: string, work: () => Promise<T>): Promise<{ acquired: boolean; result?: T }> {
+  const db = await openDatabase();
+  const owner = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
+  const key = `sync:${outletId}`;
+  const claim = async (renew: boolean) => {
+    const tx = db.transaction("locks", "readwrite");
+    const store = tx.objectStore("locks");
+    const request = store.get(key) as IDBRequest<{ key: string; owner: string; expiresAt: number } | undefined>;
+    let acquired = false;
+    request.onsuccess = () => {
+      const current = request.result;
+      if (renew ? current?.owner === owner : !current || current.expiresAt <= Date.now()) {
+        store.put({ key, owner, expiresAt: Date.now() + SYNC_LOCK_MS });
+        acquired = true;
+      }
+    };
+    await transactionDone(tx);
+    return acquired;
+  };
+  if (!await claim(false)) return { acquired: false };
+  const heartbeat = globalThis.setInterval(() => { void claim(true).catch(() => {}); }, SYNC_LOCK_HEARTBEAT_MS);
+  try { return { acquired: true, result: await work() }; }
+  finally {
+    globalThis.clearInterval(heartbeat);
+    const tx = db.transaction("locks", "readwrite");
+    const store = tx.objectStore("locks");
+    const request = store.get(key) as IDBRequest<{ key: string; owner: string } | undefined>;
+    request.onsuccess = () => { if (request.result?.owner === owner) store.delete(key); };
+    await transactionDone(tx);
+  }
 }
 
 export async function writeOfflinePosOrder(outletId: string, order: OfflinePosOrder) {

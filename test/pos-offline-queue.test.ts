@@ -44,6 +44,28 @@ describe("offline POS durable outbox", () => {
     expect(await storage.readOfflinePosOrders("outlet-1")).toEqual([order]);
   });
 
+  it("restores a recovery copy only into the matching outlet and skips identical request IDs", async () => {
+    const storage = await import("@/lib/pos-offline-queue");
+    const first = makeOrder("order-restore1");
+    const second = makeOrder("order-restore2", 200);
+    const file = JSON.stringify({ format: "tableeqr-pos-offline-recovery", version: 1, outletId: "outlet-1", orders: [first, second] });
+    await storage.writeOfflinePosOrder("outlet-1", first);
+    await expect(storage.importOfflinePosRecoveryFile("outlet-2", file)).rejects.toThrow(/different outlet/);
+    const result = await storage.importOfflinePosRecoveryFile("outlet-1", file);
+    expect(result).toEqual({ imported: 1, total: 2 });
+    expect((await storage.readOfflinePosOrders("outlet-1")).map((order) => order.id)).toEqual([first.id, second.id]);
+  });
+
+  it("rejects a request ID collision without partially importing the rest of the file", async () => {
+    const storage = await import("@/lib/pos-offline-queue");
+    await storage.writeOfflinePosOrder("outlet-1", makeOrder("order-collide1"));
+    const collision = { ...makeOrder("order-collide1"), lines: [{ itemId: "dish-1", qty: 3, modifierIds: [] }] };
+    const additional = makeOrder("order-collide2", 200);
+    const file = JSON.stringify({ format: "tableeqr-pos-offline-recovery", version: 1, outletId: "outlet-1", orders: [collision, additional] });
+    await expect(storage.importOfflinePosRecoveryFile("outlet-1", file)).rejects.toThrow(/different order details/);
+    expect((await storage.readOfflinePosOrders("outlet-1")).map((order) => order.id)).toEqual(["order-collide1"]);
+  });
+
   it("drains three consecutive orders in one pass without skipping the middle order", async () => {
     const storage = await import("@/lib/pos-offline-queue");
     const { syncSavedPosOrders } = await import("@/lib/pos-offline-sync");
@@ -97,6 +119,21 @@ describe("offline POS durable outbox", () => {
     expect(attempts).toEqual(["order-1", "order-1"]);
     expect(accepted.size).toBe(1);
     expect(result).toEqual({ synced: 1, blocked: null });
+    expect(await storage.readOfflinePosOrders("outlet-1")).toEqual([]);
+  });
+
+  it("coordinates queue draining across two POS tabs", async () => {
+    const storage = await import("@/lib/pos-offline-queue");
+    const { syncSavedPosOrders } = await import("@/lib/pos-offline-sync");
+    await storage.writeOfflinePosOrder("outlet-1", makeOrder("order-lock-1"));
+    let finish!: () => void;
+    const waiting = new Promise<void>((resolve) => { finish = resolve; });
+    const first = syncSavedPosOrders({ outletId: "outlet-1", deliver: async () => waiting });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const second = await syncSavedPosOrders({ outletId: "outlet-1", deliver: async () => { throw new Error("must not run twice"); } });
+    expect(second).toEqual({ synced: 0, blocked: null, locked: true });
+    finish();
+    expect(await first).toEqual({ synced: 1, blocked: null });
     expect(await storage.readOfflinePosOrders("outlet-1")).toEqual([]);
   });
 });
