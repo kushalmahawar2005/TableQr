@@ -275,8 +275,14 @@ export async function bookingPreorderMenu(outletCode: string) {
   const scope = await outletScope(db, outletCode);
   await requireFeature(scope.tenantId, "reservations");
   const loaded = await loadItemsForBrowsing(scope, new Date());
+  const categoryIds = [...new Set(loaded.map(({ item }) => item.categoryId))];
+  const categories = categoryIds.length ? await db.select({ id: s.menuCategories.id, nameEn: s.menuCategories.nameEn, nameHi: s.menuCategories.nameHi, sortOrder: s.menuCategories.sortOrder })
+    .from(s.menuCategories).where(and(eq(s.menuCategories.tenantId, scope.tenantId), inArray(s.menuCategories.id, categoryIds))) : [];
+  const byCategory = new Map(categories.map((category) => [category.id, category]));
   return loaded.filter(({ pricing }) => pricing.isAvailable).map(({ item, pricing }) => ({
     id: item.id, nameEn: item.nameEn, nameHi: item.nameHi, pricePaise: pricing.pricePaise,
+    categoryId: item.categoryId, categoryEn: byCategory.get(item.categoryId)?.nameEn ?? "Menu", categoryHi: byCategory.get(item.categoryId)?.nameHi ?? null,
+    categorySort: byCategory.get(item.categoryId)?.sortOrder ?? 0, isVeg: item.isVeg, imageUrl: item.imageUrl ?? null,
     taxRateBp: item.taxRateBp, station: item.station, prepMinutes: Math.max(1, item.prepMinutes),
     allergens: item.allergens ?? null, isJain: item.isJain, spiceLevel: item.spiceLevel ?? null,
     groups: pricing.groups,

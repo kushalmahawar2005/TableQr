@@ -1,7 +1,7 @@
 import { AppError } from "@/server/errors";
 import { confirmByGatewayRef, recordRefundResult } from "@/server/billing/payments";
 import { outletGatewayForWebhook } from "@/server/payments/outlet-gateway";
-import { recordReservationRefundResult } from "@/server/booking/credit";
+import { confirmReservationCreditByRef, recordReservationRefundResult } from "@/server/booking/credit";
 import { confirmDeliveryGatewayPayment, recordDeliveryRefundResult } from "@/server/delivery/payment";
 import { readRequestTextLimited } from "@/server/http-body";
 
@@ -45,7 +45,8 @@ export async function POST(request: Request, ctx: { params: Promise<{ provider: 
         gatewayPaymentId: event.gatewayPaymentId,
         reason: event.reason,
       });
-      return Response.json({ ok: true, known: !!res || delivery });
+      const booking = res || delivery ? false : await confirmReservationCreditByRef(gateway.name, event.gatewayRef);
+      return Response.json({ ok: true, known: !!res || delivery || booking });
     }
     if (event.kind === "refund") {
       const known = await recordRefundResult(gateway.name, event);
