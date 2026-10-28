@@ -293,9 +293,8 @@ export async function writeOfflinePosCashCollection(outletId: string, cash: Offl
   let reads = 0;
   const afterRead = () => {
     if (++reads !== 2) return;
-    if (settled.result || bySession.result) {
+    if (settled.result || bySession.result && bySession.result.id !== cash.id) {
       reason = new Error("Cash is already recorded locally or reconciled for this bill.");
-      tx.abort();
       return;
     }
     store.put({ ...cash, key: `${outletId}:${cash.id}`, outletId });
@@ -303,6 +302,7 @@ export async function writeOfflinePosCashCollection(outletId: string, cash: Offl
   bySession.onsuccess = afterRead;
   settled.onsuccess = afterRead;
   await complete;
+  if (reason) throw reason;
 }
 
 /** Keeps a same-device guard after sync so another stale POS tab cannot collect the same bill twice. */
