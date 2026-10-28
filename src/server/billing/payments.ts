@@ -566,7 +566,7 @@ export async function reconcilePendingPayments(scope: { tenantId: string; outlet
 /** Cashier or waiter settles shares in cash, card or counter UPI (S4) */
 export async function settleAtCounter(
   ctx: StaffContext,
-  input: { sessionId: string; forParticipantIds?: string[]; method: "cash" | "card" | "upi"; receivedPaise?: number; clientRequestId?: string; externalReference?: string },
+  input: { sessionId: string; forParticipantIds?: string[]; method: "cash" | "card" | "upi"; receivedPaise?: number; expectedDuePaise?: number; clientRequestId?: string; externalReference?: string },
   now = new Date(),
   allowedRoles: readonly StaffRole[] = ["waiter", "manager", "owner"],
 ) {
@@ -574,6 +574,7 @@ export async function settleAtCounter(
     await requireStaffRole(ctx, allowedRoles);
     if (!/^[a-zA-Z0-9_-]{8,64}$/.test(input.clientRequestId) || !["cash", "card", "upi"].includes(input.method)) throw new AppError("invalid_state", "Invalid settlement request.");
     if (input.method === "cash" && (!Number.isSafeInteger(input.receivedPaise) || input.receivedPaise! < 0)) throw new AppError("invalid_state", "Enter the cash received.");
+    if (input.expectedDuePaise !== undefined && (input.method !== "cash" || !Number.isSafeInteger(input.expectedDuePaise) || input.expectedDuePaise <= 0 || input.receivedPaise === undefined)) throw new AppError("invalid_state", "Invalid offline cash amount.");
   }
   const scope = { tenantId: ctx.tenantId, outletId: ctx.outletId, sessionId: input.sessionId };
   const res = await db.transaction(async (tx) => {
@@ -583,7 +584,8 @@ export async function settleAtCounter(
       if (old) {
         if(old.payment.takenByUserId !== ctx.userId || old.payment.method !== input.method) throw new AppError("conflict", "This request id belongs to another settlement.");
         const [entry] = await tx.select({after:s.auditLog.after}).from(s.auditLog).where(and(eq(s.auditLog.tenantId,ctx.tenantId),eq(s.auditLog.entityId,old.payment.id),eq(s.auditLog.action,"waiter.settled")));
-        const stored=entry?.after as {changePaise?:number}|null;
+        const stored=entry?.after as {changePaise?:number;receivedPaise?:number;expectedDuePaise?:number}|null;
+        if (input.expectedDuePaise !== undefined && (old.payment.amountPaise !== input.expectedDuePaise || stored?.receivedPaise !== input.receivedPaise || stored?.expectedDuePaise !== input.expectedDuePaise)) throw new AppError("conflict", "This offline cash request was already used with different amounts.");
         return {paymentId:old.payment.id,amountPaise:old.payment.amountPaise,changePaise:stored?.changePaise??0,billPaid:session.status === "closed",closedTableIds:undefined};
       }
     }
@@ -608,6 +610,8 @@ export async function settleAtCounter(
     const allocations = shares.map((sh) => ({ shareId: sh.id, amountPaise: sh.amountPaise - sh.paidPaise })).filter((a) => a.amountPaise > 0);
     if (allocations.length === 0) throw new AppError("invalid_state", "Nothing left to settle.");
     const amountPaise = allocations.reduce((sum, a) => sum + a.amountPaise, 0);
+
+    if (input.expectedDuePaise !== undefined && amountPaise !== input.expectedDuePaise) throw new AppError("conflict", "The bill amount changed after this offline cash was recorded. No payment was applied; ask a manager to reconcile the cash.");
 
     if (input.method === "cash" && input.receivedPaise !== undefined && input.receivedPaise < amountPaise) {
       throw new AppError("invalid_state", `Cash received is less than ₹${amountPaise / 100}.`);
@@ -636,7 +640,7 @@ export async function settleAtCounter(
     };
     await tx.insert(s.payments).values({ ...payment, tenantId: ctx.tenantId });
     const applied = await applyPayment(tx, payment, now);
-    if(input.clientRequestId) await tx.insert(s.auditLog).values({tenantId:ctx.tenantId,outletId:ctx.outletId,actorLabel:"staff",actorUserId:ctx.userId,action:"waiter.settled",entity:"payment",entityId:payment.id,after:{clientRequestId:input.clientRequestId,sessionId:input.sessionId,receivedPaise:input.receivedPaise,changePaise:input.method === "cash" ? input.receivedPaise!-amountPaise:0,externalReference:input.externalReference?.trim().slice(0,120) || null},createdAt:now});
+    if(input.clientRequestId) await tx.insert(s.auditLog).values({tenantId:ctx.tenantId,outletId:ctx.outletId,actorLabel:"staff",actorUserId:ctx.userId,action:"waiter.settled",entity:"payment",entityId:payment.id,after:{clientRequestId:input.clientRequestId,sessionId:input.sessionId,receivedPaise:input.receivedPaise,expectedDuePaise:input.expectedDuePaise,changePaise:input.method === "cash" ? input.receivedPaise!-amountPaise:0,externalReference:input.externalReference?.trim().slice(0,120) || null},createdAt:now});
     return {
       paymentId: payment.id,
       amountPaise,

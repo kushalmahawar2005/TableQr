@@ -76,6 +76,23 @@ describe("Tableeqr branding and compatibility", () => {
     expect(claim).toHaveBeenCalledOnce();
   });
 
+  it("routes staff console pages to the saved POS after a network failure", async () => {
+    const handlers = new Map<string, (event: any) => void>();
+    vm.runInNewContext(fs.readFileSync("public/sw.js", "utf8"), {
+      self: { addEventListener: (name: string, handler: (event: any) => void) => handlers.set(name, handler), location: { origin: "https://tableeqr.example" }, clients: { claim: vi.fn() } },
+      caches: {}, fetch: () => Promise.reject(new Error("offline")), URL, Response,
+    });
+    const event = { request: { method: "GET", mode: "navigate", url: "https://tableeqr.example/console/dashboard" }, respondWith: vi.fn() };
+    handlers.get("fetch")!(event);
+    const response = await event.respondWith.mock.calls[0][0];
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe("https://tableeqr.example/offline-pos");
+
+    const login = { request: { method: "GET", mode: "navigate", url: "https://tableeqr.example/console/login" }, respondWith: vi.fn() };
+    handlers.get("fetch")!(login);
+    expect(login.respondWith).not.toHaveBeenCalled();
+  });
+
   it("keeps the old kitchen preference readable if browser storage cannot migrate it", () => {
     vi.stubGlobal("localStorage", {
       getItem: (key: string) => key === "tableqr.kds.autoKot" ? "1" : null,

@@ -1,5 +1,6 @@
 import type { AnyDraftLine } from "@/server/guest/order";
 import type { PosTerminal } from "@/server/staff/pos-terminal";
+import type { PosBillDetail } from "@/server/staff/pos-read";
 import type { PriceQuote } from "@/domain/pricing";
 
 export type OfflinePosOrder = {
@@ -17,11 +18,35 @@ export type OfflinePosOrder = {
   nextRetryAt?: number;
 };
 
+export type OfflinePosCashCollection = {
+  /** Also sent as the stable idempotency key when the server settles the bill. */
+  id: string;
+  createdAt: number;
+  staffUserId: string;
+  sessionId: string;
+  billId: string;
+  tableCode: string;
+  expectedDuePaise: number;
+  receivedPaise: number;
+  error?: string;
+  retryCount?: number;
+  nextRetryAt?: number;
+};
+
+export type OfflinePosBillSnapshot = {
+  sessionId: string;
+  status: PosBillDetail["status"];
+  lines: PosBillDetail["lines"];
+  bill: { id: string; status: string; totalPaise: number } | null;
+  shares: Array<{ amountPaise: number; paidPaise: number }>;
+  payments: Array<{ status: string; channel: string }>;
+};
+
 type StoredOrder = OfflinePosOrder & { key: string; outletId: string };
 
 // Persisted identity stays stable through the display-name change so unsynced KOTs are never orphaned.
 const DB_NAME = "tableqr-pos-offline-v1";
-const DB_VERSION = 4;
+const DB_VERSION = 6;
 const LEGACY_QUEUE_PREFIX = "tq_pos_offline_orders_v1:";
 
 let database: Promise<IDBDatabase> | null = null;
@@ -34,9 +59,14 @@ function openDatabase() {
       const db = request.result;
       if (!db.objectStoreNames.contains("snapshots")) db.createObjectStore("snapshots", { keyPath: "outletId" });
       if (!db.objectStoreNames.contains("drafts")) db.createObjectStore("drafts", { keyPath: "outletId" });
+      if (!db.objectStoreNames.contains("billSnapshots")) db.createObjectStore("billSnapshots", { keyPath: "key" });
       if (!db.objectStoreNames.contains("orders")) {
         const orders = db.createObjectStore("orders", { keyPath: "key" });
         orders.createIndex("outletId", "outletId", { unique: false });
+      }
+      if (!db.objectStoreNames.contains("cashCollections")) {
+        const cash = db.createObjectStore("cashCollections", { keyPath: "key" });
+        cash.createIndex("outletId", "outletId", { unique: false });
       }
       if (!db.objectStoreNames.contains("meta")) db.createObjectStore("meta", { keyPath: "key" });
       if (!db.objectStoreNames.contains("locks")) db.createObjectStore("locks", { keyPath: "key" });
@@ -118,6 +148,27 @@ export async function checkOfflinePosStorage() {
   }
 }
 
+export async function saveOfflinePosBillSnapshot(outletId: string, staffUserId: string, sessionExpiresAt: number, detail: PosBillDetail, savedAt = Date.now()) {
+  const db = await openDatabase();
+  const snapshot: OfflinePosBillSnapshot = {
+    sessionId: detail.sessionId,
+    status: detail.status,
+    lines: detail.lines,
+    bill: detail.bill ? { id: detail.bill.id, status: detail.bill.status, totalPaise: detail.bill.totalPaise } : null,
+    shares: detail.shares.map(({ amountPaise, paidPaise }) => ({ amountPaise, paidPaise })),
+    payments: detail.payments.map(({ status, channel }) => ({ status, channel })),
+  };
+  const tx = db.transaction("billSnapshots", "readwrite");
+  tx.objectStore("billSnapshots").put({ key: `${outletId}:${detail.sessionId}`, outletId, staffUserId, sessionExpiresAt, savedAt, snapshot });
+  await transactionDone(tx);
+}
+
+export async function loadOfflinePosBillSnapshot(outletId: string, sessionId: string, staffUserId: string, now = Date.now()): Promise<{ savedAt: number; snapshot: OfflinePosBillSnapshot } | null> {
+  const db = await openDatabase();
+  const record = await read(db.transaction("billSnapshots", "readonly").objectStore("billSnapshots").get(`${outletId}:${sessionId}`) as IDBRequest<{ staffUserId: string; sessionExpiresAt: number; savedAt: number; snapshot: OfflinePosBillSnapshot } | undefined>);
+  return record && record.staffUserId === staffUserId && record.sessionExpiresAt > now ? { savedAt: record.savedAt, snapshot: record.snapshot } : null;
+}
+
 export async function readOfflinePosOrders(outletId: string): Promise<OfflinePosOrder[]> {
   const db = await openDatabase();
   await importLegacyOrders(db, outletId);
@@ -128,13 +179,16 @@ export async function readOfflinePosOrders(outletId: string): Promise<OfflinePos
 /** A non-destructive recovery copy; exporting never changes or clears the local outbox. */
 export async function buildOfflinePosRecoveryFile(outletId: string) {
   const orders = await readOfflinePosOrders(outletId);
+  const cashCollections = await readOfflinePosCashCollections(outletId);
   return JSON.stringify({
     format: "tableeqr-pos-offline-recovery",
-    version: 1,
+    version: 2,
     outletId,
     exportedAt: new Date().toISOString(),
     orderCount: orders.length,
+    cashCollectionCount: cashCollections.length,
     orders,
+    cashCollections,
   }, null, 2);
 }
 
@@ -144,44 +198,76 @@ export async function importOfflinePosRecoveryFile(outletId: string, raw: string
   try { parsed = JSON.parse(raw); }
   catch { throw new Error("This recovery file is not valid JSON."); }
   if (!parsed || typeof parsed !== "object") throw new Error("This is not a Tableeqr POS recovery file.");
-  const file = parsed as { format?: unknown; version?: unknown; outletId?: unknown; orders?: unknown };
-  if (file.format !== "tableeqr-pos-offline-recovery" || file.version !== 1 || file.outletId !== outletId || !Array.isArray(file.orders)) {
+  const file = parsed as { format?: unknown; version?: unknown; outletId?: unknown; orders?: unknown; cashCollections?: unknown };
+  if (file.format !== "tableeqr-pos-offline-recovery" || ![1, 2].includes(file.version as number) || file.outletId !== outletId || !Array.isArray(file.orders) || (file.version === 2 && !Array.isArray(file.cashCollections))) {
     throw new Error("This recovery file belongs to a different outlet or uses an unsupported format.");
   }
   if (file.orders.length > 5000) throw new Error("This recovery file contains too many orders to restore safely.");
   const orders = file.orders.map(validateRecoveryOrder);
   if (new Set(orders.map((order) => order.id)).size !== orders.length) throw new Error("This recovery file contains duplicate request IDs.");
+  const cashCollections = file.version === 2 ? (file.cashCollections as unknown[]).map(validateRecoveryCashCollection) : [];
+  if (new Set(cashCollections.map((cash) => cash.id)).size !== cashCollections.length) throw new Error("This recovery file contains duplicate cash record IDs.");
 
   const db = await openDatabase();
-  const tx = db.transaction("orders", "readwrite");
+  const tx = db.transaction(["orders", "cashCollections"], "readwrite");
   const store = tx.objectStore("orders");
-  let imported = 0;
-  let collision: string | null = null;
+  const cashStore = tx.objectStore("cashCollections");
+  let imported = 0, importedCash = 0, collision: string | null = null;
+  const checks = orders.length + cashCollections.length;
   let checked = 0;
   const currentOrders = new Map<string, StoredOrder | undefined>();
-  if (orders.length) for (const order of orders) {
+  const currentCash = new Map<string, (OfflinePosCashCollection & { key: string; outletId: string }) | undefined>();
+  const applyImport = () => {
+    if (++checked !== checks) return;
+    for (const candidate of orders) {
+      const current = currentOrders.get(candidate.id);
+      if (current && stableJson(toOfflinePosOrder(current)) !== stableJson(candidate)) collision = candidate.id;
+    }
+    for (const candidate of cashCollections) {
+      const current = currentCash.get(candidate.id);
+      if (current && stableJson(toOfflinePosCashCollection(current)) !== stableJson(candidate)) collision = candidate.id;
+    }
+    if (collision) return;
+    for (const candidate of orders) if (!currentOrders.get(candidate.id)) {
+      store.put({ ...candidate, key: `${outletId}:${candidate.id}`, outletId } satisfies StoredOrder);
+      imported++;
+    }
+    for (const candidate of cashCollections) if (!currentCash.get(candidate.id)) {
+      cashStore.put({ ...candidate, key: `${outletId}:${candidate.id}`, outletId });
+      importedCash++;
+    }
+  };
+  for (const order of orders) {
     const get = store.get(`${outletId}:${order.id}`) as IDBRequest<StoredOrder | undefined>;
-    get.onsuccess = () => {
-      currentOrders.set(order.id, get.result);
-      checked++;
-      if (checked !== orders.length) return;
-      for (const candidate of orders) {
-        const current = currentOrders.get(candidate.id);
-        if (current && stableJson(toOfflinePosOrder(current)) !== stableJson(candidate)) {
-          collision = candidate.id;
-          break;
-        }
-      }
-      if (collision) return;
-      for (const candidate of orders) if (!currentOrders.get(candidate.id)) {
-        store.put({ ...candidate, key: `${outletId}:${candidate.id}`, outletId } satisfies StoredOrder);
-        imported++;
-      }
-    };
+    get.onsuccess = () => { currentOrders.set(order.id, get.result); applyImport(); };
+  }
+  for (const cash of cashCollections) {
+    const get = cashStore.get(`${outletId}:${cash.id}`) as IDBRequest<(OfflinePosCashCollection & { key: string; outletId: string }) | undefined>;
+    get.onsuccess = () => { currentCash.set(cash.id, get.result); applyImport(); };
   }
   await transactionDone(tx);
   if (collision) throw new Error(`Request ID ${collision} already exists here with different order details. Nothing from this file was imported.`);
-  return { imported, total: orders.length };
+  return { imported, importedCash, total: orders.length, totalCash: cashCollections.length };
+}
+
+export async function readOfflinePosCashCollections(outletId: string): Promise<OfflinePosCashCollection[]> {
+  const db = await openDatabase();
+  const values = await read(db.transaction("cashCollections", "readonly").objectStore("cashCollections").index("outletId").getAll(outletId) as IDBRequest<(OfflinePosCashCollection & { key: string; outletId: string })[]>);
+  return values.sort((a, b) => a.createdAt - b.createdAt).map(toOfflinePosCashCollection);
+}
+
+export async function writeOfflinePosCashCollection(outletId: string, cash: OfflinePosCashCollection) {
+  const db = await openDatabase();
+  const tx = db.transaction("cashCollections", "readwrite");
+  tx.objectStore("cashCollections").put({ ...cash, key: `${outletId}:${cash.id}`, outletId });
+  await transactionDone(tx);
+}
+
+export async function removeOfflinePosCashCollection(outletId: string, id: string) {
+  const db = await openDatabase();
+  const tx = db.transaction("cashCollections", "readwrite");
+  tx.objectStore("cashCollections").delete(`${outletId}:${id}`);
+  await transactionDone(tx);
 }
 
 function validateRecoveryOrder(value: unknown): OfflinePosOrder {
@@ -193,7 +279,7 @@ function validateRecoveryOrder(value: unknown): OfflinePosOrder {
     || !(order.current.sessionId === null || typeof order.current.sessionId === "string")
     || !(order.current.tableId === null || typeof order.current.tableId === "string")
     || typeof order.current.takeaway !== "boolean" || !Number.isSafeInteger(order.current.seats) || order.current.seats < 1 || order.current.seats > 200
-    || typeof order.guestName !== "string" || order.guestName.length > 120 || !Number.isSafeInteger(order.partySize) || order.partySize < 1 || order.partySize > 200
+    || typeof order.guestName !== "string" || order.guestName.length > 120 || typeof order.partySize !== "number" || !Number.isSafeInteger(order.partySize) || order.partySize < 1 || order.partySize > 200
     || !Array.isArray(order.lines) || order.lines.length < 1 || order.lines.length > 100) {
     throw new Error("The recovery file contains an invalid order.");
   }
@@ -208,6 +294,20 @@ function validateRecoveryOrder(value: unknown): OfflinePosOrder {
     }
   }
   return order as OfflinePosOrder;
+}
+
+function validateRecoveryCashCollection(value: unknown): OfflinePosCashCollection {
+  if (!value || typeof value !== "object") throw new Error("The recovery file contains an invalid cash record.");
+  const cash = value as Partial<OfflinePosCashCollection>;
+  if (typeof cash.id !== "string" || !/^[a-zA-Z0-9_-]{8,64}$/.test(cash.id) || !Number.isSafeInteger(cash.createdAt)
+    || typeof cash.staffUserId !== "string" || !cash.staffUserId || typeof cash.sessionId !== "string" || !cash.sessionId
+    || typeof cash.billId !== "string" || !cash.billId || typeof cash.tableCode !== "string"
+    || !Number.isSafeInteger(cash.expectedDuePaise) || cash.expectedDuePaise! <= 0
+    || !Number.isSafeInteger(cash.receivedPaise) || cash.receivedPaise! < cash.expectedDuePaise!
+    || cash.error !== undefined && (typeof cash.error !== "string" || cash.error.length > 1000)
+    || cash.retryCount !== undefined && (!Number.isSafeInteger(cash.retryCount) || cash.retryCount < 0)
+    || cash.nextRetryAt !== undefined && !Number.isSafeInteger(cash.nextRetryAt)) throw new Error("The recovery file contains an invalid cash record.");
+  return cash as OfflinePosCashCollection;
 }
 
 function stableJson(value: unknown): string {
@@ -308,6 +408,17 @@ function toOfflinePosOrder(value: StoredOrder): OfflinePosOrder {
     partySize: value.partySize,
     lines: value.lines,
     ...(value.quote ? { quote: value.quote } : {}),
+    ...(value.error ? { error: value.error } : {}),
+    ...(value.retryCount !== undefined ? { retryCount: value.retryCount } : {}),
+    ...(value.nextRetryAt !== undefined ? { nextRetryAt: value.nextRetryAt } : {}),
+  };
+}
+
+function toOfflinePosCashCollection(value: OfflinePosCashCollection & { key: string; outletId: string }): OfflinePosCashCollection {
+  return {
+    id: value.id, createdAt: value.createdAt, staffUserId: value.staffUserId,
+    sessionId: value.sessionId, billId: value.billId, tableCode: value.tableCode,
+    expectedDuePaise: value.expectedDuePaise, receivedPaise: value.receivedPaise,
     ...(value.error ? { error: value.error } : {}),
     ...(value.retryCount !== undefined ? { retryCount: value.retryCount } : {}),
     ...(value.nextRetryAt !== undefined ? { nextRetryAt: value.nextRetryAt } : {}),

@@ -11,9 +11,10 @@ import { connectRealtime } from "@/lib/realtime-client";
 import type { AnyDraftLine } from "@/server/guest/order";
 import type { PosBillDetail } from "@/server/staff/pos-read";
 import type { PosTerminal } from "@/server/staff/pos-terminal";
-import { buildOfflinePosRecoveryFile, checkOfflinePosStorage, importOfflinePosRecoveryFile, loadPosDraft, queueOfflinePosOrder, readOfflinePosOrders, savePosDraft, savePosSnapshot, writeOfflinePosOrder, type OfflinePosOrder } from "@/lib/pos-offline-queue";
+import { buildOfflinePosRecoveryFile, checkOfflinePosStorage, importOfflinePosRecoveryFile, loadOfflinePosBillSnapshot, loadPosDraft, queueOfflinePosOrder, readOfflinePosCashCollections, readOfflinePosOrders, saveOfflinePosBillSnapshot, savePosDraft, savePosSnapshot, writeOfflinePosCashCollection, writeOfflinePosOrder, type OfflinePosBillSnapshot, type OfflinePosCashCollection, type OfflinePosOrder } from "@/lib/pos-offline-queue";
 import { syncSavedPosOrders } from "@/lib/pos-offline-sync";
-import { billAction, newTakeawayAction, openTableAction, orderAction, sendOrderAction, terminalAction, tokenAction } from "../actions";
+import { syncSavedPosCashCollections } from "@/lib/pos-offline-cash-sync";
+import { billAction, newTakeawayAction, openTableAction, orderAction, sendOrderAction, settleOfflineCashAction, terminalAction, tokenAction } from "../actions";
 
 // POS terminal, the way a counter bills: the table view first, then dishes by category with the
 // order on the right. New lines stay on this screen until they are sent to the kitchen (KOT);
@@ -26,7 +27,8 @@ type Line =
   | { key: string; kind: "open"; name: string; pricePaise: number; station: string; taxRateBp: number; qty: number; note: string; parcel: boolean };
 /** What the cashier is billing: a table or a takeaway, opened on the server once the first KOT goes */
 type Current = { sessionId: string | null; tableId: string | null; code: string; takeaway: boolean; seats: number };
-type PersistedDraft = { current: Current | null; detail: PosBillDetail | null; cart: Line[]; guestName: string; partySize: number; requestId: string | null; requestFingerprint: string | null };
+type CachedBillDetail = PosBillDetail | OfflinePosBillSnapshot;
+type PersistedDraft = { current: Current | null; detail: CachedBillDetail | null; cart: Line[]; guestName: string; partySize: number; requestId: string | null; requestFingerprint: string | null };
 const hasPriceChanges = (cart: Line[], menu: Dish[]) => cart.some((line) => {
   if (line.kind !== "menu") return false;
   const fresh = menu.find((item) => item.id === line.dish.id);
@@ -89,7 +91,7 @@ export function PosTerminalScreen({ initial, outletId, staffUserId, sessionExpir
   const L = useCallback((en: string, h: string) => (hi ? h : en), [hi]);
   const [data, setData] = useState(initial);
   const [current, setCurrent] = useState<Current | null>(null);
-  const [detail, setDetail] = useState<PosBillDetail | null>(null);
+  const [detail, setDetail] = useState<CachedBillDetail | null>(null);
   const [cart, setCart] = useState<Line[]>([]);
   const [category, setCategory] = useState<string>("all");
   const [zone, setZone] = useState<string>("all");
@@ -102,6 +104,9 @@ export function PosTerminalScreen({ initial, outletId, staffUserId, sessionExpir
   const [offline, setOffline] = useState(startOffline);
   const [queuedCount, setQueuedCount] = useState(0);
   const [queuedOrders, setQueuedOrders] = useState<OfflinePosOrder[]>([]);
+  const [cashCollections, setCashCollections] = useState<OfflinePosCashCollection[]>([]);
+  const [cashDialogOpen, setCashDialogOpen] = useState(false);
+  const [cashReceived, setCashReceived] = useState("");
   const [draftReady, setDraftReady] = useState(false);
   const [storageWarning, setStorageWarning] = useState<string | null>(null);
   const [lastSyncedAt, setLastSyncedAt] = useState(initialSavedAt);
@@ -122,6 +127,9 @@ export function PosTerminalScreen({ initial, outletId, staffUserId, sessionExpir
       setOffline((wasOffline) => wasOffline || !navigator.onLine);
       void readOfflinePosOrders(outletId).then((orders) => { setQueuedOrders(orders); setQueuedCount(orders.length); }).catch(() => {
         setMessage({ tone: "bad", text: L("Offline order storage is unavailable on this device.", "इस डिवाइस पर ऑफ़लाइन ऑर्डर स्टोरेज उपलब्ध नहीं है।") });
+      });
+      void readOfflinePosCashCollections(outletId).then(setCashCollections).catch(() => {
+        setMessage({ tone: "bad", text: L("Offline cash records could not be read on this device.", "इस डिवाइस पर ऑफ़लाइन नकद रिकॉर्ड नहीं पढ़े जा सके।") });
       });
       void loadPosDraft<PersistedDraft>(outletId).then((record) => {
         if (record) {
@@ -171,6 +179,12 @@ export function PosTerminalScreen({ initial, outletId, staffUserId, sessionExpir
     });
     return () => { live = false; };
   }, [draftReady, L]);
+  const cacheBillDetail = useCallback(async (billDetail: PosBillDetail) => {
+    setDetail(billDetail);
+    try { await saveOfflinePosBillSnapshot(outletId, staffUserId, sessionExpiresAt, billDetail); }
+    catch { setMessage({ tone: "bad", text: L("The bill summary could not be saved for offline cash review.", "बिल का सार ऑफ़लाइन नकद जाँच के लिए सेव नहीं हो सका।") }); }
+  }, [outletId, staffUserId, sessionExpiresAt, L]);
+
   const refresh = useCallback(async () => {
     if (!navigator.onLine) return;
     try {
@@ -183,9 +197,27 @@ export function PosTerminalScreen({ initial, outletId, staffUserId, sessionExpir
       void savePosSnapshot(outletId, r.data, sessionExpiresAt, staffUserId, hi, syncedAt).catch(() => {
         setMessage({ tone: "bad", text: L("POS data refreshed but could not be saved for offline use.", "POS डेटा अपडेट हुआ लेकिन ऑफ़लाइन उपयोग के लिए सेव नहीं हो सका।") });
       });
-      if (currentId.current) { const d = await orderAction(currentId.current); if (d.ok) setDetail(d.data); }
+      if (currentId.current) { const d = await orderAction(currentId.current); if (d.ok) await cacheBillDetail(d.data); }
     } catch { setOffline(true); }
-  }, [outletId, sessionExpiresAt, staffUserId, hi, L]);
+  }, [outletId, sessionExpiresAt, staffUserId, hi, L, cacheBillDetail]);
+
+  const syncOfflineCash = useCallback(async (force = false) => {
+    if (!navigator.onLine) return;
+    const result = await syncSavedPosCashCollections({
+      outletId, staffUserId, force,
+      deliver: async (cash) => {
+        const settled = await settleOfflineCashAction({ sessionId: cash.sessionId, clientRequestId: cash.id, receivedPaise: cash.receivedPaise, expectedDuePaise: cash.expectedDuePaise });
+        if (!settled.ok) throw new Error(settled.error);
+      },
+    });
+    const records = await readOfflinePosCashCollections(outletId);
+    setCashCollections(records);
+    if (result.blocked) setMessage({ tone: "bad", text: L(`Offline cash record needs review: ${result.blocked.error}`, `ऑफ़लाइन नकद रिकॉर्ड जाँचें: ${result.blocked.error}`) });
+    else if (result.synced) {
+      setMessage({ tone: "ok", text: L("Offline cash is now recorded in the server bill. The official receipt is ready online.", "ऑफ़लाइन नकद अब सर्वर बिल में दर्ज है। आधिकारिक रसीद ऑनलाइन उपलब्ध है।") });
+      await refresh();
+    }
+  }, [outletId, staffUserId, L, refresh]);
 
   const syncOfflineOrders = useCallback(async (force = false) => {
     if (!navigator.onLine || syncingQueue.current) return;
@@ -244,6 +276,7 @@ export function PosTerminalScreen({ initial, outletId, staffUserId, sessionExpir
       } else if (result.synced > 0) {
         setMessage({ tone: "ok", text: L("Offline KOTs synced to the server.", "ऑफ़लाइन KOT सर्वर पर सिंक हुए।") });
       }
+      await syncOfflineCash(force);
     } catch {
       setMessage({ tone: "bad", text: L("Saved orders could not be synced. They remain on this device; retry or download a recovery copy.", "सेव ऑर्डर सिंक नहीं हुए। वे इस डिवाइस पर हैं; फिर कोशिश करें या रिकवरी कॉपी डाउनलोड करें।") });
     } finally {
@@ -251,7 +284,7 @@ export function PosTerminalScreen({ initial, outletId, staffUserId, sessionExpir
       catch { setMessage({ tone: "bad", text: L("Could not read saved offline orders on this device.", "इस डिवाइस पर सेव ऑफ़लाइन ऑर्डर पढ़े नहीं जा सके।") }); }
       finally { syncingQueue.current = false; }
     }
-  }, [outletId, sessionExpiresAt, staffUserId, hi, L]);
+  }, [outletId, sessionExpiresAt, staffUserId, hi, L, syncOfflineCash]);
 
   const acceptCurrentMenuQuote = useCallback(async (order: OfflinePosOrder) => {
     if (!navigator.onLine) {
@@ -316,7 +349,8 @@ export function PosTerminalScreen({ initial, outletId, staffUserId, sessionExpir
       const saved = await readOfflinePosOrders(outletId);
       setQueuedOrders(saved);
       setQueuedCount(saved.length);
-      setMessage({ tone: "ok", text: L(`${result.imported} saved KOT${result.imported === 1 ? "" : "s"} restored. Existing orders were kept.`, `${result.imported} सेव KOT वापस आए। पहले से मौजूद ऑर्डर सुरक्षित रहे।`) });
+      setCashCollections(await readOfflinePosCashCollections(outletId));
+      setMessage({ tone: "ok", text: L(`${result.imported} saved KOT${result.imported === 1 ? "" : "s"} and ${result.importedCash} cash record${result.importedCash === 1 ? "" : "s"} restored. Existing work was kept.`, `${result.imported} सेव KOT और ${result.importedCash} नकद रिकॉर्ड वापस आए। पहले से मौजूद काम सुरक्षित रहा।`) });
     } catch (error) {
       setMessage({ tone: "bad", text: error instanceof Error ? error.message : L("This recovery copy could not be restored.", "यह रिकवरी कॉपी वापस नहीं लाई जा सकी।") });
     }
@@ -351,8 +385,11 @@ export function PosTerminalScreen({ initial, outletId, staffUserId, sessionExpir
     setCurrent({ sessionId: t.visit?.id ?? null, tableId: t.id, code: t.code, takeaway: false, seats: t.seats });
     setDetail(null);
     if (t.visit && navigator.onLine) {
-      try { const d = await orderAction(t.visit.id); if (d.ok) setDetail(d.data); else fail(d.error); }
+      try { const d = await orderAction(t.visit.id); if (d.ok) await cacheBillDetail(d.data); else fail(d.error); }
       catch { setOffline(true); }
+    } else if (t.visit) {
+      const saved = await loadOfflinePosBillSnapshot(outletId, t.visit.id, staffUserId);
+      if (saved) setDetail(saved.snapshot);
     }
     setTimeout(() => searchBox.current?.focus(), 50);
   };
@@ -363,8 +400,11 @@ export function PosTerminalScreen({ initial, outletId, staffUserId, sessionExpir
     setCurrent({ sessionId: t?.visit.id ?? null, tableId: t?.tableId ?? null, code: t?.code ?? L("New takeaway", "नया पार्सल"), takeaway: true, seats: 1 });
     setDetail(null);
     if (t && navigator.onLine) {
-      try { const d = await orderAction(t.visit.id); if (d.ok) setDetail(d.data); else fail(d.error); }
+      try { const d = await orderAction(t.visit.id); if (d.ok) await cacheBillDetail(d.data); else fail(d.error); }
       catch { setOffline(true); }
+    } else if (t) {
+      const saved = await loadOfflinePosBillSnapshot(outletId, t.visit.id, staffUserId);
+      if (saved) setDetail(saved.snapshot);
     }
     setTimeout(() => searchBox.current?.focus(), 50);
   };
@@ -382,6 +422,7 @@ export function PosTerminalScreen({ initial, outletId, staffUserId, sessionExpir
     return r.ok ? r.line.linePaise : 0;
   };
   const add = (dish: Dish) => {
+    if (current?.sessionId && cashCollections.some((cash) => cash.sessionId === current.sessionId)) return fail(L("Cash is already saved locally for this bill. Wait for sync before adding more items.", "इस बिल का नकद इस डिवाइस पर सेव है। नए आइटम जोड़ने से पहले सिंक होने दें।"));
     if (!dish.pricing.isAvailable) return;
     if (dish.pricing.groups.some((g) => g.modifiers.length > 0)) { setChoosing({ dish, mods: [], qty: 1 }); return; }
     setCart((c) => {
@@ -406,7 +447,34 @@ export function PosTerminalScreen({ initial, outletId, staffUserId, sessionExpir
   const cartCount = cart.reduce((n, l) => n + l.qty, 0);
   const priceReviewRequired = hasPriceChanges(cart, data.menu);
   const billAsked = detail?.status === "bill_requested";
+  const offlineCashForCurrent = current?.sessionId ? cashCollections.find((cash) => cash.sessionId === current.sessionId) ?? null : null;
+  const offlineCashDuePaise = detail?.bill ? detail.shares.reduce((sum, share) => sum + Math.max(0, share.amountPaise - share.paidPaise), 0) : 0;
+  const currentHasQueuedKot = current ? queuedOrders.some((order) => order.current.sessionId === current.sessionId || (!order.current.sessionId && order.current.tableId === current.tableId)) : false;
+  const hasPendingPayment = detail?.payments.some((payment) => payment.status === "initiated" || payment.status === "pending") ?? false;
+  const canRecordOfflineCash = offline && !!current?.sessionId && !!detail?.bill && billAsked && detail.bill.status !== "paid" && detail.bill.status !== "cancelled" && offlineCashDuePaise > 0 && cart.length === 0 && !currentHasQueuedKot && !hasPendingPayment && !offlineCashForCurrent;
   const offlineSessionExpired = offline && now >= sessionExpiresAt;
+
+  const recordOfflineCash = async () => {
+    if (!canRecordOfflineCash || !current?.sessionId || !detail?.bill) return;
+    const receivedPaise = Math.round(Number(cashReceived) * 100);
+    if (!Number.isSafeInteger(receivedPaise) || receivedPaise < offlineCashDuePaise) {
+      setMessage({ tone: "bad", text: L("Cash received must cover the full outstanding bill.", "मिला नकद पूरे बाकी बिल से कम नहीं हो सकता।") });
+      return;
+    }
+    try {
+      const cash: OfflinePosCashCollection = {
+        id: crypto.randomUUID(), createdAt: Date.now(), staffUserId,
+        sessionId: current.sessionId, billId: detail.bill.id, tableCode: current.code,
+        expectedDuePaise: offlineCashDuePaise, receivedPaise,
+      };
+      await writeOfflinePosCashCollection(outletId, cash);
+      setCashCollections(await readOfflinePosCashCollections(outletId));
+      setCashDialogOpen(false);
+      setMessage({ tone: "ok", text: L("Provisional cash record saved on this device. The server bill and official receipt will update after reconnection.", "अस्थायी नकद रिकॉर्ड इस डिवाइस पर सेव हुआ। इंटरनेट लौटने पर सर्वर बिल और आधिकारिक रसीद अपडेट होगी।") });
+    } catch {
+      setMessage({ tone: "bad", text: L("Cash could not be safely saved on this device. Do not treat it as recorded.", "नकद इस डिवाइस पर सुरक्षित रूप से सेव नहीं हुआ। इसे दर्ज हुआ न मानें।") });
+    }
+  };
 
   // ---- sending
   const ensureSession = async (clientRequestId?: string): Promise<string | null> => {
@@ -440,6 +508,7 @@ export function PosTerminalScreen({ initial, outletId, staffUserId, sessionExpir
 
   const send = async (thenBill: boolean) => {
     if (busy || !current) return;
+    if (offlineCashForCurrent) return fail(L("This bill already has a cash record waiting to sync. Do not add or collect more until it is reconciled.", "इस बिल का नकद रिकॉर्ड सिंक की प्रतीक्षा में है। मिलान होने तक और सामान या नकद न लें।"));
     if (priceReviewRequired) return fail(L("Review the updated menu price or remove unavailable items before sending this cart.", "कार्ट भेजने से पहले नई कीमत स्वीकारें या अनुपलब्ध आइटम हटाएँ।"));
     if (offline) {
       if (thenBill) return fail(L("Billing needs a connection. Save the KOT first, then bill when online.", "बिल के लिए कनेक्शन चाहिए। पहले KOT सेव करें, फिर ऑनलाइन बिल बनाएँ।"));
@@ -529,7 +598,7 @@ export function PosTerminalScreen({ initial, outletId, staffUserId, sessionExpir
 
   return (
     <div className="mx-auto w-full max-w-[1600px] px-4 py-4 sm:px-6">
-      {offline && <p role="status" className="mb-3 flex items-center gap-2 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-caption font-semibold text-warning"><WifiOff className="size-4" aria-hidden="true" /><span>{L(`Offline. KOTs can be saved on this device; bills and kitchen delivery wait for internet. Menu and tables last synced ${savedTime}.`, `ऑफ़लाइन। KOT इस डिवाइस पर सेव होंगे; बिल और किचन भेजना इंटरनेट आने तक रुकेगा। मेन्यू और टेबल आख़िरी बार ${savedTime} पर अपडेट हुए थे।`)}</span></p>}
+      {offline && <p role="status" className="mb-3 flex items-center gap-2 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-caption font-semibold text-warning"><WifiOff className="size-4" aria-hidden="true" /><span>{L(`Offline. New KOTs and eligible cash records stay on this device until sync; kitchen delivery and UPI/card confirmation need internet. Menu and tables last synced ${savedTime}.`, `ऑफ़लाइन। नए KOT और योग्य नकद रिकॉर्ड सिंक होने तक इस डिवाइस पर रहेंगे; किचन डिलीवरी और UPI/कार्ड पुष्टि के लिए इंटरनेट चाहिए। मेन्यू और टेबल आख़िरी बार ${savedTime} पर अपडेट हुए थे।`)}</span></p>}
       {storageWarning && <p role="status" className="mb-3 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-caption font-semibold text-warning">{storageWarning}</p>}
       <input ref={recoveryFile} type="file" accept="application/json,.json" className="hidden" onChange={importSavedOrders} aria-label={L("Choose a POS recovery copy", "POS रिकवरी कॉपी चुनें")} />
       {queuedCount > 0 ? <div role="status" className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-caption font-semibold text-warning"><span>{L(`${queuedCount} KOT ${queuedCount === 1 ? "is" : "are"} saved here and waiting to sync.`, `${queuedCount} KOT यहाँ सेव ${queuedCount === 1 ? "है" : "हैं"} और सिंक होने की प्रतीक्षा में ${queuedCount === 1 ? "है" : "हैं"}।`)}</span><div className="flex flex-wrap gap-2"><button type="button" onClick={() => recoveryFile.current?.click()} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-warning/50 bg-surface px-3 text-ink"><FileUp className="size-4" aria-hidden="true" />{L("Restore copy", "कॉपी वापस लाएँ")}</button><button type="button" onClick={() => void exportSavedOrders()} className="min-h-9 rounded-lg border border-warning/50 bg-surface px-3 text-ink">{L("Download recovery copy", "रिकवरी कॉपी डाउनलोड करें")}</button></div></div> : <div className="mb-3 flex justify-end"><button type="button" onClick={() => recoveryFile.current?.click()} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-line bg-surface px-3 text-caption font-semibold text-ink"><FileUp className="size-4" aria-hidden="true" />{L("Restore POS recovery copy", "POS रिकवरी कॉपी वापस लाएँ")}</button></div>}
@@ -552,6 +621,15 @@ export function PosTerminalScreen({ initial, outletId, staffUserId, sessionExpir
           </div>
         </section>;
       })}
+      {cashCollections.map((cash) => <section key={cash.id} className="mb-3 flex flex-wrap items-start justify-between gap-3 rounded-xl border border-warning/40 bg-warning/10 px-3 py-3 text-caption text-ink">
+        <div>
+          <p className="font-semibold">{L("Provisional local cash record", "अस्थायी लोकल नकद रिकॉर्ड")} · {cash.tableCode} · {cash.id.slice(0, 8).toUpperCase()}</p>
+          <p className="mt-1">{L("Due", "बाकी")}: {rs(cash.expectedDuePaise)} · {L("Received", "मिला")}: {rs(cash.receivedPaise)} · {L("Change", "वापस")}: {rs(cash.receivedPaise - cash.expectedDuePaise)}</p>
+          <p className="mt-1 text-warning">{cash.error || L("Saved on this device; waiting for the server to confirm the exact bill balance.", "इस डिवाइस पर सेव है; सर्वर से बिल की बाकी रकम की पुष्टि का इंतज़ार है।")}</p>
+          {cash.retryCount ? <p className="mt-1 text-muted">{L(`Sync attempt ${cash.retryCount}; the local record is still preserved.`, `सिंक की ${cash.retryCount} कोशिशें हुईं; लोकल रिकॉर्ड सुरक्षित है।`)}</p> : null}
+        </div>
+        {!offline && cash.staffUserId === staffUserId && <button type="button" className="min-h-9 rounded-lg border border-line bg-surface px-3 font-semibold text-ink" onClick={() => void syncOfflineCash(true)}>{L("Reconcile now", "अभी मिलान करें")}</button>}
+      </section>)}
       {message && <p role={message.tone === "bad" ? "alert" : "status"} className={`mb-3 rounded-xl border px-3 py-2 text-body font-semibold ${message.tone === "bad" ? "border-danger/40 bg-danger/10 text-danger" : "border-success/40 bg-success/10 text-success"}`}>{message.text}</p>}
       {priceReviewRequired && <div role="alert" className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-caption font-semibold text-warning"><span>{L("Menu price or availability changed since this cart was saved. Review the total before sending.", "कार्ट सेव होने के बाद कीमत या उपलब्धता बदली है। भेजने से पहले कुल जाँचें।")}</span><button type="button" className="min-h-9 rounded-lg bg-warning px-3 text-ink" onClick={() => setCart((saved) => saved.map((line) => line.kind === "menu" ? { ...line, dish: data.menu.find((item) => item.id === line.dish.id) ?? line.dish } : line))}>{L("Review new prices", "नई कीमतें जाँचें")}</button></div>}
 
@@ -656,6 +734,11 @@ export function PosTerminalScreen({ initial, outletId, staffUserId, sessionExpir
                 {cart.length > 0 && <div className="flex justify-between text-muted"><dt>{L("New", "नए")} · {cartCount}</dt><dd className="tabular-nums">{rs(cartTotal)}</dd></div>}
                 <div className="flex justify-between font-display text-section font-bold text-ink"><dt>{L("Total before tax", "टैक्स से पहले कुल")}</dt><dd className="tabular-nums">{rs(sentTotal + cartTotal)}</dd></div>
               </dl>
+              {canRecordOfflineCash && <div className="mt-3 rounded-xl border border-warning/40 bg-warning/10 p-3">
+                <p className="text-caption font-semibold text-warning">{L("This bill was requested before the outage. You can record full cash locally; it is provisional until the server confirms the same balance.", "यह बिल इंटरनेट बंद होने से पहले माँगा गया था। पूरा नकद लोकल दर्ज कर सकते हैं; सर्वर पर बाकी रकम मिलने तक यह अस्थायी रहेगा।")}</p>
+                <button type="button" className="mt-2 min-h-10 w-full rounded-lg bg-warning px-3 text-button font-semibold text-ink" onClick={() => { setCashReceived((offlineCashDuePaise / 100).toFixed(2)); setCashDialogOpen(true); }}>{L(`Record cash here · ${rs(offlineCashDuePaise)}`, `नकद यहाँ दर्ज करें · ${rs(offlineCashDuePaise)}`)}</button>
+              </div>}
+              {offline && current?.sessionId && detail?.bill && billAsked && !offlineCashForCurrent && !canRecordOfflineCash && <p className="mt-3 rounded-lg bg-paper px-3 py-2 text-caption text-muted">{currentHasQueuedKot ? L("Sync this table’s saved KOT before taking its offline cash.", "इस टेबल का ऑफ़लाइन नकद लेने से पहले सेव KOT सिंक करें।") : hasPendingPayment ? L("A payment is still pending. Reconnect and confirm it before taking cash.", "एक पेमेंट की पुष्टि बाकी है। नकद लेने से पहले इंटरनेट जोड़कर उसे जाँचें।") : cart.length ? L("Send or clear the new items before recording cash for this bill.", "इस बिल का नकद दर्ज करने से पहले नए आइटम भेजें या हटाएँ।") : L("Offline cash is available only for a saved, requested bill with a clear balance.", "ऑफ़लाइन नकद सिर्फ़ पहले से सेव, माँगे गए बिल और साफ़ बाकी रकम पर उपलब्ध है।")}</p>}
               <div className="mt-3 grid grid-cols-2 gap-2">
                 <button type="button" className={quiet} disabled={busy || (offline && cart.length === 0) || cart.length === 0} onClick={() => void send(false)}>
                   {busy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Send className="size-4" aria-hidden="true" />}{offline ? L("Save KOT here", "KOT यहाँ सेव करें") : L("Send KOT", "KOT भेजें")}
@@ -676,6 +759,22 @@ export function PosTerminalScreen({ initial, outletId, staffUserId, sessionExpir
           onAdd={() => { const c = choosing; setCart((x) => [...x, { key: `${c.dish.id}-${Date.now()}`, kind: "menu", dish: c.dish, qty: c.qty, mods: c.mods, note: "", parcel: !!current?.takeaway }]); setChoosing(null); }}
         />
       )}
+      <Dialog open={cashDialogOpen} onOpenChange={setCashDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{L("Record provisional cash", "अस्थायी नकद दर्ज करें")}</DialogTitle>
+            <DialogDescription>{L("This stays on this device until the server confirms the same bill balance. It is not an official invoice or receipt. UPI and card stay unavailable offline.", "यह रकम सर्वर पर बिल की बाकी रकम मिलने तक इसी डिवाइस पर रहेगी। यह आधिकारिक बिल या रसीद नहीं है। ऑफ़लाइन UPI और कार्ड उपलब्ध नहीं हैं।")}</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3">
+            <p className="flex justify-between rounded-lg bg-paper px-3 py-2 font-semibold"><span>{L("Outstanding", "बाकी रकम")}</span><span>{rs(offlineCashDuePaise)}</span></p>
+            <label className="grid gap-1 text-caption font-semibold text-ink" htmlFor="offline-cash-received">{L("Cash received (₹)", "मिला नकद (₹)")}
+              <input id="offline-cash-received" type="number" inputMode="decimal" min={(offlineCashDuePaise / 100).toFixed(2)} step="0.01" value={cashReceived} onChange={(event) => setCashReceived(event.target.value)} className={field} />
+            </label>
+            <p className="text-caption text-muted">{L("Change", "वापस")}: {rs(Math.max(0, Math.round(Number(cashReceived) * 100) - offlineCashDuePaise)}</p>
+            <button type="button" className={primary} disabled={!canRecordOfflineCash || !Number.isSafeInteger(Math.round(Number(cashReceived) * 100)) || Math.round(Number(cashReceived) * 100) < offlineCashDuePaise} onClick={() => void recordOfflineCash()}>{L("Save local cash record", "लोकल नकद रिकॉर्ड सेव करें")}</button>
+          </div>
+        </DialogContent>
+      </Dialog>
       {typing && (
         <OpenItemDialog
           L={L} config={data.openItem} onClose={() => setTyping(false)}

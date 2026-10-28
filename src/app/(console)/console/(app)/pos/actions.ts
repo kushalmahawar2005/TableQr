@@ -8,6 +8,7 @@ import { posOpenTable, posSendOrder, posTerminal, posTerminalRoles } from "@/ser
 import { staffRealtimeToken, topics } from "@/server/realtime/token";
 import { staffFor } from "@/server/staff/request";
 import { waiterRequestBill } from "@/server/staff/waiter-mutations";
+import { settleAtCounter } from "@/server/billing/payments";
 
 async function run<T>(work: (staff: Awaited<ReturnType<typeof staffFor>>) => Promise<T>) {
   try {
@@ -23,5 +24,9 @@ export async function orderAction(sessionId: string) { return run((s) => posBill
 export async function openTableAction(input: { tableId: string; partySize?: number; guestName?: string | null; clientRequestId?: string }) { return run((s) => posOpenTable(s, input)); }
 export async function newTakeawayAction(name?: string | null, clientRequestId?: string) { return run((s) => startTakeaway(s, { name, clientRequestId })); }
 export async function sendOrderAction(input: { sessionId: string; clientRequestId: string; lines: AnyDraftLine[]; quote?: PriceQuote; guestName?: string | null }) { return run((s) => posSendOrder(s, input)); }
+/** Settle a full, previously requested bill with cash captured offline; the server rechecks the due amount. */
+export async function settleOfflineCashAction(input: { sessionId: string; clientRequestId: string; receivedPaise: number; expectedDuePaise: number }) {
+  return run((s) => settleAtCounter(s, { ...input, method: "cash" }, new Date(), posTerminalRoles));
+}
 /** Close the eating stage so the bill can be paid on the Billing screen */
 export async function billAction(sessionId: string) { return run((s) => waiterRequestBill(s, String(sessionId), new Date(), [...posTerminalRoles])); }

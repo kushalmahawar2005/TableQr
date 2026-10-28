@@ -55,7 +55,9 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  if (request.mode === "navigate" && ["/console", "/console/", "/console/pos"].includes(url.pathname)) {
+  const staffRoute = url.pathname === "/console" || url.pathname.startsWith("/console/");
+  const loginRoute = url.pathname === "/console/login" || url.pathname.startsWith("/console/login/");
+  if (request.mode === "navigate" && staffRoute && !loginRoute) {
     event.respondWith((async () => {
       try {
         const response = await fetch(request);
