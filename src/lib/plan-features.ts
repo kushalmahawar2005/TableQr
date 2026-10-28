@@ -16,6 +16,8 @@ export const FEATURE_KEYS = [
   "inventory",
   "delivery",
   "guestPwaCustomization",
+  "pos",
+  "attendance",
 ] as const;
 export type FeatureKey = (typeof FEATURE_KEYS)[number];
 
@@ -33,6 +35,8 @@ export const FEATURE_LABELS: Record<FeatureKey, { label: string; hint: string }>
   multiOutlet: { label: "Multiple outlets", hint: "More than one outlet under this restaurant" },
   delivery: { label: "Delivery orders", hint: "Home delivery with outlet service areas, charges and payment preferences" },
   guestPwaCustomization: { label: "Branded guest app install", hint: "Let guests install this restaurant's booking and delivery experience with its name and logo" },
+  pos: { label: "POS counter", hint: "Punch orders at the counter for a table or takeaway, including offline POS" },
+  attendance: { label: "Staff attendance", hint: "Daily register: present, half day, absent, leave and week off" },
   inventory: { label: "Inventory & recipes", hint: "Stock that goes down as dishes sell, with low-stock alerts" },
 };
 
@@ -75,6 +79,8 @@ export const SECTION_FEATURE: Partial<Record<string, FeatureKey>> = {
   reports: "fullReports",
   customers: "whatsappBills",
   inventory: "inventory",
+  pos: "pos",
+  attendance: "attendance",
 };
 
 export const notInPlanMessage = (key: FeatureKey) =>
@@ -82,12 +88,12 @@ export const notInPlanMessage = (key: FeatureKey) =>
 
 const NONE: Record<FeatureKey, boolean> = Object.fromEntries(FEATURE_KEYS.map((k) => [k, false])) as Record<FeatureKey, boolean>;
 /** A restaurant: tables, no rooms */
-const LITE = { ...NONE, dineIn: true };
+const LITE = { ...NONE, dineIn: true, pos: true, attendance: true };
 const PLUS = { ...LITE, waiterApp: true, discounts: true, whatsappBills: true, groupSplit: true, reservations: true, guestPwaCustomization: true };
 const PRO = { ...PLUS, kitchenDisplay: true, pricingRules: true, fullReports: true, inventory: true };
 
 /** A hotel without a restaurant floor: rooms, room service through the kitchen, and the bills */
-export const HOTEL: Features = { ...NONE, rooms: true, discounts: true, whatsappBills: true, kitchenDisplay: true, fullReports: true, maxTables: null, maxStaff: 10, maxRooms: 30, poweredBy: false };
+export const HOTEL: Features = { ...NONE, rooms: true, pos: true, attendance: true, discounts: true, whatsappBills: true, kitchenDisplay: true, fullReports: true, maxTables: null, maxStaff: 10, maxRooms: 30, poweredBy: false };
 /** A hotel with its own restaurant: everything in Pro, plus rooms */
 export const HOTEL_PLUS: Features = { ...PRO, rooms: true, maxTables: 20, maxStaff: 25, maxRooms: 30, poweredBy: false };
 

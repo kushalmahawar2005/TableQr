@@ -4,7 +4,9 @@ import { redirect } from "next/navigation";
 import { LANG_COOKIE, parseLang } from "@/lib/i18n";
 import { canSee } from "@/lib/staff-permissions";
 import { posTerminal } from "@/server/staff/pos-terminal";
+import { tenantFeatures } from "@/server/plan";
 import { currentStaff } from "@/server/staff/request";
+import { FeatureLocked } from "../_components/feature-locked";
 import { PosTerminalScreen } from "./_components/pos-terminal-screen";
 
 export const metadata: Metadata = { title: "POS", robots: { index: false, follow: false } };
@@ -21,6 +23,7 @@ export default async function PosTerminalPage() {
       </main>
     );
   }
+  if (!(await tenantFeatures(staff.tenantId)).pos) return <FeatureLocked feature="pos" />;
   const lang = parseLang((await cookies()).get(LANG_COOKIE)?.value);
   const initial = await posTerminal(staff);
   return <PosTerminalScreen initial={initial} initialSavedAt={initial.loadedAt} initialIsServerFresh outletId={staff.outletId} staffUserId={staff.userId} canReviewOfflineOrders={staff.roles.some((role) => role === "owner" || role === "manager")} sessionExpiresAt={staff.expiresAt} hi={lang === "hi"} realtimeUrl={process.env.REALTIME_URL?.replace(/^http/, "ws") ?? null} />;

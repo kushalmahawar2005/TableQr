@@ -15,6 +15,7 @@ import { isWithinCategoryWindow, loadItems } from "../guest/menu";
 import type { AnyDraftLine } from "../guest/order";
 import type { PriceQuote } from "@/domain/pricing";
 import type { StaffSession } from "./auth";
+import { requireFeature } from "../plan";
 import { requireStaffRole } from "./waiter";
 import { addPhonelessDiner } from "./waiter-mutations";
 
@@ -29,6 +30,7 @@ export const posTerminalRoles = ["cashier", "manager", "owner", "reception"] as 
 
 export async function posTerminal(staff: StaffSession, now = new Date()) {
   await requireStaffRole(staff, posTerminalRoles);
+  await requireFeature(staff.tenantId, "pos");
   const scope = { tenantId: staff.tenantId, outletId: staff.outletId };
   const [[outlet], layout] = await Promise.all([
     db.select({ brandId: s.outlets.brandId, timezone: s.outlets.timezone, gstin: s.outlets.gstin }).from(s.outlets).where(and(eq(s.outlets.tenantId, scope.tenantId), eq(s.outlets.id, scope.outletId))),
@@ -111,6 +113,7 @@ export type PosTerminal = Awaited<ReturnType<typeof posTerminal>>;
 /** Open a free table for billing at the counter, as a walk-in */
 export async function posOpenTable(staff: StaffSession, input: { tableId: string; partySize?: number; guestName?: string | null; clientRequestId?: string }, now = new Date()) {
   await requireStaffRole(staff, posTerminalRoles);
+  await requireFeature(staff.tenantId, "pos");
   const [table] = await db.select({ tableClass: s.diningTables.tableClass, maxSeats: s.diningTables.maxSeats }).from(s.diningTables)
     .where(and(eq(s.diningTables.tenantId, staff.tenantId), eq(s.diningTables.outletId, staff.outletId), eq(s.diningTables.id, String(input.tableId)), eq(s.diningTables.isActive, true)));
   if (!table || table.tableClass === TAKEAWAY_CLASS || table.tableClass === ROOM_CLASS) throw new AppError("not_found", "This table was not found.");
@@ -147,6 +150,7 @@ export async function posRecoverOfflineOrderVisit(staff: StaffSession, input: { 
  */
 export async function posSendOrder(staff: StaffSession, input: { sessionId: string; clientRequestId: string; lines: AnyDraftLine[]; quote?: PriceQuote; guestName?: string | null; managerApprovedOfflineRequestId?: string }, now = new Date()) {
   await requireStaffRole(staff, posTerminalRoles);
+  await requireFeature(staff.tenantId, "pos");
   const sessionId = String(input.sessionId);
   const [session] = await db.select({ tableId: s.tableSessions.tableId, status: s.tableSessions.status }).from(s.tableSessions)
     .where(and(eq(s.tableSessions.tenantId, staff.tenantId), eq(s.tableSessions.outletId, staff.outletId), eq(s.tableSessions.id, sessionId)));
