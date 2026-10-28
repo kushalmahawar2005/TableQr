@@ -454,7 +454,7 @@ export function PosTerminalScreen({ initial, outletId, staffUserId, sessionExpir
   const canRecordOfflineCash = offline && !!current?.sessionId && !!detail?.bill && billAsked && detail.bill.status !== "paid" && detail.bill.status !== "cancelled" && offlineCashDuePaise > 0 && cart.length === 0 && !currentHasQueuedKot && !hasPendingPayment && !offlineCashForCurrent;
   const offlineSessionExpired = offline && now >= sessionExpiresAt;
 
-  const recordOfflineCash = async () => {
+  const handleRecordOfflineCash = async () => {
     if (!canRecordOfflineCash || !current?.sessionId || !detail?.bill) return;
     const receivedPaise = Math.round(Number(cashReceived) * 100);
     if (!Number.isSafeInteger(receivedPaise) || receivedPaise < offlineCashDuePaise) {
@@ -463,7 +463,7 @@ export function PosTerminalScreen({ initial, outletId, staffUserId, sessionExpir
     }
     try {
       const cash: OfflinePosCashCollection = {
-        id: crypto.randomUUID(), createdAt: Date.now(), staffUserId,
+        id: crypto.randomUUID(), createdAt: now, staffUserId,
         sessionId: current.sessionId, billId: detail.bill.id, tableCode: current.code,
         expectedDuePaise: offlineCashDuePaise, receivedPaise,
       };
@@ -770,8 +770,8 @@ export function PosTerminalScreen({ initial, outletId, staffUserId, sessionExpir
             <label className="grid gap-1 text-caption font-semibold text-ink" htmlFor="offline-cash-received">{L("Cash received (₹)", "मिला नकद (₹)")}
               <input id="offline-cash-received" type="number" inputMode="decimal" min={(offlineCashDuePaise / 100).toFixed(2)} step="0.01" value={cashReceived} onChange={(event) => setCashReceived(event.target.value)} className={field} />
             </label>
-            <p className="text-caption text-muted">{L("Change", "वापस")}: {rs(Math.max(0, Math.round(Number(cashReceived) * 100) - offlineCashDuePaise)}</p>
-            <button type="button" className={primary} disabled={!canRecordOfflineCash || !Number.isSafeInteger(Math.round(Number(cashReceived) * 100)) || Math.round(Number(cashReceived) * 100) < offlineCashDuePaise} onClick={() => void recordOfflineCash()}>{L("Save local cash record", "लोकल नकद रिकॉर्ड सेव करें")}</button>
+            <p className="text-caption text-muted">{L("Change", "वापस")}: {rs(Math.max(0, Math.round(Number(cashReceived) * 100) - offlineCashDuePaise))}</p>
+            <button type="button" className={primary} disabled={!canRecordOfflineCash || !Number.isSafeInteger(Math.round(Number(cashReceived) * 100)) || Math.round(Number(cashReceived) * 100) < offlineCashDuePaise} onClick={() => void handleRecordOfflineCash()}>{L("Save local cash record", "लोकल नकद रिकॉर्ड सेव करें")}</button>
           </div>
         </DialogContent>
       </Dialog>

@@ -6,7 +6,7 @@ import { settleAtCounter } from "@/server/billing/payments";
 import { startTakeaway } from "@/server/floor/takeaway";
 import { resolveStaff, signInStaff, type StaffSession } from "@/server/staff/auth";
 import { getSalesDetail } from "@/server/staff/sales-detail";
-import { posOpenTable, posSendOrder, posTerminal } from "@/server/staff/pos-terminal";
+import { posOpenTable, posSendOrder, posTerminal, posTerminalRoles } from "@/server/staff/pos-terminal";
 import { quoteKey } from "@/domain/pricing";
 import { waiterRequestBill } from "@/server/staff/waiter-mutations";
 import { resetTestDb } from "./setup-db";
@@ -140,5 +140,20 @@ describe("POS terminal", () => {
     } finally {
       await env.db.update(s.menuItems).set({ pricePaise: item.pricePaise }).where(eq(s.menuItems.id, itemId));
     }
+  });
+
+  it("reconciles offline cash only when the live bill still has the recorded balance", async () => {
+    const { sessionId } = await posOpenTable(cashier, { tableId: env.demo.tableIds["T5"] });
+    await posSendOrder(cashier, { sessionId, clientRequestId: "offline-cash-kot-0001", lines: [{ itemId: env.demo.itemIds["Dal Makhani"], qty: 1, modifierIds: [] }] });
+    await waiterRequestBill(cashier, sessionId, new Date(), ["cashier"]);
+    const [bill] = await env.db.select().from(s.bills).where(eq(s.bills.sessionId, sessionId));
+    const request = { sessionId, method: "cash" as const, receivedPaise: bill.totalPaise, expectedDuePaise: bill.totalPaise, clientRequestId: "offline-cash-settle-0001" };
+    await expect(settleAtCounter(cashier, { ...request, expectedDuePaise: bill.totalPaise + 100 }, new Date(), posTerminalRoles)).rejects.toMatchObject({ code: "conflict" });
+    expect(await env.db.select({ id: s.payments.id }).from(s.payments).where(eq(s.payments.clientRequestId, request.clientRequestId))).toHaveLength(0);
+
+    const first = await settleAtCounter(cashier, request, new Date(), posTerminalRoles);
+    const replay = await settleAtCounter(cashier, request, new Date(), posTerminalRoles);
+    expect(replay).toEqual(first);
+    expect(await env.db.select({ id: s.payments.id }).from(s.payments).where(eq(s.payments.clientRequestId, request.clientRequestId))).toHaveLength(1);
   });
 });

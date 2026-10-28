@@ -46,7 +46,7 @@ type StoredOrder = OfflinePosOrder & { key: string; outletId: string };
 
 // Persisted identity stays stable through the display-name change so unsynced KOTs are never orphaned.
 const DB_NAME = "tableqr-pos-offline-v1";
-const DB_VERSION = 6;
+const DB_VERSION = 7;
 const LEGACY_QUEUE_PREFIX = "tq_pos_offline_orders_v1:";
 
 let database: Promise<IDBDatabase> | null = null;
@@ -59,7 +59,10 @@ function openDatabase() {
       const db = request.result;
       if (!db.objectStoreNames.contains("snapshots")) db.createObjectStore("snapshots", { keyPath: "outletId" });
       if (!db.objectStoreNames.contains("drafts")) db.createObjectStore("drafts", { keyPath: "outletId" });
-      if (!db.objectStoreNames.contains("billSnapshots")) db.createObjectStore("billSnapshots", { keyPath: "key" });
+      if (!db.objectStoreNames.contains("billSnapshots")) {
+        const billSnapshots = db.createObjectStore("billSnapshots", { keyPath: "key" });
+        billSnapshots.createIndex("outletId", "outletId", { unique: false });
+      }
       if (!db.objectStoreNames.contains("orders")) {
         const orders = db.createObjectStore("orders", { keyPath: "key" });
         orders.createIndex("outletId", "outletId", { unique: false });
@@ -67,6 +70,10 @@ function openDatabase() {
       if (!db.objectStoreNames.contains("cashCollections")) {
         const cash = db.createObjectStore("cashCollections", { keyPath: "key" });
         cash.createIndex("outletId", "outletId", { unique: false });
+        cash.createIndex("outletSession", ["outletId", "sessionId"], { unique: true });
+      } else {
+        const cash = request.transaction!.objectStore("cashCollections");
+        if (!cash.indexNames.contains("outletSession")) cash.createIndex("outletSession", ["outletId", "sessionId"], { unique: true });
       }
       if (!db.objectStoreNames.contains("meta")) db.createObjectStore("meta", { keyPath: "key" });
       if (!db.objectStoreNames.contains("locks")) db.createObjectStore("locks", { keyPath: "key" });
@@ -108,13 +115,15 @@ export async function loadOfflinePosSnapshot(): Promise<OfflinePosSnapshot | nul
 
 export async function clearOfflinePosAccess() {
   const db = await openDatabase();
-  const tx = db.transaction(["snapshots", "drafts", "meta"], "readwrite");
+  const tx = db.transaction(["snapshots", "drafts", "billSnapshots", "meta"], "readwrite");
   const meta = tx.objectStore("meta");
   const previous = meta.get("last-pos-outlet");
   previous.onsuccess = () => {
     if (typeof previous.result?.outletId === "string") {
       tx.objectStore("snapshots").delete(previous.result.outletId);
       tx.objectStore("drafts").delete(previous.result.outletId);
+      const bills = tx.objectStore("billSnapshots").index("outletId").openKeyCursor(previous.result.outletId);
+      bills.onsuccess = () => { if (bills.result) { bills.result.delete(); bills.result.continue(); } };
     }
     meta.delete("last-pos-outlet");
   };
@@ -258,8 +267,37 @@ export async function readOfflinePosCashCollections(outletId: string): Promise<O
 
 export async function writeOfflinePosCashCollection(outletId: string, cash: OfflinePosCashCollection) {
   const db = await openDatabase();
-  const tx = db.transaction("cashCollections", "readwrite");
-  tx.objectStore("cashCollections").put({ ...cash, key: `${outletId}:${cash.id}`, outletId });
+  const tx = db.transaction(["cashCollections", "meta"], "readwrite");
+  const store = tx.objectStore("cashCollections");
+  const bySession = store.index("outletSession").get([outletId, cash.sessionId]);
+  const settled = tx.objectStore("meta").get(`cash-settled:${outletId}:${cash.sessionId}`);
+  let reason: Error | null = null;
+  const complete = new Promise<void>((resolve, reject) => {
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(reason ?? tx.error ?? new Error("Could not save POS cash data."));
+    tx.onabort = () => reject(reason ?? tx.error ?? new Error("POS cash save was interrupted."));
+  });
+  let reads = 0;
+  const afterRead = () => {
+    if (++reads !== 2) return;
+    if (settled.result || bySession.result) {
+      reason = new Error("Cash is already recorded locally or reconciled for this bill.");
+      tx.abort();
+      return;
+    }
+    store.put({ ...cash, key: `${outletId}:${cash.id}`, outletId });
+  };
+  bySession.onsuccess = afterRead;
+  settled.onsuccess = afterRead;
+  await complete;
+}
+
+/** Keeps a same-device guard after sync so another stale POS tab cannot collect the same bill twice. */
+export async function markOfflinePosBillSettled(outletId: string, sessionId: string, requestId: string) {
+  const db = await openDatabase();
+  const tx = db.transaction(["cashCollections", "meta"], "readwrite");
+  tx.objectStore("cashCollections").delete(`${outletId}:${requestId}`);
+  tx.objectStore("meta").put({ key: `cash-settled:${outletId}:${sessionId}`, settledAt: Date.now() });
   await transactionDone(tx);
 }
 

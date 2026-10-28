@@ -40,7 +40,7 @@ describe("offline POS durable outbox", () => {
     const order = { ...makeOrder("order-1"), retryCount: 2, nextRetryAt: 5000 };
     await storage.queueOfflinePosOrder("outlet-1", order);
     const exported = JSON.parse(await storage.buildOfflinePosRecoveryFile("outlet-1"));
-    expect(exported).toMatchObject({ format: "tableeqr-pos-offline-recovery", version: 1, outletId: "outlet-1", orderCount: 1, orders: [order] });
+    expect(exported).toMatchObject({ format: "tableeqr-pos-offline-recovery", version: 2, outletId: "outlet-1", orderCount: 1, cashCollectionCount: 0, orders: [order], cashCollections: [] });
     expect(await storage.readOfflinePosOrders("outlet-1")).toEqual([order]);
   });
 
@@ -48,11 +48,11 @@ describe("offline POS durable outbox", () => {
     const storage = await import("@/lib/pos-offline-queue");
     const first = makeOrder("order-restore1");
     const second = makeOrder("order-restore2", 200);
-    const file = JSON.stringify({ format: "tableeqr-pos-offline-recovery", version: 1, outletId: "outlet-1", orders: [first, second] });
+    const file = JSON.stringify({ format: "tableeqr-pos-offline-recovery", version: 2, outletId: "outlet-1", orders: [first, second], cashCollections: [] });
     await storage.writeOfflinePosOrder("outlet-1", first);
     await expect(storage.importOfflinePosRecoveryFile("outlet-2", file)).rejects.toThrow(/different outlet/);
     const result = await storage.importOfflinePosRecoveryFile("outlet-1", file);
-    expect(result).toEqual({ imported: 1, total: 2 });
+    expect(result).toEqual({ imported: 1, importedCash: 0, total: 2, totalCash: 0 });
     expect((await storage.readOfflinePosOrders("outlet-1")).map((order) => order.id)).toEqual([first.id, second.id]);
   });
 
@@ -61,9 +61,25 @@ describe("offline POS durable outbox", () => {
     await storage.writeOfflinePosOrder("outlet-1", makeOrder("order-collide1"));
     const collision = { ...makeOrder("order-collide1"), lines: [{ itemId: "dish-1", qty: 3, modifierIds: [] }] };
     const additional = makeOrder("order-collide2", 200);
-    const file = JSON.stringify({ format: "tableeqr-pos-offline-recovery", version: 1, outletId: "outlet-1", orders: [collision, additional] });
+    const file = JSON.stringify({ format: "tableeqr-pos-offline-recovery", version: 2, outletId: "outlet-1", orders: [collision, additional], cashCollections: [] });
     await expect(storage.importOfflinePosRecoveryFile("outlet-1", file)).rejects.toThrow(/different order details/);
     expect((await storage.readOfflinePosOrders("outlet-1")).map((order) => order.id)).toEqual(["order-collide1"]);
+  });
+
+  it("exports, restores, and syncs a provisional cash record exactly once", async () => {
+    const storage = await import("@/lib/pos-offline-queue");
+    const { syncSavedPosCashCollections } = await import("@/lib/pos-offline-cash-sync");
+    const cash = { id: "cash-record-0001", createdAt: 100, staffUserId: "cashier-1", sessionId: "session-1", billId: "bill-1", tableCode: "T1", expectedDuePaise: 12500, receivedPaise: 15000 };
+    const file = JSON.stringify({ format: "tableeqr-pos-offline-recovery", version: 2, outletId: "outlet-1", orders: [], cashCollections: [cash] });
+    expect(await storage.importOfflinePosRecoveryFile("outlet-1", file)).toEqual({ imported: 0, importedCash: 1, total: 0, totalCash: 1 });
+    expect(JSON.parse(await storage.buildOfflinePosRecoveryFile("outlet-1"))).toMatchObject({ cashCollections: [cash], cashCollectionCount: 1 });
+    const attempts: string[] = [];
+    const deliver = async (record: typeof cash) => { attempts.push(record.id); if (attempts.length === 1) throw new Error("Reply lost after server commit"); };
+    await syncSavedPosCashCollections({ outletId: "outlet-1", staffUserId: "cashier-1", now: () => 1000, deliver });
+    const retry = await syncSavedPosCashCollections({ outletId: "outlet-1", staffUserId: "cashier-1", force: true, now: () => 1001, deliver });
+    expect(retry).toEqual({ synced: 1, blocked: null });
+    expect(attempts).toEqual([cash.id, cash.id]);
+    expect(await storage.readOfflinePosCashCollections("outlet-1")).toEqual([]);
   });
 
   it("drains three consecutive orders in one pass without skipping the middle order", async () => {

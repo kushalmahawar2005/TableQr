@@ -77,20 +77,23 @@ describe("Tableeqr branding and compatibility", () => {
   });
 
   it("routes staff console pages to the saved POS after a network failure", async () => {
-    const handlers = new Map<string, (event: any) => void>();
+    type ServiceWorkerEvent = { request?: { method: string; mode: string; url: string }; respondWith?: (response: Promise<Response> | Response) => void; waitUntil?: (work: Promise<unknown>) => void };
+    const handlers = new Map<string, (event: ServiceWorkerEvent) => void>();
     vm.runInNewContext(fs.readFileSync("public/sw.js", "utf8"), {
-      self: { addEventListener: (name: string, handler: (event: any) => void) => handlers.set(name, handler), location: { origin: "https://tableeqr.example" }, clients: { claim: vi.fn() } },
+      self: { addEventListener: (name: string, handler: (event: ServiceWorkerEvent) => void) => handlers.set(name, handler), location: { origin: "https://tableeqr.example" }, clients: { claim: vi.fn() } },
       caches: {}, fetch: () => Promise.reject(new Error("offline")), URL, Response,
     });
-    const event = { request: { method: "GET", mode: "navigate", url: "https://tableeqr.example/console/dashboard" }, respondWith: vi.fn() };
+    let navigationResponse: Promise<Response> | Response | undefined;
+    const event: ServiceWorkerEvent = { request: { method: "GET", mode: "navigate", url: "https://tableeqr.example/console/dashboard" }, respondWith: (response) => { navigationResponse = response; } };
     handlers.get("fetch")!(event);
-    const response = await event.respondWith.mock.calls[0][0];
+    const response = await navigationResponse!;
     expect(response.status).toBe(302);
     expect(response.headers.get("location")).toBe("https://tableeqr.example/offline-pos");
 
-    const login = { request: { method: "GET", mode: "navigate", url: "https://tableeqr.example/console/login" }, respondWith: vi.fn() };
+    let loginWasIntercepted = false;
+    const login: ServiceWorkerEvent = { request: { method: "GET", mode: "navigate", url: "https://tableeqr.example/console/login" }, respondWith: () => { loginWasIntercepted = true; } };
     handlers.get("fetch")!(login);
-    expect(login.respondWith).not.toHaveBeenCalled();
+    expect(loginWasIntercepted).toBe(false);
   });
 
   it("keeps the old kitchen preference readable if browser storage cannot migrate it", () => {
