@@ -1,6 +1,6 @@
 import "server-only";
 import { createHash, randomBytes } from "node:crypto";
-import { and, count, eq, gt, gte, isNull, or } from "drizzle-orm";
+import { and, count, eq, gt, gte, inArray, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { uuidv7 } from "@/db/id";
 import * as s from "@/db/schema";
@@ -54,7 +54,13 @@ export async function verifyStaffPin(input: { outletCode: string; phone: string;
     .where(and(eq(s.staffLoginAttempts.tenantId, scope.tenantId), eq(s.staffLoginAttempts.outletId, scope.outletId), eq(s.staffLoginAttempts.phone, phone), eq(s.staffLoginAttempts.ok, false), gte(s.staffLoginAttempts.createdAt, since)));
   if (n >= PIN_LIMIT.attempts) throw failed("Too many wrong PINs. Try again in 15 minutes or ask a manager.", { reason: "locked" });
 
-  const [user] = await db.select().from(s.users).where(and(eq(s.users.tenantId, scope.tenantId), eq(s.users.phone, phone)));
+  // Tenant creation and older staff records may store +91, spaces or punctuation. Compare the
+  // digits-only DB value with both the normalized local number and its Indian country-code form.
+  const storedPhoneDigits = sql`REGEXP_REPLACE(${s.users.phone}, '[^0-9]', '')`;
+  const phoneCandidates = phone.length === 10 ? [phone, `91${phone}`] : [phone];
+  const matchingUsers = await db.select().from(s.users).where(and(eq(s.users.tenantId, scope.tenantId), inArray(storedPhoneDigits, phoneCandidates))).limit(2);
+  // Refuse ambiguous duplicate phone records instead of signing in to an arbitrary account.
+  const user = matchingUsers.length === 1 ? matchingUsers[0] : undefined;
   const pinOk = await verifyPin(String(input.pin ?? ""), user?.pinHash ?? null);
   const roles = user ? await rolesAt(user.id, scope) : [];
   const ok = !!user && pinOk && user.isActive && roles.length > 0;

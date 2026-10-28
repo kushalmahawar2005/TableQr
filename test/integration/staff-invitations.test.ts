@@ -23,6 +23,16 @@ beforeAll(async () => {
 afterAll(async () => { await env.conn.end(); await appDb.$client.end(); });
 
 describe("verified staff invitations", () => {
+  it("signs in when an existing owner phone is stored with +91 and spaces", async () => {
+    const ownerId = env.demo.staffIds.owner;
+    await env.db.update(s.users).set({ phone: "+91 90000 00001" }).where(eq(s.users.id, ownerId));
+    try {
+      expect((await signIn("9000000001", "1111")).roles).toContain("owner");
+    } finally {
+      await env.db.update(s.users).set({ phone: "9000000001" }).where(eq(s.users.id, ownerId));
+    }
+  });
+
   it("does not create an account until the invited phone verifies, then activates the chosen role", async () => {
     const invitation = await createStaffInvitation(owner, { phone: "+91 93333 33331", role: "waiter" });
     expect(await getStaffInvitation(invitation.token)).toMatchObject({ valid: true, role: "waiter", phoneLast4: "3331" });
