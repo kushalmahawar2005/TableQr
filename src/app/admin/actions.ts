@@ -2,7 +2,7 @@
 import { friendlyError } from "@/server/friendly-error";
 
 import { insertRoom } from "@/server/staff/rooms";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
@@ -99,7 +99,7 @@ export async function createTenantAction(_prev: TenantState, form: FormData): Pr
     const ownerPhone = text(form, "ownerPhone");
     const ownerName = text(form, "ownerName");
     const ownerPin = text(form, "ownerPin");
-    const tableCount = Math.min(100, Math.max(1, Number(text(form, "tableCount") || 4)));
+    const tableCount = Math.min(100, Math.max(0, Math.floor(Number(text(form, "tableCount") || 0))));
     const roomCount = Math.min(200, Math.max(0, Math.floor(Number(text(form, "roomCount") || 0))));
     const trialDays = Math.min(90, Math.max(1, Math.floor(Number(text(form, "trialDays") || 14))));
     const guestPayments = text(form, "guestPayments") || "online";
@@ -203,6 +203,36 @@ export async function removeSelectedTenantsAction(tenantIds: string[]): Promise<
     return { error: null };
   } catch (error) {
     return { error: friendlyError(error, "Selected restaurants could not be removed.") };
+  }
+}
+
+/**
+ * Permanently deletes a suspended or removed restaurant and every row that belongs to it.
+ * Each table with a tenant_id column is cleared inside one transaction, so a failure leaves
+ * everything in place. Uploaded files in storage are not touched.
+ */
+export async function deleteTenantPermanentlyAction(tenantId: string, typedName: string): Promise<TenantActionState> {
+  try {
+    const admin = await requireSuperAdmin();
+    const [tenant] = await db.select({ id: s.tenants.id, name: s.tenants.name, status: s.tenants.status }).from(s.tenants).where(eq(s.tenants.id, tenantId));
+    if (!tenant) return { error: "Tenant not found." };
+    if (tenant.status !== "suspended" && tenant.status !== "cancelled") return { error: "Suspend or remove the restaurant first, then delete it." };
+    if (typedName.trim() !== tenant.name) return { error: "The name typed does not match. Nothing was deleted." };
+    await db.transaction(async (tx) => {
+      const [rows] = (await tx.execute(sql`select table_name as t from information_schema.columns where table_schema = database() and column_name = 'tenant_id' and table_name <> 'tenants'`)) as unknown as [{ t: string }[]];
+      await tx.execute(sql`set foreign_key_checks = 0`);
+      try {
+        for (const { t } of rows) await tx.execute(sql`delete from ${sql.identifier(t)} where tenant_id = ${tenantId}`);
+        await tx.delete(s.tenants).where(eq(s.tenants.id, tenantId));
+      } finally {
+        await tx.execute(sql`set foreign_key_checks = 1`);
+      }
+    });
+    console.info("[admin] tenant deleted permanently", { tenantId, name: tenant.name, by: admin.email });
+    revalidatePath("/admin");
+    return { error: null };
+  } catch (error) {
+    return { error: friendlyError(error, "Restaurant could not be deleted.") };
   }
 }
 
