@@ -8,7 +8,7 @@ import { connectRealtime } from "@/lib/realtime-client";
 import { riderCashAction, riderDeliveredAction, riderJobsAction, riderLocationAction, riderOnlineAction, riderPaymentIssueAction, riderPickUpAction, riderProfileAction, riderQrAction, riderQrStatusAction, riderSaveProfileAction, riderTokenAction, riderUpiReceivedAction, submitDocumentsAction } from "./actions";
 import type { RiderQr } from "@/server/delivery/rider-pay";
 import { LiveMap } from "@/components/live-map";
-import { signOutAction } from "@/app/(console)/console/login/actions";
+import { signOutRiderAction } from "./login/actions";
 import { distanceKm, etaMinutes } from "@/domain/delivery";
 
 type Jobs = Awaited<ReturnType<typeof riderJobs>>;
@@ -143,7 +143,7 @@ export function RiderScreen({ initialJobs, initialProfile, initialVerification, 
         {editing ? <ProfileForm profile={profile} onSaved={(p) => { setProfile((old) => ({ ...old, ...p })); setEditing(false); }} />
           : <button type="button" onClick={() => setEditing(true)} className="mt-4 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-line bg-surface text-body font-semibold"><Camera className="size-4" aria-hidden="true" />Edit photo and vehicle</button>}
 
-        <form action={signOutAction}><button className="mt-3 flex min-h-12 w-full items-center justify-center rounded-2xl border border-line bg-surface text-body font-semibold text-danger">Sign out</button></form>
+        <form action={signOutRiderAction}><button className="mt-3 flex min-h-12 w-full items-center justify-center rounded-2xl border border-line bg-surface text-body font-semibold text-danger">Sign out</button></form>
       </>}
 
       {/* Bottom tabs: the work, and me */}

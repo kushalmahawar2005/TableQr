@@ -5,7 +5,6 @@ import { db } from "@/db";
 import { uuidv7 } from "@/db/id";
 import * as s from "@/db/schema";
 import { actionRoles, can, canUse, type ConsoleSectionSlug, type FloorPermission, type RoleAccess, type StaffRole } from "@/lib/staff-permissions";
-import type { StaffAppLoginRole } from "@/lib/console-nav";
 import { AppError } from "../errors";
 import type { StaffContext } from "./context";
 import { ACCESS_STOPPED, tenantAccess } from "../access";
@@ -74,7 +73,7 @@ export async function verifyStaffPin(input: { outletCode: string; phone: string;
 }
 
 /** Signs in at an outlet; returns the cookie token (shown to nobody but the browser) */
-export async function signInStaff(input: { outletCode: string; phone: string; pin: string; asRole?: StaffAppLoginRole; now?: Date }) {
+export async function signInStaff(input: { outletCode: string; phone: string; pin: string; asRole?: StaffRole; now?: Date }) {
   const now = input.now ?? new Date();
   const { user, scope, roles } = await verifyStaffPin({ ...input, now });
   if (input.asRole && !roles.includes(input.asRole)) {

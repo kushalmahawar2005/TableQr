@@ -138,6 +138,19 @@ export function StaffShell({
 }) {
   const [dark, setDark] = useState(theme === "dark");
   const [networkOnline, setNetworkOnline] = useState(true);
+  useEffect(() => {
+    const root = document.documentElement;
+    const capacitor = (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor;
+    const standalone = window.matchMedia("(display-mode: standalone)").matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
+    if (!capacitor?.isNativePlatform?.() && !standalone) return;
+    const probe = document.createElement("div");
+    probe.style.paddingTop = "env(safe-area-inset-top)";
+    document.body.appendChild(probe);
+    const inset = parseFloat(getComputedStyle(probe).paddingTop) || 0;
+    probe.remove();
+    if (inset === 0) root.style.setProperty("--staff-app-top", "2rem");
+    return () => { root.style.removeProperty("--staff-app-top"); };
+  }, []);
   // Dialogs and menus render in a portal on <body>, outside this wrapper, so the console theme must also be on <html> while the console is open.
   useEffect(() => {
     const root = document.documentElement;
@@ -197,10 +210,10 @@ export function StaffShell({
     <div
       lang={lang}
       style={{ "--sidebar-width": folded ? "4rem" : "13rem" } as CSSProperties}
-      className={`flex min-h-dvh flex-1 flex-col bg-paper text-ink sm:flex-row ${dark ? "theme-dark" : ""}`}
+      className={`flex min-h-dvh flex-1 flex-col bg-paper pt-[max(env(safe-area-inset-top),var(--staff-app-top,0px))] text-ink sm:flex-row sm:pt-0 ${dark ? "theme-dark" : ""}`}
     >
       <header
-        className={`sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between border-b px-4 sm:hidden print:hidden ${active === "dashboard" ? "border-line bg-paper" : "border-line bg-surface"}`}
+        className={`sticky top-[max(env(safe-area-inset-top),var(--staff-app-top,0px))] z-30 flex h-16 shrink-0 items-center justify-between border-b px-4 sm:hidden print:hidden ${active === "dashboard" ? "border-line bg-paper" : "border-line bg-surface"}`}
       >
         <span className="flex min-w-0 items-center gap-2.5">
           <span

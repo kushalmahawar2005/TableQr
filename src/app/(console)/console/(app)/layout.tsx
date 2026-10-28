@@ -29,7 +29,7 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export async function generateViewport(): Promise<Viewport> {
-  return staffAppViewportFor(await consoleAppBrand());
+  return { ...staffAppViewportFor(await consoleAppBrand()), viewportFit: "cover" };
 }
 
 // Staff console: sign-in first, then a sidebar showing only what this role may open (UI spec 3.5).
