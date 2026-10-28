@@ -104,6 +104,7 @@ describe("G7 rendering", () => {
     const online = table(g7Base);
     const offline = table(g7Base, { offline: true });
     expect(offline).toContain("You’re offline");
+    expect(offline).toContain("New waiter calls and service requests are not sent while offline. Please call staff or use the table bell.");
     for (const label of ["Pause ordering", "Water", "Call waiter", "Request bill"]) {
       expect(buttonWith(online, label)).not.toContain(' disabled=""');
       expect(buttonWith(offline, label)).toContain(' disabled=""');

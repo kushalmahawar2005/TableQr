@@ -1,0 +1,1 @@
+ALTER TABLE `outlets` ADD `guest_pwa_install_enabled` boolean DEFAULT true NOT NULL;

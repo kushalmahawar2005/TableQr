@@ -1,6 +1,6 @@
 import "server-only";
 import { validateDeliveryPolicy, type DeliveryPolicy } from "@/domain/delivery";
-import { requireFeature } from "../plan";
+import { requireFeature, tenantFeatures } from "../plan";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import * as s from "@/db/schema";
@@ -21,7 +21,7 @@ const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
 export type SettingsPatch = {
   deliveryPolicy?: DeliveryPolicy;
   city: string; address: string; gstin: string; fssai: string;
-  serviceChargeBp: number; tipPresetsBp: number[] | null; autoAcceptOrders: boolean; guestOnlinePayments?: boolean; reviewUrl: string;
+  serviceChargeBp: number; tipPresetsBp: number[] | null; autoAcceptOrders: boolean; guestOnlinePayments?: boolean; guestPwaInstallEnabled?: boolean; reviewUrl: string;
   openingHours: Record<string, [string, string][]> | null;
   roomServices: RoomRequestKind[]; wifiSsid: string; wifiPassword: string;
   guestServices?: GuestService[];
@@ -38,6 +38,11 @@ const bad = (message: string) => new AppError("invalid_state", message, { reason
 export async function updateOutletSettings(staff: Staff, input: SettingsPatch, now = new Date()) {
   if (!staff.roles.includes("owner")) throw new AppError("forbidden", "Only the owner can change settings.");
   if (input.guestOnlinePayments !== undefined && typeof input.guestOnlinePayments !== "boolean") throw bad("Choose a valid online payment preference.");
+  if (input.guestPwaInstallEnabled !== undefined && typeof input.guestPwaInstallEnabled !== "boolean") throw bad("Choose whether guests can install the restaurant app.");
+  if (input.guestPwaInstallEnabled === true) {
+    const features = await tenantFeatures(staff.tenantId);
+    if (!features.guestPwaCustomization || (!features.delivery && !features.reservations)) throw bad("Branded guest app install is not included in this restaurant’s plan. Ask Tableeqr to enable it.");
+  }
   if (input.bookingPaymentMode !== undefined && !["gateway", "manual_qr"].includes(input.bookingPaymentMode)) throw bad("Choose a valid booking payment method.");
   const upiId = input.upiId === undefined ? undefined : String(input.upiId ?? "").trim().toLowerCase();
   if (upiId && !/^[a-z0-9._-]{2,256}@[a-z][a-z0-9]{1,63}$/.test(upiId)) throw bad("Enter a UPI ID like restaurant@okaxis.");
@@ -99,6 +104,7 @@ export async function updateOutletSettings(staff: Staff, input: SettingsPatch, n
     const savedAnnouncementTitle = input.announcementTitle === undefined ? before.announcementTitle : announcementTitle || null;
     const savedAnnouncementBody = input.announcementBody === undefined ? before.announcementBody : announcementBody || null;
     const announcementWillBeActive = input.announcementActive ?? before.announcementActive;
+    const guestPwaInstallEnabled = input.guestPwaInstallEnabled ?? before.guestPwaInstallEnabled;
     if (announcementWillBeActive && (!savedAnnouncementTitle || !savedAnnouncementBody)) throw bad("Add a title and message before publishing the announcement.");
     const next = { city, address, gstin: gstin || null, fssai: fssai || null, serviceChargeBp: sc, tipPresetsBp: tips, autoAcceptOrders: !!input.autoAcceptOrders, guestOnlinePayments: input.guestOnlinePayments ?? before.guestOnlinePayments, reviewUrl: reviewUrl || null, openingHours: hours, roomServices, wifiSsid: wifiSsid || null, wifiPassword: wifiPassword || null, announcementActive: announcementWillBeActive, announcementTitle: savedAnnouncementTitle, announcementBody: savedAnnouncementBody };
     const nextGuestServices = input.guestServices === undefined ? before.guestServices : [...input.guestServices];
@@ -111,11 +117,11 @@ export async function updateOutletSettings(staff: Staff, input: SettingsPatch, n
     if ((input.bookingAdvancePaise ?? before.bookingAdvancePaise) > 0 && bookingPaymentMode === "manual_qr" && !before.bookingPaymentQrUrl) throw bad("Upload your restaurant payment QR before requiring reservation advances.");
     if (deliveryPolicy?.paymentMode === "manual_qr" && !before.bookingPaymentQrUrl) throw bad("Upload your restaurant payment QR before selecting manual delivery payments.");
     const bookingAdvancePaise = input.bookingAdvancePaise ?? before.bookingAdvancePaise;
-    await tx.update(s.outlets).set({ ...next, ...(deliveryPolicy ? { deliveryPolicy } : {}), guestServices: nextGuestServices, bookingPaymentMode, bookingAdvancePaise, ...(upiId !== undefined ? { upiId: upiId || null } : {}), ...(upiName !== undefined ? { upiName: upiName || null } : {}) }).where(and(eq(s.outlets.tenantId, staff.tenantId), eq(s.outlets.id, staff.outletId)));
+    await tx.update(s.outlets).set({ ...next, guestPwaInstallEnabled, ...(deliveryPolicy ? { deliveryPolicy } : {}), guestServices: nextGuestServices, bookingPaymentMode, bookingAdvancePaise, ...(upiId !== undefined ? { upiId: upiId || null } : {}), ...(upiName !== undefined ? { upiName: upiName || null } : {}) }).where(and(eq(s.outlets.tenantId, staff.tenantId), eq(s.outlets.id, staff.outletId)));
     await audit(tx, staff, {
       action: "outlet.settings_changed", entity: "outlet", entityId: staff.outletId, now,
-      before: { deliveryPolicy: before.deliveryPolicy, city: before.city, address: before.address, gstin: before.gstin, fssai: before.fssai, serviceChargeBp: before.serviceChargeBp, tipPresetsBp: before.tipPresetsBp, autoAcceptOrders: before.autoAcceptOrders, guestOnlinePayments: before.guestOnlinePayments, guestServices: before.guestServices, bookingPaymentMode: before.bookingPaymentMode, bookingAdvancePaise: before.bookingAdvancePaise, reviewUrl: before.reviewUrl, openingHours: before.openingHours, roomServices: before.roomServices, wifiSsid: before.wifiSsid, hasWifiPassword: !!before.wifiPassword, announcementActive: before.announcementActive, announcementTitle: before.announcementTitle, announcementBody: before.announcementBody },
-      after: { ...next, deliveryPolicy: deliveryPolicy ?? before.deliveryPolicy, guestServices: nextGuestServices, bookingPaymentMode, bookingAdvancePaise, wifiPassword: "[redacted]", hasWifiPassword: !!wifiPassword },
+      before: { deliveryPolicy: before.deliveryPolicy, city: before.city, address: before.address, gstin: before.gstin, fssai: before.fssai, serviceChargeBp: before.serviceChargeBp, tipPresetsBp: before.tipPresetsBp, autoAcceptOrders: before.autoAcceptOrders, guestOnlinePayments: before.guestOnlinePayments, guestPwaInstallEnabled: before.guestPwaInstallEnabled, guestServices: before.guestServices, bookingPaymentMode: before.bookingPaymentMode, bookingAdvancePaise: before.bookingAdvancePaise, reviewUrl: before.reviewUrl, openingHours: before.openingHours, roomServices: before.roomServices, wifiSsid: before.wifiSsid, hasWifiPassword: !!before.wifiPassword, announcementActive: before.announcementActive, announcementTitle: before.announcementTitle, announcementBody: before.announcementBody },
+      after: { ...next, guestPwaInstallEnabled, deliveryPolicy: deliveryPolicy ?? before.deliveryPolicy, guestServices: nextGuestServices, bookingPaymentMode, bookingAdvancePaise, wifiPassword: "[redacted]", hasWifiPassword: !!wifiPassword },
     });
   });
 }

@@ -8,13 +8,15 @@ import { OPEN_TAX_RATES } from "@/domain/gst";
 import { menuThumb } from "@/domain/menu-photo";
 import { priceLine, quoteKey, type PriceQuote } from "@/domain/pricing";
 import { connectRealtime } from "@/lib/realtime-client";
+import { usePrint } from "@/components/print/print-provider";
+import { offlinePosKotHtml } from "@/lib/pos-offline-kot";
 import type { AnyDraftLine } from "@/server/guest/order";
 import type { PosBillDetail } from "@/server/staff/pos-read";
 import type { PosTerminal } from "@/server/staff/pos-terminal";
 import { buildOfflinePosRecoveryFile, checkOfflinePosStorage, importOfflinePosRecoveryFile, loadOfflinePosBillSnapshot, loadPosDraft, queueOfflinePosOrder, readOfflinePosCashCollections, readOfflinePosOrders, saveOfflinePosBillSnapshot, savePosDraft, savePosSnapshot, writeOfflinePosCashCollection, writeOfflinePosOrder, type OfflinePosBillSnapshot, type OfflinePosCashCollection, type OfflinePosOrder } from "@/lib/pos-offline-queue";
 import { syncSavedPosOrders } from "@/lib/pos-offline-sync";
 import { syncSavedPosCashCollections } from "@/lib/pos-offline-cash-sync";
-import { billAction, newTakeawayAction, openTableAction, orderAction, sendOrderAction, settleOfflineCashAction, terminalAction, tokenAction } from "../actions";
+import { approveOfflineOrderAction, billAction, newTakeawayAction, openTableAction, orderAction, recoverOfflineOrderVisitAction, sendOrderAction, settleOfflineCashAction, terminalAction, tokenAction } from "../actions";
 
 // POS terminal, the way a counter bills: the table view first, then dishes by category with the
 // order on the right. New lines stay on this screen until they are sent to the kitchen (KOT);
@@ -86,8 +88,9 @@ const photoPref = (() => {
   };
 })();
 
-export function PosTerminalScreen({ initial, outletId, staffUserId, sessionExpiresAt, hi, realtimeUrl, initialSavedAt, initialIsServerFresh, startOffline = false }: { initial: PosTerminal; outletId: string; staffUserId: string; sessionExpiresAt: number; hi: boolean; realtimeUrl: string | null; initialSavedAt: number; initialIsServerFresh: boolean; startOffline?: boolean }) {
+export function PosTerminalScreen({ initial, outletId, staffUserId, canReviewOfflineOrders = false, sessionExpiresAt, hi, realtimeUrl, initialSavedAt, initialIsServerFresh, startOffline = false }: { initial: PosTerminal; outletId: string; staffUserId: string; canReviewOfflineOrders?: boolean; sessionExpiresAt: number; hi: boolean; realtimeUrl: string | null; initialSavedAt: number; initialIsServerFresh: boolean; startOffline?: boolean }) {
   const router = useRouter();
+  const printer = usePrint().manager;
   const L = useCallback((en: string, h: string) => (hi ? h : en), [hi]);
   const [data, setData] = useState(initial);
   const [current, setCurrent] = useState<Current | null>(null);
@@ -106,6 +109,7 @@ export function PosTerminalScreen({ initial, outletId, staffUserId, sessionExpir
   const [queuedOrders, setQueuedOrders] = useState<OfflinePosOrder[]>([]);
   const [cashCollections, setCashCollections] = useState<OfflinePosCashCollection[]>([]);
   const [cashDialogOpen, setCashDialogOpen] = useState(false);
+  const [reviewOrder, setReviewOrder] = useState<OfflinePosOrder | null>(null);
   const [cashReceived, setCashReceived] = useState("");
   const [draftReady, setDraftReady] = useState(false);
   const [storageWarning, setStorageWarning] = useState<string | null>(null);
@@ -228,12 +232,13 @@ export function PosTerminalScreen({ initial, outletId, staffUserId, sessionExpir
         force,
         deliver: async (saved, checkpoint) => {
           let order = saved;
-          if (order.staffUserId !== staffUserId) throw new Error(L("This saved order belongs to a different staff session. Ask a manager to review it.", "यह सेव ऑर्डर दूसरे स्टाफ़ सेशन का है। मैनेजर से जाँच करवाएँ।"));
+          const managerApproved = order.managerApprovedByUserId === staffUserId;
+          if (order.staffUserId !== staffUserId && !managerApproved) throw new Error(L("This saved order belongs to a different staff session. Ask a manager to review it.", "यह सेव ऑर्डर दूसरे स्टाफ़ सेशन का है। मैनेजर से जाँच करवाएँ।"));
           // A previous request may have reached the server even when its reply was lost. Ask the
           // idempotent endpoint first for an already-open session so a later menu change cannot
           // strand an order the kitchen has already received.
           if (order.current.sessionId) {
-            const replay = await sendOrderAction({ sessionId: order.current.sessionId, clientRequestId: order.id, lines: order.lines, quote: order.quote ?? {}, guestName: order.guestName.trim() || null });
+            const replay = await sendOrderAction({ sessionId: order.current.sessionId, clientRequestId: order.id, lines: order.lines, quote: order.quote ?? {}, guestName: order.guestName.trim() || null, ...(managerApproved ? { managerApprovedOfflineRequestId: order.id } : {}) });
             if (replay.ok) return;
             if (!/prices have changed/i.test(replay.error)) throw new Error(replay.error);
           }
@@ -256,7 +261,12 @@ export function PosTerminalScreen({ initial, outletId, staffUserId, sessionExpir
             }
           }
           if (!order.current.sessionId) {
-            if (order.current.takeaway) {
+            if (managerApproved) {
+              const opened = await recoverOfflineOrderVisitAction({ requestId: order.id, current: order.current, guestName: order.guestName, partySize: order.partySize });
+              if (!opened.ok) throw new Error(opened.error);
+              order = { ...order, current: { ...order.current, sessionId: opened.data.sessionId, tableId: opened.data.tableId, code: opened.data.code } };
+              await checkpoint(order);
+            } else if (order.current.takeaway) {
               const opened = await newTakeawayAction(order.guestName.trim() || null, order.id);
               if (!opened.ok) throw new Error(opened.error);
               order = { ...order, current: { ...order.current, sessionId: opened.data.sessionId, tableId: opened.data.tableId, code: opened.data.code } };
@@ -267,7 +277,7 @@ export function PosTerminalScreen({ initial, outletId, staffUserId, sessionExpir
             }
             await checkpoint(order);
           }
-          const sent = await sendOrderAction({ sessionId: order.current.sessionId!, clientRequestId: order.id, lines: order.lines, quote: order.quote ?? {}, guestName: order.guestName.trim() || null });
+          const sent = await sendOrderAction({ sessionId: order.current.sessionId!, clientRequestId: order.id, lines: order.lines, quote: order.quote ?? {}, guestName: order.guestName.trim() || null, ...(managerApproved ? { managerApprovedOfflineRequestId: order.id } : {}) });
           if (!sent.ok) throw new Error(sent.error);
         },
       });
@@ -285,6 +295,32 @@ export function PosTerminalScreen({ initial, outletId, staffUserId, sessionExpir
       finally { syncingQueue.current = false; }
     }
   }, [outletId, sessionExpiresAt, staffUserId, hi, L, syncOfflineCash]);
+
+  const approveAndSyncOfflineOrder = useCallback(async (order: OfflinePosOrder) => {
+    if (!canReviewOfflineOrders || !navigator.onLine) return;
+    const approval = await approveOfflineOrderAction({ requestId: order.id, originalStaffUserId: order.staffUserId, current: order.current, partySize: order.partySize, lines: order.lines, quote: order.quote, guestName: order.guestName });
+    if (!approval.ok) {
+      setMessage({ tone: "bad", text: approval.error });
+      return;
+    }
+    const approved = { ...order, managerApprovedByUserId: staffUserId, error: undefined, retryCount: 0, nextRetryAt: undefined };
+    try {
+      await writeOfflinePosOrder(outletId, approved);
+      const saved = await readOfflinePosOrders(outletId);
+      setQueuedOrders(saved);
+      setQueuedCount(saved.length);
+      setReviewOrder(null);
+      setMessage({ tone: "ok", text: L("Manager approval recorded. Retrying this order with the same request ID; server checks will still apply.", "मैनेजर की मंज़ूरी दर्ज हुई। उसी request ID से ऑर्डर फिर भेज रहे हैं; सर्वर की जाँचें लागू रहेंगी।") });
+      await syncOfflineOrders(true);
+    } catch {
+      setMessage({ tone: "bad", text: L("Approval was recorded, but this device could not update the saved order. Keep the recovery copy and try again.", "मंज़ूरी दर्ज हुई, लेकिन डिवाइस सेव ऑर्डर अपडेट नहीं कर सका। रिकवरी कॉपी सुरक्षित रखें और फिर कोशिश करें।") });
+    }
+  }, [canReviewOfflineOrders, outletId, staffUserId, L, syncOfflineOrders]);
+
+  const printOfflineKitchenCopy = useCallback(async (order: OfflinePosOrder) => {
+    const run = await printer.print({ kind: "kot", subject: { type: "offline_pos_order", id: order.id }, build: (paper) => offlinePosKotHtml(order, data.menu, paper) });
+    setMessage({ tone: run.status === "failed" ? "bad" : "ok", text: run.status === "failed" ? run.message : L("Local kitchen copy opened in the print dialog. It is not a server KOT; hand it to the kitchen and confirm the paper printed.", "लोकल किचन कॉपी प्रिंट डायलॉग में खुली। यह सर्वर KOT नहीं है; इसे किचन तक पहुँचाएँ और प्रिंट हुआ है या नहीं जाँचें।") });
+  }, [printer, data.menu, L]);
 
   const acceptCurrentMenuQuote = useCallback(async (order: OfflinePosOrder) => {
     if (!navigator.onLine) {
@@ -314,7 +350,7 @@ export function PosTerminalScreen({ initial, outletId, staffUserId, sessionExpir
       }
       quote[quoteKey(line.itemId, line.modifierIds)] = priced.line.unitPricePaise;
     }
-    const reviewed = { ...order, quote, error: undefined, retryCount: 0, nextRetryAt: undefined };
+    const reviewed = { ...order, quote, managerApprovedByUserId: undefined, error: undefined, retryCount: 0, nextRetryAt: undefined };
     await writeOfflinePosOrder(outletId, reviewed);
     const saved = await readOfflinePosOrders(outletId);
     setQueuedOrders(saved);
@@ -610,14 +646,19 @@ export function PosTerminalScreen({ initial, outletId, staffUserId, sessionExpir
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="font-semibold">{L("Saved KOT", "सेव किया KOT")} · {order.current.code || L("New takeaway", "नया पार्सल")} · {order.lines.length} {L("lines", "आइटम")}</p>
+              {order.staffUserId !== staffUserId && <p role="alert" className="mt-1 text-danger">{L("This KOT belongs to another staff login. Sign back into that account on this device to sync it; do not enter the order again. If that account is unavailable, download the recovery copy and ask the owner to review it.", "यह KOT दूसरे स्टाफ़ लॉगिन का है। सिंक करने के लिए उसी अकाउंट से इस डिवाइस पर लॉगिन करें; ऑर्डर दोबारा दर्ज न करें। अकाउंट उपलब्ध न हो तो रिकवरी कॉपी डाउनलोड करके मालिक से जाँच करवाएँ।")}</p>}
               {order.error && <p role="alert" className="mt-1 text-danger">{order.error}</p>}
               {order.retryCount ? <p className="mt-1 text-muted">{L(`Sync attempt ${order.retryCount}; automatic retry is scheduled.`, `सिंक की ${order.retryCount} कोशिशें हुईं; अपने-आप फिर प्रयास होगा।`)}</p> : null}
+            {offline && <button type="button" className="mt-2 min-h-9 rounded-lg border border-line bg-surface px-3 font-semibold text-ink" onClick={() => void printOfflineKitchenCopy(order)}>{L("Print local kitchen copy", "लोकल किचन कॉपी प्रिंट करें")}</button>}
               {needsReview && <ul className="mt-2 space-y-1 text-warning">{changes.map((change, index) => <li key={`${change.name}:${index}`}>{change.name}: {change.previous === undefined ? L("old price not saved", "पुरानी कीमत सेव नहीं थी") : rs(change.previous)} → {change.next === null ? L("unavailable", "उपलब्ध नहीं") : rs(change.next)}</li>)}</ul>}
             </div>
             {needsReview && !offline && (canAccept
               ? <button type="button" className="min-h-9 rounded-lg bg-warning px-3 font-semibold text-ink" onClick={() => void acceptCurrentMenuQuote(order)}>{L("Accept current prices & retry", "अभी की कीमतें मानकर फिर भेजें")}</button>
               : <p className="max-w-52 text-danger">{L("Unavailable items need a manager review.", "अनुपलब्ध आइटम मैनेजर से जाँचें।")}</p>)}
             {!needsReview && order.error && !offline && order.staffUserId === staffUserId && <button type="button" className="min-h-9 rounded-lg border border-line bg-surface px-3 font-semibold text-ink" onClick={() => void syncOfflineOrders(true)}>{L("Retry now", "अभी फिर कोशिश करें")}</button>}
+            {order.staffUserId !== staffUserId && canReviewOfflineOrders && !offline && (order.current.takeaway || !!order.current.tableId) && order.managerApprovedByUserId !== staffUserId && <button type="button" className="min-h-9 rounded-lg bg-ink px-3 font-semibold text-paper" onClick={() => setReviewOrder(order)}>{order.current.sessionId ? L("Review & approve replay", "जाँचें और दोबारा भेजने की मंज़ूरी दें") : L("Review & recover order", "ऑर्डर जाँचें और वापस लें")}</button>}
+            {order.staffUserId !== staffUserId && canReviewOfflineOrders && !offline && !order.current.sessionId && !order.current.takeaway && !order.current.tableId && <p className="max-w-56 text-danger">{L("This recovery copy is missing its table. Keep the copy and contact the owner before entering the order again.", "इस रिकवरी कॉपी में टेबल की जानकारी नहीं है। कॉपी सुरक्षित रखें और ऑर्डर दोबारा दर्ज करने से पहले मालिक से संपर्क करें।")}</p>}
+            {order.managerApprovedByUserId === staffUserId && order.error && !offline && <button type="button" className="min-h-9 rounded-lg border border-line bg-surface px-3 font-semibold text-ink" onClick={() => void syncOfflineOrders(true)}>{L("Retry approved order", "मंज़ूर ऑर्डर फिर भेजें")}</button>}
           </div>
         </section>;
       })}
@@ -626,6 +667,7 @@ export function PosTerminalScreen({ initial, outletId, staffUserId, sessionExpir
           <p className="font-semibold">{L("Provisional local cash record", "अस्थायी लोकल नकद रिकॉर्ड")} · {cash.tableCode} · {cash.id.slice(0, 8).toUpperCase()}</p>
           <p className="mt-1">{L("Due", "बाकी")}: {rs(cash.expectedDuePaise)} · {L("Received", "मिला")}: {rs(cash.receivedPaise)} · {L("Change", "वापस")}: {rs(cash.receivedPaise - cash.expectedDuePaise)}</p>
           <p className="mt-1 text-warning">{cash.error || L("Saved on this device; waiting for the server to confirm the exact bill balance.", "इस डिवाइस पर सेव है; सर्वर से बिल की बाकी रकम की पुष्टि का इंतज़ार है।")}</p>
+          {cash.staffUserId !== staffUserId && <p role="alert" className="mt-1 text-danger">{L("This cash record belongs to another staff login. Sign back into that account on this device to reconcile it. Keep this record and do not collect cash for this bill again until it is checked.", "यह नकद रिकॉर्ड दूसरे स्टाफ़ लॉगिन का है। मिलान के लिए उसी अकाउंट से इस डिवाइस पर लॉगिन करें। रिकॉर्ड सुरक्षित रखें और जाँच होने तक इस बिल का नकद दोबारा न लें।")}</p>}
           {cash.retryCount ? <p className="mt-1 text-muted">{L(`Sync attempt ${cash.retryCount}; the local record is still preserved.`, `सिंक की ${cash.retryCount} कोशिशें हुईं; लोकल रिकॉर्ड सुरक्षित है।`)}</p> : null}
         </div>
         {!offline && cash.staffUserId === staffUserId && <button type="button" className="min-h-9 rounded-lg border border-line bg-surface px-3 font-semibold text-ink" onClick={() => void syncOfflineCash(true)}>{L("Reconcile now", "अभी मिलान करें")}</button>}
@@ -772,6 +814,27 @@ export function PosTerminalScreen({ initial, outletId, staffUserId, sessionExpir
             </label>
             <p className="text-caption text-muted">{L("Change", "वापस")}: {rs(Math.max(0, Math.round(Number(cashReceived) * 100) - offlineCashDuePaise))}</p>
             <button type="button" className={primary} disabled={!canRecordOfflineCash || !Number.isSafeInteger(Math.round(Number(cashReceived) * 100)) || Math.round(Number(cashReceived) * 100) < offlineCashDuePaise} onClick={() => void handleRecordOfflineCash()}>{L("Save local cash record", "लोकल नकद रिकॉर्ड सेव करें")}</button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={!!reviewOrder} onOpenChange={(open) => { if (!open) setReviewOrder(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{L("Review saved order before replay", "दोबारा भेजने से पहले सेव ऑर्डर जाँचें")}</DialogTitle>
+            <DialogDescription>{L("This local order was created by another staff account. Approval is recorded in the audit log and the server checks prices and availability. If its table visit does not exist yet, the server opens the saved table only if it is still free; otherwise the order stays pending.", "यह लोकल ऑर्डर दूसरे स्टाफ़ अकाउंट ने बनाया था। मंज़ूरी audit log में दर्ज होगी और सर्वर कीमत व उपलब्धता जाँचेगा। अगर टेबल विज़िट अभी नहीं बनी है, तो सर्वर सेव टेबल तभी खोलेगा जब वह खाली हो; वरना ऑर्डर रुका रहेगा।")}</DialogDescription>
+          </DialogHeader>
+          {reviewOrder && <div className="max-h-64 space-y-2 overflow-y-auto rounded-xl border border-line p-3">
+            <p className="font-semibold">{reviewOrder.current.code || L("New takeaway", "नया पार्सल")} · {new Date(reviewOrder.createdAt).toLocaleString(hi ? "hi-IN" : "en-IN")}</p>
+            {reviewOrder.lines.map((line, index) => {
+              const dish = "itemId" in line ? data.menu.find((item) => item.id === line.itemId) : null;
+              const name = "itemId" in line ? dish?.name ?? line.itemId : line.open.name;
+              const mods = "itemId" in line ? line.modifierIds.map((id) => dish?.pricing.groups.flatMap((group) => group.modifiers).find((mod) => mod.id === id)?.nameEn ?? id).join(", ") : "";
+              return <div key={`${index}-${name}`} className="border-t border-line pt-2 text-caption"><p className="font-semibold">{line.qty} × {name}</p>{mods && <p className="text-muted">{mods}</p>}{line.note && <p className="text-warning">{L("Note", "नोट")}: {line.note}</p>}</div>;
+            })}
+          </div>}
+          <div className="flex justify-end gap-2">
+            <button type="button" className={quiet} onClick={() => setReviewOrder(null)}>{L("Cancel", "रद्द करें")}</button>
+            <button type="button" className={primary} disabled={!reviewOrder || !canReviewOfflineOrders || offline} onClick={() => reviewOrder && void approveAndSyncOfflineOrder(reviewOrder)}>{reviewOrder && !reviewOrder.current.sessionId ? L("Approve & recover", "मंज़ूरी देकर वापस लें") : L("Approve & retry", "मंज़ूरी देकर फिर भेजें")}</button>
           </div>
         </DialogContent>
       </Dialog>

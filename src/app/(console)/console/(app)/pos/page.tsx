@@ -23,5 +23,5 @@ export default async function PosTerminalPage() {
   }
   const lang = parseLang((await cookies()).get(LANG_COOKIE)?.value);
   const initial = await posTerminal(staff);
-  return <PosTerminalScreen initial={initial} initialSavedAt={initial.loadedAt} initialIsServerFresh outletId={staff.outletId} staffUserId={staff.userId} sessionExpiresAt={staff.expiresAt} hi={lang === "hi"} realtimeUrl={process.env.REALTIME_URL?.replace(/^http/, "ws") ?? null} />;
+  return <PosTerminalScreen initial={initial} initialSavedAt={initial.loadedAt} initialIsServerFresh outletId={staff.outletId} staffUserId={staff.userId} canReviewOfflineOrders={staff.roles.some((role) => role === "owner" || role === "manager")} sessionExpiresAt={staff.expiresAt} hi={lang === "hi"} realtimeUrl={process.env.REALTIME_URL?.replace(/^http/, "ws") ?? null} />;
 }

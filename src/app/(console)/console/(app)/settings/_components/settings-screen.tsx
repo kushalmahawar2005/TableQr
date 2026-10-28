@@ -81,6 +81,7 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
   const [deliveryPolicy, setDeliveryPolicy] = useState(o.deliveryPolicy);
   const [auto, setAuto] = useState(o.autoAcceptOrders);
   const [guestOnlinePayments, setGuestOnlinePayments] = useState(o.guestOnlinePayments);
+  const [guestPwaInstallEnabled, setGuestPwaInstallEnabled] = useState(o.guestPwaInstallEnabled);
   const [publicServices, setPublicServices] = useState<GuestService[]>(o.guestServices);
   const [announcementActive, setAnnouncementActive] = useState(o.announcementActive);
   const [announcementTitle, setAnnouncementTitle] = useState(o.announcementTitle);
@@ -107,7 +108,7 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
   const [logoMessage, setLogoMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
   // What is on screen against what was last saved, so the save bar can say if anything changed
-  const snapshot = JSON.stringify({ city, address, gstin, fssai, sc, tips, auto, guestOnlinePayments, publicServices, announcementActive, announcementTitle, announcementBody, bookingPaymentMode, bookingAdvance, deliveryPolicy, review, roomServices, wifiSsid, wifiPassword, hours: hoursOn ? hours : null });
+  const snapshot = JSON.stringify({ city, address, gstin, fssai, sc, tips, auto, guestOnlinePayments, guestPwaInstallEnabled, publicServices, announcementActive, announcementTitle, announcementBody, bookingPaymentMode, bookingAdvance, deliveryPolicy, review, roomServices, wifiSsid, wifiPassword, hours: hoursOn ? hours : null });
   const [savedSnapshot, setSavedSnapshot] = useState(snapshot);
   const dirty = snapshot !== savedSnapshot;
 
@@ -233,7 +234,7 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
         city, address, gstin, fssai,
         serviceChargeBp: Math.round(scNum * 100),
         tipPresetsBp: tips.map((t) => Math.round(t * 100)),
-        autoAcceptOrders: auto, guestOnlinePayments, reviewUrl: review, roomServices, wifiSsid, wifiPassword,
+        autoAcceptOrders: auto, guestOnlinePayments, guestPwaInstallEnabled, reviewUrl: review, roomServices, wifiSsid, wifiPassword,
         guestServices: publicServices,
         announcementActive, announcementTitle, announcementBody,
         bookingPaymentMode,
@@ -375,6 +376,9 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
           </Section>
 
           <Section id="guest-link" icon={Store} title="Public restaurant link" desc="Choose the services shown after guests select their language.">
+            <Row label="Customer app install" hint={o.guestPwaCustomizationAvailable ? "When enabled, guests can install your restaurant app from its public link. Turning this off keeps the website and booking link working." : "This option is not included in the current plan. Ask Tableeqr to enable branded guest app installation."}>
+              <div className="flex sm:justify-end"><Toggle on={guestPwaInstallEnabled} onChange={setGuestPwaInstallEnabled} label="Show customer app install option" disabled={!canEdit || !o.guestPwaCustomizationAvailable} /></div>
+            </Row>
             {o.availableGuestServices.map(service => <Row key={service} label={GUEST_SERVICE_LABELS[service].title} hint={GUEST_SERVICE_LABELS[service].hint}>
               <div className="flex sm:justify-end"><Toggle on={publicServices.includes(service)} onChange={enabled => setPublicServices(current => enabled ? [...current, service] : current.filter(value => value !== service))} label={`Show ${GUEST_SERVICE_LABELS[service].title}`} disabled={!canEdit} /></div>
             </Row>)}

@@ -75,6 +75,12 @@ describe("staff auth", () => {
     expect(owner.roles).toEqual(["owner"]);
   });
 
+  it("checks the selected login card against assigned roles", async () => {
+    await failsWith(signInStaff({ outletCode: "SRJ01", phone: "9000000004", pin: "4444", asRole: "owner" }), "sign_in_failed", "role_mismatch");
+    const { token } = await signInStaff({ outletCode: "SRJ01", phone: "9000000004", pin: "4444", asRole: "host" });
+    expect((await resolveStaff(token))?.roles).toEqual(["host"]);
+  });
+
   it("refuses a wrong PIN, an inactive user, the wrong outlet and locks after five tries", async () => {
     await failsWith(signInStaff({ outletCode: "SRJ01", phone: "9000000004", pin: "1234" }), "sign_in_failed");
     await failsWith(signInStaff({ outletCode: "CNJ01", phone: "9000000004", pin: "4444" }), "sign_in_failed");

@@ -13,6 +13,8 @@ export type OfflinePosOrder = {
   lines: AnyDraftLine[];
   /** Server menu unit prices the cashier saw when saving the offline KOT. */
   quote?: PriceQuote;
+  /** A manager/owner approved this local-only order for replay under their own staff identity. */
+  managerApprovedByUserId?: string;
   error?: string;
   retryCount?: number;
   nextRetryAt?: number;
@@ -335,6 +337,7 @@ function validateRecoveryOrder(value: unknown): OfflinePosOrder {
     throw new Error("The recovery file contains an invalid order.");
   }
   if (order.quote !== undefined && (!order.quote || typeof order.quote !== "object" || Object.values(order.quote).some((price) => !Number.isSafeInteger(price) || price < 0))) throw new Error("The recovery file contains an invalid saved price quote.");
+  if (order.managerApprovedByUserId !== undefined && (typeof order.managerApprovedByUserId !== "string" || !order.managerApprovedByUserId)) throw new Error("The recovery file contains an invalid manager approval.");
   if (order.retryCount !== undefined && (!Number.isSafeInteger(order.retryCount) || order.retryCount < 0) || order.nextRetryAt !== undefined && !Number.isSafeInteger(order.nextRetryAt) || order.error !== undefined && (typeof order.error !== "string" || order.error.length > 1000)) throw new Error("The recovery file contains invalid retry information.");
   for (const line of order.lines) {
     if (!line || typeof line !== "object" || !Number.isSafeInteger(line.qty) || line.qty < 1 || line.qty > 99 || line.note !== undefined && (typeof line.note !== "string" || line.note.length > 140) || line.personalForPickup !== undefined && typeof line.personalForPickup !== "boolean") throw new Error("The recovery file contains an invalid order line.");
@@ -459,6 +462,7 @@ function toOfflinePosOrder(value: StoredOrder): OfflinePosOrder {
     partySize: value.partySize,
     lines: value.lines,
     ...(value.quote ? { quote: value.quote } : {}),
+    ...(value.managerApprovedByUserId ? { managerApprovedByUserId: value.managerApprovedByUserId } : {}),
     ...(value.error ? { error: value.error } : {}),
     ...(value.retryCount !== undefined ? { retryCount: value.retryCount } : {}),
     ...(value.nextRetryAt !== undefined ? { nextRetryAt: value.nextRetryAt } : {}),

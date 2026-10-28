@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { uuidv7 } from "@/db/id";
 import * as s from "@/db/schema";
 import { actionRoles, can, canUse, type ConsoleSectionSlug, type FloorPermission, type RoleAccess, type StaffRole } from "@/lib/staff-permissions";
+import type { StaffAppLoginRole } from "@/lib/console-nav";
 import { AppError } from "../errors";
 import type { StaffContext } from "./context";
 import { ACCESS_STOPPED, tenantAccess } from "../access";
@@ -67,9 +68,12 @@ export async function verifyStaffPin(input: { outletCode: string; phone: string;
 }
 
 /** Signs in at an outlet; returns the cookie token (shown to nobody but the browser) */
-export async function signInStaff(input: { outletCode: string; phone: string; pin: string; now?: Date }) {
+export async function signInStaff(input: { outletCode: string; phone: string; pin: string; asRole?: StaffAppLoginRole; now?: Date }) {
   const now = input.now ?? new Date();
-  const { user, scope } = await verifyStaffPin({ ...input, now });
+  const { user, scope, roles } = await verifyStaffPin({ ...input, now });
+  if (input.asRole && !roles.includes(input.asRole)) {
+    throw failed("This account isn't assigned to that role. Choose your assigned role or ask the owner.", { reason: "role_mismatch" });
+  }
   const token = randomBytes(32).toString("base64url");
   const expiresAt = new Date(now.getTime() + STAFF_SESSION_HOURS * 3600_000);
   await db.insert(s.staffSessions).values({ id: uuidv7(), tenantId: scope.tenantId, userId: user.id, outletId: scope.outletId, tokenHash: hashToken(token), createdAt: now, expiresAt, lastSeenAt: now });

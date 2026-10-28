@@ -6,7 +6,7 @@ import { settleAtCounter } from "@/server/billing/payments";
 import { startTakeaway } from "@/server/floor/takeaway";
 import { resolveStaff, signInStaff, type StaffSession } from "@/server/staff/auth";
 import { getSalesDetail } from "@/server/staff/sales-detail";
-import { posOpenTable, posSendOrder, posTerminal, posTerminalRoles } from "@/server/staff/pos-terminal";
+import { posOpenTable, posRecoverOfflineOrderVisit, posSendOrder, posTerminal, posTerminalRoles } from "@/server/staff/pos-terminal";
 import { quoteKey } from "@/domain/pricing";
 import { waiterRequestBill } from "@/server/staff/waiter-mutations";
 import { resetTestDb } from "./setup-db";
@@ -16,12 +16,14 @@ import { resetTestDb } from "./setup-db";
 
 let env: Awaited<ReturnType<typeof resetTestDb>>;
 let cashier: StaffSession;
+let manager: StaffSession;
 let accountant: StaffSession | null = null;
 const signIn = async (phone: string, pin: string) => (await resolveStaff((await signInStaff({ outletCode: "SRJ01", phone, pin })).token))!;
 
 beforeAll(async () => {
   env = await resetTestDb();
   cashier = await signIn("9000000003", "3333");
+  manager = await signIn("9000000002", "2222");
   const [acc] = await env.db.select({ userId: s.staffRoles.userId }).from(s.staffRoles).where(and(eq(s.staffRoles.tenantId, env.demo.tenantId), eq(s.staffRoles.role, "accountant")));
   if (acc) accountant = { ...cashier, userId: acc.userId, roles: ["accountant"] };
 });
@@ -155,5 +157,43 @@ describe("POS terminal", () => {
     const replay = await settleAtCounter(cashier, request, new Date(), posTerminalRoles);
     expect(replay).toEqual(first);
     expect(await env.db.select({ id: s.payments.id }).from(s.payments).where(eq(s.payments.clientRequestId, request.clientRequestId))).toHaveLength(1);
+  });
+
+  it("requires a matching manager approval before replaying another staff member's local order", async () => {
+    const tableId = env.demo.tableIds["T6"];
+    const { sessionId } = await posOpenTable(cashier, { tableId, partySize: 2 });
+    const requestId = "manager-review-order-01";
+    const lines = [{ itemId: env.demo.itemIds["Dal Makhani"], qty: 1, modifierIds: [] as string[] }];
+    const current = { sessionId, tableId, code: "T6", takeaway: false, seats: 2 };
+    const guestName = "";
+    await env.db.insert(s.auditLog).values({ tenantId: manager.tenantId, outletId: manager.outletId, actorUserId: manager.userId, actorLabel: `staff:${manager.name}`, action: "pos.offline_order_approved", entity: "offline_pos_order", entityId: requestId, before: { originalStaffUserId: cashier.userId }, after: { approvedByUserId: manager.userId, current, lines, quote: {}, guestName: null }, reason: "Manager reviewed a local POS recovery record before retrying it.", createdAt: new Date() });
+
+    await expect(posSendOrder(cashier, { sessionId, clientRequestId: requestId, lines, guestName, managerApprovedOfflineRequestId: requestId })).rejects.toMatchObject({ code: "forbidden" });
+    await expect(posSendOrder(manager, { sessionId, clientRequestId: requestId, lines: [{ ...lines[0], qty: 2 }], guestName, managerApprovedOfflineRequestId: requestId })).rejects.toMatchObject({ code: "forbidden" });
+    const sent = await posSendOrder(manager, { sessionId, clientRequestId: requestId, lines, guestName, managerApprovedOfflineRequestId: requestId });
+    expect(sent.atCounter).toBe(false);
+    expect(await env.db.select({ id: s.orders.id }).from(s.orders).where(eq(s.orders.sessionId, sessionId))).toHaveLength(1);
+  });
+
+  it("recovers a not-yet-opened offline table order only for its approved table and party size", async () => {
+    const tableId = env.demo.tableIds["T7"];
+    const requestId = "manager-recover-order-01";
+    const current = { sessionId: null, tableId, code: "T7", takeaway: false, seats: 4 };
+    const partySize = 3;
+    const guestName = "Asha";
+    const itemId = env.demo.itemIds["Dal Makhani"];
+    const [item] = await env.db.select({ pricePaise: s.menuItems.pricePaise }).from(s.menuItems).where(eq(s.menuItems.id, itemId));
+    const lines = [{ itemId, qty: 1, modifierIds: [] as string[] }];
+    const quote = { [quoteKey(itemId, [])]: item.pricePaise };
+    await env.db.insert(s.auditLog).values({ tenantId: manager.tenantId, outletId: manager.outletId, actorUserId: manager.userId, actorLabel: `staff:${manager.name}`, action: "pos.offline_order_approved", entity: "offline_pos_order", entityId: requestId, before: { originalStaffUserId: cashier.userId }, after: { approvedByUserId: manager.userId, current, partySize, lines, quote, guestName }, reason: "Manager reviewed a local POS recovery record before retrying it.", createdAt: new Date() });
+
+    const input = { requestId, current, partySize, guestName };
+    await expect(posRecoverOfflineOrderVisit(manager, { ...input, partySize: 2 })).rejects.toMatchObject({ code: "forbidden" });
+    const recovered = await posRecoverOfflineOrderVisit(manager, input);
+    expect(await posRecoverOfflineOrderVisit(manager, input)).toEqual(recovered);
+    const visit = await posTerminal(manager);
+    expect(visit.tables.find((table) => table.id === tableId)?.visit?.id).toBe(recovered.sessionId);
+    await posSendOrder(manager, { sessionId: recovered.sessionId, clientRequestId: requestId, lines, quote, guestName, managerApprovedOfflineRequestId: requestId });
+    expect(await env.db.select({ id: s.orders.id }).from(s.orders).where(eq(s.orders.sessionId, recovered.sessionId))).toHaveLength(1);
   });
 });

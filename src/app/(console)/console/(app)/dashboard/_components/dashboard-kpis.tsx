@@ -1,4 +1,4 @@
-import { Calendar, CreditCard, FileText, Receipt, Wallet } from "lucide-react";
+import { Calendar, CreditCard, FileText, Receipt, Truck, Wallet } from "lucide-react";
 import Link from "next/link";
 import type { DashboardData, RevenueTrend } from "@/server/staff/dashboard";
 import { Delta, dayLabel, focusRing, money } from "./dashboard-shared";
@@ -63,6 +63,18 @@ export function DashboardKpis({ data, trend }: { data: DashboardData; trend: Rev
             <p className="mt-1 min-h-7 text-xs font-medium leading-4 text-muted sm:mt-2 sm:min-h-8">Total amount due</p>
           </div>
           <div className={`${footer} justify-start`}><span className="text-[11px] font-medium text-muted">Across open bills</span></div>
+        </Link>
+
+        <Link href="/console/orders?view=delivery" className={`${card} xl:col-span-1`}>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[12px] font-semibold leading-4 text-muted sm:text-[13px]">Delivery Orders</p>
+            <span className={`${iconBox} bg-sage text-forest`} aria-hidden="true"><Truck className="size-[18px]" /></span>
+          </div>
+          <div className="mt-2">
+            <p className="font-display text-[30px] font-bold leading-none tracking-tight text-ink tabular sm:text-[32px]">{k.delivery.active}</p>
+            <p className="mt-1 min-h-7 text-xs font-medium leading-4 text-muted sm:mt-2 sm:min-h-8">{k.delivery.onTheWay} on the way · {money(k.delivery.cashToCollectPaise)} cash</p>
+          </div>
+          <div className={`${footer} justify-start`}><span className="text-[11px] font-medium text-muted">{k.delivery.deliveredToday} delivered today</span></div>
         </Link>
 
         <Link href="/console/floor" className={`${card} xl:col-span-1`}>

@@ -130,7 +130,7 @@ export const kdsWorkRoles = ["kitchen", "manager", "owner"] as const satisfies r
 export const printRoles = {
   receipt: ["cashier", "waiter", "host", "reception", "accountant", "manager", "owner"],
   bill: ["cashier", "waiter", "host", "reception", "accountant", "manager", "owner"],
-  kot: ["kitchen", "waiter", "manager", "owner"],
+  kot: ["cashier", "reception", "kitchen", "waiter", "manager", "owner"],
   order_slip: ["cashier", "waiter", "manager", "owner"],
   day_close: ["manager", "owner", "accountant"],
   test: ["manager", "owner"],

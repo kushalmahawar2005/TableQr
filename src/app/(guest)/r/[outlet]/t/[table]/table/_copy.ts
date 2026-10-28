@@ -76,7 +76,7 @@ const en = {
   pausedBody: "No one can add new items right now.",
   billBy: (name: string | null, isMe: boolean) => (isMe ? "by you (Host)" : name ? `by ${name} (Host)` : "by the host"),
   offline: "You’re offline",
-  offlineBody: "Table details may be out of date.",
+  offlineBody: "Table details may be out of date. New waiter calls and service requests are not sent while offline. Please call staff or use the table bell.",
 
   needs: "Need something?",
   notified: "Notified",
@@ -166,7 +166,7 @@ const hi: G7Copy = {
   pausedBody: "अभी कोई नया आइटम नहीं जोड़ सकता।",
   billBy: (name, isMe) => (isMe ? "आपने माँगा (होस्ट)" : name ? `${name} ने माँगा (होस्ट)` : "होस्ट ने माँगा"),
   offline: "आप ऑफ़लाइन हैं",
-  offlineBody: "टेबल की जानकारी पुरानी हो सकती है।",
+  offlineBody: "टेबल की जानकारी पुरानी हो सकती है। ऑफ़लाइन होने पर वेटर बुलाने या दूसरी सर्विस रिक्वेस्ट नहीं जाएगी। कृपया स्टाफ को आवाज़ दें या टेबल बेल बजाएँ।",
 
   needs: "कुछ चाहिए?",
   notified: "सूचित",
