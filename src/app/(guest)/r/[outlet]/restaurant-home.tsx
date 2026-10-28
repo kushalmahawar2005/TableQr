@@ -36,13 +36,13 @@ export function RestaurantHome({ data, initialLang = "en", installable = null }:
         welcome: "स्वागत है", intro: "पार्टी के लिए टेबल बुक करें या घर पर खाना मँगाएँ।", next: "आगे बढ़ें", back: "वापस",
         choose: "आप क्या करना चाहेंगे?", chooseNote: "नीचे से एक विकल्प चुनें।", booking: "पार्टी के लिए टेबल बुक करें", bookingHint: "तारीख, समय और मेहमानों की संख्या चुनें।", waitlist: "वेटिंग लिस्ट में जुड़ें", waitlistHint: "अभी आ रहे हैं? लाइन में नाम लिखवाएँ, टेबल तैयार होने पर बताएँगे।",
         delivery: "घर पर डिलीवरी", deliveryHint: "मेन्यू चुनें और घर पर डिलीवरी मँगाएँ।", none: "ऑनलाइन बुकिंग और डिलीवरी अभी उपलब्ध नहीं हैं। टेबल या रूम QR स्कैन करें।",
-        announcement: "घोषणा", step: (n: number) => `चरण ${n} / 3`, poweredBy: "TableQR द्वारा",
+        announcement: "घोषणा", step: (n: number) => `चरण ${n} / 3`, poweredBy: "Tableeqr द्वारा",
       }
     : {
         welcome: "Welcome to", intro: "Reserve a table for your party or order food for delivery.", next: "Continue", back: "Back",
         choose: "How would you like to continue?", chooseNote: "Pick one to get started.", booking: "Reserve for a party", bookingHint: "Choose a date, time and party size.", waitlist: "Join the waiting list", waitlistHint: "Coming now? Get in line and we will tell you when your table is ready.",
         delivery: "Home delivery", deliveryHint: "Choose your food and enter your delivery address.", none: "Online reservations and delivery are not available. Scan your table or room QR instead.",
-        announcement: "Announcement", step: (n: number) => `Step ${n} of 3`, poweredBy: "Powered by TableQR",
+        announcement: "Announcement", step: (n: number) => `Step ${n} of 3`, poweredBy: "Powered by Tableeqr",
       };
   const style = brandStyle(deriveBrandTokens(outlet.accentColor)) as CSSProperties;
 

@@ -73,7 +73,7 @@ describe("G7 ordered so far", () => {
 
 describe("invite QR", () => {
   it("encodes a table address in a small, standard symbol", () => {
-    const qr = encodeQr("https://tableqr.example/r/SRJ01/t/k7Qm");
+    const qr = encodeQr("https://tableeqr.example/r/SRJ01/t/k7Qm");
     expect(qr.version).toBe(3);
     expect(qr.size).toBe(29);
     // Finder pattern corners are dark, their separators light

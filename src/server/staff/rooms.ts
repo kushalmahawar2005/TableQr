@@ -209,7 +209,7 @@ export async function saveRoom(staff: Staff, input: { id?: string | null; number
     const { maxRooms } = await tenantFeatures(staff.tenantId);
     if (maxRooms !== null) {
       const [{ n }] = await tx.select({ n: sql<number>`COUNT(*)` }).from(s.rooms).where(and(eq(s.rooms.tenantId, staff.tenantId), eq(s.rooms.isActive, true)));
-      if (Number(n) >= maxRooms) throw bad(`Your plan includes ${maxRooms} room${maxRooms === 1 ? "" : "s"}. To add more, ask TableQR to upgrade your plan.`);
+      if (Number(n) >= maxRooms) throw bad(`Your plan includes ${maxRooms} room${maxRooms === 1 ? "" : "s"}. To add more, ask Tableeqr to upgrade your plan.`);
     }
     const id = await insertRoom(tx, { tenantId: staff.tenantId, outletId: staff.outletId, zoneId: await zoneFor(tx, staff) }, { number, roomType, floorLabel }, now);
     await audit(tx, staff, { action: "room.added", entity: "room", entityId: id, after: { number, roomType, floorLabel }, now });

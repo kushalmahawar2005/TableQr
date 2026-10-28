@@ -95,7 +95,7 @@ export async function createServiceRequest(ctx: GuestContext, kind: StoredServic
       visitChanged(ctx.sessionId, "service_request"),
     ]);
     if (kind === "request_bill") announceBill(ctx, { tableIds: result.tableIds, state: "bill_requested" });
-    await sendOutletPush(ctx, { title: "New table request", body: `A guest requested ${kind.replaceAll("_", " ")}. Open TableQR to respond.`, url: "/console", tag: `request-${result.id}` }, { sessionId: ctx.sessionId, kind: "service" });
+    await sendOutletPush(ctx, { title: "New table request", body: `A guest requested ${kind.replaceAll("_", " ")}. Open Tableeqr to respond.`, url: "/console", tag: `request-${result.id}` }, { sessionId: ctx.sessionId, kind: "service" });
   }
   return { id: result.id, createdAt: result.createdAt, replayed: result.replayed, cooldownUntil: result.createdAt + SERVICE_COOLDOWN_MS };
 }

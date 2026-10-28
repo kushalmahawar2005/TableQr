@@ -11,7 +11,7 @@ import {
 import type { Features } from "../../lib/plan-features";
 import { at, createdAt, id, updatedAt } from "./_columns";
 
-// Platform level: owned by the TableQR operator, not by any restaurant (PS 11).
+// Platform level: owned by the Tableeqr operator, not by any restaurant (PS 11).
 // Nothing here carries a tenant_id.
 
 /**
@@ -62,7 +62,7 @@ export const platformAdminLoginBuckets = mysqlTable("platform_admin_login_bucket
   lockedUntil: at("locked_until"),
 });
 
-/** Versions of TableQR's own apps (the rider app) that the platform admin uploads; the newest is downloaded */
+/** Versions of Tableeqr's own apps (the rider app) that the platform admin uploads; the newest is downloaded */
 export const appReleases = mysqlTable("app_releases", {
   id: id(),
   app: mysqlEnum("app", ["rider"]).notNull(),

@@ -103,7 +103,7 @@ export function DashboardView({ data, name }: { data: AdminData; name: string })
   const planConfig = Object.fromEntries(plans.map((p) => [p.code, { label: p.name, color: p.fill }])) satisfies ChartConfig;
 
   return <div className="space-y-6">
-    <div><h1 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">Welcome back, {name} 👋</h1><p className="mt-1 text-sm text-muted-foreground">Here&apos;s how your TableQR business is doing.</p></div>
+    <div><h1 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">Welcome back, {name} 👋</h1><p className="mt-1 text-sm text-muted-foreground">Here&apos;s how your Tableeqr business is doing.</p></div>
 
     {(waiting.claims > 0 || waiting.requests > 0) && <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#5b42f5]/40 bg-[#5b42f5]/10 px-4 py-3">
       <p className="text-sm font-medium">

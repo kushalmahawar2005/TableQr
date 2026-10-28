@@ -26,9 +26,9 @@ describe("Cashfree platform gateway", () => {
     expect(await gw().createOrder({
       paymentId: "fee_1",
       amountPaise: 54100,
-      receipt: "TableQR 3m",
-      callbackUrl: "https://tableqr.example/api/fees/return?p=fee_1",
-      notifyUrl: "https://tableqr.example/api/fees/cashfree/webhook",
+      receipt: "Tableeqr 3m",
+      callbackUrl: "https://tableeqr.example/api/fees/return?p=fee_1",
+      notifyUrl: "https://tableeqr.example/api/fees/cashfree/webhook",
       customer: { id: "tenant_1", phone: "+91 98765 43210", name: "Spice Route" },
     })).toEqual({ gatewayRef: "fee_1" });
     expect(calls[0].url).toBe("https://cashfree.example/pg/orders");
@@ -38,10 +38,10 @@ describe("Cashfree platform gateway", () => {
       order_amount: 541,
       order_currency: "INR",
       customer_details: { customer_id: "tenant_1", customer_phone: "9876543210", customer_name: "Spice Route" },
-      order_meta: { return_url: "https://tableqr.example/api/fees/return?p=fee_1", notify_url: "https://tableqr.example/api/fees/cashfree/webhook" },
+      order_meta: { return_url: "https://tableeqr.example/api/fees/return?p=fee_1", notify_url: "https://tableeqr.example/api/fees/cashfree/webhook" },
     });
 
-    const checkout = await gw().checkout({ gatewayRef: "fee_1", paymentId: "fee_1", amountPaise: 54100, method: "upi", outletName: "TableQR", callbackUrl: "https://tableqr.example/return" });
+    const checkout = await gw().checkout({ gatewayRef: "fee_1", paymentId: "fee_1", amountPaise: 54100, method: "upi", outletName: "Tableeqr", callbackUrl: "https://tableeqr.example/return" });
     expect(checkout).toEqual({ provider: "cashfree", kind: "cashfree", mode: "sandbox", paymentSessionId: "session_1" });
     expect(JSON.stringify(checkout)).not.toContain(CLIENT_ID);
     expect(JSON.stringify(checkout)).not.toContain(CLIENT_SECRET);
@@ -93,7 +93,7 @@ describe("Cashfree platform gateway", () => {
     expect(currencyAccepted(undefined)).toBe(true);
   });
 
-  it("keeps the TableQR Cashfree account out of restaurant guest payments", () => {
+  it("keeps the Tableeqr Cashfree account out of restaurant guest payments", () => {
     vi.stubEnv("NODE_ENV", "test");
     vi.stubEnv("CASHFREE_MODE", "sandbox");
     vi.stubEnv("CASHFREE_CLIENT_ID", CLIENT_ID);
@@ -128,8 +128,8 @@ describe("Cashfree platform gateway", () => {
     await expect(live.createOrder({
       paymentId: "fee_1",
       amountPaise: 100,
-      receipt: "TableQR 1m",
-      callbackUrl: "http://tableqr.example/api/fees/return?p=fee_1",
+      receipt: "Tableeqr 1m",
+      callbackUrl: "http://tableeqr.example/api/fees/return?p=fee_1",
     })).rejects.toThrow(/HTTPS/);
   });
 });

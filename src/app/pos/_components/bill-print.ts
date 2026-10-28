@@ -62,7 +62,7 @@ export function billHtml(d: PosBillDetail, outlet: string, kind: "bill" | "recei
     ? `<hr>${paid.map((p) => row(`Paid by ${METHOD[p.method] ?? p.method}`, rs(p.amountPaise + p.tipPaise))).join("")}${row("Amount paid", rs(paidTotal), "b")}`
     : "";
 
-  const footer = `<hr><div class="c m">Thank you for dining with us!</div><div class="c m">Powered by TableQR</div>`;
+  const footer = `<hr><div class="c m">Thank you for dining with us!</div><div class="c m">Powered by Tableeqr</div>`;
 
   // Height before measuring: a long name or address wraps onto more rows than its count of lines
   const perLine = charsPerLine(profile);

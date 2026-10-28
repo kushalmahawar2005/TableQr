@@ -33,7 +33,7 @@ function wrap(text: string, font: PDFFont, size: number, width: number): string[
 export async function billPdf(b: SharedBill): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   doc.setTitle(`${TITLE[b.docType]} - ${safe(b.outlet.name)} - Table ${safe(b.table)}`);
-  doc.setCreator("TableQR");
+  doc.setCreator("Tableeqr");
   const font = await doc.embedFont(StandardFonts.Helvetica);
   const bold = await doc.embedFont(StandardFonts.HelveticaBold);
   const inner = W - 2 * M;
@@ -103,7 +103,7 @@ export async function billPdf(b: SharedBill): Promise<Uint8Array> {
   }
   rule();
   text("Thank you for dining with us!", { size: 8, center: true });
-  text("Powered by TableQR", { size: 7, center: true, gray: true });
+  text("Powered by Tableeqr", { size: 7, center: true, gray: true });
 
   const height = ops.reduce((n, o) => n + o.h, 0) + 2 * M;
   const page = doc.addPage([W, height]);
@@ -112,4 +112,4 @@ export async function billPdf(b: SharedBill): Promise<Uint8Array> {
   return doc.save();
 }
 
-export const billPdfName = (b: SharedBill) => `${b.docType === "bill" ? "Bill" : b.docType === "receipt" ? "Receipt" : "Invoice"}-${safe(b.outlet.name).replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "") || "TableQR"}-${safe(b.table).replace(/[^A-Za-z0-9]+/g, "")}.pdf`;
+export const billPdfName = (b: SharedBill) => `${b.docType === "bill" ? "Bill" : b.docType === "receipt" ? "Receipt" : "Invoice"}-${safe(b.outlet.name).replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "") || "Tableeqr"}-${safe(b.table).replace(/[^A-Za-z0-9]+/g, "")}.pdf`;

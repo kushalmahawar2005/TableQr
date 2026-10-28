@@ -111,8 +111,8 @@ describe("G7 table screen", () => {
     await env.db.update(s.tableSessions).set({ mode: "host_confirmed" }).where(eq(s.tableSessions.id, host.sessionId));
     expect((await screen(devices.riya)).invite).toEqual({ mode: "host_confirmed", joinCode: "4821" });
 
-    const invite = tableInvite("https://tableqr.example", "SRJ01", "k7Qm");
-    expect(invite.url).toBe("https://tableqr.example/r/SRJ01/t/k7Qm");
+    const invite = tableInvite("https://tableeqr.example", "SRJ01", "k7Qm");
+    expect(invite.url).toBe("https://tableeqr.example/r/SRJ01/t/k7Qm");
     for (const secret of [host.participantId, host.sessionId, riya.participantId, devices.host, "4821"]) {
       expect(invite.url).not.toContain(secret);
     }

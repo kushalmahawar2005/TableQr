@@ -1,5 +1,5 @@
-TableQR — brand film voiceover script (Hindi)
-Video: tableqr-brand-film.mp4 · 36.0s · 1080x1920 · 30fps
+Tableeqr — brand film voiceover script (Hindi)
+Video: tableeqr-brand-film.mp4 · 36.0s · 1080x1920 · 30fps
 =========================================================
 
 HOW TO READ THIS
@@ -44,7 +44,7 @@ DIR  Drop the energy. This is the line that lands the problem.
 
 
 ---------------------------------------------------------
- 4   10.2 - 13.4s      [on screen: QR builds, then TableQR logo]
+ 4   10.2 - 13.4s      [on screen: QR builds, then Tableeqr logo]
 ---------------------------------------------------------
 HI   बस एक QR, टेबल पर. यही पूरा setup है.
 ROM  Bas ek QR, table par. Yahi poora setup hai.
@@ -102,11 +102,11 @@ DIR  Faster, to match the chips snapping in.
 
 
 ---------------------------------------------------------
-11   33.8 - 35.9s      [on screen: TableQR logo + tagline]
+11   33.8 - 35.9s      [on screen: Tableeqr logo + tagline]
 ---------------------------------------------------------
-HI   TableQR. फ़्लोर संभालिए, काग़ज़ नहीं.
-ROM  TableQR. Floor sambhaaliye, kaagaz nahi.
-DIR  Slowest line in the film. Clear pause after "TableQR".
+HI   Tableeqr. फ़्लोर संभालिए, काग़ज़ नहीं.
+ROM  Tableeqr. Floor sambhaaliye, kaagaz nahi.
+DIR  Slowest line in the film. Clear pause after "Tableeqr".
 
 
 =========================================================

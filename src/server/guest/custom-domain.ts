@@ -1,9 +1,9 @@
 import "server-only";
 import { domainToASCII } from "node:url";
-import { resolveTxt } from "node:dns/promises";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import * as s from "@/db/schema";
+import { hasCustomDomainProof } from "../custom-domain-proof";
 
 type DomainProof = { valid: boolean; expiresAt: number };
 const proofCache = new Map<string, DomainProof>();
@@ -19,11 +19,7 @@ async function hasCurrentOwnershipProof(domain: string, token: string | null): P
   const key = `${domain}:${token}`;
   const cached = proofCache.get(key);
   if (cached && cached.expiresAt > Date.now()) return cached.valid;
-  let valid = false;
-  try {
-    const records = await resolveTxt(`_tableqr-verify.${domain}`);
-    valid = records.some((parts) => parts.join("") === `tableqr-verify=${token}`);
-  } catch { /* DNS ownership proof was removed or is temporarily unavailable: fail closed. */ }
+  const valid = await hasCustomDomainProof(domain, token);
   proofCache.delete(key);
   proofCache.set(key, { valid, expiresAt: Date.now() + PROOF_CACHE_MS });
   if (proofCache.size > 1_000) proofCache.delete(proofCache.keys().next().value!);

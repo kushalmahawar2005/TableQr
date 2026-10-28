@@ -9,7 +9,10 @@ const eslintConfig = defineConfig([
   globalIgnores([
     // Default ignores of eslint-config-next:
     ".next/**",
+    ".next-load/**",
     "out/**",
+    "output/**",
+    "tmp/**",
     "build/**",
     "next-env.d.ts",
     // Cloudflare Worker, checked by its own tsconfig

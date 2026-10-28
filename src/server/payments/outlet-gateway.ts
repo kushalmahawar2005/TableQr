@@ -11,7 +11,7 @@ const fail = (message: string) => new AppError("invalid_state", message, { reaso
 
 function encryptionKey() {
   const raw = process.env.PAYMENT_CREDENTIALS_KEY?.trim() ?? "";
-  if (!/^[\da-fA-F]{64}$/.test(raw)) throw fail("Payment credential encryption is not configured on the server yet. Ask your TableQR administrator to finish the setup.");
+  if (!/^[\da-fA-F]{64}$/.test(raw)) throw fail("Payment credential encryption is not configured on the server yet. Ask your Tableeqr administrator to finish the setup.");
   return Buffer.from(raw, "hex");
 }
 

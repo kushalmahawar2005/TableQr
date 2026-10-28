@@ -7,7 +7,7 @@ afterEach(() => {
 });
 
 describe("restaurant Cashfree account isolation", () => {
-  it("uses encrypted restaurant credentials and never the TableQR subscription account", async () => {
+  it("uses encrypted restaurant credentials and never the Tableeqr subscription account", async () => {
     vi.stubEnv("NODE_ENV", "test");
     vi.stubEnv("PAYMENT_CREDENTIALS_KEY", "a".repeat(64));
     vi.stubEnv("CASHFREE_MODE", "sandbox");

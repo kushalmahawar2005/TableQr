@@ -1,4 +1,4 @@
-// Adaptive brand layer (Foundation v1): an outlet gives one brand colour, and TableQR derives
+// Adaptive brand layer (Foundation v1): an outlet gives one brand colour, and Tableeqr derives
 // safe tokens from it. The brand never changes semantic colours, fonts, radius or layout.
 
 export const DEFAULT_ACCENT = "#C9482B";

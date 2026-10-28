@@ -36,7 +36,7 @@ export default async function AdminPage() {
     logout={adminLogoutAction}
     pages={{
       Dashboard: <DashboardView data={data} name={name} />,
-      Tenants: <TenantsView data={data} />,
+      Tenants: <TenantsView data={data} canRemove={admin.role === "super_admin"} />,
       Subscriptions: <SubscriptionsView data={data} />,
       "Plans & Pricing": <PlansView data={data} />,
       Fees: <FeesView data={data} />,

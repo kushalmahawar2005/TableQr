@@ -20,7 +20,7 @@ export function staffAppMetadataFor(brand: StaffAppBrand | null): Pick<Metadata,
   const manifest = `/staff.webmanifest${code ? `?outlet=${encodeURIComponent(code)}` : ""}`;
   return {
     manifest,
-    appleWebApp: { capable: true, title: (brand?.name || "TableQR").trim().slice(0, 16), statusBarStyle: "default" },
+    appleWebApp: { capable: true, title: (brand?.name || "Tableeqr").trim().slice(0, 16), statusBarStyle: "default" },
     icons: { apple: brand?.logoUrl || staffAppIconUrl(180, code) },
   };
 }

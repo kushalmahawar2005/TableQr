@@ -1,13 +1,14 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
 import { domainToASCII } from "node:url";
-import { resolveTxt } from "node:dns/promises";
 import { and, eq, ne } from "drizzle-orm";
 import { db } from "@/db";
 import * as s from "@/db/schema";
 import { AppError } from "../errors";
 import { audit } from "./audit";
 import type { StaffSession } from "./auth";
+import { customDomainProofRecord } from "@/domain/custom-domain-proof";
+import { hasCustomDomainProof } from "../custom-domain-proof";
 
 type Staff = Pick<StaffSession, "tenantId" | "outletId" | "roles" | "userId" | "name">;
 const invalid = (message: string) => new AppError("invalid_state", message, { reason: "custom_domain" });
@@ -93,11 +94,8 @@ export async function verifyCustomDomain(staff: Staff, now = new Date()) {
   const [outlet] = await db.select({ customDomain: s.outlets.customDomain, customDomainToken: s.outlets.customDomainToken, customDomainVerifiedAt: s.outlets.customDomainVerifiedAt })
     .from(s.outlets).where(and(eq(s.outlets.tenantId, staff.tenantId), eq(s.outlets.id, staff.outletId)));
   if (!outlet?.customDomain || !outlet.customDomainToken) throw invalid("Save a domain first.");
-  const recordName = `_tableqr-verify.${outlet.customDomain}`;
-  let records: string[][] = [];
-  try { records = await resolveTxt(recordName); } catch { /* DNS may still be propagating */ }
-  const expected = `tableqr-verify=${outlet.customDomainToken}`;
-  const found = records.some((parts) => parts.join("") === expected);
+  const recordName = customDomainProofRecord(outlet.customDomain, outlet.customDomainToken).name;
+  const found = await hasCustomDomainProof(outlet.customDomain, outlet.customDomainToken);
   if (!found) return { ok: false as const, message: `TXT record not found yet at ${recordName}. Check the record and wait for DNS to update.` };
   const result = await db.update(s.outlets).set({ customDomainVerifiedAt: now })
     .where(and(eq(s.outlets.tenantId, staff.tenantId), eq(s.outlets.id, staff.outletId), eq(s.outlets.customDomain, outlet.customDomain), eq(s.outlets.customDomainToken, outlet.customDomainToken)));

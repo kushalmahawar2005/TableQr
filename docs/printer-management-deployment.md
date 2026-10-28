@@ -23,7 +23,7 @@ Live commit before this work: `4679e18`. This work adds `fcbd42d` (slip layouts)
 1. Settings: a **Printers** card appears. Add "Counter printer", 80 mm, Browser print. Press **Test print**: the print window
    opens with a ruler line; both ends of the line should show on paper.
 2. Assign it as the receipt printer and add a "Kitchen printer" for the kitchen. Reload; the choices stay.
-3. Billing: print a bill and a receipt. A small notice says **Sent**, and that TableQR cannot confirm paper came out.
+3. Billing: print a bill and a receipt. A small notice says **Sent**, and that Tableeqr cannot confirm paper came out.
 4. Kitchen screen: print a ticket from a card. Turn on auto-print on one screen only, place an order, and confirm exactly one
    ticket prints.
 5. Day close: Print. Check "DAY SUMMARY" for today and "DAY CLOSE REPORT" for a past day.
@@ -49,7 +49,7 @@ To go forward again after a rollback, revert the revert commits; `db:migrate` fi
 
 `print_jobs` older than 60 days are deleted, 500 at a time, by the scheduled `/api/internal/service-tasks` call. That call is made every
 minute by the Cloudflare Worker `tableqr-realtime` (`triggers.crons` in `realtime/wrangler.jsonc`), which needs the secrets
-`TABLEQR_API_URL` and `SERVICE_TASK_SECRET`. If they are not set on the Worker, nothing runs and the table only grows (about 50 MB a
+`TABLEEQR_API_URL` and `SERVICE_TASK_SECRET` (the existing `TABLEQR_API_URL` secret remains supported during migration). If they are not set on the Worker, nothing runs and the table only grows (about 50 MB a
 month for 30 restaurants). It does not affect printing. To check, in Cloudflare open the Worker, **Triggers** (the cron) and **Logs**; or
 run once from a trusted computer, which returns a small JSON summary:
 

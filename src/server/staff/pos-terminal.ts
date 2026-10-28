@@ -12,6 +12,7 @@ import { seatWalkIn } from "../floor/table-actions";
 import { TAKEAWAY_CLASS } from "../floor/takeaway-class";
 import { isWithinCategoryWindow, loadItems } from "../guest/menu";
 import type { AnyDraftLine } from "../guest/order";
+import type { PriceQuote } from "@/domain/pricing";
 import type { StaffSession } from "./auth";
 import { requireStaffRole } from "./waiter";
 import { addPhonelessDiner } from "./waiter-mutations";
@@ -94,6 +95,7 @@ export async function posTerminal(staff: StaffSession, now = new Date()) {
   const gst = hasGstin(outlet.gstin);
   const commonTax = count(items.map((x) => x.item.taxRateBp)).find((r) => (OPEN_TAX_RATES as readonly number[]).includes(r));
   return {
+    loadedAt: now.getTime(),
     tables,
     zones: layout.zones.filter((z) => tables.some((t) => t.zoneId === z.id)),
     takeaways,
@@ -105,20 +107,20 @@ export async function posTerminal(staff: StaffSession, now = new Date()) {
 export type PosTerminal = Awaited<ReturnType<typeof posTerminal>>;
 
 /** Open a free table for billing at the counter, as a walk-in */
-export async function posOpenTable(staff: StaffSession, input: { tableId: string; partySize?: number; guestName?: string | null }, now = new Date()) {
+export async function posOpenTable(staff: StaffSession, input: { tableId: string; partySize?: number; guestName?: string | null; clientRequestId?: string }, now = new Date()) {
   await requireStaffRole(staff, posTerminalRoles);
   const [table] = await db.select({ tableClass: s.diningTables.tableClass, maxSeats: s.diningTables.maxSeats }).from(s.diningTables)
     .where(and(eq(s.diningTables.tenantId, staff.tenantId), eq(s.diningTables.outletId, staff.outletId), eq(s.diningTables.id, String(input.tableId)), eq(s.diningTables.isActive, true)));
   if (!table || table.tableClass === TAKEAWAY_CLASS || table.tableClass === ROOM_CLASS) throw new AppError("not_found", "This table was not found.");
   const partySize = Math.min(table.maxSeats, Math.max(1, Math.floor(Number(input.partySize) || 1)));
-  return seatWalkIn(staff, { tableId: String(input.tableId), partySize, guestName: input.guestName?.trim().slice(0, 80) || null }, now, { checkedByPos: true });
+  return seatWalkIn(staff, { tableId: String(input.tableId), partySize, guestName: input.guestName?.trim().slice(0, 80) || null }, now, { checkedByPos: true, clientRequestId: input.clientRequestId });
 }
 
 /**
  * Send dishes to the kitchen on a table or takeaway. The order is placed for the first named diner;
  * a table nobody scanned gets a diner called Guest (or the name the cashier gave).
  */
-export async function posSendOrder(staff: StaffSession, input: { sessionId: string; clientRequestId: string; lines: AnyDraftLine[]; guestName?: string | null }, now = new Date()) {
+export async function posSendOrder(staff: StaffSession, input: { sessionId: string; clientRequestId: string; lines: AnyDraftLine[]; quote?: PriceQuote; guestName?: string | null }, now = new Date()) {
   await requireStaffRole(staff, posTerminalRoles);
   const sessionId = String(input.sessionId);
   const [session] = await db.select({ tableId: s.tableSessions.tableId, status: s.tableSessions.status }).from(s.tableSessions)
@@ -132,5 +134,5 @@ export async function posSendOrder(staff: StaffSession, input: { sessionId: stri
     const typed = checkFirstName(String(input.guestName ?? ""));
     participantId = (await addPhonelessDiner(staff, sessionId, typed.ok ? typed.name : "Guest", now, posTerminalRoles)).id;
   }
-  return addItemsAtBilling(staff, { sessionId, tableId: session.tableId, participantId, clientRequestId: String(input.clientRequestId), lines: input.lines }, now);
+  return addItemsAtBilling(staff, { sessionId, tableId: session.tableId, participantId, clientRequestId: String(input.clientRequestId), lines: input.lines, quote: input.quote }, now);
 }

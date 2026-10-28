@@ -69,7 +69,7 @@ function PlanDialog({ plan, onClose }: { plan: AdminPlan | "new" | null; onClose
         </div>
         <fieldset className="space-y-2.5"><legend className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Included features</legend>
           <div className="grid gap-2.5 sm:grid-cols-2">{FEATURES.map((x) => check(x.key, x.label, f?.[x.key] ?? false, x.hint))}</div>
-          {check("poweredBy", "Show “Powered by TableQR”", f?.poweredBy ?? false, "A small line on the guest page. Usually on for lower plans.")}
+          {check("poweredBy", "Show “Powered by Tableeqr”", f?.poweredBy ?? false, "A small line on the guest page. Usually on for lower plans.")}
         </fieldset>
         {check("isPublic", "Available for new tenants", editing?.isPublic ?? true, "Turn off to hide this plan. Existing tenants on it are not affected.")}
         {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}

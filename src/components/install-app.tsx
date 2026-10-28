@@ -36,7 +36,7 @@ function hiddenForNow(key = HIDE_KEY) {
   }
 }
 
-export function InstallApp({ className = "", name = "TableQR", logoUrl = null, compact = false, title, blurb, guest = false, downloadHref }: { className?: string; name?: string; logoUrl?: string | null; compact?: boolean; title?: string; blurb?: string; /** A customer page: its own "not now", and only for a day */ guest?: boolean; /** A native app to download instead of installing this site (the rider's Android app) */ downloadHref?: string }) {
+export function InstallApp({ className = "", name = "Tableeqr", logoUrl = null, compact = false, title, blurb, guest = false, downloadHref }: { className?: string; name?: string; logoUrl?: string | null; compact?: boolean; title?: string; blurb?: string; /** A customer page: its own "not now", and only for a day */ guest?: boolean; /** A native app to download instead of installing this site (the rider's Android app) */ downloadHref?: string }) {
   const hideKey = guest ? "tq_guest_install_hidden_until" : HIDE_KEY;
   const [prompt, setPrompt] = useState<InstallEvent | null>(null);
   const [ios, setIos] = useState(false);

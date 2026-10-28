@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   const code = new URL(request.url).searchParams.get("outlet");
   const brand = await staffAppBrandForOutletCode(code);
-  const name = brand?.name?.trim() || "TableQR Staff";
+  const name = brand?.name?.trim() || "Tableeqr Staff";
   const icon = (size: 180 | 192 | 512) => staffAppIconUrl(size, brand?.code);
   const icons = [
     ...(brand?.logoUrl ? [{ src: brand.logoUrl, sizes: "any", purpose: "any" }] : []),

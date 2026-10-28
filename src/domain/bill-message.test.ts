@@ -9,7 +9,7 @@ describe("bill on WhatsApp", () => {
     expect(text).toContain("Due: ₹500");
     expect(text).toContain("Date: 20 Oct 2026");
     expect(text).toContain("*View bill*\nhttps://x.test/b/abc.def");
-    expect(text).toContain("Sent via TableQR");
+    expect(text).toContain("Sent via Tableeqr");
     expect(text).not.toContain("Tomato Soup");
   });
 

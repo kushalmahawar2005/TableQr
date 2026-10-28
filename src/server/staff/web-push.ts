@@ -87,7 +87,7 @@ export async function sendOutletPush(scope: { tenantId: string; outletId: string
       title: message.title.slice(0, 120),
       body: message.body.slice(0, 240),
       url: message.url?.startsWith("/") ? message.url : "/console",
-      tag: (message.tag ?? "tableqr-staff").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 32) || "tableqr-staff",
+      tag: (message.tag ?? "tableeqr-staff").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 32) || "tableeqr-staff",
       icon,
       badge,
     });

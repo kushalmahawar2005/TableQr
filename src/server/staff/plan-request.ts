@@ -8,7 +8,7 @@ import { emailAdmin } from "../admin-alerts";
 import { AppError } from "../errors";
 import type { StaffSession } from "./auth";
 
-// A restaurant asks TableQR to unlock a feature or change its plan. Nothing changes by itself: the
+// A restaurant asks Tableeqr to unlock a feature or change its plan. Nothing changes by itself: the
 // platform admin sees the request and changes the plan, custom package or price by hand.
 
 type Staff = Pick<StaffSession, "tenantId" | "outletId" | "roles" | "name">;
@@ -29,7 +29,7 @@ export async function requestPlanChange(staff: Staff, input: { feature?: string 
   const [t] = await db.select({ name: s.tenants.name, phone: s.tenants.contactPhone }).from(s.tenants).where(eq(s.tenants.id, staff.tenantId));
   const what = feature ? FEATURE_LABELS[feature].label : note!;
   emailAdmin(`${t?.name ?? "A restaurant"} asked: ${what}`, [
-    `${t?.name ?? "A restaurant"} asked TableQR for: ${what}.`,
+    `${t?.name ?? "A restaurant"} asked Tableeqr for: ${what}.`,
     ...(feature && note ? [`Note: ${note}`] : []),
     `By ${staff.name} · phone ${t?.phone ?? "—"}`,
     "Handle it in Admin → Tenants → Manage, then mark it done.",

@@ -8,6 +8,7 @@ import { AppError } from "../errors";
 import { lockSession, loadBillInputs, syncBill } from "../billing/bill";
 import { announceBill, requestBillInTransaction, reopenBill } from "../billing/payments";
 import { isOpenLine, placeOrderTx, type AnyDraftLine } from "../guest/order";
+import type { PriceQuote } from "@/domain/pricing";
 import { publish } from "../realtime/publish";
 import { topics } from "../realtime/token";
 import { requireStaffRole } from "./waiter";
@@ -43,13 +44,13 @@ export async function addPhonelessDiner(staff: StaffSession, sessionId: string, 
   await publish(staff,[{topic:topics.session(sessionId),type:"participant.joined"},{topic:topics.floor,type:"visit.updated"}]);
   return result;
 }
-export async function staffPlaceOrder(staff: StaffSession, input: {sessionId:string; tableId:string; participantId:string; clientRequestId:string; lines:AnyDraftLine[]},now=new Date(),roles:readonly StaffRole[]=["waiter","manager","owner"]) {
+export async function staffPlaceOrder(staff: StaffSession, input: {sessionId:string; tableId:string; participantId:string; clientRequestId:string; lines:AnyDraftLine[]; quote?: PriceQuote},now=new Date(),roles:readonly StaffRole[]=["waiter","manager","owner"]) {
   await requireStaffRole(staff, roles);
   if (!/^[a-zA-Z0-9_-]{8,64}$/.test(input.clientRequestId) || !Array.isArray(input.lines) || !input.lines.length || input.lines.length>100 || input.lines.some(l=>(isOpenLine(l) ? typeof l.open !== "object" : (typeof l.itemId !== "string" || !Array.isArray(l.modifierIds) || l.modifierIds.some(m=>typeof m !== "string"))) || !Number.isInteger(l.qty) || (l.personalForPickup !== undefined && typeof l.personalForPickup !== "boolean"))) throw new AppError("invalid_state","Invalid draft order.");
   const [person] = await db.select({ name: s.participants.displayName }).from(s.participants).where(and(eq(s.participants.tenantId, staff.tenantId), eq(s.participants.sessionId, input.sessionId), eq(s.participants.id, input.participantId)));
   if (!person || isPlaceholderName(person.name) || !checkFirstName(person.name).ok) throw new AppError("invalid_state", "Enter the customer’s name before placing this order.");
   const [outlet] = await db.select().from(s.outlets).where(and(eq(s.outlets.tenantId,staff.tenantId),eq(s.outlets.id,staff.outletId)));
-  const result=await placeOrderTx({...staff,sessionId:input.sessionId,tableId:input.tableId,participantId:input.participantId,brandId:outlet.brandId,timezone:outlet.timezone},{requestId:input.clientRequestId},now,{userId:staff.userId,lines:input.lines});
+  const result=await placeOrderTx({...staff,sessionId:input.sessionId,tableId:input.tableId,participantId:input.participantId,brandId:outlet.brandId,timezone:outlet.timezone},{requestId:input.clientRequestId,quote:input.quote},now,{userId:staff.userId,lines:input.lines});
   if (!result.replayed) await publish(staff,[{topic:topics.kitchen,type:"ticket.created",data:{orderId:result.orderId}},{topic:topics.session(input.sessionId),type:"order.status",data:{orderId:result.orderId}},{topic:topics.floor,type:"visit.updated"},...result.soldOutItemIds.map(itemId=>({topic:topics.menu,type:"item.availability",data:{itemId,available:false}}))]);
   if (!result.replayed) await sendOutletPush(staff, { title: "New table order", body: "A staff member sent a new order to the kitchen.", url: "/console", tag: `order-${result.orderId}` }, { sessionId: input.sessionId, kind: "order" });
   return result;

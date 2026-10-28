@@ -129,6 +129,8 @@ export async function openVisit(
     expectedEndAt: Date;
     reservationId?: string | null;
     userId: string;
+    staffRequestId?: string | null;
+    staffRequestFingerprint?: string | null;
     now: Date;
   },
 ) {
@@ -151,6 +153,8 @@ export async function openVisit(
     guestName: opts.guestName?.trim().slice(0, 80) || null,
     expectedEndAt: opts.expectedEndAt,
     openedByUserId: opts.userId,
+    staffRequestId: opts.staffRequestId ?? null,
+    staffRequestFingerprint: opts.staffRequestFingerprint ?? null,
     reservationId: opts.reservationId ?? null,
     hostParticipantId: null,
     openKey: primary.id,

@@ -17,7 +17,7 @@ export type AdminTenant = {
   /** The admin's own table limit for this restaurant; null follows the plan */
   tableLimitOverride: number | null;
   /** Open asks from the restaurant to unlock a feature or change the plan */
-  /** Whether the restaurant can use TableQR now: trial or paid period, grace days, or paused */
+  /** Whether the restaurant can use Tableeqr now: trial or paid period, grace days, or paused */
   access: { state: "ok" | "grace" | "blocked"; reason: string; endsAt: string | null; stopsAt: string | null };
   /** A plan payment waiting for Cashfree or manual confirmation. */
   feeClaim: { amountPaise: number; createdAt: string; method: "cashfree" | "upi" | "cash" | "bank" } | null;

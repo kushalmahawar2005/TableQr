@@ -37,7 +37,7 @@ describe("outlet delivery settings", () => {
     expect((await getOutletSettings(owner())).deliveryPolicy).toEqual(policy);
   });
   it("enables manual QR only after the restaurant saves its own payment QR", async () => {
-    await env.db.update(s.outlets).set({ bookingPaymentQrUrl: "https://assets.tableqr.test/restaurant-qr.png" }).where(eq(s.outlets.id, owner().outletId));
+    await env.db.update(s.outlets).set({ bookingPaymentQrUrl: "https://assets.tableeqr.test/restaurant-qr.png" }).where(eq(s.outlets.id, owner().outletId));
     const manual = { ...policy, paymentMode: "manual_qr" as const };
     await updateOutletSettings(owner(), patch(manual));
     expect((await getOutletSettings(owner())).deliveryPolicy.paymentMode).toBe("manual_qr");

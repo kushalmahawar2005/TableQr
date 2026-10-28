@@ -7,6 +7,7 @@ import { startTakeaway } from "@/server/floor/takeaway";
 import { resolveStaff, signInStaff, type StaffSession } from "@/server/staff/auth";
 import { getSalesDetail } from "@/server/staff/sales-detail";
 import { posOpenTable, posSendOrder, posTerminal } from "@/server/staff/pos-terminal";
+import { quoteKey } from "@/domain/pricing";
 import { waiterRequestBill } from "@/server/staff/waiter-mutations";
 import { resetTestDb } from "./setup-db";
 
@@ -94,5 +95,50 @@ describe("POS terminal", () => {
     await expect(posSendOrder(cashier, { sessionId, clientRequestId: "pos-test-0003", lines: [{ open: { name: "Tea", pricePaise: 0, station: "kitchen", taxRateBp: 0 }, qty: 1 }] })).rejects.toThrow(/open item/);
     await expect(posSendOrder(cashier, { sessionId, clientRequestId: "pos-test-0004", lines: [{ open: { name: "Tea", pricePaise: 2000, station: "kitchen", taxRateBp: 300 }, qty: 1 }] })).rejects.toThrow(/open item/);
     if (accountant) await expect(posTerminal(accountant)).rejects.toThrow();
+  });
+
+  it("deduplicates concurrent table opens and rejects changed details on the same request", async () => {
+    const input = { tableId: env.demo.tableIds["T4"], partySize: 2, guestName: "Anita", clientRequestId: "offline-table-retry-1" };
+    const [first, replay] = await Promise.all([posOpenTable(cashier, input), posOpenTable(cashier, input)]);
+    expect(replay.sessionId).toBe(first.sessionId);
+    expect(await env.db.select({ id: s.tableSessions.id }).from(s.tableSessions).where(eq(s.tableSessions.staffRequestId, input.clientRequestId))).toHaveLength(1);
+    await expect(posOpenTable(cashier, { ...input, guestName: "Meena" })).rejects.toMatchObject({ code: "conflict" });
+  });
+
+  it("deduplicates concurrent takeaway opens and preserves the original counter", async () => {
+    const input = { name: "Anita", clientRequestId: "offline-takeaway-retry-1" };
+    const [first, replay] = await Promise.all([startTakeaway(cashier, input), startTakeaway(cashier, input)]);
+    expect(replay).toEqual(first);
+    expect(await env.db.select({ id: s.tableSessions.id }).from(s.tableSessions).where(eq(s.tableSessions.staffRequestId, input.clientRequestId))).toHaveLength(1);
+    await expect(startTakeaway(cashier, { ...input, name: "Meena" })).rejects.toMatchObject({ code: "conflict" });
+  });
+
+  it("blocks a stale offline quote before writing a KOT and replays an accepted request after another price change", async () => {
+    const itemId = env.demo.itemIds["Dal Makhani"];
+    const [item] = await env.db.select({ pricePaise: s.menuItems.pricePaise }).from(s.menuItems).where(eq(s.menuItems.id, itemId));
+    const takeaway = await startTakeaway(cashier, { name: "Anita", clientRequestId: "offline-price-session-1" });
+    const input = {
+      sessionId: takeaway.sessionId, clientRequestId: "offline-price-kot-1", guestName: "Anita",
+      lines: [{ itemId, qty: 1, modifierIds: [] as string[] }],
+      quote: { [quoteKey(itemId, [])]: item.pricePaise },
+    };
+    try {
+      await env.db.update(s.menuItems).set({ pricePaise: item.pricePaise + 100 }).where(eq(s.menuItems.id, itemId));
+      await expect(posSendOrder(cashier, input)).rejects.toMatchObject({ code: "price_changed" });
+      expect(await env.db.select({ id: s.orders.id }).from(s.orders).where(eq(s.orders.sessionId, takeaway.sessionId))).toHaveLength(0);
+      expect(await env.db.select({ id: s.orderLines.id }).from(s.orderLines).where(eq(s.orderLines.sessionId, takeaway.sessionId))).toHaveLength(0);
+
+      const reviewed = { ...input, quote: { [quoteKey(itemId, [])]: item.pricePaise + 100 } };
+      const placed = await posSendOrder(cashier, reviewed);
+      await env.db.update(s.menuItems).set({ pricePaise: item.pricePaise + 200 }).where(eq(s.menuItems.id, itemId));
+      const replay = await posSendOrder(cashier, reviewed);
+      expect(replay.orderId).toBe(placed.orderId);
+      expect(replay.replayed).toBe(true);
+      const lines = await env.db.select().from(s.orderLines).where(eq(s.orderLines.sessionId, takeaway.sessionId));
+      expect(lines).toHaveLength(1);
+      expect(lines[0].unitPricePaise).toBe(item.pricePaise + 100);
+    } finally {
+      await env.db.update(s.menuItems).set({ pricePaise: item.pricePaise }).where(eq(s.menuItems.id, itemId));
+    }
   });
 });

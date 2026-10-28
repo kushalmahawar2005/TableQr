@@ -13,6 +13,7 @@ import { requireStaffRole } from "../staff/waiter";
 import { openVisit, visitAt } from "./visits";
 import { releaseVisitTables, visitChanged } from "./assignments";
 import { TAKEAWAY_CLASS } from "./takeaway-class";
+import { findStaffOpenRequest, staffOpenRequestFingerprint, validateStaffOpenRequestId } from "./staff-open-request";
 
 // Takeaway (parcel) orders, for guests who order at the counter and do not sit down. Each one
 // runs on a takeaway counter: a hidden table "TA-1", "TA-2" … that never shows on the floor, in
@@ -22,11 +23,24 @@ import { TAKEAWAY_CLASS } from "./takeaway-class";
 export const takeawayRoles = ["owner", "manager", "cashier", "waiter", "reception"] as const;
 
 /** Opens a takeaway order and returns its visit, ready for items */
-export async function startTakeaway(staff: StaffSession, input: { name?: string | null } = {}, now = new Date()) {
+export async function startTakeaway(staff: StaffSession, input: { name?: string | null; clientRequestId?: string } = {}, now = new Date()) {
   await requireStaffRole(staff, takeawayRoles);
   const scope = { tenantId: staff.tenantId, outletId: staff.outletId };
   const name = String(input.name ?? "").trim().slice(0, 80) || null;
+  const requestId = input.clientRequestId ? validateStaffOpenRequestId(input.clientRequestId) : null;
+  const fingerprint = requestId ? staffOpenRequestFingerprint({ type: "takeaway", name }) : null;
   const res = await db.transaction(async (tx) => {
+    // Serializes allocation and request lookup, including the first takeaway counter for an outlet.
+    const [outlet] = await tx.select({ id: s.outlets.id }).from(s.outlets)
+      .where(and(eq(s.outlets.tenantId, scope.tenantId), eq(s.outlets.id, scope.outletId))).for("update");
+    if (!outlet) throw new AppError("not_found", "This outlet was not found.");
+    const existing = requestId ? await findStaffOpenRequest(tx, scope, requestId, staff.userId, fingerprint!) : null;
+    if (existing) {
+      const [table] = await tx.select({ id: s.diningTables.id, code: s.diningTables.code }).from(s.diningTables)
+        .where(and(eq(s.diningTables.tenantId, scope.tenantId), eq(s.diningTables.id, existing.tableId)));
+      if (!table) throw new AppError("not_found", "The saved takeaway counter was not found.");
+      return { sessionId: existing.id, tableId: table.id, code: table.code };
+    }
     const counters = await tx
       .select()
       .from(s.diningTables)
@@ -64,7 +78,7 @@ export async function startTakeaway(staff: StaffSession, input: { name?: string 
       });
       [table] = await tx.select().from(s.diningTables).where(and(eq(s.diningTables.tenantId, scope.tenantId), eq(s.diningTables.id, id)));
     }
-    const sessionId = await openVisit(tx, scope, [table!], { source: "walk_in", partySize: 1, guestName: name, expectedEndAt: new Date(now.getTime() + 60 * 60_000), userId: staff.userId, now });
+    const sessionId = await openVisit(tx, scope, [table!], { source: "walk_in", partySize: 1, guestName: name, expectedEndAt: new Date(now.getTime() + 60 * 60_000), userId: staff.userId, staffRequestId: requestId, staffRequestFingerprint: fingerprint, now });
     await audit(tx, staff, { action: "takeaway.started", entity: "table", entityId: table!.id, after: { sessionId, code: table!.code, name }, now });
     return { sessionId, tableId: table!.id, code: table!.code };
   }, LOCK_THEN_READ);

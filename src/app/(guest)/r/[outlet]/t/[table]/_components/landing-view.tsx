@@ -219,7 +219,7 @@ export function LandingNotFound({ lang, preview }: { lang: Lang; preview?: boole
   const c = g1Copy[lang];
   return (
     <GuestFrame lang={lang} preview={preview}>
-      <OutletHeader name="TableQR" logoUrl={null} subline="" aside={<LanguageToggle lang={lang} label={c.language} preview={preview} />} />
+      <OutletHeader name="Tableeqr" logoUrl={null} subline="" aside={<LanguageToggle lang={lang} label={c.language} preview={preview} />} />
       <main className="pt-3">
         <TableCard className="animate-fade" status={<StatusPill tone="paid" icon={HelpCircleIcon} label={c.pill.notFound} />}>
           <CardMessage {...c.notFound} large />

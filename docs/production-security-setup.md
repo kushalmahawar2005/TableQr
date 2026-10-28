@@ -18,7 +18,7 @@ MSG91_OTP_TEMPLATE_ID=<template ID from the MSG91 OTP section>
 MSG91_OTP_EXPIRY_MINUTES=5
 ```
 
-In MSG91, create the OTP template with the `##OTP##` variable, map your DLT-approved template and sender ID to it, and copy its template ID. TableQR makes and hashes the code itself and sends it through MSG91's v5 OTP API with the `authkey` in a header, so it never appears in an address or log. Only Indian numbers (+91) are sent. `npm run security:preflight` reports the provider as ready when the three variables are valid.
+In MSG91, create the OTP template with the `##OTP##` variable, map your DLT-approved template and sender ID to it, and copy its template ID. Tableeqr makes and hashes the code itself and sends it through MSG91's v5 OTP API with the `authkey` in a header, so it never appears in an address or log. Only Indian numbers (+91) are sent. `npm run security:preflight` reports the provider as ready when the three variables are valid.
 
 ## Configure SMS after DLT approval
 
@@ -31,7 +31,7 @@ FAST2SMS_OTP_TEMPLATE_ID=<approved OTP template ID>
 FAST2SMS_OTP_EXPIRY_MINUTES=5
 ```
 
-The DLT OTP template must contain the OTP variable in the format Fast2SMS expects. TableQR generates and hashes the OTP itself, then sends that code to Fast2SMS; verification remains inside TableQR, so the existing per-phone, device, table, and wrong-code limits still apply. The API key stays on the server and is sent only in Fast2SMS's Authorization header. Provider failures never fall back to demo codes.
+The DLT OTP template must contain the OTP variable in the format Fast2SMS expects. Tableeqr generates and hashes the OTP itself, then sends that code to Fast2SMS; verification remains inside Tableeqr, so the existing per-phone, device, table, and wrong-code limits still apply. The API key stays on the server and is sent only in Fast2SMS's Authorization header. Provider failures never fall back to demo codes.
 
 The Fast2SMS OTP endpoint accepts an OTP template ID, Indian mobile number, app-supplied OTP, and expiry. Confirm the approved template ID and variable mapping in the Fast2SMS panel before enabling the variables.
 
@@ -53,7 +53,7 @@ Staff push uses the existing VAPID key pair configured in Hostinger. Keep the sa
 
 ## Restaurant custom domains
 
-Set `CUSTOM_DOMAIN_CNAME_TARGET` in the deployed Node.js app to the exact DNS destination Hostinger shows for that app. If left empty, the settings screen suggests the hostname in `PUBLIC_APP_URL` / `NEXT_PUBLIC_APP_URL`; use Hostinger's value if it differs. For each restaurant, the owner adds the domain to the same app in hPanel, publishes the displayed ownership TXT record plus the host's required CNAME/ALIAS record, waits for Hostinger's HTTPS certificate, opens the guest link and confirms the right restaurant loads, then enables the custom URL in TableQR settings. Keep the TXT proof record in DNS: TableQR checks it with a short cache and redirects unavailable, unverified, or disabled custom-domain requests to the configured public app URL. Set `PUBLIC_APP_URL` to the canonical TableQR app origin so that fallback always has a destination.
+Set `CUSTOM_DOMAIN_CNAME_TARGET` in the deployed Node.js app to the exact DNS destination Hostinger shows for that app. If left empty, the settings screen suggests the hostname in `PUBLIC_APP_URL` / `NEXT_PUBLIC_APP_URL`; use Hostinger's value if it differs. For each restaurant, the owner adds the domain to the same app in hPanel, publishes the displayed ownership TXT record plus the host's required CNAME/ALIAS record, waits for Hostinger's HTTPS certificate, opens the guest link and confirms the right restaurant loads, then enables the custom URL in Tableeqr settings. Keep the TXT proof record in DNS: Tableeqr checks it with a short cache and redirects unavailable, unverified, or disabled custom-domain requests to the configured public app URL. Set `PUBLIC_APP_URL` to the canonical Tableeqr app origin so that fallback always has a destination.
 
 ## References
 

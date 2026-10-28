@@ -1,6 +1,6 @@
 # Printer management
 
-How a Print button reaches a printer, and what TableQR can honestly say about it. The slip layouts
+How a Print button reaches a printer, and what Tableeqr can honestly say about it. The slip layouts
 themselves are in [printing.md](printing.md); Bluetooth research is in
 [printing-bluetooth.md](printing-bluetooth.md).
 

@@ -2,14 +2,14 @@ import Link from "next/link";
 import { FEATURE_LABELS, type FeatureKey } from "@/lib/plan-features";
 import { hasOpenRequest } from "@/server/staff/plan-request";
 import { currentStaff } from "@/server/staff/request";
-import { ContactTableQR } from "./contact-tableqr";
+import { ContactTableeqr } from "./contact-tableeqr";
 import { RequestUpgrade } from "./request-upgrade";
 
 /** Shown in place of a screen the restaurant's plan does not include */
 export async function FeatureLocked({ feature, extra }: { feature: FeatureKey; extra?: { href: string; label: string } | { href: string; label: string }[] }) {
   const { label, hint } = FEATURE_LABELS[feature];
   const staff = await currentStaff();
-  // Owners and managers can ask for it; TableQR then changes the plan by hand
+  // Owners and managers can ask for it; Tableeqr then changes the plan by hand
   const canAsk = !!staff && staff.roles.some((r) => r === "owner" || r === "manager");
   const asked = canAsk && (await hasOpenRequest(staff.tenantId, feature));
   return (
@@ -17,9 +17,9 @@ export async function FeatureLocked({ feature, extra }: { feature: FeatureKey; e
       <div className="max-w-md">
         <p className="text-caption font-semibold uppercase tracking-wider text-muted">Not in your plan</p>
         <h1 className="mt-2 font-display text-title font-bold text-ink">{label}</h1>
-        <p className="mt-2 text-body text-muted">{hint}. Ask TableQR to upgrade your plan to use it.</p>
+        <p className="mt-2 text-body text-muted">{hint}. Ask Tableeqr to upgrade your plan to use it.</p>
         {canAsk && <RequestUpgrade feature={feature} asked={asked} />}
-        {canAsk && <div className="mt-3"><ContactTableQR message={`Hi TableQR, this is ${staff.outlet.name}. We want ${label}.`} /></div>}
+        {canAsk && <div className="mt-3"><ContactTableeqr message={`Hi Tableeqr, this is ${staff.outlet.name}. We want ${label}.`} /></div>}
         {extra && (
           <div className="mt-5 flex flex-wrap justify-center gap-2">
             {(Array.isArray(extra) ? extra : [extra]).map((x) => (

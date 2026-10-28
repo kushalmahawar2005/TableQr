@@ -23,7 +23,7 @@ const reviewers = ["owner", "manager"] as const;
 /** A key for documents only, derived from the server's credential key */
 function docKey() {
   const raw = process.env.PAYMENT_CREDENTIALS_KEY?.trim() ?? "";
-  if (!/^[\da-fA-F]{64}$/.test(raw)) throw new AppError("invalid_state", "Document storage is not set up on the server yet. Ask TableQR support.");
+  if (!/^[\da-fA-F]{64}$/.test(raw)) throw new AppError("invalid_state", "Document storage is not set up on the server yet. Ask Tableeqr support.");
   return Buffer.from(hkdfSync("sha256", Buffer.from(raw, "hex"), Buffer.alloc(0), "tableqr-rider-documents-v1", 32));
 }
 

@@ -323,7 +323,7 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
               {canEdit && <p className="mt-2 text-xs text-muted" aria-live="polite">{selectedLogo ? "Preview only — save this logo to show it to guests." : logoUrl ? "Logo is saved and visible on guest welcome screens and menus." : "No logo set. Upload one to show your brand to guests."}</p>}
               {logoMessage && <p role={logoMessage.ok ? "status" : "alert"} className={`mt-2 text-xs ${logoMessage.ok ? "text-[var(--state-available-text)]" : "text-danger"}`}>{logoMessage.text}</p>}
             </Row>
-            <Row label="Name" hint="Changed by TableQR."><Fixed>{o.name}</Fixed></Row>
+            <Row label="Name" hint="Changed by Tableeqr."><Fixed>{o.name}</Fixed></Row>
             <Row label="Outlet code" hint="Your team types this to sign in.">
               <div className="flex items-center gap-2 sm:justify-end">
                 <span className="font-mono text-sm font-semibold text-ink">{o.code}</span>
@@ -370,7 +370,7 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
             <Row label="Guest online payments" hint={!o.guestOnlinePaymentAvailable ? "No restaurant payment gateway is connected yet. Counter payment stays available; online checkout cannot be enabled." : guestOnlinePayments ? "Guests can pay their bill online." : "Guests will request payment at the counter; online checkout is hidden."}>
               <div className="flex sm:justify-end"><Toggle on={guestOnlinePayments} onChange={setGuestOnlinePayments} label="Allow guests to pay online" disabled={!canEdit || (!o.guestOnlinePaymentAvailable && !guestOnlinePayments)} /></div>
             </Row>
-            <Row label="Table mode" hint="Changed by TableQR."><Fixed>{MODE[o.sessionMode] ?? o.sessionMode}</Fixed></Row>
+            <Row label="Table mode" hint="Changed by Tableeqr."><Fixed>{MODE[o.sessionMode] ?? o.sessionMode}</Fixed></Row>
             <Row label="Google review link" htmlFor="review" hint="Guests see this after paying."><Input id="review" className={fieldCls} type="url" placeholder="https://g.page/r/…" value={review} onChange={(e) => setReview(e.target.value)} disabled={!canEdit} /></Row>
           </Section>
 
@@ -409,7 +409,7 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
           </Section>
 
           <Section id="delivery" icon={Store} title="Delivery setup" desc="Service areas, delivery charges and payment preferences for this outlet.">
-            {o.deliveryAvailable ? <DeliverySettings value={deliveryPolicy} onChange={setDeliveryPolicy} disabled={!canEdit} hasGateway={o.paymentGateway.configured && o.paymentGateway.available} hasPaymentQr={!!paymentQr} /> : <p className="py-4 text-sm text-muted">Delivery is not included in this restaurant’s package. TableQR can enable it from the tenant’s feature settings.</p>}
+            {o.deliveryAvailable ? <DeliverySettings value={deliveryPolicy} onChange={setDeliveryPolicy} disabled={!canEdit} hasGateway={o.paymentGateway.configured && o.paymentGateway.available} hasPaymentQr={!!paymentQr} /> : <p className="py-4 text-sm text-muted">Delivery is not included in this restaurant’s package. Tableeqr can enable it from the tenant’s feature settings.</p>}
           </Section>
 
           <Section id="room-guest" icon={Wifi} title="Room guest page" desc="Choose what checked-in guests can request and share your Wi-Fi details.">
@@ -459,7 +459,7 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
             })}
           </Section>
 
-          <Section id="plan" icon={CreditCard} title="Plan and setup" desc="Managed by TableQR.">
+          <Section id="plan" icon={CreditCard} title="Plan and setup" desc="Managed by Tableeqr.">
             <dl className="grid grid-cols-3 divide-x divide-line py-4">
               {[["Plan", o.plan || "—"], ["Tables", String(o.tables)], ["Team members", String(o.staff)]].map(([k, v]) => <div key={k} className="min-w-0 px-4 first:pl-0"><dt className="text-xs text-muted">{k}</dt><dd className="truncate font-display text-section font-bold">{v}</dd></div>)}
             </dl>

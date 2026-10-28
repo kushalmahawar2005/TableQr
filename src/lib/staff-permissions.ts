@@ -29,7 +29,7 @@ export const consoleSectionRoles = {
   /** The daily attendance register: managers and owners mark who was present, absent or on a half day */
   attendance: ["manager", "owner"],
   settings: ["manager", "owner"],
-  /** What the restaurant pays TableQR, and paying it */
+  /** What the restaurant pays Tableeqr, and paying it */
   plan: ["manager", "owner"],
 } as const satisfies Record<string, readonly StaffRole[]>;
 

@@ -83,7 +83,7 @@ export const subscriptions = mysqlTable(
   (t) => [index("subscriptions_tenant_idx").on(t.tenantId, t.periodStart)],
 );
 
-/** A restaurant asks TableQR for a feature or a plan change; the platform admin handles it by hand */
+/** A restaurant asks Tableeqr for a feature or a plan change; the platform admin handles it by hand */
 export const planRequests = mysqlTable(
   "plan_requests",
   {
@@ -102,7 +102,7 @@ export const planRequests = mysqlTable(
   (t) => [index("plan_requests_tenant_status_idx").on(t.tenantId, t.status)],
 );
 
-/** TableQR plan fees. Cashfree confirms online payments; admins can still record offline receipts. */
+/** Tableeqr plan fees. Cashfree confirms online payments; admins can still record offline receipts. */
 export const feePayments = mysqlTable(
   "fee_payments",
   {
@@ -197,7 +197,7 @@ export const outlets = mysqlTable(
     idleCloseMinutes: int("idle_close_minutes").notNull().default(240),
     /** Optional service charge in basis points of the discounted subtotal; 0 means off (PS 6.1) */
     serviceChargeBp: int("service_charge_bp").notNull().default(0),
-    /** Tip presets offered at payment, basis points; null means the TableQR default (5%, 10%) */
+    /** Tip presets offered at payment, basis points; null means the Tableeqr default (5%, 10%) */
     tipPresetsBp: json("tip_presets_bp").$type<number[]>(),
     /** Public review page shown to every guest after paying; null hides the link (PS 3.8) */
     reviewUrl: varchar("review_url", { length: 500 }),

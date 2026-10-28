@@ -11,6 +11,7 @@ import { audit } from "../staff/audit";
 import type { StaffSession } from "../staff/auth";
 import { posRoles } from "../staff/pos-read";
 import type { AnyDraftLine } from "../guest/order";
+import type { PriceQuote } from "@/domain/pricing";
 import { staffPlaceOrder, waiterRequestBill } from "../staff/waiter-mutations";
 import { requireStaffRole } from "../staff/waiter";
 import { lockSession, syncBill } from "./bill";
@@ -20,7 +21,7 @@ import { reopenBill } from "./payments";
 // directly; lines marked for pickup remain open on the kitchen ticket so they can be packed.
 // Once anyone has paid part of the bill, add them as a takeaway instead.
 
-export async function addItemsAtBilling(staff: StaffSession, input: { sessionId: string; tableId: string; participantId: string; clientRequestId: string; lines: AnyDraftLine[] }, now = new Date()) {
+export async function addItemsAtBilling(staff: StaffSession, input: { sessionId: string; tableId: string; participantId: string; clientRequestId: string; lines: AnyDraftLine[]; quote?: PriceQuote }, now = new Date()) {
   const roles = [...posRoles, "waiter"] as const;
   await requireStaffRole(staff, roles);
   const [session] = await db

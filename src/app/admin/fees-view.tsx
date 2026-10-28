@@ -16,7 +16,7 @@ import { openAdminPage } from "./admin-nav";
 import type { AdminData } from "./admin-types";
 import { FeeForm } from "./subscriptions-view";
 
-// TableQR's own income. Cashfree plan fees and admin-recorded offline receipts live here;
+// Tableeqr's own income. Cashfree plan fees and admin-recorded offline receipts live here;
 // restaurant guest bill money is never shown here.
 
 const money = (paise: number) => `₹${Math.round(paise / 100).toLocaleString("en-IN")}`;
@@ -55,7 +55,7 @@ function dueText(t: FeesTenant, now: number) {
 }
 
 function reminder(t: FeesTenant) {
-  return `Hi ${t.contactName}, your TableQR ${t.planName} plan for ${t.name} is ${money(t.monthlyPaise)} per month and ${t.access.state === "ok" ? `is due on ${date(t.access.endsAt)}` : "is overdue"}. Please open TableQR > My plan and pay securely through Cashfree. Thank you!`;
+  return `Hi ${t.contactName}, your Tableeqr ${t.planName} plan for ${t.name} is ${money(t.monthlyPaise)} per month and ${t.access.state === "ok" ? `is due on ${date(t.access.endsAt)}` : "is overdue"}. Please open Tableeqr > My plan and pay securely through Cashfree. Thank you!`;
 }
 
 export function FeesView({ data }: { data: AdminData }) {
@@ -93,7 +93,7 @@ export function FeesView({ data }: { data: AdminData }) {
   return <div className="space-y-6">
     <div>
       <h1 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">Fees</h1>
-      <p className="mt-1 text-sm text-muted-foreground">What restaurants pay TableQR. Cashfree confirms online payments automatically; offline receipts can still be recorded here.</p>
+      <p className="mt-1 text-sm text-muted-foreground">What restaurants pay Tableeqr. Cashfree confirms online payments automatically; offline receipts can still be recorded here.</p>
     </div>
     {notice && <p role={notice.ok ? "status" : "alert"} className={`rounded-lg p-3 text-sm ${notice.ok ? "bg-emerald-50 text-emerald-800" : "bg-red-50 text-red-700"}`}>{notice.text}</p>}
 
@@ -126,7 +126,7 @@ export function FeesView({ data }: { data: AdminData }) {
             </div>
             <div className="flex flex-wrap items-center gap-2">
               {c.method === "cashfree" ? <Badge variant="secondary" className="bg-blue-100 text-blue-700">Cashfree is confirming automatically</Badge> : <>
-                <Reach t={c.tenant} message={`Hi ${c.tenant.contactName}, this is TableQR about your ${money(c.amountPaise)} payment.`} />
+                <Reach t={c.tenant} message={`Hi ${c.tenant.contactName}, this is Tableeqr about your ${money(c.amountPaise)} payment.`} />
                 <Button variant="outline" disabled={pending} onClick={() => run(() => rejectFeeAction(c.id), "Marked not received. The owner can try again.")}>Not received</Button>
                 <Button disabled={pending} className="bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => run(() => confirmFeeAction(c.id), `Confirmed. ${c.tenant.name} is paid for ${c.months} ${c.months === 1 ? "month" : "months"}${c.planCode ? ` and moved to ${data.plans.find((p) => p.code === c.planCode)?.name ?? c.planCode}` : ""}.`)}>{pending ? <Loader2 className="animate-spin" /> : <CircleCheck />}Confirm payment</Button>
               </>}
@@ -145,7 +145,7 @@ export function FeesView({ data }: { data: AdminData }) {
                 <p className="text-xs text-muted-foreground">Asked by {r.requestedBy} · {r.tenant.planName} plan · {money(r.tenant.monthlyPaise)}/month · {r.tenant.contactName} · {r.tenant.contactPhone}</p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <Reach t={r.tenant} message={`Hi ${r.tenant.contactName}, this is TableQR about your request: ${what}.`} />
+                <Reach t={r.tenant} message={`Hi ${r.tenant.contactName}, this is Tableeqr about your request: ${what}.`} />
                 <Button variant="outline" onClick={() => openAdminPage("Tenants", r.tenant.id)}>Open restaurant</Button>
                 <Button disabled={pending} onClick={() => run(() => markPlanRequestDoneAction(r.id), "Marked done.")}><CircleCheck />Done</Button>
               </div>

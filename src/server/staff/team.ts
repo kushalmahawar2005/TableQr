@@ -57,7 +57,7 @@ export async function listTeam(staff: Staff): Promise<TeamMember[]> {
   for (const r of rows) {
     const m = byUser.get(r.id) ?? { id: r.id, name: r.name, phone: r.phone, photoUrl: r.photoUrl, isActive: r.isActive, roles: [], isMe: r.id === staff.userId, locked: false };
     if (!m.roles.includes(r.role)) m.roles.push(r.role);
-    // Owners and people with access to every outlet are managed by TableQR, not here
+    // Owners and people with access to every outlet are managed by Tableeqr, not here
     if (r.role === "owner" || r.outletId === null) m.locked = true;
     byUser.set(r.id, m);
   }
@@ -69,7 +69,7 @@ async function target(tx: Pick<typeof db, "select">, staff: Staff, userId: strin
   const [user] = await tx.select().from(s.users).where(and(eq(s.users.tenantId, staff.tenantId), eq(s.users.id, userId)));
   if (!user || roles.length === 0) throw new AppError("not_found", "That person is not on this outlet's team.");
   if (userId === staff.userId) throw bad("You cannot change your own access.");
-  if (roles.some((r) => r.role === "owner" || r.outletId === null)) throw bad("This person is managed by TableQR. Contact support to change them.");
+  if (roles.some((r) => r.role === "owner" || r.outletId === null)) throw bad("This person is managed by Tableeqr. Contact support to change them.");
   return { user, roles };
 }
 

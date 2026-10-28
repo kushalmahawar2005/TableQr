@@ -7,7 +7,7 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
- * TableQR Design Foundation v1 (locked). Overrides the visual tokens in UI/UX spec section 2;
+ * Tableeqr Design Foundation v1 (locked). Overrides the visual tokens in UI/UX spec section 2;
  * the spec still decides behaviour, content and states.
  * Guest and staff screens are light-only; the KDS uses its own dark tokens.
  */
@@ -20,7 +20,7 @@
   --ring: #103B2C;
   --hover: #f1f2f8;
 
-  /* Core palette - TableQR Premium Theme */
+  /* Core palette - Tableeqr Premium Theme */
   --ink: #17251F; /* Primary Text */
   --accent: #D86B45; /* Terracotta Accent */
   --paper: #F7F5EF; /* Warm Cream background */
@@ -79,7 +79,7 @@
   --kds-line: #34405f;
 
   /*
-   * Adaptive brand layer. These are the tokens derived from the TableQR default accent;
+   * Adaptive brand layer. These are the tokens derived from the Tableeqr default accent;
    * a guest page overrides them from the outlet's own colour (src/domain/brand.ts).
    */
   --brand-main: #c9482b;
@@ -430,7 +430,7 @@ body {
 .theme-dark [class~="text-rose-600"] { color: #ff9ca7; }
 .theme-dark [class~="hover:bg-rose-50"]:hover { background-color: #3b2027; }
 
-/* Owner dashboard uses TableQR's terracotta accent without changing the palette on other screens. */
+/* Owner dashboard uses Tableeqr's terracotta accent without changing the palette on other screens. */
 .dashboard-theme {
   --paper: #F5F2EA;
   --dashboard-canvas: #EFEEE8;

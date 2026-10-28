@@ -36,14 +36,14 @@ afterAll(async () => {
 
 describe("custom guest domain routing", () => {
   it("routes only live domains with current DNS proof and safely falls back when proof disappears", async () => {
-    process.env.PUBLIC_APP_URL = "https://tableqr.example";
+    process.env.PUBLIC_APP_URL = "https://tableeqr.example";
     const saved = await saveCustomDomain(owner(), "Menu.Example.com.");
     expect(saved.domain).toBe("menu.example.com");
     expect(saved.token).toMatch(/^[a-f\d]{48}$/);
     expect(await outletCodeForCustomDomain("menu.example.com")).toBeNull();
     expect(await outletCodeForCustomDomain("spoof-menu.example.com")).toBeNull();
     const request = new NextRequest("https://menu.example.com/");
-    expect((await proxy(request)).headers.get("location")).toBe("https://tableqr.example/");
+    expect((await proxy(request)).headers.get("location")).toBe("https://tableeqr.example/");
     await expect(setCustomDomainLive(owner(), true)).rejects.toMatchObject({ code: "invalid_state" });
 
     vi.mocked(resolveTxt).mockResolvedValue([[`tableqr-verify=${saved.token}`]]);
@@ -67,13 +67,13 @@ describe("custom guest domain routing", () => {
     clearCustomDomainProofCache();
     expect(await outletCodeForCustomDomain("menu.example.com")).toBeNull();
     const fallback = await proxy(guestRequest);
-    expect(fallback.headers.get("location")).toBe("https://tableqr.example/r/OTHER/t/table123?from=qr");
+    expect(fallback.headers.get("location")).toBe("https://tableeqr.example/r/OTHER/t/table123?from=qr");
 
     await saveCustomDomain(owner(), null);
     clearCustomDomainProofCache();
     expect(await outletCodeForCustomDomain("menu.example.com")).toBeNull();
     const removedDomainFallback = await proxy(request);
-    expect(removedDomainFallback.headers.get("location")).toBe("https://tableqr.example/");
+    expect(removedDomainFallback.headers.get("location")).toBe("https://tableeqr.example/");
   });
 
   it("limits domain ownership changes to the outlet owner", async () => {

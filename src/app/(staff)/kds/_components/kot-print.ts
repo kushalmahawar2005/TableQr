@@ -57,6 +57,18 @@ hr.s{border-top:2px solid #000;margin:6px 0}
   });
 }
 
-const KEY = "tableqr.kds.autoKot";
-export const autoKotSaved = () => { try { return localStorage.getItem(KEY) === "1"; } catch { return false; } };
-export const saveAutoKot = (on: boolean) => { try { localStorage.setItem(KEY, on ? "1" : "0"); } catch { /* private window */ } };
+const KEY = "tableeqr.kds.autoKot";
+const LEGACY_KEY = "tableqr.kds.autoKot";
+export const autoKotSaved = () => {
+  try {
+    const current = localStorage.getItem(KEY);
+    if (current !== null) return current === "1";
+    const previous = localStorage.getItem(LEGACY_KEY);
+    if (previous !== null) {
+      try { localStorage.setItem(KEY, previous); localStorage.removeItem(LEGACY_KEY); }
+      catch { /* A full browser store must not change the existing auto-print preference. */ }
+    }
+    return previous === "1";
+  } catch { return false; }
+};
+export const saveAutoKot = (on: boolean) => { try { localStorage.setItem(KEY, on ? "1" : "0"); localStorage.removeItem(LEGACY_KEY); } catch { /* private window */ } };

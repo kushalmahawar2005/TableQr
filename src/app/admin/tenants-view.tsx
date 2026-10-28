@@ -14,7 +14,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { addOutletAction, changeTenantPlanAction, markPlanRequestDoneAction, recordFeePaymentAction, setTenantPriceAction, extendTrialAction, getTenantDetailAction, resetOwnerPinAction, setCustomPackageAction, setRoleAccessAction, setTenantKitchenAction, setTenantStatusAction, setTenantTableLimitAction, updateTenantAction } from "./actions";
+import { addOutletAction, changeTenantPlanAction, markPlanRequestDoneAction, recordFeePaymentAction, setTenantPriceAction, extendTrialAction, getTenantDetailAction, removeSelectedTenantsAction, resetOwnerPinAction, setCustomPackageAction, setRoleAccessAction, setTenantKitchenAction, setTenantStatusAction, setTenantTableLimitAction, updateTenantAction } from "./actions";
 import { CreateTenantDialog } from "./create-tenant-dialog";
 import { FeeForm } from "./subscriptions-view";
 import type { AdminData, AdminTenant, TenantDetail } from "./admin-types";
@@ -135,7 +135,7 @@ function CustomPackageForm({ tenant, pending, onSave }: { tenant: AdminTenant; p
     <div><h3 className="text-sm font-semibold">Custom package</h3><p className="text-xs text-muted-foreground">Tick what this restaurant gets and set its price. It applies as soon as you save.</p></div>
     <div className="grid gap-2.5 sm:grid-cols-2">
       {FEATURE_KEYS.map((k) => <label key={k} className="flex items-start gap-2 text-sm"><input type="checkbox" checked={f[k]} onChange={(e) => setF({ ...f, [k]: e.target.checked })} className="mt-0.5 size-4 accent-[#5b42f5]" /><span>{FEATURE_LABELS[k].label}<span className="block text-xs text-muted-foreground">{FEATURE_LABELS[k].hint}</span></span></label>)}
-      <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={f.poweredBy} onChange={(e) => setF({ ...f, poweredBy: e.target.checked })} className="mt-0.5 size-4 accent-[#5b42f5]" /><span>Show “Powered by TableQR”<span className="block text-xs text-muted-foreground">A small line on the guest page</span></span></label>
+      <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={f.poweredBy} onChange={(e) => setF({ ...f, poweredBy: e.target.checked })} className="mt-0.5 size-4 accent-[#5b42f5]" /><span>Show “Powered by Tableeqr”<span className="block text-xs text-muted-foreground">A small line on the guest page</span></span></label>
     </div>
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
       <div className="space-y-1"><Label htmlFor="custom-tables" className="text-xs">Tables</Label><Input id="custom-tables" inputMode="numeric" value={f.maxTables ?? ""} placeholder="No limit" onChange={(e) => setF({ ...f, maxTables: limit(e.target.value) })} /></div>
@@ -393,7 +393,7 @@ type SortKey = "name" | "outletCount" | "mrr" | "orders30d" | "createdAt";
 
 function csvCell(value: string | number) { const text = String(value); return /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text; }
 
-export function TenantsView({ data }: { data: AdminData }) {
+export function TenantsView({ data, canRemove }: { data: AdminData; canRemove: boolean }) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [plan, setPlan] = useState("all");
@@ -406,6 +406,9 @@ export function TenantsView({ data }: { data: AdminData }) {
   const [city, setCity] = useState("all");
   const [health, setHealth] = useState("all");
   const [checked, setChecked] = useState<Set<string>>(new Set());
+  const [selectionError, setSelectionError] = useState<string | null>(null);
+  const [isRemoving, startRemove] = useTransition();
+  const router = useRouter();
   const now = new Date(data.asOf).getTime();
 
   const counts = useMemo(() => {
@@ -450,6 +453,21 @@ export function TenantsView({ data }: { data: AdminData }) {
   const allChecked = pageIds.length > 0 && pageIds.every((id) => checked.has(id));
   const toggleAll = () => setChecked((c) => { const n = new Set(c); for (const id of pageIds) { if (allChecked) n.delete(id); else n.add(id); } return n; });
   const toggleOne = (id: string) => setChecked((c) => { const n = new Set(c); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const removeSelected = () => {
+    if (!canRemove) return;
+    const targets = data.tenants.filter((tenant) => checked.has(tenant.id) && tenant.status !== "cancelled");
+    if (!targets.length) return;
+    const names = targets.slice(0, 5).map((tenant) => tenant.name).join(", ");
+    const suffix = targets.length > 5 ? ` and ${targets.length - 5} more` : "";
+    if (!window.confirm(`Remove ${targets.length} selected restaurant${targets.length === 1 ? "" : "s"} (${names}${suffix})? Access will be turned off, but their records and billing history will be kept. You can reactivate them from their profile.`)) return;
+    setSelectionError(null);
+    startRemove(async () => {
+      const result = await removeSelectedTenantsAction(targets.map((tenant) => tenant.id));
+      if (result.error) { setSelectionError(result.error); return; }
+      setChecked(new Set());
+      router.refresh();
+    });
+  };
 
   return <div className="space-y-6">
     <div className="flex flex-wrap items-start justify-between gap-3">
@@ -495,6 +513,14 @@ export function TenantsView({ data }: { data: AdminData }) {
           </Select>
           {filtered && <Button variant="ghost" size="sm" onClick={resetFilters}><RotateCcw />Reset filters</Button>}
         </div>
+
+        {checked.size > 0 && <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#5b42f5]/25 bg-[#5b42f5]/5 px-3 py-2.5">
+          <div className="text-sm font-medium">{checked.size} selected{selectionError ? <p role="alert" className="mt-1 font-normal text-red-600">{selectionError}</p> : null}</div>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" onClick={() => { setChecked(new Set()); setSelectionError(null); }}>Clear selection</Button>
+            {canRemove && <Button variant="destructive" size="sm" disabled={isRemoving || !data.tenants.some((tenant) => checked.has(tenant.id) && tenant.status !== "cancelled")} onClick={removeSelected}>{isRemoving ? <Loader2 className="animate-spin" /> : <XCircle />}Remove selected</Button>}
+          </div>
+        </div>}
 
         {rows.length ? <Table>
           <TableHeader><TableRow><TableHead className="w-8"><input type="checkbox" aria-label="Select all on page" checked={allChecked} onChange={toggleAll} className="size-4 accent-[#5b42f5]" /></TableHead>{sortHead("name", "Tenant")}<TableHead>City</TableHead><TableHead>Plan</TableHead>{sortHead("outletCount", "Outlets", true)}<TableHead>Status</TableHead>{sortHead("mrr", "MRR", true)}{sortHead("orders30d", "Orders (30d)", true)}{sortHead("createdAt", "Joined", false, "pl-6")}<TableHead className="pl-6">Health</TableHead><TableHead className="text-right"><span className="sr-only">Actions</span></TableHead></TableRow></TableHeader>

@@ -1,4 +1,4 @@
-// TableQR menu library: common categories and dishes of Indian restaurants and cafes, so a new
+// Tableeqr menu library: common categories and dishes of Indian restaurants and cafes, so a new
 // restaurant picks what it serves instead of typing it. Prices are never here: every restaurant
 // sets its own. Names are general dish names (no brand, photo or text taken from anyone's menu).
 //

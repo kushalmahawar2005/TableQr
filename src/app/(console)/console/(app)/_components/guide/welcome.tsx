@@ -9,7 +9,7 @@ import { guideCopy } from "./copy";
 
 const spring = { type: "spring", stiffness: 380, damping: 32 } as const;
 
-/** First sign-in: a few slides on what TableQR does, then the tour or straight to work */
+/** First sign-in: a few slides on what Tableeqr does, then the tour or straight to work */
 export function Welcome({ lang, name, onStart, onSkip }: { lang: Lang; name: string; onStart: () => void; onSkip: () => void }) {
   const c = guideCopy(lang).welcome;
   const slides = [{ title: c.title(name.split(" ")[0] || name), body: c.body }, ...c.slides];

@@ -1,5 +1,5 @@
 // Seeds the demo restaurant from the spec's running example: npm run db:seed
-// Wipes every TableQR table first, so it refuses to run against a non-local database.
+// Wipes every Tableeqr table first, so it refuses to run against a non-local database.
 import { loadEnvConfig } from "@next/env";
 import { drizzle } from "drizzle-orm/mysql2";
 import mysql from "mysql2/promise";

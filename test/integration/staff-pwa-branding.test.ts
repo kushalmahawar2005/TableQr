@@ -20,7 +20,7 @@ describe("tenant-branded staff PWA", () => {
     const brand = await staffAppBrandForOutletCode(env.demo.outletCode);
     expect(brand).toMatchObject({ code: env.demo.outletCode, name: "BMW Jaipur", logoUrl: "/uploads/menus/bmw/logo.webp", accentColor: "#c9482b" });
 
-    const response = await staffManifest(new Request(`https://tableqr.example/staff.webmanifest?outlet=${env.demo.outletCode}`));
+    const response = await staffManifest(new Request(`https://tableeqr.example/staff.webmanifest?outlet=${env.demo.outletCode}`));
     const manifest = await response.json();
     expect(response.headers.get("content-type")).toContain("application/manifest+json");
     expect(manifest).toMatchObject({
@@ -38,9 +38,9 @@ describe("tenant-branded staff PWA", () => {
 
   it("does not expose another outlet or accept an invalid outlet code as branding", async () => {
     expect(await staffAppBrandForOutletCode("<script>alert(1)</script>")).toBeNull();
-    const response = await staffManifest(new Request("https://tableqr.example/staff.webmanifest?outlet=UNKNOWN"));
+    const response = await staffManifest(new Request("https://tableeqr.example/staff.webmanifest?outlet=UNKNOWN"));
     const manifest = await response.json();
-    expect(manifest.name).toBe("TableQR Staff");
+    expect(manifest.name).toBe("Tableeqr Staff");
     expect(manifest.icons.some((icon: { src: string }) => icon.src.includes("BMW"))).toBe(false);
   });
 

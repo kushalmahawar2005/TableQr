@@ -43,7 +43,7 @@ export function fitThermalPage(doc: Document) {
 }
 
 function printInPopup(html: string) {
-  const win = window.open("", "tableqr-print", "popup,width=460,height=720");
+  const win = window.open("", "tableeqr-print", "popup,width=460,height=720");
   if (!win) return false;
   try {
     win.document.open();

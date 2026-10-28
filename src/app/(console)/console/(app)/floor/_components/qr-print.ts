@@ -42,7 +42,7 @@ h1{margin:0;font-size:${7 * scale}mm}
 .table{font-size:${11 * scale}mm;font-weight:800;margin:0}
 .join{font-size:${4 * scale}mm;color:#4b5563}.join b{font-size:${5 * scale}mm;letter-spacing:.2em;color:#1f2937}
 .foot{font-size:${3 * scale}mm;color:#9ca3af}
-</style></head><body><div class="card"><h1>${esc(p.outlet)}</h1><p class="sub">Scan to see the menu, order and pay from your phone</p><div class="qr">${p.svg}</div><p class="table">Table ${esc(p.table)}</p>${p.joinCode ? `<p class="join">Joining friends? Use code <b>${esc(p.joinCode)}</b></p>` : ""}<p class="foot">Powered by TableQR</p></div></body></html>`;
+</style></head><body><div class="card"><h1>${esc(p.outlet)}</h1><p class="sub">Scan to see the menu, order and pay from your phone</p><div class="qr">${p.svg}</div><p class="table">Table ${esc(p.table)}</p>${p.joinCode ? `<p class="join">Joining friends? Use code <b>${esc(p.joinCode)}</b></p>` : ""}<p class="foot">Powered by Tableeqr</p></div></body></html>`;
 }
 
 /** Prints through a hidden frame so no pop-up is blocked. */

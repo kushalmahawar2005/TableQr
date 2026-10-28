@@ -39,6 +39,8 @@ const nextConfig: NextConfig = {
       { source: "/uploads/:path*", headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }] },
       // App icons and the staff app manifest change rarely
       { source: "/staff-icon/:size", headers: [{ key: "Cache-Control", value: "public, max-age=604800" }] },
+      // Service worker scripts must be revalidated so installed staff apps receive offline fixes
+      { source: "/sw.js", headers: [{ key: "Cache-Control", value: "no-cache, no-store, must-revalidate" }, { key: "Service-Worker-Allowed", value: "/" }] },
     ];
   },
 };

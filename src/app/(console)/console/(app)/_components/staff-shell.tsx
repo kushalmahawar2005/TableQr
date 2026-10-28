@@ -203,7 +203,7 @@ export function StaffShell({
           </span>
           <span className="min-w-0">
             <span className="block truncate font-display text-sm font-bold leading-tight text-ink">
-              TableQR
+              Tableeqr
             </span>
             <span className="block truncate text-[11px] font-medium leading-tight text-muted">
               {staff.outlet}
@@ -256,7 +256,7 @@ export function StaffShell({
           </span>
           <span className={`hidden min-w-0 ${folded ? "" : "lg:block"}`}>
             <span className="block truncate font-display text-base font-bold text-ink">
-              TableQR
+              Tableeqr
             </span>
             <span className="block truncate text-xs font-medium text-muted">
               {staff.outlet}

@@ -105,7 +105,7 @@ export async function reverseGeocode(lat: number, lng: number): Promise<PlaceAdd
   // About 10 m: nearby taps share one cached answer, which keeps us well inside Nominatim's fair use
   const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&addressdetails=1&zoom=18&accept-language=en&lat=${lat.toFixed(4)}&lon=${lng.toFixed(4)}`;
   try {
-    const res = await fetch(url, { headers: { "User-Agent": "TableQR delivery address (tableqr)" }, signal: AbortSignal.timeout(5000), next: { revalidate: 30 * 86400 } });
+    const res = await fetch(url, { headers: { "User-Agent": "Tableeqr delivery address (tableeqr)" }, signal: AbortSignal.timeout(5000), next: { revalidate: 30 * 86400 } });
     if (!res.ok) return null;
     const place = parseReverseResponse(await res.json());
     if (!place) return null;

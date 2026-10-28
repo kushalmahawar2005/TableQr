@@ -1,7 +1,7 @@
 {
-  "name": "tableqr-rider-app",
+  "name": "tableeqr-rider-app",
   "private": true,
-  "description": "Android wrapper for the TableQR rider page with background location",
+  "description": "Android wrapper for the Tableeqr rider page with background location",
   "scripts": {
     "sync": "cap sync android",
     "apk": "cap sync android && cd android && ./gradlew assembleDebug"

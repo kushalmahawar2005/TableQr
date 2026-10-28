@@ -35,7 +35,7 @@ These come from public browser-support pages that are undated. Check caniuse.com
   paired printer later without asking again depends on the Chrome version and settings. Test it.
 - BLE writes are small. Slips must be sent in chunks with a pause between them, and the right chunk size is per printer.
 - ESC/POS text printing uses printer code pages that often lack the ₹ sign and Hindi. The reliable way is to draw the slip
-  as an image (bitmap) and send that, which also keeps TableQR's own layout. That is more data over a slow link.
+  as an image (bitmap) and send that, which also keeps Tableeqr's own layout. That is more data over a slow link.
 - A BLE printer accepts one connection at a time. Two phones cannot print to it together, so a shared printer used by
   several devices needs a network or cloud printer instead.
 - BLE printers rarely report paper-out or cover-open. A Bluetooth transport can say `sent`, not `confirmed`, unless the

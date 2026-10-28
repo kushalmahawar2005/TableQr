@@ -2,6 +2,7 @@
 import { AppError } from "@/server/errors";
 import { startTakeaway } from "@/server/floor/takeaway";
 import type { AnyDraftLine } from "@/server/guest/order";
+import type { PriceQuote } from "@/domain/pricing";
 import { posBillDetail } from "@/server/staff/pos-read";
 import { posOpenTable, posSendOrder, posTerminal, posTerminalRoles } from "@/server/staff/pos-terminal";
 import { staffRealtimeToken, topics } from "@/server/realtime/token";
@@ -19,8 +20,8 @@ async function run<T>(work: (staff: Awaited<ReturnType<typeof staffFor>>) => Pro
 export async function terminalAction() { return run((s) => posTerminal(s)); }
 export async function tokenAction() { const s = await staffFor(posTerminalRoles, "pos"); return staffRealtimeToken(s, [topics.floor, topics.kitchen]); }
 export async function orderAction(sessionId: string) { return run((s) => posBillDetail(s, String(sessionId))); }
-export async function openTableAction(input: { tableId: string; partySize?: number; guestName?: string | null }) { return run((s) => posOpenTable(s, input)); }
-export async function newTakeawayAction(name?: string | null) { return run((s) => startTakeaway(s, { name })); }
-export async function sendOrderAction(input: { sessionId: string; clientRequestId: string; lines: AnyDraftLine[]; guestName?: string | null }) { return run((s) => posSendOrder(s, input)); }
+export async function openTableAction(input: { tableId: string; partySize?: number; guestName?: string | null; clientRequestId?: string }) { return run((s) => posOpenTable(s, input)); }
+export async function newTakeawayAction(name?: string | null, clientRequestId?: string) { return run((s) => startTakeaway(s, { name, clientRequestId })); }
+export async function sendOrderAction(input: { sessionId: string; clientRequestId: string; lines: AnyDraftLine[]; quote?: PriceQuote; guestName?: string | null }) { return run((s) => posSendOrder(s, input)); }
 /** Close the eating stage so the bill can be paid on the Billing screen */
 export async function billAction(sessionId: string) { return run((s) => waiterRequestBill(s, String(sessionId), new Date(), [...posTerminalRoles])); }

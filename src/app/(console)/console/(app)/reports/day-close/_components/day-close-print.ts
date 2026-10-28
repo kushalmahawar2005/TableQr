@@ -55,7 +55,7 @@ ${row("Items sold", String(r.itemsSold))}
 ${r.removed.qty ? row(`Voided (${r.removed.qty})`, rs(r.removed.paise)) : ""}
 ${top}${still}
 <hr>
-<div class="c m">Powered by TableQR</div>`;
+<div class="c m">Powered by Tableeqr</div>`;
 
   // Height before measuring: long outlet or dish names wrap onto more rows
   const perLine = charsPerLine(profile);

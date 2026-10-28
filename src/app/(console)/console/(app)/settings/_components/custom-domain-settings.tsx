@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { CheckCircle2, ExternalLink, Globe2, LoaderCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { customDomainProofRecord } from "@/domain/custom-domain-proof";
 import { saveCustomDomainAction, setCustomDomainLiveAction, verifyCustomDomainAction } from "../actions";
 
 export function CustomDomainSettings({ domain: initialDomain, token: initialToken, verifiedAt, live: initialLive, dnsTarget, canEdit }: {
@@ -45,8 +46,9 @@ export function CustomDomainSettings({ domain: initialDomain, token: initialToke
     });
   }
 
-  const recordHost = domain ? `_tableqr-verify.${domain}` : "";
-  const recordValue = token ? `tableqr-verify=${token}` : "";
+  const proof = customDomainProofRecord(domain, token);
+  const recordHost = domain ? proof.name : "";
+  const recordValue = token ? proof.value : "";
 
   return <section className="mt-5 overflow-hidden rounded-2xl border border-line bg-surface" aria-labelledby="custom-domain-heading">
     <header className="flex items-start gap-3 border-b border-line px-5 py-4">
@@ -71,7 +73,7 @@ export function CustomDomainSettings({ domain: initialDomain, token: initialToke
         {canEdit && <button type="button" onClick={verify} disabled={busy} className="mt-4 inline-flex h-10 items-center gap-2 rounded-xl border border-line px-4 font-semibold text-ink disabled:opacity-50">{busy && <LoaderCircle className="size-4 animate-spin" />}Verify DNS record</button>}
       </div>}
       {domain && verified && <div className="space-y-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950">
-        <p className="font-semibold">2. Attach it to the TableQR app in Hostinger</p>
+        <p className="font-semibold">2. Attach it to the Tableeqr app in Hostinger</p>
         <p>In hPanel, open the same Node.js app and add <span className="font-mono">{domain}</span> under its domains. Then add the DNS record Hostinger requires:</p>
         {dnsTarget ? <dl className="grid gap-2 rounded-lg bg-white/80 p-3 sm:grid-cols-[7rem_1fr]">
           <dt className="text-emerald-800">Type</dt><dd className="font-mono">CNAME</dd>
@@ -85,8 +87,8 @@ export function CustomDomainSettings({ domain: initialDomain, token: initialToke
           <a href={`https://${domain}`} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-white px-4 font-semibold text-emerald-900 hover:bg-emerald-100"><ExternalLink className="size-4" aria-hidden="true" />Open guest site</a>
         </div>
         {canEdit && !live && <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={confirmedHttps} onChange={(event) => setConfirmedHttps(event.target.checked)} className="mt-1 accent-emerald-800" /><span>I opened the HTTPS guest page and confirmed the correct restaurant loads without a certificate warning.</span></label>}
-        {canEdit && <button type="button" onClick={() => { const nextLive = !live; setConfirmedHttps(false); setGuestLinkDomain(nextLive, nextLive && confirmedHttps); }} disabled={busy || (!live && !confirmedHttps)} className="min-h-10 rounded-xl bg-emerald-800 px-4 font-semibold text-white disabled:opacity-50">{busy ? "Saving…" : live ? "Use TableQR links instead" : "Use this domain for guest links"}</button>}
-        <p className="text-xs">If DNS ownership proof disappears, the custom URL safely redirects guests to the TableQR address. Turning this off also restores TableQR links and QR printouts.</p>
+        {canEdit && <button type="button" onClick={() => { const nextLive = !live; setConfirmedHttps(false); setGuestLinkDomain(nextLive, nextLive && confirmedHttps); }} disabled={busy || (!live && !confirmedHttps)} className="min-h-10 rounded-xl bg-emerald-800 px-4 font-semibold text-white disabled:opacity-50">{busy ? "Saving…" : live ? "Use Tableeqr links instead" : "Use this domain for guest links"}</button>}
+        <p className="text-xs">If DNS ownership proof disappears, the custom URL safely redirects guests to the Tableeqr address. Turning this off also restores Tableeqr links and QR printouts.</p>
       </div>}
       {message && <p role="status" className="text-sm text-muted">{message}</p>}
     </div>

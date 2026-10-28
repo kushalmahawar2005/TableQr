@@ -124,7 +124,7 @@ export function PrinterSettings({ initial, outletId, outletName, recent: initial
             <input type="radio" name="transport" className="mt-1" disabled={!t.implemented} checked={draft.transport === t.id} onChange={() => setDraft({ ...draft, transport: t.id })} />
             <span><span className="font-semibold text-ink">{t.label}{!t.implemented && <span className="ml-2 text-xs font-medium text-muted">Not available yet</span>}</span>
               <span className="mt-0.5 block text-xs text-muted">{t.description}</span>
-              {t.implemented && <span className="mt-0.5 block text-xs text-muted">{confirmable(t.id) ? "The printer can confirm that it printed." : "TableQR can show that a slip was sent, not that paper came out."}</span>}</span>
+              {t.implemented && <span className="mt-0.5 block text-xs text-muted">{confirmable(t.id) ? "The printer can confirm that it printed." : "Tableeqr can show that a slip was sent, not that paper came out."}</span>}</span>
           </label>)}</div></fieldset>
         <div className="mt-4 flex gap-2"><button type="button" className={primary} disabled={busy || !draft.name.trim()} onClick={save}>{busy ? <LoaderCircle className="mx-auto size-4 animate-spin" aria-label="Saving" /> : draft.id ? "Save changes" : "Add printer"}</button>
           <button type="button" className="h-11 rounded-xl border border-line px-5 text-sm font-semibold text-ink" onClick={() => setDraft(null)}>Cancel</button></div>

@@ -12,7 +12,7 @@ import { emailAdmin } from "./admin-alerts";
 import { currencyAccepted, PAYMENT_CURRENCY, platformGateway } from "./payments/gateway";
 import type { Checkout } from "@/lib/payments/checkout";
 
-// TableQR's own fees. Cashfree confirms online payments; an admin can still record an offline
+// Tableeqr's own fees. Cashfree confirms online payments; an admin can still record an offline
 // receipt. Guest bill money never comes through here.
 
 export const FEE_MONTHS = [1, 3, 6, 12] as const;
@@ -100,7 +100,7 @@ async function upgradeTarget(tenantId: string, planCode: string | null | undefin
   const [t] = await db.select({ planCode: s.tenants.planCode }).from(s.tenants).where(eq(s.tenants.id, tenantId));
   if (!t || t.planCode === planCode) return null;
   const plan = (await upgradePlans()).find((p) => p.code === planCode);
-  if (!plan || plan.monthlyPricePaise === null) throw new AppError("invalid_state", "This plan is set up by TableQR. Please call or WhatsApp us.");
+  if (!plan || plan.monthlyPricePaise === null) throw new AppError("invalid_state", "This plan is set up by Tableeqr. Please call or WhatsApp us.");
   return { code: plan.code, name: plan.name, monthlyPricePaise: plan.monthlyPricePaise };
 }
 
@@ -116,7 +116,7 @@ export async function claimFee(staff: Pick<StaffSession, "tenantId" | "roles" | 
     reference = utr;
   }
   const [waiting] = await db.select({ id: s.feePayments.id }).from(s.feePayments).where(and(eq(s.feePayments.tenantId, staff.tenantId), eq(s.feePayments.status, "claimed")));
-  if (waiting) throw new AppError("invalid_state", "Your last payment is still being checked by TableQR.");
+  if (waiting) throw new AppError("invalid_state", "Your last payment is still being checked by Tableeqr.");
   const fee = await monthlyFee(db, staff.tenantId);
   // Upgrading: the new plan's list price for every outlet
   const target = await upgradeTarget(staff.tenantId, input.planCode);
@@ -135,7 +135,7 @@ export async function claimFee(staff: Pick<StaffSession, "tenantId" | "roles" | 
 
 export type StartedFeePayment = { id: string; amountPaise: number; checkout: Checkout; replayed: boolean };
 
-/** Starts TableQR plan payment on the platform's Cashfree account. */
+/** Starts Tableeqr plan payment on the platform's Cashfree account. */
 export async function startFeePayment(
   staff: Pick<StaffSession, "tenantId" | "roles" | "name">,
   input: { months: number; planCode?: string | null; requestId: string; callbackUrl: string },
@@ -192,7 +192,7 @@ export async function startFeePayment(
       gatewayRef = (await gateway.createOrder({
         paymentId: payment.id,
         amountPaise: payment.amountPaise,
-        receipt: `TableQR ${payment.months}m`,
+        receipt: `Tableeqr ${payment.months}m`,
         callbackUrl,
         notifyUrl: `${new URL(callbackUrl).origin}/api/fees/cashfree/webhook`,
         customer: { id: staff.tenantId, phone: tenant?.phone, name: tenant?.name },
@@ -203,7 +203,7 @@ export async function startFeePayment(
     }
     await db.update(s.feePayments).set({ gatewayRef }).where(and(eq(s.feePayments.tenantId, staff.tenantId), eq(s.feePayments.id, payment.id)));
   }
-  const checkout = await gateway.checkout({ gatewayRef, paymentId: payment.id, amountPaise: payment.amountPaise, method: "upi", outletName: "TableQR", callbackUrl });
+  const checkout = await gateway.checkout({ gatewayRef, paymentId: payment.id, amountPaise: payment.amountPaise, method: "upi", outletName: "Tableeqr", callbackUrl });
   return { id: payment.id, amountPaise: payment.amountPaise, checkout, replayed };
 }
 

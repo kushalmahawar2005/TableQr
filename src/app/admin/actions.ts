@@ -2,7 +2,7 @@
 import { friendlyError } from "@/server/friendly-error";
 
 import { insertRoom } from "@/server/staff/rooms";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
@@ -164,12 +164,45 @@ export async function setTenantStatusAction(tenantId: string, status: "active" |
     if (status !== "active" && status !== "suspended") return { error: "Invalid status." };
     const [tenant] = await db.select({ id: s.tenants.id, status: s.tenants.status }).from(s.tenants).where(eq(s.tenants.id, tenantId));
     if (!tenant) return { error: "Tenant not found." };
-    await db.update(s.tenants).set({ status }).where(eq(s.tenants.id, tenantId));
+    await db.update(s.tenants).set({ status, statusReason: status === "active" ? null : "Suspended by platform admin" }).where(eq(s.tenants.id, tenantId));
     await logAdminAction(admin, tenantId, status === "suspended" ? "admin.tenant_suspended" : "admin.tenant_activated", { status: tenant.status }, { status });
     revalidatePath("/admin");
     return { error: null };
   } catch (error) {
     return { error: friendlyError(error, "Tenant could not be updated.") };
+  }
+}
+
+/** Soft-remove selected restaurants by cancelling platform access; tenant and business history stay intact. */
+export async function removeSelectedTenantsAction(tenantIds: string[]): Promise<TenantActionState> {
+  try {
+    const admin = await requireSuperAdmin();
+    if (!Array.isArray(tenantIds) || tenantIds.length < 1 || tenantIds.length > 200 || tenantIds.some((id) => typeof id !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id))) {
+      return { error: "Select between 1 and 200 valid restaurants." };
+    }
+    const ids = [...new Set(tenantIds)];
+    if (ids.length !== tenantIds.length) return { error: "The restaurant selection is not valid. Refresh and try again." };
+    const now = new Date();
+    const result = await db.transaction(async (tx) => {
+      const tenants = await tx.select({ id: s.tenants.id, status: s.tenants.status }).from(s.tenants).where(inArray(s.tenants.id, ids)).for("update");
+      if (tenants.length !== ids.length) return { error: "One or more selected restaurants no longer exist. Refresh and try again." };
+      const toRemove = tenants.filter((tenant) => tenant.status !== "cancelled");
+      if (!toRemove.length) return { error: "All selected restaurants are already removed." };
+      for (const tenant of toRemove) {
+        await tx.update(s.tenants).set({ status: "cancelled", statusReason: "Removed by platform admin" }).where(eq(s.tenants.id, tenant.id));
+        await tx.insert(s.auditLog).values({
+          id: uuidv7(), tenantId: tenant.id, actorLabel: `admin:${admin.email}`.slice(0, 80),
+          action: "admin.tenant_cancelled", entity: "tenant", entityId: tenant.id,
+          before: { status: tenant.status }, after: { status: "cancelled" }, reason: "Removed from tenant list by platform admin", createdAt: now,
+        });
+      }
+      return { error: null };
+    });
+    if (result.error) return result;
+    revalidatePath("/admin");
+    return { error: null };
+  } catch (error) {
+    return { error: friendlyError(error, "Selected restaurants could not be removed.") };
   }
 }
 
@@ -194,7 +227,7 @@ export async function extendTrialAction(tenantId: string, days: number): Promise
 const FEE_METHODS = { upi: "UPI", cash: "Cash", bank: "Bank transfer" } as const;
 export type FeeMethod = keyof typeof FEE_METHODS;
 
-/** The restaurant paid its TableQR fee by hand (UPI, cash or bank): record it; the paid months start right away */
+/** The restaurant paid its Tableeqr fee by hand (UPI, cash or bank): record it; the paid months start right away */
 export async function recordFeePaymentAction(tenantId: string, input: { months: number; amountRupees: number; method: FeeMethod; reference: string }): Promise<TenantActionState> {
   try {
     const admin = await requireSuperAdmin();
@@ -472,7 +505,7 @@ export type PlanInput = {
 };
 
 const limit = (value: number | null) => (value === null ? null : Math.max(1, Math.floor(value)));
-/** Only the switches TableQR knows, as true/false, with whole-number limits */
+/** Only the switches Tableeqr knows, as true/false, with whole-number limits */
 const cleanFeatures = (f: Features): Features => ({
   ...(Object.fromEntries(FEATURE_KEYS.map((k) => [k, f[k] === true])) as Record<(typeof FEATURE_KEYS)[number], boolean>),
   maxTables: limit(f.maxTables), maxStaff: limit(f.maxStaff), maxRooms: limit(f.maxRooms ?? null), poweredBy: f.poweredBy === true,

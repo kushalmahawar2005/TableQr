@@ -31,7 +31,7 @@ import { checkIn, checkOut, getRooms, roomFoodTab, saveRoom } from "@/server/sta
 import { askFromRoom, getRoomPage } from "@/server/guest/room";
 import { seedPlatform, wipeAll, type Db } from "../../scripts/demo-data";
 
-// Three restaurants on one TableQR install, set up the way the platform admin creates them. Each
+// Three restaurants on one Tableeqr install, set up the way the platform admin creates them. Each
 // one gets its own menu, team, guests, orders and a paid bill. Then every staff screen and guest
 // path is run as one restaurant against the other two: nothing of theirs may be seen or changed.
 

@@ -1,6 +1,6 @@
 # Inventory management (context)
 
-What TableQR's inventory does today, how it is built, and what is planned next. Written for the
+What Tableeqr's inventory does today, how it is built, and what is planned next. Written for the
 owner and for anyone (or any AI agent) picking the work up. Built 27 Oct 2026, modelled on the
 Petpooja inventory module. Not yet committed or deployed at the time of writing.
 

@@ -1,6 +1,6 @@
 # Printing on a receipt roll
 
-TableQR prints through the browser: it builds a small HTML page for the slip, sets the page size
+Tableeqr prints through the browser: it builds a small HTML page for the slip, sets the page size
 with `@page`, and calls the browser's print. There is no ESC/POS or printer driver in the app, so
 the printer must be set up in the operating system and chosen in the browser's print window.
 

@@ -48,7 +48,7 @@ export async function placeOrder(ctx: GuestContext, input: PlaceInput = {}, now 
   ]);
   await sendOutletPush(ctx, {
     title: "New table order",
-    body: "A guest placed an order. Open TableQR to view it.",
+    body: "A guest placed an order. Open Tableeqr to view it.",
     url: "/console",
     tag: `order-${placed.orderId}`,
   }, { sessionId: ctx.sessionId, kind: "order" });
@@ -232,7 +232,7 @@ export async function placeOrderInTransaction(tx: Tx, ctx: GuestContext, input: 
     const lines = priced.filter((p) => p !== null);
     // Never charge a price the guest did not review: a changed (higher or lower) or unseen price stops here,
     // before anything is written, and the cart shows the current prices to confirm
-    if (!staffDraft && input.quote) {
+    if (input.quote) {
       const quote = input.quote;
       const changed = lines.filter(({ line, priced: p }) => quote[quoteKey(line.itemId, (line.modifiers ?? []).map((m) => m.modifierId))] !== p.unitPricePaise);
       if (changed.length) {

@@ -49,7 +49,7 @@ describe("counter bill print", () => {
     expect(html).toContain("<span>Table</span><span>T4</span>");
     expect(html).toContain("<span>Date</span><span>25 Oct 2026");
     expect(html).toContain("Thank you for dining with us!");
-    expect(html).toContain("Powered by TableQR");
+    expect(html).toContain("Powered by Tableeqr");
     const take = billHtml(detail({ takeaway: true, tableCode: "TA-3" }), "Spice Route", "receipt", 80);
     expect(take).toContain("<span>Order</span><span>Takeaway</span>");
     expect(take).toContain("<span>Token</span><span>TA-3</span>");

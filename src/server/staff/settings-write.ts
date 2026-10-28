@@ -12,7 +12,7 @@ import { guestServices, type GuestService } from "@/domain/guest-services";
 import { outletGatewayFromConfig } from "../payments/outlet-gateway";
 import { encryptMerchantCredentials, outletPaymentGatewayStatus } from "../payments/outlet-gateway";
 
-// Outlet settings the owner may change. Name, code, time zone, table mode and plan stay with TableQR.
+// Outlet settings the owner may change. Name, code, time zone, table mode and plan stay with Tableeqr.
 
 type Staff = Pick<StaffSession, "tenantId" | "outletId" | "roles" | "userId" | "name">;
 const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;

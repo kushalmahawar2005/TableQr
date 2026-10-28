@@ -2,7 +2,7 @@ import { settleCashfreeFeeByGatewayRef } from "@/server/fees";
 import { platformGateway } from "@/server/payments/gateway";
 import { readRequestTextLimited } from "@/server/http-body";
 
-/** Cashfree payment webhook for TableQR plan fees. Replays are safe and idempotent. */
+/** Cashfree payment webhook for Tableeqr plan fees. Replays are safe and idempotent. */
 export async function POST(request: Request) {
   const gateway = platformGateway();
   if (!gateway) return Response.json({ error: "Cashfree is not configured" }, { status: 503 });

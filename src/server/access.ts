@@ -3,7 +3,7 @@ import { and, desc, eq, ne } from "drizzle-orm";
 import { db } from "@/db";
 import * as s from "@/db/schema";
 
-// Whether a restaurant may use TableQR right now. A free trial or a paid period ends on its date;
+// Whether a restaurant may use Tableeqr right now. A free trial or a paid period ends on its date;
 // then there are GRACE_DAYS with a warning, then staff screens and guest ordering stop until the
 // platform admin extends the trial or records the fees. Suspended or cancelled stops at once.
 // Nothing is deleted.
@@ -45,4 +45,4 @@ export async function tenantAccess(tenantId: string, now = new Date()): Promise<
   return accessFrom({ status: tenant.status, trialEndsAt: tenant.trialEndsAt, paidUntil: paid?.periodEnd ?? null }, now);
 }
 
-export const ACCESS_STOPPED = "TableQR is paused for this restaurant. The owner can ask TableQR to renew the plan.";
+export const ACCESS_STOPPED = "Tableeqr is paused for this restaurant. The owner can ask Tableeqr to renew the plan.";

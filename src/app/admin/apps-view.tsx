@@ -13,7 +13,7 @@ export function AppsView({ initial }: { initial: Release[] }) {
   return (
     <div className="space-y-5">
       <div className="rounded-2xl border border-[#e2e5ec] bg-white p-5">
-        <p className="text-sm font-semibold text-[#172033]">TableQR Rider app</p>
+        <p className="text-sm font-semibold text-[#172033]">Tableeqr Rider app</p>
         <p className="mt-1 text-sm text-muted-foreground">Riders download it from <a className="font-semibold text-[#5b42f5]" href="/download/rider" target="_blank" rel="noreferrer">/download/rider</a>. {latest ? `Now giving version ${latest.version} (${mb(latest.sizeBytes)}).` : "No version uploaded yet."}</p>
         <form className="mt-4 grid gap-3 sm:grid-cols-[140px_1fr]" onSubmit={async (e) => {
           e.preventDefault(); setBusy(true); setMsg(null);

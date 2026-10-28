@@ -24,7 +24,7 @@ ${esc(edge)}</pre>
 <div class="r b"><span>TOTAL</span><span>${esc(rs(98765))}</span></div>
 <hr>
 <div class="c m">Both edges of the lines above should show.<br>If one is cut off: print window, Margins None, Scale 100%.</div>
-<div class="c m">${esc(clock(Date.now()))} · TableQR</div>`;
+<div class="c m">${esc(clock(Date.now()))} · Tableeqr</div>`;
   return thermalDocument({
     title: "Test print",
     paper,

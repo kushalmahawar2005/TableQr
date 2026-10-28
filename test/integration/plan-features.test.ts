@@ -78,7 +78,7 @@ describe("plan features", () => {
     expect((await tenantFeatures(env.demo.tenantId)).pricingRules).toBe(true);
   });
 
-  it("owners and managers ask TableQR to unlock a feature; asking twice makes one request", async () => {
+  it("owners and managers ask Tableeqr to unlock a feature; asking twice makes one request", async () => {
     const first = await requestPlanChange(owner, { feature: "kitchenDisplay" });
     const again = await requestPlanChange(owner, { feature: "kitchenDisplay" });
     expect(again).toEqual({ id: first.id, already: true });

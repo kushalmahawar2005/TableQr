@@ -1,4 +1,4 @@
-// How a restaurant reaches TableQR: a phone call or a WhatsApp chat with the operator.
+// How a restaurant reaches Tableeqr: a phone call or a WhatsApp chat with the operator.
 // SUPPORT_PHONE (10 digits) in the hosting panel overrides the number.
 
 const DIGITS = (process.env.SUPPORT_PHONE ?? "6367828788").replace(/\D/g, "").slice(-10);

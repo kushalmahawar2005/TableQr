@@ -44,7 +44,7 @@ export type PrintTransport = {
 export const browserTransport: PrintTransport = {
   id: "browser",
   label: "Browser print",
-  description: "Opens this device's print window. Pick the receipt printer there. Works on every device, but the window appears each time and TableQR cannot tell whether paper came out.",
+  description: "Opens this device's print window. Pick the receipt printer there. Works on every device, but the window appears each time and Tableeqr cannot tell whether paper came out.",
   capabilities: { confirmation: "none", silent: false, runsOn: "this_device", shared: false },
   implemented: true,
   availability: () => (typeof window === "undefined" ? { ok: false, reason: "Printing needs a browser." } : { ok: true }),
@@ -72,12 +72,12 @@ const PLANNED: Record<Exclude<TransportId, "browser">, { label: string; descript
   },
   network: {
     label: "Network printer",
-    description: "A printer on the restaurant's WiFi or cable. Needs a compatible printer and a way for TableQR to reach it; not built yet.",
+    description: "A printer on the restaurant's WiFi or cable. Needs a compatible printer and a way for Tableeqr to reach it; not built yet.",
     capabilities: { confirmation: "printer", silent: true, runsOn: "server", shared: true },
   },
   cloud: {
     label: "Cloud print",
-    description: "A printer that collects its jobs from TableQR over the internet, so any device can print to it. Needs a compatible printer; not built yet.",
+    description: "A printer that collects its jobs from Tableeqr over the internet, so any device can print to it. Needs a compatible printer; not built yet.",
     capabilities: { confirmation: "printer", silent: true, runsOn: "server", shared: true },
   },
   desktop_bridge: {

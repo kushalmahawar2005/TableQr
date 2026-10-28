@@ -104,7 +104,7 @@ export function TeamScreen({ initial, invitations: initialInvitations = [], canE
     });
   }
 
-  const loginText = (c: NonNullable<typeof created>) => `You're invited to join ${outletName} on TableQR as ${LABEL[c.role] ?? c.role}.\n\nOutlet: ${outletName}\nOutlet code: ${outletCode}\nInvited phone: ${c.phone}\n\nComplete staff setup: ${c.inviteUrl}\nThis link expires in 7 days.`;
+  const loginText = (c: NonNullable<typeof created>) => `You're invited to join ${outletName} on Tableeqr as ${LABEL[c.role] ?? c.role}.\n\nOutlet: ${outletName}\nOutlet code: ${outletCode}\nInvited phone: ${c.phone}\n\nComplete staff setup: ${c.inviteUrl}\nThis link expires in 7 days.`;
   const whatsappUrl = (c: NonNullable<typeof created>) => {
     const digits = c.phone.replace(/\D/g, "");
     return `https://wa.me/${digits.length === 10 ? `91${digits}` : digits}?text=${encodeURIComponent(loginText(c))}`;

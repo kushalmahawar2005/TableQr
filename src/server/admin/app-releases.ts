@@ -6,7 +6,7 @@ import * as s from "@/db/schema";
 import { AppError } from "../errors";
 import { photoBucket } from "../menu-storage";
 
-// TableQR's own Android apps. The platform admin uploads each version; the download page
+// Tableeqr's own Android apps. The platform admin uploads each version; the download page
 // always offers the newest. Files live in the public bucket under apps/<app>/.
 
 export type AppName = (typeof s.appReleases.app.enumValues)[number];
@@ -32,8 +32,8 @@ export async function addRelease(input: { app: AppName; version: string; notes: 
   if (dupe) throw new AppError("invalid_state", `Version ${version} is already uploaded. Use a higher number.`);
   const bucket = photoBucket();
   if (!bucket) throw new AppError("invalid_state", "File storage is not set up on this server.");
-  const key = `apps/${input.app}/TableQR-Rider-${version}.apk`;
-  await bucket.client.send(new PutObjectCommand({ Bucket: bucket.name, Key: key, Body: input.bytes, ContentType: "application/vnd.android.package-archive", ContentDisposition: 'attachment; filename="TableQR-Rider.apk"', CacheControl: "public,max-age=31536000,immutable" }));
+  const key = `apps/${input.app}/Tableeqr-Rider-${version}.apk`;
+  await bucket.client.send(new PutObjectCommand({ Bucket: bucket.name, Key: key, Body: input.bytes, ContentType: "application/vnd.android.package-archive", ContentDisposition: 'attachment; filename="Tableeqr-Rider.apk"', CacheControl: "public,max-age=31536000,immutable" }));
   await db.insert(s.appReleases).values({ app: input.app, version, url: `${bucket.publicBase}/${key}`, sizeBytes: input.bytes.byteLength, notes: String(input.notes ?? "").trim().slice(0, 300) || null });
   return latestRelease(input.app);
 }

@@ -38,7 +38,7 @@ export async function importPreviewAction(filename: string, base64: string) { re
 }); }
 export async function importCommitAction(rows: Parameters<typeof commitMenuCsv>[1]) { return run((s) => commitMenuCsv(s, rows)); }
 export async function uploadImageAction(filename: string, contentType: string, base64: string) { return run(async staff => { const brand = (await import("drizzle-orm")).eq; void brand; const { db } = await import("@/db"); const schema = await import("@/db/schema"); const [outlet] = await db.select({ brandId: schema.outlets.brandId }).from(schema.outlets).where((await import("drizzle-orm")).and((await import("drizzle-orm")).eq(schema.outlets.tenantId, staff.tenantId), (await import("drizzle-orm")).eq(schema.outlets.id, staff.outletId))); if (!outlet) throw new AppError("not_found", "Outlet not found."); return storeMenuImage({ tenantId: staff.tenantId, brandId: outlet.brandId, filename, contentType, bytes: Buffer.from(base64, "base64") }); }); }
-// Menu library: browse and search the TableQR list, then add picked dishes with prices
+// Menu library: browse and search the Tableeqr list, then add picked dishes with prices
 export async function libraryBrowseAction() { return run((s) => browseLibrary(s)); }
 export async function librarySearchAction(query: string) { return run((s) => searchLibrary(s, query)); }
 export async function libraryCategoryAction(categoryKey: string) { return run((s) => libraryCategoryDetail(s, categoryKey)); }

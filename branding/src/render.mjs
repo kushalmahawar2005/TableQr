@@ -2,7 +2,7 @@ import { chromium } from 'playwright';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const FPS = 30, TOTAL = 1080;
+const TOTAL = 1080;
 const root = import.meta.dirname;
 
 // --- build film.built.html with the QR matrix injected ---
@@ -33,12 +33,12 @@ if (arg === 'all') {
 }
 
 const PATCH = process.env.PATCH === '1';
-const outDir = path.join(root, (arg === 'all' || PATCH) ? 'frames' : 'sample');
+const outDir = process.env.BRAND_FRAMES_DIR || path.join(root, (arg === 'all' || PATCH) ? 'frames' : 'sample');
 if (!PATCH) fs.rmSync(outDir, { recursive: true, force: true });
 fs.mkdirSync(outDir, { recursive: true });
 
 const browser = await chromium.launch({
-  executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+  ...(process.env.CHROMIUM_EXECUTABLE_PATH ? { executablePath: process.env.CHROMIUM_EXECUTABLE_PATH } : {}),
   args: ['--force-device-scale-factor=1', '--hide-scrollbars', '--font-render-hinting=none',
          '--disable-lcd-text', '--allow-file-access-from-files']
 });
@@ -61,6 +61,9 @@ for (let i = 0; i < frames.length; i++) {
     path: path.join(outDir, String(f).padStart(5, '0') + '.png'),
     animations: 'disabled'
   });
+  if (f === 1070 && process.env.BRAND_COVER_PATH) {
+    await page.screenshot({ path: process.env.BRAND_COVER_PATH, type: 'jpeg', quality: 95, animations: 'disabled' });
+  }
   if (arg === 'all' && i % 90 === 0) {
     const pct = ((i / frames.length) * 100).toFixed(0);
     const eta = i ? (((Date.now() - t0) / i) * (frames.length - i) / 1000).toFixed(0) : '?';

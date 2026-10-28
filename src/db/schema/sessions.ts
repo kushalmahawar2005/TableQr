@@ -59,6 +59,9 @@ export const tableSessions = mysqlTable(
     openedByUserId: ref("opened_by_user_id"),
     /** Visit owner: stays with the party when it moves to another physical table. */
     waiterUserId: ref("waiter_user_id"),
+    /** POS walk-in/takeaway request key for exactly-once session creation after a lost reply. */
+    staffRequestId: varchar("staff_request_id", { length: 64 }),
+    staffRequestFingerprint: char("staff_request_fingerprint", { length: 64 }),
     reservationId: ref("reservation_id"),
     /** No FK: participants reference the session, so this would be circular */
     hostParticipantId: ref("host_participant_id"),
@@ -76,6 +79,7 @@ export const tableSessions = mysqlTable(
   },
   (t) => [
     uniqueIndex("table_sessions_open_key_uq").on(t.openKey),
+    uniqueIndex("table_sessions_staff_request_uq").on(t.outletId, t.staffRequestId),
     index("table_sessions_outlet_idx").on(t.outletId, t.openedAt),
     tenantKey("table_sessions", t),
     sameTenant("fk_sessions_outlet", t, t.outletId, outlets),

@@ -8,7 +8,7 @@ import { openCheckout } from "@/lib/payments/checkout";
 import { FEATURE_KEYS, FEATURE_LABELS, type Features } from "@/lib/plan-features";
 import { refreshFeePaymentAction, startFeePaymentAction } from "./plan-request-actions";
 
-// "My plan": the restaurant's TableQR plan, paying through Cashfree, and moving to a bigger plan.
+// "My plan": the restaurant's Tableeqr plan, paying through Cashfree, and moving to a bigger plan.
 
 export type PlanOption = { code: string; name: string; monthlyPricePaise: number | null; features: Features };
 export type PlanView = {
@@ -45,7 +45,7 @@ function standing(plan: PlanView) {
   const { days } = planDue(plan);
   const trial = plan.access.reason === "trial";
   if (plan.access.state === "blocked") return { tone: "danger", chip: "Paused", line: `Ended ${day(plan.access.endsAt)}. Pay to start again.` } as const;
-  if (plan.access.state === "grace") return { tone: "danger", chip: "Ended", line: `Ended ${day(plan.access.endsAt)}. Pay now to keep using TableQR.` } as const;
+  if (plan.access.state === "grace") return { tone: "danger", chip: "Ended", line: `Ended ${day(plan.access.endsAt)}. Pay now to keep using Tableeqr.` } as const;
   if (days === null) return { tone: "good", chip: trial ? "Free trial" : "Active", line: "No end date set" } as const;
   const tone = days <= 3 ? "danger" : days <= 7 ? "warn" : "good";
   return { tone, chip: trial ? "Free trial" : "Active", line: `${trial ? "Trial ends" : "Renews"} ${day(plan.access.endsAt)}` } as const;
@@ -166,10 +166,10 @@ export function PayCard({ plan, target, bare = false }: { plan: PlanView; target
 
   const shell = bare ? "" : "overflow-hidden rounded-[22px] border border-line bg-surface";
   const pendingId = startedPaymentId ?? plan.payments.find((payment) => payment.method === "cashfree" && payment.status === "claimed")?.id;
-  if (state === "sent") return <section aria-label="Pay TableQR" className={shell}><Sent upgrade={target?.name} paymentId={pendingId} /></section>;
+  if (state === "sent") return <section aria-label="Pay Tableeqr" className={shell}><Sent upgrade={target?.name} paymentId={pendingId} /></section>;
 
   return (
-    <section aria-label="Pay TableQR" className={shell}>
+    <section aria-label="Pay Tableeqr" className={shell}>
       {!bare && <div className="border-b border-line px-5 py-4 sm:px-6">
         <p className="text-caption font-semibold uppercase tracking-[0.08em] text-muted">{target ? "Plan change" : "Subscription payment"}</p>
         <h2 className="mt-1 font-display text-section font-bold text-ink">{target ? `Switch to ${target.name}` : "Pay for your plan"}</h2>
@@ -308,7 +308,7 @@ export function ComparePlans({ plan }: { plan: PlanView }) {
                 {current ? (
                   <span className="flex min-h-11 w-full items-center justify-center rounded-xl border border-line text-button font-semibold text-muted">Your plan</span>
                 ) : p.monthlyPricePaise === null ? (
-                  <span className="flex min-h-11 w-full items-center justify-center rounded-xl border border-line text-button font-semibold text-muted">Call TableQR</span>
+                  <span className="flex min-h-11 w-full items-center justify-center rounded-xl border border-line text-button font-semibold text-muted">Call Tableeqr</span>
                 ) : (
                   <button type="button" onClick={() => setTarget(p)} className={`flex min-h-11 w-full items-center justify-center rounded-xl text-button font-semibold ${p.code === popular ? "bg-brand text-brand-on hover:bg-brand-hover" : "bg-ink text-paper hover:bg-ink/90"} ${focus}`}>
                     Switch to {p.name}
@@ -479,7 +479,7 @@ const STATUS = {
   rejected: { label: "Not received", tone: "bg-danger/12 text-danger" },
 } as const;
 
-/** Every payment to TableQR, newest first */
+/** Every payment to Tableeqr, newest first */
 export function PlanPayments({ plan }: { plan: PlanView }) {
   if (!plan.payments.length) return null;
   const nameOf = (code: string | null) => plan.plans.find((p) => p.code === code)?.name;

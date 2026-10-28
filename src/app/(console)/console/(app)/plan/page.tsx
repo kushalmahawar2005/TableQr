@@ -2,13 +2,13 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { canSee } from "@/lib/staff-permissions";
 import { currentStaff } from "@/server/staff/request";
-import { ContactTableQR } from "../_components/contact-tableqr";
+import { ContactTableeqr } from "../_components/contact-tableeqr";
 import { planViewFor } from "../_components/plan-data";
 import { ComparePlans, PayOrPaid, PlanPass, PlanPayments } from "../_components/plan-panel";
 
 export const metadata: Metadata = { title: "My plan", robots: { index: false, follow: false } };
 
-// My plan: the restaurant's TableQR membership, paying for it, and moving to a bigger plan.
+// My plan: the restaurant's Tableeqr membership, paying for it, and moving to a bigger plan.
 export default async function PlanPage() {
   const staff = await currentStaff();
   if (!staff) redirect("/console/login");
@@ -28,7 +28,7 @@ export default async function PlanPage() {
           <h1 className="mt-1 font-display text-title font-bold text-ink">My plan</h1>
           <p className="mt-1 text-body text-muted">Check your access, compare plans and pay securely when you’re ready.</p>
         </div>
-        <ContactTableQR message={`Hi TableQR, this is ${staff.outlet.name}. I have a question about our plan.`} />
+        <ContactTableeqr message={`Hi Tableeqr, this is ${staff.outlet.name}. I have a question about our plan.`} />
       </header>
       <div className="mt-6 grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
         <PlanPass plan={plan} />

@@ -6,11 +6,13 @@ import { ArrowLeft, Loader2, Minus, Package, PenLine, Plus, ReceiptText, Search,
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { OPEN_TAX_RATES } from "@/domain/gst";
 import { menuThumb } from "@/domain/menu-photo";
-import { priceLine } from "@/domain/pricing";
+import { priceLine, quoteKey, type PriceQuote } from "@/domain/pricing";
 import { connectRealtime } from "@/lib/realtime-client";
 import type { AnyDraftLine } from "@/server/guest/order";
 import type { PosBillDetail } from "@/server/staff/pos-read";
 import type { PosTerminal } from "@/server/staff/pos-terminal";
+import { buildOfflinePosRecoveryFile, loadPosDraft, queueOfflinePosOrder, readOfflinePosOrders, savePosDraft, savePosSnapshot, writeOfflinePosOrder, type OfflinePosOrder } from "@/lib/pos-offline-queue";
+import { syncSavedPosOrders } from "@/lib/pos-offline-sync";
 import { billAction, newTakeawayAction, openTableAction, orderAction, sendOrderAction, terminalAction, tokenAction } from "../actions";
 
 // POS terminal, the way a counter bills: the table view first, then dishes by category with the
@@ -24,6 +26,37 @@ type Line =
   | { key: string; kind: "open"; name: string; pricePaise: number; station: string; taxRateBp: number; qty: number; note: string; parcel: boolean };
 /** What the cashier is billing: a table or a takeaway, opened on the server once the first KOT goes */
 type Current = { sessionId: string | null; tableId: string | null; code: string; takeaway: boolean; seats: number };
+type PersistedDraft = { current: Current | null; detail: PosBillDetail | null; cart: Line[]; guestName: string; partySize: number; requestId: string | null; requestFingerprint: string | null };
+const hasPriceChanges = (cart: Line[], menu: Dish[]) => cart.some((line) => {
+  if (line.kind !== "menu") return false;
+  const fresh = menu.find((item) => item.id === line.dish.id);
+  if (!fresh || !fresh.pricing.isAvailable) return true;
+  const oldPrice = priceLine(line.dish.pricing, line.qty, line.mods);
+  const newPrice = priceLine(fresh.pricing, line.qty, line.mods);
+  return !oldPrice.ok || !newPrice.ok || oldPrice.line.linePaise !== newPrice.line.linePaise;
+});
+const quoteForCart = (cart: Line[]): PriceQuote | null => {
+  const quote: PriceQuote = {};
+  for (const line of cart) {
+    if (line.kind !== "menu") continue;
+    const priced = priceLine(line.dish.pricing, line.qty, line.mods);
+    if (!priced.ok) return null;
+    quote[quoteKey(line.dish.id, line.mods)] = priced.line.unitPricePaise;
+  }
+  return quote;
+};
+const queuedQuoteChanges = (order: OfflinePosOrder, menu: Dish[]) => order.lines.flatMap((line) => {
+  if (!("itemId" in line)) return [];
+  const dish = menu.find((item) => item.id === line.itemId);
+  const priced = dish ? priceLine(dish.pricing, line.qty, line.modifierIds) : null;
+  const next = priced?.ok ? priced.line.unitPricePaise : null;
+  const key = quoteKey(line.itemId, line.modifierIds);
+  const previous = order.quote?.[key];
+  if (next === null || previous === undefined || previous !== next) {
+    return [{ name: dish?.name ?? line.itemId, previous, next }];
+  }
+  return [];
+});
 
 const rs = (paise: number) => `₹${(paise / 100).toLocaleString("en-IN", { minimumFractionDigits: paise % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
 const focus = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand";
@@ -51,9 +84,9 @@ const photoPref = (() => {
   };
 })();
 
-export function PosTerminalScreen({ initial, hi, realtimeUrl }: { initial: PosTerminal; hi: boolean; realtimeUrl: string | null }) {
+export function PosTerminalScreen({ initial, outletId, staffUserId, sessionExpiresAt, hi, realtimeUrl, initialSavedAt, initialIsServerFresh, startOffline = false }: { initial: PosTerminal; outletId: string; staffUserId: string; sessionExpiresAt: number; hi: boolean; realtimeUrl: string | null; initialSavedAt: number; initialIsServerFresh: boolean; startOffline?: boolean }) {
   const router = useRouter();
-  const L = (en: string, h: string) => (hi ? h : en);
+  const L = useCallback((en: string, h: string) => (hi ? h : en), [hi]);
   const [data, setData] = useState(initial);
   const [current, setCurrent] = useState<Current | null>(null);
   const [detail, setDetail] = useState<PosBillDetail | null>(null);
@@ -66,62 +99,240 @@ export function PosTerminalScreen({ initial, hi, realtimeUrl }: { initial: PosTe
   const [choosing, setChoosing] = useState<{ dish: Dish; mods: string[]; qty: number } | null>(null);
   const [typing, setTyping] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [offline, setOffline] = useState(false);
+  const [offline, setOffline] = useState(startOffline);
+  const [queuedCount, setQueuedCount] = useState(0);
+  const [queuedOrders, setQueuedOrders] = useState<OfflinePosOrder[]>([]);
+  const [draftReady, setDraftReady] = useState(false);
+  const [lastSyncedAt, setLastSyncedAt] = useState(initialSavedAt);
   const [message, setMessage] = useState<{ tone: "ok" | "bad"; text: string } | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const requestId = useRef<string | null>(null);
+  const requestFingerprint = useRef<string | null>(null);
   const currentId = useRef<string | null>(null);
+  const syncingQueue = useRef(false);
   const searchBox = useRef<HTMLInputElement>(null);
   const photos = useSyncExternalStore(photoPref.subscribe, photoPref.get, () => true);
   const togglePhotos = () => photoPref.set(!photos);
 
   useEffect(() => { currentId.current = current?.sessionId ?? null; }, [current]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setOffline((wasOffline) => wasOffline || !navigator.onLine);
+      void readOfflinePosOrders(outletId).then((orders) => { setQueuedOrders(orders); setQueuedCount(orders.length); }).catch(() => {
+        setMessage({ tone: "bad", text: L("Offline order storage is unavailable on this device.", "इस डिवाइस पर ऑफ़लाइन ऑर्डर स्टोरेज उपलब्ध नहीं है।") });
+      });
+      void loadPosDraft<PersistedDraft>(outletId).then((record) => {
+        if (record) {
+          setCurrent(record.draft.current);
+          currentId.current = record.draft.current?.sessionId ?? null;
+          setDetail(record.draft.detail);
+          setCart(record.draft.cart);
+          setGuest(record.draft.guestName);
+          setPax(record.draft.partySize);
+          requestId.current = record.draft.requestId;
+          requestFingerprint.current = record.draft.requestFingerprint;
+          if (initialIsServerFresh && hasPriceChanges(record.draft.cart, initial.menu)) {
+            setMessage({ tone: "bad", text: L("The menu changed since this cart was saved. Review the new prices before sending.", "कार्ट सेव होने के बाद मेन्यू बदला है। भेजने से पहले नई कीमतें जाँचें।") });
+          }
+        }
+        setDraftReady(true);
+      }).catch(() => {
+        setMessage({ tone: "bad", text: L("The saved POS draft could not be read. Your new changes may not survive a restart.", "सेव POS ड्राफ्ट नहीं पढ़ा जा सका। नए बदलाव रीस्टार्ट के बाद नहीं बच सकते।") });
+        setDraftReady(true);
+      });
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [outletId, initialIsServerFresh, initial.menu, L]);
+  useEffect(() => {
+    if (!initialIsServerFresh) return;
+    void savePosSnapshot(outletId, data, sessionExpiresAt, staffUserId, hi, initialSavedAt).catch(() => {
+      setMessage({ tone: "bad", text: L("Could not save the menu and tables for offline use.", "मेन्यू और टेबल ऑफ़लाइन उपयोग के लिए सेव नहीं हो सके।") });
+    });
+  }, [outletId, data, sessionExpiresAt, staffUserId, hi, initialSavedAt, initialIsServerFresh, L]);
+  useEffect(() => {
+    if (!draftReady) return;
+    const draft: PersistedDraft | null = current ? { current, detail, cart, guestName: guest, partySize: pax, requestId: requestId.current, requestFingerprint: requestFingerprint.current } : null;
+    void savePosDraft(outletId, draft).catch(() => {
+      setMessage({ tone: "bad", text: L("The POS draft could not be saved on this device.", "POS ड्राफ्ट इस डिवाइस पर सेव नहीं हो सका।") });
+    });
+  }, [outletId, current, detail, cart, guest, pax, draftReady, L]);
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(t); }, []);
-  // A changed cart is a new order: a retry of the same cart reuses its id, so a lost reply never sends it twice
-  useEffect(() => { requestId.current = null; }, [cart]);
-
   const refresh = useCallback(async () => {
     if (!navigator.onLine) return;
-    const r = await terminalAction();
-    if (!r.ok) return;
-    setData(r.data);
+    try {
+      const r = await terminalAction();
+      if (!r.ok) return;
+      const syncedAt = Date.now();
+      setData(r.data);
+      setLastSyncedAt(syncedAt);
+      setOffline(false);
+      void savePosSnapshot(outletId, r.data, sessionExpiresAt, staffUserId, hi, syncedAt).catch(() => {
+        setMessage({ tone: "bad", text: L("POS data refreshed but could not be saved for offline use.", "POS डेटा अपडेट हुआ लेकिन ऑफ़लाइन उपयोग के लिए सेव नहीं हो सका।") });
+      });
+      if (currentId.current) { const d = await orderAction(currentId.current); if (d.ok) setDetail(d.data); }
+    } catch { setOffline(true); }
+  }, [outletId, sessionExpiresAt, staffUserId, hi, L]);
+
+  const syncOfflineOrders = useCallback(async (force = false) => {
+    if (!navigator.onLine || syncingQueue.current) return;
+    syncingQueue.current = true;
+    try {
+      const result = await syncSavedPosOrders({
+        outletId,
+        force,
+        deliver: async (saved, checkpoint) => {
+          let order = saved;
+          if (order.staffUserId !== staffUserId) throw new Error(L("This saved order belongs to a different staff session. Ask a manager to review it.", "यह सेव ऑर्डर दूसरे स्टाफ़ सेशन का है। मैनेजर से जाँच करवाएँ।"));
+          const hasMenuLines = order.lines.some((line) => "itemId" in line);
+          if (hasMenuLines) {
+            if (!order.quote) throw new Error(L("This saved order has no saved menu prices. Review the current prices before syncing it.", "इस सेव ऑर्डर की मेन्यू कीमतें सेव नहीं हैं। सिंक से पहले अभी की कीमतें जाँचें।"));
+            const fresh = await terminalAction();
+            if (!fresh.ok) throw new Error(fresh.error);
+            setData(fresh.data);
+            setOffline(false);
+            const syncedAt = Date.now();
+            setLastSyncedAt(syncedAt);
+            void savePosSnapshot(outletId, fresh.data, sessionExpiresAt, staffUserId, hi, syncedAt).catch(() => {
+              setMessage({ tone: "bad", text: L("Fresh POS data could not be saved for offline use.", "ताज़ा POS डेटा ऑफ़लाइन उपयोग के लिए सेव नहीं हुआ।") });
+            });
+            const changes = queuedQuoteChanges(order, fresh.data.menu);
+            if (changes.length) {
+              const names = changes.slice(0, 3).map((change) => change.name).join(", ");
+              throw new Error(L(`Menu price or availability changed for ${names}. Review the saved order before syncing.`, `${names} की कीमत या उपलब्धता बदली है। सिंक से पहले सेव ऑर्डर जाँचें।`));
+            }
+          }
+          if (!order.current.sessionId) {
+            if (order.current.takeaway) {
+              const opened = await newTakeawayAction(order.guestName.trim() || null, order.id);
+              if (!opened.ok) throw new Error(opened.error);
+              order = { ...order, current: { ...order.current, sessionId: opened.data.sessionId, tableId: opened.data.tableId, code: opened.data.code } };
+            } else {
+              const opened = await openTableAction({ tableId: order.current.tableId!, partySize: order.partySize, guestName: order.guestName.trim() || null, clientRequestId: order.id });
+              if (!opened.ok) throw new Error(opened.error);
+              order = { ...order, current: { ...order.current, sessionId: opened.data.sessionId } };
+            }
+            await checkpoint(order);
+          }
+          const sent = await sendOrderAction({ sessionId: order.current.sessionId!, clientRequestId: order.id, lines: order.lines, quote: order.quote ?? {}, guestName: order.guestName.trim() || null });
+          if (!sent.ok) throw new Error(sent.error);
+        },
+      });
+      if (result.blocked) {
+        setMessage({ tone: "bad", text: L(`A saved order needs attention: ${result.blocked.error}`, `सेव किए ऑर्डर पर ध्यान दें: ${result.blocked.error}`) });
+      } else if (result.synced > 0) {
+        setMessage({ tone: "ok", text: L("Offline KOTs synced to the server.", "ऑफ़लाइन KOT सर्वर पर सिंक हुए।") });
+      }
+    } catch {
+      setMessage({ tone: "bad", text: L("Saved orders could not be synced. They remain on this device; retry or download a recovery copy.", "सेव ऑर्डर सिंक नहीं हुए। वे इस डिवाइस पर हैं; फिर कोशिश करें या रिकवरी कॉपी डाउनलोड करें।") });
+    } finally {
+      try { const saved = await readOfflinePosOrders(outletId); setQueuedOrders(saved); setQueuedCount(saved.length); }
+      catch { setMessage({ tone: "bad", text: L("Could not read saved offline orders on this device.", "इस डिवाइस पर सेव ऑफ़लाइन ऑर्डर पढ़े नहीं जा सके।") }); }
+      finally { syncingQueue.current = false; }
+    }
+  }, [outletId, sessionExpiresAt, staffUserId, hi, L]);
+
+  const acceptCurrentMenuQuote = useCallback(async (order: OfflinePosOrder) => {
+    if (!navigator.onLine) {
+      setMessage({ tone: "bad", text: L("Reconnect before reviewing current menu prices.", "अभी की मेन्यू कीमतें जाँचने के लिए इंटरनेट जोड़ें।") });
+      return;
+    }
+    const fresh = await terminalAction();
+    if (!fresh.ok) {
+      setMessage({ tone: "bad", text: fresh.error });
+      return;
+    }
+    setData(fresh.data);
+    const refreshedAt = Date.now();
+    setLastSyncedAt(refreshedAt);
     setOffline(false);
-    if (currentId.current) { const d = await orderAction(currentId.current); if (d.ok) setDetail(d.data); }
-  }, []);
+    void savePosSnapshot(outletId, fresh.data, sessionExpiresAt, staffUserId, hi, refreshedAt).catch(() => {
+      setMessage({ tone: "bad", text: L("Fresh POS data could not be saved for offline use.", "ताज़ा POS डेटा ऑफ़लाइन उपयोग के लिए सेव नहीं हुआ।") });
+    });
+    const quote: PriceQuote = {};
+    for (const line of order.lines) {
+      if (!("itemId" in line)) continue;
+      const dish = fresh.data.menu.find((item) => item.id === line.itemId);
+      const priced = dish ? priceLine(dish.pricing, line.qty, line.modifierIds) : null;
+      if (!priced?.ok) {
+        setMessage({ tone: "bad", text: L("This saved order contains a dish or option that is unavailable now. Ask a manager to resolve it before sending.", "इस सेव ऑर्डर की डिश या विकल्प अभी उपलब्ध नहीं है। भेजने से पहले मैनेजर से हल करवाएँ।") });
+        return;
+      }
+      quote[quoteKey(line.itemId, line.modifierIds)] = priced.line.unitPricePaise;
+    }
+    const reviewed = { ...order, quote, error: undefined, retryCount: 0, nextRetryAt: undefined };
+    await writeOfflinePosOrder(outletId, reviewed);
+    const saved = await readOfflinePosOrders(outletId);
+    setQueuedOrders(saved);
+    setQueuedCount(saved.length);
+    setMessage({ tone: "ok", text: L("Current menu prices accepted for this saved order. Syncing it now.", "इस सेव ऑर्डर के लिए अभी की मेन्यू कीमतें स्वीकार हुईं। अब सिंक कर रहे हैं।") });
+    await syncOfflineOrders(true);
+  }, [outletId, sessionExpiresAt, staffUserId, hi, L, syncOfflineOrders]);
+
+  const exportSavedOrders = async () => {
+    try {
+      const recoveryFile = await buildOfflinePosRecoveryFile(outletId);
+      const blobUrl = URL.createObjectURL(new Blob([recoveryFile], { type: "application/json" }));
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = `tableeqr-pos-recovery-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+      setMessage({ tone: "ok", text: L("Recovery copy downloaded. Saved orders remain on this device.", "रिकवरी कॉपी डाउनलोड हुई। सेव ऑर्डर इस डिवाइस पर बने रहेंगे।") });
+    } catch {
+      setMessage({ tone: "bad", text: L("Could not create a recovery copy. Keep this POS open and try again.", "रिकवरी कॉपी नहीं बनी। POS खुला रखें और फिर कोशिश करें।") });
+    }
+  };
 
   useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+    void navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => {
+      setMessage({ tone: "bad", text: L("Offline app support could not be prepared on this browser.", "इस ब्राउज़र पर ऑफ़लाइन ऐप तैयार नहीं हो सका।") });
+    });
+  }, [L]);
+  useEffect(() => {
     const stop = connectRealtime({ url: realtimeUrl, getToken: tokenAction, pollMs: 20000, onResync: () => void refresh(), onEvents: () => void refresh(), onStatus: (s) => setOffline(s === "offline") });
-    const poll = setInterval(() => void refresh(), 30000);
-    const on = () => void refresh();
+    const poll = setInterval(() => { void refresh(); if (navigator.onLine) void syncOfflineOrders(); }, 30000);
+    const initialSync = window.setTimeout(() => { if (navigator.onLine) void syncOfflineOrders(); }, 0);
+    const on = () => { setOffline(false); void syncOfflineOrders().then(() => refresh()); };
     const off = () => setOffline(true);
     window.addEventListener("online", on);
     window.addEventListener("offline", off);
-    return () => { stop(); clearInterval(poll); window.removeEventListener("online", on); window.removeEventListener("offline", off); };
-  }, [realtimeUrl, refresh]);
+    return () => { stop(); clearInterval(poll); window.clearTimeout(initialSync); window.removeEventListener("online", on); window.removeEventListener("offline", off); };
+  }, [realtimeUrl, refresh, syncOfflineOrders]);
 
   const fail = (text: string) => setMessage({ tone: "bad", text });
+  const clearRequest = () => { requestId.current = null; requestFingerprint.current = null; };
 
   // ---- choosing what to bill
   const pickTable = async (t: Table) => {
     setMessage(null);
+    clearRequest();
     setCart([]); setGuest(""); setQuery(""); setCategory("all");
     setPax(Math.min(2, t.seats));
     setCurrent({ sessionId: t.visit?.id ?? null, tableId: t.id, code: t.code, takeaway: false, seats: t.seats });
     setDetail(null);
-    if (t.visit) { const d = await orderAction(t.visit.id); if (d.ok) setDetail(d.data); else fail(d.error); }
+    if (t.visit && navigator.onLine) {
+      try { const d = await orderAction(t.visit.id); if (d.ok) setDetail(d.data); else fail(d.error); }
+      catch { setOffline(true); }
+    }
     setTimeout(() => searchBox.current?.focus(), 50);
   };
   const pickTakeaway = async (t: PosTerminal["takeaways"][number] | null) => {
     setMessage(null);
+    clearRequest();
     setCart([]); setGuest(t?.visit.guestName ?? ""); setQuery(""); setCategory("all");
     setCurrent({ sessionId: t?.visit.id ?? null, tableId: t?.tableId ?? null, code: t?.code ?? L("New takeaway", "नया पार्सल"), takeaway: true, seats: 1 });
     setDetail(null);
-    if (t) { const d = await orderAction(t.visit.id); if (d.ok) setDetail(d.data); else fail(d.error); }
+    if (t && navigator.onLine) {
+      try { const d = await orderAction(t.visit.id); if (d.ok) setDetail(d.data); else fail(d.error); }
+      catch { setOffline(true); }
+    }
     setTimeout(() => searchBox.current?.focus(), 50);
   };
   const back = () => {
     if (cart.length && !window.confirm(L("Leave without sending these items to the kitchen?", "ये आइटम किचन भेजे बिना वापस जाएँ?"))) return;
     setCurrent(null); setDetail(null); setCart([]); setMessage(null);
+    clearRequest();
     void refresh();
   };
 
@@ -147,22 +358,28 @@ export function PosTerminalScreen({ initial, hi, realtimeUrl }: { initial: PosTe
   }, [data.menu, query, category]);
 
   const sent = (detail?.lines ?? []).filter((l) => !DEAD.includes(l.status));
-  const sentTotal = sent.reduce((n, l) => n + l.unitPricePaise * l.qty, 0);
+  const cachedVisit = current?.takeaway
+    ? data.takeaways.find((takeaway) => takeaway.tableId === current.tableId)?.visit
+    : data.tables.find((table) => table.id === current?.tableId)?.visit;
+  const sentTotal = detail ? sent.reduce((n, l) => n + l.unitPricePaise * l.qty, 0) : cachedVisit?.orderedPaise ?? 0;
+  const sentCount = detail ? sent.reduce((n, l) => n + l.qty, 0) : cachedVisit?.items ?? 0;
   const cartTotal = cart.reduce((n, l) => n + linePrice(l), 0);
   const cartCount = cart.reduce((n, l) => n + l.qty, 0);
+  const priceReviewRequired = hasPriceChanges(cart, data.menu);
   const billAsked = detail?.status === "bill_requested";
+  const offlineSessionExpired = offline && now >= sessionExpiresAt;
 
   // ---- sending
-  const ensureSession = async (): Promise<string | null> => {
+  const ensureSession = async (clientRequestId?: string): Promise<string | null> => {
     if (!current) return null;
     if (current.sessionId) return current.sessionId;
     let opened: Partial<Current> & { sessionId: string };
     if (current.takeaway) {
-      const r = await newTakeawayAction(guest.trim() || null);
+      const r = await newTakeawayAction(guest.trim() || null, clientRequestId);
       if (!r.ok) { fail(r.error); return null; }
       opened = { sessionId: r.data.sessionId, tableId: r.data.tableId, code: r.data.code };
     } else {
-      const r = await openTableAction({ tableId: current.tableId!, partySize: pax, guestName: guest.trim() || null });
+      const r = await openTableAction({ tableId: current.tableId!, partySize: pax, guestName: guest.trim() || null, clientRequestId });
       if (!r.ok) { fail(r.error); return null; }
       opened = { sessionId: r.data.sessionId };
     }
@@ -173,19 +390,62 @@ export function PosTerminalScreen({ initial, hi, realtimeUrl }: { initial: PosTe
   const draft = (): AnyDraftLine[] => cart.map((l) => l.kind === "open"
     ? { open: { name: l.name, pricePaise: l.pricePaise, station: l.station, taxRateBp: l.taxRateBp }, qty: l.qty, note: l.note || undefined, personalForPickup: l.parcel }
     : { itemId: l.dish.id, qty: l.qty, modifierIds: l.mods, note: l.note || undefined, personalForPickup: l.parcel });
+  const requestFor = (lines: AnyDraftLine[]) => {
+    const fingerprint = JSON.stringify({ visit: current?.sessionId ?? current?.tableId ?? current?.code, lines });
+    if (!requestId.current || requestFingerprint.current !== fingerprint) {
+      requestId.current = crypto.randomUUID();
+      requestFingerprint.current = fingerprint;
+    }
+    return { id: requestId.current, fingerprint };
+  };
 
   const send = async (thenBill: boolean) => {
-    if (busy || offline || !current) return;
+    if (busy || !current) return;
+    if (priceReviewRequired) return fail(L("Review the updated menu price or remove unavailable items before sending this cart.", "कार्ट भेजने से पहले नई कीमत स्वीकारें या अनुपलब्ध आइटम हटाएँ।"));
+    if (offline) {
+      if (thenBill) return fail(L("Billing needs a connection. Save the KOT first, then bill when online.", "बिल के लिए कनेक्शन चाहिए। पहले KOT सेव करें, फिर ऑनलाइन बिल बनाएँ।"));
+      if (!cart.length) return;
+      const lines = draft();
+      const quote = quoteForCart(cart);
+      if (!quote) return fail(L("A dish option needs review before it can be saved.", "सेव करने से पहले डिश का विकल्प जाँचना होगा।"));
+      const { id } = requestFor(lines);
+      const order: OfflinePosOrder = { id, createdAt: Date.now(), staffUserId, current, guestName: guest, partySize: pax, lines, quote };
+      try {
+        await queueOfflinePosOrder(outletId, order);
+        const saved = await readOfflinePosOrders(outletId);
+        setQueuedOrders(saved);
+        setQueuedCount(saved.length);
+        clearRequest();
+        setCart([]);
+        setCurrent(null);
+        setDetail(null);
+        setMessage({ tone: "ok", text: L("Saved on this device. KOT will reach the kitchen when internet returns; it is not sent yet.", "इस डिवाइस पर सेव हुआ। इंटरनेट आने पर KOT किचन भेजा जाएगा; अभी नहीं पहुँचा है।") });
+      } catch {
+        fail(L("Could not save this order on the device. Keep this screen open and reconnect.", "ऑर्डर डिवाइस पर सेव नहीं हुआ। यह स्क्रीन खुली रखें और कनेक्शन वापस लाएँ।"));
+      }
+      return;
+    }
     const missing = cart.find((l) => l.kind === "menu" && !priceLine(l.dish.pricing, l.qty, l.mods).ok);
     if (missing && missing.kind === "menu") return fail(`${missing.dish.name}: ${L("choose the required option", "ज़रूरी विकल्प चुनें")}`);
     setBusy(true); setMessage(null);
+    const lines = cart.length ? draft() : [];
+    const pending = lines.length ? requestFor(lines) : null;
+    const quote = lines.length ? quoteForCart(cart) : undefined;
+    if (lines.length && !quote) return fail(L("A dish option needs review before it can be sent.", "भेजने से पहले डिश का विकल्प जाँचना होगा।"));
+    let activeSessionId = current.sessionId;
     try {
-      const sessionId = await ensureSession();
+      if (pending) await savePosDraft(outletId, { current, detail, cart, guestName: guest, partySize: pax, requestId: pending.id, requestFingerprint: pending.fingerprint } satisfies PersistedDraft);
+      const sessionId = await ensureSession(pending?.id);
       if (!sessionId) return;
+      activeSessionId = sessionId;
       if (cart.length) {
-        requestId.current ??= crypto.randomUUID();
-        const r = await sendOrderAction({ sessionId, clientRequestId: requestId.current, lines: draft(), guestName: guest.trim() || null });
-        if (!r.ok) return fail(r.error);
+        if (pending) await savePosDraft(outletId, { current: { ...current, sessionId }, detail, cart, guestName: guest, partySize: pax, requestId: pending.id, requestFingerprint: pending.fingerprint } satisfies PersistedDraft);
+        const r = await sendOrderAction({ sessionId, clientRequestId: pending!.id, lines, quote: quote ?? undefined, guestName: guest.trim() || null });
+        if (!r.ok) {
+          if (r.error.toLowerCase().includes("price")) await refresh();
+          return fail(r.error);
+        }
+        clearRequest();
         setCart([]);
       }
       if (thenBill) {
@@ -202,18 +462,57 @@ export function PosTerminalScreen({ initial, hi, realtimeUrl }: { initial: PosTe
       await refresh();
     } catch {
       setOffline(true);
-      fail(L("Connection lost. It is safe to try again.", "कनेक्शन टूट गया। फिर से कोशिश करें।"));
+      if (pending && current && cart.length) {
+        try {
+          const queue = await readOfflinePosOrders(outletId);
+          if (!queue.some((order) => order.id === pending.id)) await queueOfflinePosOrder(outletId, { id: pending.id, createdAt: Date.now(), staffUserId, current: { ...current, sessionId: activeSessionId }, guestName: guest, partySize: pax, lines, quote: quote ?? undefined });
+          setQueuedCount(queue.length + (queue.some((order) => order.id === pending.id) ? 0 : 1));
+          setQueuedOrders(await readOfflinePosOrders(outletId));
+          clearRequest();
+          setCart([]);
+          setCurrent(null);
+          setDetail(null);
+          setMessage({ tone: "ok", text: L("Connection dropped. The order is saved here and will sync when internet returns.", "कनेक्शन टूट गया। ऑर्डर यहाँ सेव है और इंटरनेट आने पर सिंक होगा।") });
+        } catch {
+          fail(L("Connection lost and device saving failed. Keep this screen open and reconnect.", "कनेक्शन टूट गया और डिवाइस पर सेव नहीं हुआ। स्क्रीन खुली रखें और कनेक्शन वापस लाएँ।"));
+        }
+      } else fail(L("Connection lost. Your order is still on screen; reconnect and try again.", "कनेक्शन टूट गया। ऑर्डर स्क्रीन पर है; कनेक्शन आने पर फिर कोशिश करें।"));
     } finally { setBusy(false); }
   };
 
   const zones = data.zones;
   const tables = data.tables.filter((t) => zone === "all" || t.zoneId === zone);
   const running = data.tables.filter((t) => t.visit).length;
+  const savedTime = new Intl.DateTimeFormat(hi ? "hi-IN" : "en-IN", { dateStyle: "medium", timeStyle: "short" }).format(lastSyncedAt);
+
+  if (!draftReady) return <main className="grid min-h-[60dvh] place-items-center px-5 text-body text-muted">{L("Restoring this device’s POS…", "इस डिवाइस का POS वापस खोला जा रहा है…")}</main>;
+  if (offlineSessionExpired) return <main className="mx-auto grid min-h-[70dvh] max-w-lg place-content-center gap-3 px-5 text-center"><h1 className="font-display text-title font-bold text-ink">{L("Staff session expired", "स्टाफ़ सेशन समाप्त हो गया")}</h1><p className="text-body text-muted">{L("Reconnect to sign in again before using POS.", "POS इस्तेमाल करने से पहले इंटरनेट जोड़कर फिर साइन इन करें।")}</p></main>;
 
   return (
     <div className="mx-auto w-full max-w-[1600px] px-4 py-4 sm:px-6">
-      {offline && <p role="status" className="mb-3 flex items-center gap-2 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-caption font-semibold text-warning"><WifiOff className="size-4" aria-hidden="true" />{L("Offline. Changes are paused until the connection is back.", "ऑफ़लाइन। कनेक्शन आने तक बदलाव रुके हैं।")}</p>}
+      {offline && <p role="status" className="mb-3 flex items-center gap-2 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-caption font-semibold text-warning"><WifiOff className="size-4" aria-hidden="true" /><span>{L(`Offline. KOTs can be saved on this device; bills and kitchen delivery wait for internet. Menu and tables last synced ${savedTime}.`, `ऑफ़लाइन। KOT इस डिवाइस पर सेव होंगे; बिल और किचन भेजना इंटरनेट आने तक रुकेगा। मेन्यू और टेबल आख़िरी बार ${savedTime} पर अपडेट हुए थे।`)}</span></p>}
+      {queuedCount > 0 && <div role="status" className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-caption font-semibold text-warning"><span>{L(`${queuedCount} KOT ${queuedCount === 1 ? "is" : "are"} saved here and waiting to sync.`, `${queuedCount} KOT यहाँ सेव ${queuedCount === 1 ? "है" : "हैं"} और सिंक होने की प्रतीक्षा में ${queuedCount === 1 ? "है" : "हैं"}।`)}</span><button type="button" onClick={() => void exportSavedOrders()} className="min-h-9 rounded-lg border border-warning/50 bg-surface px-3 text-ink">{L("Download recovery copy", "रिकवरी कॉपी डाउनलोड करें")}</button></div>}
+      {queuedOrders.map((order) => {
+        const changes = queuedQuoteChanges(order, data.menu);
+        const needsReview = changes.length > 0 || (!order.quote && order.lines.some((line) => "itemId" in line)) || /price|unavailable|available/i.test(order.error ?? "");
+        const canAccept = changes.every((change) => change.next !== null);
+        return <section key={order.id} className="mb-3 rounded-xl border border-warning/40 bg-warning/10 px-3 py-3 text-caption text-ink">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="font-semibold">{L("Saved KOT", "सेव किया KOT")} · {order.current.code || L("New takeaway", "नया पार्सल")} · {order.lines.length} {L("lines", "आइटम")}</p>
+              {order.error && <p role="alert" className="mt-1 text-danger">{order.error}</p>}
+              {order.retryCount ? <p className="mt-1 text-muted">{L(`Sync attempt ${order.retryCount}; automatic retry is scheduled.`, `सिंक की ${order.retryCount} कोशिशें हुईं; अपने-आप फिर प्रयास होगा।`)}</p> : null}
+              {needsReview && <ul className="mt-2 space-y-1 text-warning">{changes.map((change, index) => <li key={`${change.name}:${index}`}>{change.name}: {change.previous === undefined ? L("old price not saved", "पुरानी कीमत सेव नहीं थी") : rs(change.previous)} → {change.next === null ? L("unavailable", "उपलब्ध नहीं") : rs(change.next)}</li>)}</ul>}
+            </div>
+            {needsReview && !offline && (canAccept
+              ? <button type="button" className="min-h-9 rounded-lg bg-warning px-3 font-semibold text-ink" onClick={() => void acceptCurrentMenuQuote(order)}>{L("Accept current prices & retry", "अभी की कीमतें मानकर फिर भेजें")}</button>
+              : <p className="max-w-52 text-danger">{L("Unavailable items need a manager review.", "अनुपलब्ध आइटम मैनेजर से जाँचें।")}</p>)}
+            {!needsReview && order.error && !offline && order.staffUserId === staffUserId && <button type="button" className="min-h-9 rounded-lg border border-line bg-surface px-3 font-semibold text-ink" onClick={() => void syncOfflineOrders(true)}>{L("Retry now", "अभी फिर कोशिश करें")}</button>}
+          </div>
+        </section>;
+      })}
       {message && <p role={message.tone === "bad" ? "alert" : "status"} className={`mb-3 rounded-xl border px-3 py-2 text-body font-semibold ${message.tone === "bad" ? "border-danger/40 bg-danger/10 text-danger" : "border-success/40 bg-success/10 text-success"}`}>{message.text}</p>}
+      {priceReviewRequired && <div role="alert" className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-caption font-semibold text-warning"><span>{L("Menu price or availability changed since this cart was saved. Review the total before sending.", "कार्ट सेव होने के बाद कीमत या उपलब्धता बदली है। भेजने से पहले कुल जाँचें।")}</span><button type="button" className="min-h-9 rounded-lg bg-warning px-3 text-ink" onClick={() => setCart((saved) => saved.map((line) => line.kind === "menu" ? { ...line, dish: data.menu.find((item) => item.id === line.dish.id) ?? line.dish } : line))}>{L("Review new prices", "नई कीमतें जाँचें")}</button></div>}
 
       {!current ? (
         <TablesView
@@ -295,6 +594,7 @@ export function PosTerminalScreen({ initial, hi, realtimeUrl }: { initial: PosTe
                   </ul>
                 </div>
               )}
+              {sent.length === 0 && sentCount > 0 && <p className="mb-4 rounded-xl bg-paper px-3 py-2 text-caption text-muted">{L(`${sentCount} previously sent items · ${rs(sentTotal)}. Item details will load when connected.`, `${sentCount} पहले भेजे आइटम · ${rs(sentTotal)}। इंटरनेट आने पर आइटम विवरण आएगा।`)}</p>}
               {cart.length === 0 ? (
                 <p className="py-6 text-center text-body text-muted">{sent.length ? L("Tap dishes to add more.", "और जोड़ने के लिए डिश टैप करें।") : L("Tap dishes on the left to start the order.", "ऑर्डर शुरू करने के लिए डिश टैप करें।")}</p>
               ) : (
@@ -311,19 +611,19 @@ export function PosTerminalScreen({ initial, hi, realtimeUrl }: { initial: PosTe
 
             <footer className="border-t border-line p-4">
               <dl className="space-y-1 text-body">
-                {sent.length > 0 && cart.length > 0 && <div className="flex justify-between text-muted"><dt>{L("Sent", "भेजे गए")}</dt><dd className="tabular-nums">{rs(sentTotal)}</dd></div>}
+                {sentCount > 0 && cart.length > 0 && <div className="flex justify-between text-muted"><dt>{L("Sent", "भेजे गए")}</dt><dd className="tabular-nums">{rs(sentTotal)}</dd></div>}
                 {cart.length > 0 && <div className="flex justify-between text-muted"><dt>{L("New", "नए")} · {cartCount}</dt><dd className="tabular-nums">{rs(cartTotal)}</dd></div>}
                 <div className="flex justify-between font-display text-section font-bold text-ink"><dt>{L("Total before tax", "टैक्स से पहले कुल")}</dt><dd className="tabular-nums">{rs(sentTotal + cartTotal)}</dd></div>
               </dl>
               <div className="mt-3 grid grid-cols-2 gap-2">
-                <button type="button" className={quiet} disabled={busy || offline || cart.length === 0} onClick={() => void send(false)}>
-                  {busy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Send className="size-4" aria-hidden="true" />}{L("Send KOT", "KOT भेजें")}
+                <button type="button" className={quiet} disabled={busy || (offline && cart.length === 0) || cart.length === 0} onClick={() => void send(false)}>
+                  {busy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Send className="size-4" aria-hidden="true" />}{offline ? L("Save KOT here", "KOT यहाँ सेव करें") : L("Send KOT", "KOT भेजें")}
                 </button>
-                <button type="button" className={primary} disabled={busy || offline || (cart.length === 0 && sent.length === 0)} onClick={() => void send(true)}>
+                <button type="button" className={primary} disabled={busy || offline || (cart.length === 0 && sentCount === 0)} onClick={() => void send(true)}>
                   <ReceiptText className="size-4" aria-hidden="true" />{cart.length ? L("KOT & bill", "KOT और बिल") : L("Bill", "बिल")}
                 </button>
               </div>
-              {cart.length > 0 && <button type="button" onClick={() => setCart([])} className="mt-2 inline-flex min-h-9 w-full items-center justify-center gap-1.5 rounded-lg text-caption font-semibold text-muted hover:text-danger"><Trash2 className="size-3.5" aria-hidden="true" />{L("Clear new items", "नए आइटम हटाएँ")}</button>}
+              {cart.length > 0 && <button type="button" onClick={() => { setCart([]); clearRequest(); }} className="mt-2 inline-flex min-h-9 w-full items-center justify-center gap-1.5 rounded-lg text-caption font-semibold text-muted hover:text-danger"><Trash2 className="size-3.5" aria-hidden="true" />{L("Clear new items", "नए आइटम हटाएँ")}</button>}
             </footer>
           </aside>
         </div>

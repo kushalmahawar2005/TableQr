@@ -76,7 +76,7 @@ export default async function SharedBillPage(props: { params: Promise<{ token: s
             </ul>
           </>
         )}
-        <p className="mt-5 text-center text-caption text-muted">Thank you for dining with us! · Powered by TableQR</p>
+        <p className="mt-5 text-center text-caption text-muted">Thank you for dining with us! · Powered by Tableeqr</p>
       </article>
       <div className="mt-4">
         <a href={`/b/${encodeURIComponent(token)}/pdf`} download className="flex min-h-12 w-full items-center justify-center rounded-cta border border-line bg-surface px-4 text-button font-semibold text-ink print:hidden focus-visible:outline-2 focus-visible:outline-brand">

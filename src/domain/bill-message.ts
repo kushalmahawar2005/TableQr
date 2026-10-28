@@ -27,7 +27,7 @@ export function billMessage(b: BillMessage): string {
     "",
     b.link ? `*View ${b.kind === "bill" ? "bill" : "receipt"}*\n${b.link}` : "",
     "",
-    "Sent via TableQR",
+    "Sent via Tableeqr",
   ];
   return lines.filter((line, index, all) => line !== "" || (all[index - 1] !== "" && index > 0)).join("\n").trim();
 }

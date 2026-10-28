@@ -16,6 +16,7 @@ import { topics } from "../realtime/token";
 import { can } from "@/lib/staff-permissions";
 import { loadPolicy } from "./policy";
 import { syncEvents, syncTableHolds } from "./sync";
+import { findStaffOpenRequest, staffOpenRequestFingerprint, validateStaffOpenRequestId } from "./staff-open-request";
 import {
   assertCombinable,
   assertFreeForSeating,
@@ -52,15 +53,20 @@ async function setState(tx: Tx, scope: Scope, ids: string[], state: TableState, 
 }
 
 /** Seat a walk-in at a free table: an open visit with nobody in it until someone scans */
-export async function seatWalkIn(staff: FloorActor, input: { tableId: string; partySize: number; guestName?: string | null; endBy?: number | null }, now = new Date(), opts: { checkedByPos?: boolean } = {}) {
+export async function seatWalkIn(staff: FloorActor, input: { tableId: string; partySize: number; guestName?: string | null; endBy?: number | null }, now = new Date(), opts: { checkedByPos?: boolean; clientRequestId?: string } = {}) {
   // The POS opens a table for its own billing roles and checks them itself (see staff/pos-terminal.ts)
   if (!opts.checkedByPos) assertMay(staff, "floor.seat");
   const scope = scopeOf(staff);
+  const requestId = opts.clientRequestId ? validateStaffOpenRequestId(opts.clientRequestId) : null;
   return run(staff, async (tx) => {
     const policy = await loadPolicy(tx, scope);
     const table = (await lockTables(tx, scope, [input.tableId])).get(input.tableId)!;
-    await assertFreeForSeating(tx, scope, table);
     const partySize = Number(input.partySize);
+    const guestName = input.guestName?.trim().slice(0, 80) || null;
+    const fingerprint = requestId ? staffOpenRequestFingerprint({ type: "table", tableId: table.id, partySize, guestName }) : null;
+    const existing = requestId ? await findStaffOpenRequest(tx, scope, requestId, staff.userId, fingerprint!) : null;
+    if (existing) return { result: { sessionId: existing.id }, events: [...tableStateEvents([table.id], "seated"), visitChanged(existing.id, "seated")] };
+    await assertFreeForSeating(tx, scope, table);
     assertSeats([table], partySize);
     let until = new Date(now.getTime() + diningMinutesFor(partySize, policy) * 60_000);
     const [clash] = await bookingConflicts(tx, scope, [table.id], now, until, policy);
@@ -73,7 +79,7 @@ export async function seatWalkIn(staff: FloorActor, input: { tableId: string; pa
       }
       until = new Date(endBy);
     }
-    const sessionId = await openVisit(tx, scope, [table], { source: "walk_in", partySize, guestName: input.guestName ?? null, expectedEndAt: until, userId: staff.userId, now });
+    const sessionId = await openVisit(tx, scope, [table], { source: "walk_in", partySize, guestName, expectedEndAt: until, userId: staff.userId, staffRequestId: requestId, staffRequestFingerprint: fingerprint, now });
     await audit(tx, staff, { action: "table.seat_walk_in", entity: "table", entityId: table.id, before: { state: table.state }, after: { state: "seated", sessionId, partySize, expectedEndAt: until }, now });
     return { result: { sessionId }, events: [...tableStateEvents([table.id], "seated"), visitChanged(sessionId, "seated")] };
   });

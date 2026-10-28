@@ -53,7 +53,7 @@ export async function verifyCustomDomainAction(): Promise<{ ok: boolean; message
 export async function setCustomDomainLiveAction(live: boolean, confirmedHttps = false): Promise<{ ok: boolean; live: boolean; message: string }> {
   try {
     const result = await setCustomDomainLive(await staffFor(consoleSectionRoles.settings, "settings"), live, confirmedHttps);
-    return { ok: true, ...result, message: live ? "Custom domain is now used for guest links." : "Guest links now use your TableQR address." };
+    return { ok: true, ...result, message: live ? "Custom domain is now used for guest links." : "Guest links now use your Tableeqr address." };
   } catch (err) {
     if (err instanceof AppError) return { ok: false, live: false, message: err.message };
     console.error("[settings] custom domain activation failed", err);

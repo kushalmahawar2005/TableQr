@@ -13,7 +13,7 @@ const field = "mt-1 block h-10 w-full rounded-lg border border-[#dfe3ed] bg-whit
 export function AdminLogin() {
   const [state, action, pending] = useActionState<AdminLoginState, FormData>(adminLoginAction, { error: null });
   return <form action={action} className="mx-auto w-full max-w-sm rounded-2xl border border-[#e2e5ec] bg-white p-7 shadow-xl">
-    <div className="mb-6 flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-[#5b42f5] text-xl text-white">⌘</span><div><p className="font-display text-lg font-bold">TableQR</p><p className="text-xs text-muted-foreground">Platform Admin</p></div></div>
+    <div className="mb-6 flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-[#5b42f5] text-xl text-white">⌘</span><div><p className="font-display text-lg font-bold">Tableeqr</p><p className="text-xs text-muted-foreground">Platform Admin</p></div></div>
     <h1 className="font-display text-2xl font-bold text-[#172033]">Welcome back</h1>
     <p className="mt-1 text-sm text-muted-foreground">Sign in to manage your platform.</p>
     <label className="mt-6 block text-sm font-semibold">Email<input name="email" type="email" required className={field} /></label>
@@ -34,7 +34,7 @@ export function AdminSidebar({ active, onSelect, email, logout, dark, onTheme }:
   return <SidebarBody>
     <div className="flex h-11 items-center gap-3 px-1.5">
       <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-[#5b42f5] text-white"><Command aria-hidden="true" className="size-4" /></span>
-      <SidebarLabel><span className="block font-display text-sm font-bold leading-tight text-foreground">TableQR</span><span className="block text-[11px] font-normal text-muted-foreground">Platform Admin</span></SidebarLabel>
+      <SidebarLabel><span className="block font-display text-sm font-bold leading-tight text-foreground">Tableeqr</span><span className="block text-[11px] font-normal text-muted-foreground">Platform Admin</span></SidebarLabel>
     </div>
     <nav aria-label="Platform admin" className="mt-6 no-scrollbar flex-1 space-y-5 overflow-y-auto overflow-x-hidden">
       {navGroups.map((group) => <div key={group.title}>
@@ -92,7 +92,7 @@ export function AdminShell(props: { email: string; pages: Record<string, React.R
     return () => clearInterval(t);
   }, [router]);
   useEffect(() => {
-    document.title = `${alerts.length ? `(${alerts.length}) ` : ""}Platform admin | TableQR`;
+    document.title = `${alerts.length ? `(${alerts.length}) ` : ""}Platform admin | Tableeqr`;
   }, [alerts.length]);
   const [dark, setDark] = useState(props.theme === "dark");
   // Dialogs and side panels render in a portal on <body>, so the dark tokens must live on <html> while the admin is open.

@@ -1,4 +1,4 @@
-# TableQR
+# Tableeqr
 
 ## Local development
 
@@ -15,7 +15,7 @@ not in source control:
 
 ```text
 PLATFORM_ADMIN_EMAIL=admin@example.com
-PLATFORM_ADMIN_NAME=TableQR Admin
+PLATFORM_ADMIN_NAME=Tableeqr Admin
 PLATFORM_ADMIN_PASSWORD=<12-or-more-character-password>
 PLATFORM_ADMIN_SESSION_SECRET=<random-secret-at-least-32-characters>
 ```

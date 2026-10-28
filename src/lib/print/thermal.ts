@@ -1,4 +1,4 @@
-// Shared basics for every slip TableQR prints on a receipt roll: the receipt, the kitchen ticket
+// Shared basics for every slip Tableeqr prints on a receipt roll: the receipt, the kitchen ticket
 // (KOT), the order slip and the day close. Each keeps its own layout; the paper sizes, the
 // printable width, the typography and the page rule live here once.
 //

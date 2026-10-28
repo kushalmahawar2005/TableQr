@@ -8,7 +8,7 @@ import { BillingScreen } from "./_components/billing-screen";
 import { StaffPrintProvider } from "@/components/print/staff-print-provider";
 import { tenantAccess } from "@/server/access";
 import { AccessBanner, PausedScreen } from "../(console)/console/(app)/_components/access-notice";
-export const metadata: Metadata = { title: "POS · TableQR" };
+export const metadata: Metadata = { title: "POS · Tableeqr" };
 export default async function PosPage() {
   const staff = await currentStaff();
   if (!staff) redirect("/console/login");

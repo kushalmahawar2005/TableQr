@@ -133,7 +133,7 @@ export function CreateTenantDialog({ open, onOpenChange, plans }: { open: boolea
   const outletForCreds = state.outletCode ?? creds?.outlet ?? "";
   const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "") || (typeof window === "undefined" ? "" : window.location.origin);
   const loginUrl = `${appUrl}/console/login`;
-  const message = creds ? `Hi! Your TableQR account for ${creds.tenant} is ready.\n\nSign in: ${loginUrl}\nOutlet code: ${outletForCreds}\nPhone: ${creds.phone}\nPIN: ${creds.pin}\n\nPlease change your PIN after signing in.` : "";
+  const message = creds ? `Hi! Your Tableeqr account for ${creds.tenant} is ready.\n\nSign in: ${loginUrl}\nOutlet code: ${outletForCreds}\nPhone: ${creds.phone}\nPIN: ${creds.pin}\n\nPlease change your PIN after signing in.` : "";
   const waNumber = creds ? (creds.phone.replace(/\D/g, "").length === 10 ? `91${creds.phone.replace(/\D/g, "")}` : creds.phone.replace(/\D/g, "")) : "";
   const copy = async () => { try { await navigator.clipboard.writeText(message); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch { setCopied(false); } };
 
@@ -198,7 +198,7 @@ export function CreateTenantDialog({ open, onOpenChange, plans }: { open: boolea
           </label>
           {customize && <div className="grid gap-2 rounded-xl border p-3 sm:grid-cols-2">
             {FEATURE_KEYS.map((key) => <label key={key} className="flex items-start gap-2 text-sm"><input type="checkbox" checked={features[key]} onChange={(e) => setFeatures({ ...features, [key]: e.target.checked })} className="mt-0.5 size-4 accent-[var(--primary)]" /><span>{FEATURE_LABELS[key].label}<span className="block text-xs text-muted-foreground">{FEATURE_LABELS[key].hint}</span></span></label>)}
-            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={features.poweredBy} onChange={(e) => setFeatures({ ...features, poweredBy: e.target.checked })} className="size-4 accent-[var(--primary)]" />Show “Powered by TableQR”</label>
+            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={features.poweredBy} onChange={(e) => setFeatures({ ...features, poweredBy: e.target.checked })} className="size-4 accent-[var(--primary)]" />Show “Powered by Tableeqr”</label>
             {(["maxTables", "maxStaff", "maxRooms"] as const).map((key) => <label key={key} className="space-y-1 text-sm">{key === "maxTables" ? "Table limit" : key === "maxStaff" ? "Staff login limit" : "Room limit"}<Input type="number" min={1} max={key === "maxRooms" ? 1000 : 500} value={features[key] ?? ""} onChange={(e) => setFeatures({ ...features, [key]: e.target.value === "" ? null : Math.max(1, Number(e.target.value)) })} placeholder="No limit" /></label>)}
             <input type="hidden" name="customizeFeatures" value="on" />
             <input type="hidden" name="customFeatures" value={JSON.stringify(features)} />

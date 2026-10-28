@@ -13,8 +13,8 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "TableQR",
-    template: "%s | TableQR",
+    default: "Tableeqr",
+    template: "%s | Tableeqr",
   },
   description: "QR table booking, ordering and billing for restaurants.",
   // The app has its own dark mode; Dark Reader rewriting colours breaks the guest pages and hydration

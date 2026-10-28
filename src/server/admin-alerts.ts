@@ -23,7 +23,7 @@ export function emailAdmin(subject: string, lines: string[]) {
   const send = async () => {
     const mail = nodemailer.createTransport({ host: env("SMTP_HOST")!, port, secure: port === 465, disableFileAccess: true, disableUrlAccess: true, auth: { user: env("SMTP_USER")!, pass: env("SMTP_PASS")! } });
     await mail.sendMail({
-      from: `TableQR <${env("SMTP_USER")}>`,
+      from: `Tableeqr <${env("SMTP_USER")}>`,
       to,
       subject,
       text: [...lines, ...(link ? ["", `Open admin: ${link}`] : [])].join("\n"),

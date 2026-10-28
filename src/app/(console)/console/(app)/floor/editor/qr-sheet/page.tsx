@@ -45,7 +45,7 @@ export default async function QrSheetPage(props: PageProps<"/console/floor/edito
               <div style={{ width: `${mm}mm`, maxWidth: "100%", aspectRatio: "1" }} className="[&>svg]:size-full" dangerouslySetInnerHTML={{ __html: qrSvg(`${base}/r/${staff.outlet.code}/t/${t.shortCode}`) }} />
               <p className="font-extrabold" style={{ fontSize: `${1.8 * scale}rem` }}>Table {t.code}</p>
               {t.joinCode && <p className="text-sm text-neutral-600" style={{ fontSize: `${0.8 * scale}rem` }}>Joining friends? Use code <b className="tracking-[0.2em] text-neutral-900">{t.joinCode}</b></p>}
-              <p className="text-xs text-neutral-400">Powered by TableQR</p>
+              <p className="text-xs text-neutral-400">Powered by Tableeqr</p>
             </section>
           ))}</div>)}
         </div>

@@ -23,7 +23,7 @@ const WHO: Record<Who, { label: string; tone: string }> = {
   system: { label: "System", tone: "bg-zinc-100 text-zinc-600" },
 };
 const ACTIONS: Record<string, string> = {
-  "admin.tenant_created": "Tenant created", "admin.tenant_edited": "Tenant details edited", "admin.tenant_suspended": "Tenant suspended", "admin.tenant_activated": "Tenant activated",
+  "admin.tenant_created": "Tenant created", "admin.tenant_edited": "Tenant details edited", "admin.tenant_suspended": "Tenant suspended", "admin.tenant_activated": "Tenant activated", "admin.tenant_cancelled": "Tenant removed from platform",
   "admin.plan_changed": "Plan changed", "admin.trial_extended": "Trial extended", "admin.fee_received": "Fees received", "admin.owner_pin_reset": "Owner PIN reset",
 };
 const nice = (a: string) => ACTIONS[a] ?? a.replace(/^admin\./, "").replace(/[._]/g, " ").replace(/^./, (c) => c.toUpperCase());

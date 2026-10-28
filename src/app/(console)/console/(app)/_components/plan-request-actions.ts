@@ -7,7 +7,7 @@ import { publicOrigin } from "@/server/guest/invite";
 import { requestPlanChange } from "@/server/staff/plan-request";
 import { currentStaff } from "@/server/staff/request";
 
-/** Owner or manager asks TableQR to unlock a feature or change the plan */
+/** Owner or manager asks Tableeqr to unlock a feature or change the plan */
 export async function requestPlanChangeAction(input: { feature?: string | null; note?: string | null }): Promise<{ ok: true; already: boolean } | { ok: false; error: string }> {
   try {
     // Works while the restaurant is paused too, so the owner can ask to renew
@@ -20,7 +20,7 @@ export async function requestPlanChangeAction(input: { feature?: string | null; 
   }
 }
 
-/** Opens Cashfree for a TableQR plan renewal or upgrade. */
+/** Opens Cashfree for a Tableeqr plan renewal or upgrade. */
 export async function startFeePaymentAction(input: { months: number; planCode?: string | null; requestId: string }) {
   try {
     const staff = await currentStaff();

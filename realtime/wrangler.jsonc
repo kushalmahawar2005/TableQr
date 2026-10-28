@@ -1,5 +1,5 @@
 {
-  // TableQR realtime fan-out: one Durable Object per outlet holds that outlet's WebSockets.
+  // Tableeqr realtime fan-out: one Durable Object per outlet holds that outlet's WebSockets.
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "tableqr-realtime",
   "main": "src/index.ts",
@@ -15,4 +15,4 @@
   //   PUBLISH_SECRET  authorises the Next.js server to publish events
 }
 
-// G6 scheduler secrets: TABLEQR_API_URL (deployed app URL), SERVICE_TASK_SECRET (same as app).
+// G6 scheduler secrets: TABLEEQR_API_URL (legacy TABLEQR_API_URL also accepted) (deployed app URL), SERVICE_TASK_SECRET (same as app).

@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { cache } from "react";
 import { redirect } from "next/navigation";
 import { InstallApp } from "@/components/install-app";
+import { ClearOfflinePosAccess } from "@/components/clear-offline-pos-access";
 import { homeFor } from "@/lib/console-nav";
 import { staffAppMetadataFor, staffAppViewportFor } from "@/lib/staff-app";
 import { staffAppBrandForOutletCode } from "@/server/staff/pwa-branding";
@@ -29,8 +30,9 @@ export default async function StaffSignInPage() {
   const brand = await staffAppBrandForOutletCode(outlet);
   return (
     <main className="grid min-h-dvh place-items-center bg-[#f3f1ec] px-4 py-8">
+      <ClearOfflinePosAccess />
       <div className="w-full max-w-sm space-y-4">
-        <InstallApp name={brand?.name ?? "TableQR"} logoUrl={brand?.logoUrl} />
+        <InstallApp name={brand?.name ?? "Tableeqr"} logoUrl={brand?.logoUrl} />
         <SignInForm outlet={outlet} />
       </div>
     </main>

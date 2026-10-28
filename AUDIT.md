@@ -1,4 +1,4 @@
-# TableQR full audit
+# Tableeqr full audit
 
 Started 25 October 2026. Goal: walk every part of the product the way a restaurant and its guests will use it, and fix what is wrong before clients find it, including mistakes that do not show at first glance. `TODO.md` tracks feature work; this file tracks quality.
 
@@ -52,7 +52,7 @@ Findings go under the part as `- [ ] finding` and are ticked when fixed with the
   - [x] A cashier could give up to 100% discount with only a reason. Now (owner's choice) up to 10% alone; more needs a manager's phone and PIN, recorded in the audit log.
 - [x] **A3. Refunds** — staff refund flow, gateway refund webhooks, counter refunds, overpayment refunds.
 - [x] **A4. Payment webhooks and reconciliation** — `/api/payments/*`, `/api/fees/*`, minute re-check, amount checks, replay safety. *(Cross-outlet forged webhook fixed in `3b60206`.)*
-- [x] **A5. TableQR fees and plans** — `/console/plan`, admin Fees, Cashfree subscription, UPI-reference fees, trial, grace days, pause and unlock.
+- [x] **A5. Tableeqr fees and plans** — `/console/plan`, admin Fees, Cashfree subscription, UPI-reference fees, trial, grace days, pause and unlock.
   - [x] A plan fee paid on a retry of the same Cashfree order (after an earlier attempt failed) was ignored: money taken, plan not extended. A later full capture now confirms it.
   - [x] Trial, grace days, pause and unlock reviewed: paying ends a trial or suspension and the paid period starts after the trial.
 - [x] **A6. Invoices and GST** — invoice numbering per financial year, tax invoice vs receipt, GST report, Excel export.
@@ -112,7 +112,7 @@ Checked 25 Oct: review boards g1-g7 and b1-b4 render at 360 px with no horizonta
 - [ ] **D4. Thermal printing** — KOT, bill, receipt, day close, order slip. *(Slips now fit their content, `29453e5`.)*
   - [x] Only 80 mm rolls are supported; 58 mm printers cut the right side. Add a paper-width setting.
 
-### E. Platform admin (TableQR team)
+### E. Platform admin (Tableeqr team)
 
 - [ ] **E1. Admin sign-in and dashboard** — `/admin`.
 - [ ] **E2. Tenants and onboarding** — create restaurant, outlets, trial, status, custom package.

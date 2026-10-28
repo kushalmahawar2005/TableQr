@@ -21,7 +21,7 @@ const everyDay = (hours: [string, string][]) => ({
   mon: hours, tue: hours, wed: hours, thu: hours, fri: hours, sat: hours, sun: hours,
 });
 
-/** Empties every TableQR table */
+/** Empties every Tableeqr table */
 export async function wipeAll(db: Db) {
   const tables = (Object.values(s) as unknown[]).filter((v): v is MySqlTable => v instanceof MySqlTable);
   await db.execute(sql`SET FOREIGN_KEY_CHECKS = 0`);
@@ -32,7 +32,7 @@ export async function wipeAll(db: Db) {
 export async function seedPlatform(db: Db) {
   await db.insert(s.plans).values(DEFAULT_PLANS);
   const adminId = uuidv7();
-  await db.insert(s.platformAdmins).values({ id: adminId, email: "admin@tableqr.local", name: "Platform Owner", role: "super_admin" });
+  await db.insert(s.platformAdmins).values({ id: adminId, email: "admin@tableeqr.local", name: "Platform Owner", role: "super_admin" });
   return { adminId };
 }
 

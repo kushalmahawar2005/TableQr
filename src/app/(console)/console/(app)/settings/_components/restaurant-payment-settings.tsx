@@ -49,7 +49,7 @@ export function RestaurantPaymentSettings({ initial, canEdit }: { initial: Outle
     <div className="space-y-4 p-5">
       <div className="rounded-xl border border-line bg-ink/[0.02] p-4 text-sm text-muted">
         <p className="font-semibold text-ink">Payments go directly to your restaurant.</p>
-        <p className="mt-1">Use the App ID and Secret Key from your own Cashfree account. TableQR’s separate Cashfree account is used only for your TableQR subscription and is never used for guest payments.</p>
+        <p className="mt-1">Use the App ID and Secret Key from your own Cashfree account. Tableeqr’s separate Cashfree account is used only for your Tableeqr subscription and is never used for guest payments.</p>
         {status.configured && <p className="mt-2">Saved account: {status.appIdHint} · {status.mode === "production" ? "Live" : "Test mode"}</p>}
         {status.configured && <p className="mt-1">Saved means the credentials are encrypted here; Cashfree still has to accept them for an order to work.</p>}
         {status.configured && !status.available && <p className="mt-1 text-amber-700">Test mode is saved, but live guest checkout stays unavailable on the production app.</p>}
@@ -64,7 +64,7 @@ export function RestaurantPaymentSettings({ initial, canEdit }: { initial: Outle
         {canEdit && status.configured && <button type="button" onClick={remove} disabled={busy} className="min-h-11 rounded-xl border border-line px-4 text-sm font-semibold text-ink disabled:opacity-50">Disconnect</button>}
         {message && <p role="status" className="text-sm text-muted">{message}</p>}
       </div>
-      <p className="text-xs text-muted">Credentials are encrypted on the server. Live mode requires a secure HTTPS guest link and a server PAYMENT_CREDENTIALS_KEY configured by the TableQR administrator.</p>
+      <p className="text-xs text-muted">Credentials are encrypted on the server. Live mode requires a secure HTTPS guest link and a server PAYMENT_CREDENTIALS_KEY configured by the Tableeqr administrator.</p>
     </div>
   </section>;
 }

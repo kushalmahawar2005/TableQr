@@ -4,7 +4,7 @@ import { uuidv7 } from "@/db/id";
 import type { Checkout, FormCheckout } from "@/lib/payments/checkout";
 
 // Payment gateway boundary (PS 6.4). Each restaurant connects its own gateway account and money
-// settles straight to them; TableQR never holds guest funds or sees card numbers: the guest pays
+// settles straight to them; Tableeqr never holds guest funds or sees card numbers: the guest pays
 // on the gateway's hosted page. A payment counts as paid only when the gateway itself says so,
 // through a signed webhook or a server-to-server status check, never because a browser came back.
 
@@ -48,7 +48,7 @@ export interface PaymentGateway {
   parseWebhook(rawBody: string): WebhookEvent;
 }
 
-/** Every order TableQR creates is in rupees, so a success in any other currency is never taken as paid */
+/** Every order Tableeqr creates is in rupees, so a success in any other currency is never taken as paid */
 export const PAYMENT_CURRENCY = "INR";
 /** A gateway that reports a currency must report rupees; one that reports none (the mock) is not asked */
 export const currencyAccepted = (currency?: string) => currency === undefined || currency.trim().toUpperCase() === PAYMENT_CURRENCY;
@@ -171,7 +171,7 @@ export class CashfreeGateway implements PaymentGateway {
           return_url: input.callbackUrl,
           notify_url: input.notifyUrl || `${callback.origin}/api/payments/cashfree/webhook`,
         },
-        order_note: "TableQR payment",
+        order_note: "Tableeqr payment",
         order_tags: { payment_id: input.paymentId, receipt: input.receipt.slice(0, 40) },
       },
     });
@@ -231,7 +231,7 @@ export class CashfreeGateway implements PaymentGateway {
       body: {
         refund_amount: input.amountPaise / 100,
         refund_id: input.refundId,
-        refund_note: "TableQR refund",
+        refund_note: "Tableeqr refund",
         refund_speed: "STANDARD",
       },
     });
@@ -324,7 +324,7 @@ class MockGateway implements PaymentGateway {
 
   async upiQr(gatewayRef: string) {
     const o = this.orders.get(gatewayRef);
-    return { link: `upi://pay?pa=mock@upi&pn=TableQR%20Mock&am=${((o?.amountPaise ?? 0) / 100).toFixed(2)}&tr=${encodeURIComponent(gatewayRef)}` };
+    return { link: `upi://pay?pa=mock@upi&pn=Tableeqr%20Mock&am=${((o?.amountPaise ?? 0) / 100).toFixed(2)}&tr=${encodeURIComponent(gatewayRef)}` };
   }
 
   async fetchStatus(gatewayRef: string) {
@@ -401,7 +401,7 @@ export function gatewayFor(): PaymentGateway | null {
   return mockAllowed() ? mockGateway : null;
 }
 
-/** TableQR's own Cashfree account, used only for restaurant plan fees. */
+/** Tableeqr's own Cashfree account, used only for restaurant plan fees. */
 export function platformGateway(): CashfreeGateway | null {
   return configuredCashfree();
 }

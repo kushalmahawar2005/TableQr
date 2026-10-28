@@ -42,7 +42,7 @@ export function describeJob(status: JobStatus, o: { confirmable: boolean; printe
     case "queued": return `Getting it ready${where}…`;
     case "sent": return o.confirmable
       ? `Sent${where}. Waiting for the printer to say it printed.`
-      : `Sent${where}. TableQR cannot confirm that paper came out, so check the printer.`;
+      : `Sent${where}. Tableeqr cannot confirm that paper came out, so check the printer.`;
     case "confirmed": return `Printed${where}. The printer confirmed it.`;
     case "failed": return o.detail ? `Could not print${where}. ${o.detail}` : `Could not print${where}.`;
     case "cancelled": return "Print cancelled.";

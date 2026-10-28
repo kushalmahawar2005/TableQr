@@ -108,7 +108,7 @@ export function WaiterScreen({
         if (ctx && ctx.state !== "running") void ctx.resume().then(beep, () => {}); else beep();
       } catch { /* sound is a bonus */ }
       // renotify: a second task with the same tag must alert again, not silently replace the first
-      try { if (typeof Notification !== "undefined" && Notification.permission === "granted" && document.hidden && text) new Notification("TableQR", { body: text, tag: "tableqr-task", requireInteraction: true, renotify: true } as NotificationOptions); } catch { /* ignore */ }
+      try { if (typeof Notification !== "undefined" && Notification.permission === "granted" && document.hidden && text) new Notification("Tableeqr", { body: text, tag: "tableeqr-task", requireInteraction: true, renotify: true } as NotificationOptions); } catch { /* ignore */ }
     };
   });
   // Keep the screen on while the waiter app is open, so alerts are not missed on a locked phone

@@ -8,7 +8,7 @@ import { AppError } from "@/server/errors";
 import { claimFee, confirmFee, feesData, monthlyFee, ownerPlan, recordFee, reconcileCashfreeFee, rejectFee, settleCashfreeFeeByGatewayRef, startFeePayment } from "@/server/fees";
 import { resetTestDb } from "./setup-db";
 
-// TableQR fees paid by hand: the owner says "I have paid", the admin confirms, the months are added.
+// Tableeqr fees paid by hand: the owner says "I have paid", the admin confirms, the months are added.
 
 let env: Awaited<ReturnType<typeof resetTestDb>>;
 const DAY = 86_400_000;
@@ -138,7 +138,7 @@ describe("fees paid by hand", () => {
       vi.stubEnv("CASHFREE_MODE", "sandbox");
       vi.stubEnv("CASHFREE_API_BASE", "https://cashfree.example/pg");
       vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ message: "down" }), { status: 503 }));
-      await refused(startFeePayment(owner(), { months: 1, requestId: "pay-down-1", callbackUrl: "https://tableqr.example/api/fees/return?p=PLACEHOLDER" }), "invalid_state");
+      await refused(startFeePayment(owner(), { months: 1, requestId: "pay-down-1", callbackUrl: "https://tableeqr.example/api/fees/return?p=PLACEHOLDER" }), "invalid_state");
       expect((await ownerPlan(owner())).waiting).toBe(false);
     });
 
@@ -158,10 +158,10 @@ describe("fees paid by hand", () => {
         }
         return new Response(JSON.stringify({ payment_session_id: "session_1" }), { status: 200 });
       });
-      const started = await startFeePayment(owner(), { months: 1, requestId: "pay-again-1", callbackUrl: "https://tableqr.example/api/fees/return?p=PLACEHOLDER" });
+      const started = await startFeePayment(owner(), { months: 1, requestId: "pay-again-1", callbackUrl: "https://tableeqr.example/api/fees/return?p=PLACEHOLDER" });
       expect(started.checkout).toEqual({ provider: "cashfree", kind: "cashfree", mode: "sandbox", paymentSessionId: "session_1" });
       expect(started.replayed).toBe(false);
-      const again = await startFeePayment(owner(), { months: 1, requestId: "pay-again-1", callbackUrl: "https://tableqr.example/api/fees/return?p=PLACEHOLDER" });
+      const again = await startFeePayment(owner(), { months: 1, requestId: "pay-again-1", callbackUrl: "https://tableeqr.example/api/fees/return?p=PLACEHOLDER" });
       expect(again).toMatchObject({ id: started.id, replayed: true });
       const [before] = await env.db.select({ n: count() }).from(s.subscriptions).where(eq(s.subscriptions.tenantId, env.demo.tenantId));
       expect(await reconcileCashfreeFee(started.id)).toBe("confirmed");

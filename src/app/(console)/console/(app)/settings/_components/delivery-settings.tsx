@@ -12,7 +12,7 @@ export function DeliverySettings({ value, onChange, disabled, hasGateway, hasPay
   const [codes, setCodes] = useState(value.pincodes.join(", "));
   const update = (patch: Partial<DeliveryPolicy>) => onChange({ ...value, ...patch });
   return <div className="space-y-5 py-5">
-    <p className="rounded-xl bg-brand-soft p-3 text-sm text-ink">Online delivery payments go directly to this restaurant’s own Cashfree account. TableQR’s Cashfree account is only used for restaurant subscriptions.</p>
+    <p className="rounded-xl bg-brand-soft p-3 text-sm text-ink">Online delivery payments go directly to this restaurant’s own Cashfree account. Tableeqr’s Cashfree account is only used for restaurant subscriptions.</p>
     <label className="flex min-h-11 items-center justify-between gap-4 text-sm font-semibold">
       Accept delivery orders
       <input type="checkbox" checked={value.acceptingOrders} disabled={disabled} onChange={event => update({ acceptingOrders: event.target.checked })} className="size-5 accent-[var(--brand)]" />

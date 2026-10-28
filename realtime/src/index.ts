@@ -1,6 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 
-// TableQR realtime (PS 9.3). The Next.js server publishes small events after it commits a change;
+// Tableeqr realtime (PS 9.3). The Next.js server publishes small events after it commits a change;
 // this Worker fans them out to the phones and screens of that outlet within milliseconds.
 //
 // Isolation: each outlet has its own Durable Object, addressed by tenant and outlet ids taken
@@ -12,6 +12,8 @@ export interface Env {
   OUTLET_HUB: DurableObjectNamespace<OutletHub>;
   TOKEN_SECRET: string;
   PUBLISH_SECRET: string;
+  TABLEEQR_API_URL?: string;
+  /** Existing deployed secret remains supported during the rename. */
   TABLEQR_API_URL?: string;
   SERVICE_TASK_SECRET?: string;
 }
@@ -66,8 +68,9 @@ const hubFor = (env: Env, tenantId: string, outletId: string) =>
 export default {
   /** Minute cron: escalation happens even when all guest phones are asleep. */
   async scheduled(_event: ScheduledController, env: Env): Promise<void> {
-    if (!env.TABLEQR_API_URL || !env.SERVICE_TASK_SECRET) return;
-    const res = await fetch(`${env.TABLEQR_API_URL.replace(/\/$/, "")}/api/internal/service-tasks`, {
+    const apiUrl = env.TABLEEQR_API_URL || env.TABLEQR_API_URL;
+    if (!apiUrl || !env.SERVICE_TASK_SECRET) return;
+    const res = await fetch(`${apiUrl.replace(/\/$/, "")}/api/internal/service-tasks`, {
       method: "POST",
       headers: { Authorization: `Bearer ${env.SERVICE_TASK_SECRET}` },
       signal: AbortSignal.timeout(20_000),

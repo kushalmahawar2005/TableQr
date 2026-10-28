@@ -39,7 +39,7 @@ export default async function RoomQrSheetPage(props: { searchParams: Promise<Rec
               <p className="text-sm text-neutral-600" style={{ fontSize: `${0.8 * scale}rem` }}>Scan to order food to your room, or ask for towels, cleaning and more</p>
               <div style={{ width: `${mm}mm`, maxWidth: "100%", aspectRatio: "1" }} className="[&>svg]:size-full" dangerouslySetInnerHTML={{ __html: qrSvg(`${base}/r/${staff.outlet.code}/room/${r.shortCode}`) }} />
               <p className="font-extrabold" style={{ fontSize: `${1.8 * scale}rem` }}>Room {r.number}</p>
-              <p className="text-xs text-neutral-400">Powered by TableQR</p>
+              <p className="text-xs text-neutral-400">Powered by Tableeqr</p>
             </section>
           ))}</div>)}
         </div>

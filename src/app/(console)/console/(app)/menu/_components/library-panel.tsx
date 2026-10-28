@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import type { LibraryCategoryView, LibraryItemView } from "@/server/staff/menu-library";
 import * as actions from "../actions";
 
-// "Add from library": browse or search the TableQR menu list, tick dishes, type prices (or a price
+// "Add from library": browse or search the Tableeqr menu list, tick dishes, type prices (or a price
 // per size) and add them. Each dish goes into its own category, made if the menu does not have it.
 
 type Pick = { price: string; sizes: Record<string, string>; useSizes: boolean };
@@ -164,7 +164,7 @@ export function LibraryPanel({ canEdit, onDone }: { canEdit: boolean; onDone: (m
 
   return (
     <div className="space-y-4">
-      <p className="text-xs text-muted">Pick dishes from the TableQR list and type your price. Each dish goes into its own category; a category you don&apos;t have yet is made for you.</p>
+      <p className="text-xs text-muted">Pick dishes from the Tableeqr list and type your price. Each dish goes into its own category; a category you don&apos;t have yet is made for you.</p>
       {!canEdit && <p className="rounded-xl bg-[var(--state-held-soft)] p-3 text-sm text-[var(--state-held-text)]">Only the owner can add dishes. You can still look through the list.</p>}
       {canEdit && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-paper p-3">
@@ -270,7 +270,7 @@ export function LibraryQuickPick({ onPick }: { onPick: (item: LibraryItemView) =
   const { result, loading } = useLibrarySearch(query);
   return (
     <section className="rounded-2xl border border-dashed border-brand/50 bg-brand-soft/40 p-4">
-      <p className="text-sm font-semibold text-ink">Start from the TableQR list</p>
+      <p className="text-sm font-semibold text-ink">Start from the Tableeqr list</p>
       <p className="mt-0.5 text-xs text-muted">Type a dish name. We fill in the details and its category; you add the price.</p>
       <Input aria-label="Search the library" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="e.g. margherita, paneer tikka, cold coffee" className="mt-2 h-11 rounded-xl" />
       {loading && <p className="mt-2 text-xs text-muted">Searching…</p>}

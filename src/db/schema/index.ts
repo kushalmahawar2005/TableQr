@@ -1,4 +1,4 @@
-// TableQR data model (Product spec 9.4).
+// Tableeqr data model (Product spec 9.4).
 // Pricing rules, coupons and notifications are added in the phases that build them.
 export * from "./platform";
 export * from "./tenancy";

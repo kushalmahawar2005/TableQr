@@ -86,7 +86,7 @@ describe("verified delivery checkout", () => {
     await verifyDeliveryOtp("SRJ01", created.token, gatewayDevice, otp.challengeId, otp.devCode!, "Kiran");
     await expect(placeDeliveryOrder("SRJ01", created.token, gatewayDevice, created.quote.totalPaise)).rejects.toMatchObject({ code: "invalid_state" });
 
-    const started = await startDeliveryPayment("SRJ01", created.token, gatewayDevice, "https://tableqr.test/api/delivery/payments/return?c={checkoutId}");
+    const started = await startDeliveryPayment("SRJ01", created.token, gatewayDevice, "https://tableeqr.test/api/delivery/payments/return?c={checkoutId}");
     const gatewayRef = started.checkout.kind === "form" ? started.checkout.fields.ref : "";
     expect(gatewayRef).toMatch(/^mock_/);
     expect((await deliveryCheckout("SRJ01", created.token, gatewayDevice)).row.sessionId).toBeNull();
@@ -110,7 +110,7 @@ describe("verified delivery checkout", () => {
     const created = await createDeliveryCheckout("SRJ01", device, { lines: [{ itemId: env.demo.itemIds["Dal Makhani"], qty: 1, modifierIds: [] }], address });
     const otp = await sendDeliveryOtp("SRJ01", created.token, device, "9876543299");
     await verifyDeliveryOtp("SRJ01", created.token, device, otp.challengeId, otp.devCode!, "Mira");
-    const started = await startDeliveryPayment("SRJ01", created.token, device, "https://tableqr.test/api/delivery/payments/return?c={checkoutId}");
+    const started = await startDeliveryPayment("SRJ01", created.token, device, "https://tableeqr.test/api/delivery/payments/return?c={checkoutId}");
     const gatewayRef = started.checkout.kind === "form" ? started.checkout.fields.ref : "";
     mockGateway.settle(gatewayRef, "success");
     const real = await mockGateway.fetchStatus(gatewayRef);
@@ -125,10 +125,10 @@ describe("verified delivery checkout", () => {
 
   it("holds restaurant QR delivery until staff verifies the UPI reference, then records payment and releases one kitchen order", async () => {
     const qrDevice = "delivery-manual-qr-device";
-    await env.db.update(s.outlets).set({ bookingPaymentQrUrl: "https://assets.tableqr.test/restaurant-qr.png", deliveryPolicy: { ...DEFAULT_DELIVERY_POLICY, acceptingOrders: true, pincodes: ["302001"], deliveryFeePaise: 3000, paymentMode: "manual_qr" } }).where(eq(s.outlets.id, env.demo.outletId));
+    await env.db.update(s.outlets).set({ bookingPaymentQrUrl: "https://assets.tableeqr.test/restaurant-qr.png", deliveryPolicy: { ...DEFAULT_DELIVERY_POLICY, acceptingOrders: true, pincodes: ["302001"], deliveryFeePaise: 3000, paymentMode: "manual_qr" } }).where(eq(s.outlets.id, env.demo.outletId));
     const created = await createDeliveryCheckout("SRJ01", qrDevice, { lines: [{ itemId: env.demo.itemIds["Dal Makhani"], qty: 1, modifierIds: [] }], address });
     const scoped = await deliveryCheckout("SRJ01", created.token, qrDevice);
-    expect(scoped.row.manualPaymentQrUrl).toBe("https://assets.tableqr.test/restaurant-qr.png");
+    expect(scoped.row.manualPaymentQrUrl).toBe("https://assets.tableeqr.test/restaurant-qr.png");
     const otp = await sendDeliveryOtp("SRJ01", created.token, qrDevice, "9876543212");
     await verifyDeliveryOtp("SRJ01", created.token, qrDevice, otp.challengeId, otp.devCode!, "Kiran");
     await expect(placeDeliveryOrder("SRJ01", created.token, qrDevice, created.quote.totalPaise)).rejects.toMatchObject({ code: "invalid_state" });

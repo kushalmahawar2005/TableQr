@@ -902,7 +902,7 @@ export function FloorEditor({
             <DialogDescription>
               Your plan includes {data.tableLimit} table
               {data.tableLimit === 1 ? "" : "s"}, and all of them are on the
-              floor. To add more, ask TableQR to upgrade your plan. You can
+              floor. To add more, ask Tableeqr to upgrade your plan. You can
               still move, rename or remove the tables you have.
             </DialogDescription>
           </DialogHeader>

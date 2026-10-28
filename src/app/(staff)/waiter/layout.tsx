@@ -25,7 +25,7 @@ export default async function WaiterLayout({ children }: LayoutProps<"/waiter">)
   return (
     <>
       <div className="mx-auto w-full max-w-xl px-4 pt-3 empty:hidden">
-        <InstallApp name={brand?.name ?? "TableQR"} logoUrl={brand?.logoUrl} />
+        <InstallApp name={brand?.name ?? "Tableeqr"} logoUrl={brand?.logoUrl} />
       </div>
       <div className="mx-auto w-full max-w-xl px-4">
         <NotificationPermissionOnboarding />

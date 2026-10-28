@@ -57,9 +57,9 @@ export async function tenantTableLimit(tenantId: string): Promise<number | null>
 }
 
 export const tableLimitMessage = (limit: number) =>
-  `Your plan includes ${limit} table${limit === 1 ? "" : "s"}. To add more, ask TableQR to upgrade your plan.`;
+  `Your plan includes ${limit} table${limit === 1 ? "" : "s"}. To add more, ask Tableeqr to upgrade your plan.`;
 
 export const staffLimitMessage = (limit: number) =>
-  `Your plan includes ${limit} staff login${limit === 1 ? "" : "s"}. To add more, ask TableQR to upgrade your plan.`;
+  `Your plan includes ${limit} staff login${limit === 1 ? "" : "s"}. To add more, ask Tableeqr to upgrade your plan.`;
 
-export const KITCHEN_NOT_IN_PLAN = "The kitchen screen is not switched on for this restaurant. Ask TableQR to turn it on.";
+export const KITCHEN_NOT_IN_PLAN = "The kitchen screen is not switched on for this restaurant. Ask Tableeqr to turn it on.";

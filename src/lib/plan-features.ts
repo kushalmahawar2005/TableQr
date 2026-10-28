@@ -40,7 +40,7 @@ export type Features = Record<FeatureKey, boolean> & {
   maxTables: number | null;
   maxStaff: number | null;
   maxRooms: number | null;
-  /** Small "powered by TableQR" line on the guest page */
+  /** Small "powered by Tableeqr" line on the guest page */
   poweredBy: boolean;
 };
 
@@ -74,7 +74,7 @@ export const SECTION_FEATURE: Partial<Record<string, FeatureKey>> = {
 };
 
 export const notInPlanMessage = (key: FeatureKey) =>
-  `${FEATURE_LABELS[key].label} is not in your plan. Ask TableQR to upgrade your plan to use it.`;
+  `${FEATURE_LABELS[key].label} is not in your plan. Ask Tableeqr to upgrade your plan to use it.`;
 
 const NONE: Record<FeatureKey, boolean> = Object.fromEntries(FEATURE_KEYS.map((k) => [k, false])) as Record<FeatureKey, boolean>;
 /** A restaurant: tables, no rooms */

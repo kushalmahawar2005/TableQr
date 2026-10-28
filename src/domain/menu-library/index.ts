@@ -1,6 +1,6 @@
 import { LIBRARY } from "./data";
 
-// Search over the TableQR menu library (see data.ts). Pure functions, so they run on the server
+// Search over the Tableeqr menu library (see data.ts). Pure functions, so they run on the server
 // and in tests; the console asks the server, which keeps the whole list out of the browser.
 
 export type LibraryItem = {

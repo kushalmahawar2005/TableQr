@@ -1,6 +1,6 @@
 # Uploading menu library photos (context for an AI coding agent)
 
-You are working in the TableQR repo (Next.js 16, MySQL/Drizzle, deployed to Hostinger on push
+You are working in the Tableeqr repo (Next.js 16, MySQL/Drizzle, deployed to Hostinger on push
 to `master`). The task: upload one team member's dish photos to the menu library. Do only this.
 Do not change any other code.
 

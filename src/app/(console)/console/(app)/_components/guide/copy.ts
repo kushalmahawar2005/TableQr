@@ -34,7 +34,7 @@ type Copy = {
 
 const en: Copy = {
   welcome: {
-    title: (name) => `Welcome to TableQR, ${name}`,
+    title: (name) => `Welcome to Tableeqr, ${name}`,
     body: "Your whole restaurant on one simple screen. Here is how it works.",
     slides: [
       { title: "Guests scan and order", body: "Every table gets a QR code. Guests open your menu on their phone and order. No app to install." },
@@ -94,7 +94,7 @@ const en: Copy = {
 
 const hi: Copy = {
   welcome: {
-    title: (name) => `TableQR में स्वागत है, ${name}`,
+    title: (name) => `Tableeqr में स्वागत है, ${name}`,
     body: "पूरा रेस्टोरेंट एक आसान स्क्रीन पर। देखिए कैसे काम करता है।",
     slides: [
       { title: "ग्राहक स्कैन करके ऑर्डर करें", body: "हर टेबल पर एक QR कोड। ग्राहक फ़ोन पर मेन्यू खोलकर ऑर्डर करते हैं। कोई ऐप नहीं चाहिए।" },

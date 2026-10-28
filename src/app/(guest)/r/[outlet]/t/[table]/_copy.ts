@@ -93,7 +93,7 @@ const en = {
   loadError: "We could not load this table.",
   actionError: "We could not reach the restaurant. Try again.",
   tryAgain: "Try again",
-  poweredBy: "powered by TableQR",
+  poweredBy: "powered by Tableeqr",
 
   menuPlaceholder: { title: "Your table is open", body: "Please ask staff to continue." },
 };
@@ -187,7 +187,7 @@ const hi: G1Copy = {
   loadError: "हम यह टेबल लोड नहीं कर सके।",
   actionError: "रेस्टोरेंट से संपर्क नहीं हो सका। फिर से कोशिश करें।",
   tryAgain: "फिर से कोशिश करें",
-  poweredBy: "powered by TableQR",
+  poweredBy: "powered by Tableeqr",
 
   menuPlaceholder: { title: "आपकी टेबल खुल गई है", body: "आगे बढ़ने के लिए कृपया स्टाफ से पूछें।" },
 };

@@ -45,7 +45,7 @@ export async function proxy(request: NextRequest) {
           const fallback = new URL(`${request.nextUrl.pathname}${request.nextUrl.search}`, fallbackOrigin);
           response = NextResponse.redirect(fallback, 307);
         } else {
-          response = new NextResponse("This host is not configured for TableQR.", { status: 421 });
+          response = new NextResponse("This host is not configured for Tableeqr.", { status: 421 });
         }
       } else {
         const destination = request.nextUrl.clone();
@@ -60,7 +60,7 @@ export async function proxy(request: NextRequest) {
           const fallback = new URL(`${request.nextUrl.pathname}${request.nextUrl.search}`, fallbackOrigin);
           response = NextResponse.redirect(fallback, 307);
         } else {
-          response = new NextResponse("This host is not configured for TableQR.", { status: 421 });
+          response = new NextResponse("This host is not configured for Tableeqr.", { status: 421 });
         }
       }
     }

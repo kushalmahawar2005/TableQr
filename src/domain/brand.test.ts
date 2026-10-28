@@ -18,7 +18,7 @@ describe("adaptive brand tokens", () => {
     }
   });
 
-  it("falls back to the TableQR accent when the outlet has none or it is invalid", () => {
+  it("falls back to the Tableeqr accent when the outlet has none or it is invalid", () => {
     expect(deriveBrandTokens(null).main).toBe(DEFAULT_ACCENT);
     expect(deriveBrandTokens("red").main).toBe(DEFAULT_ACCENT);
   });
