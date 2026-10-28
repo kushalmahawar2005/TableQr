@@ -73,6 +73,7 @@ describe("offline POS durable outbox", () => {
     const file = JSON.stringify({ format: "tableeqr-pos-offline-recovery", version: 2, outletId: "outlet-1", orders: [], cashCollections: [cash] });
     expect(await storage.importOfflinePosRecoveryFile("outlet-1", file)).toEqual({ imported: 0, importedCash: 1, total: 0, totalCash: 1 });
     expect(JSON.parse(await storage.buildOfflinePosRecoveryFile("outlet-1"))).toMatchObject({ cashCollections: [cash], cashCollectionCount: 1 });
+    await expect(storage.writeOfflinePosCashCollection("outlet-1", { ...cash, id: "cash-record-0002" })).rejects.toThrow(/already recorded locally/);
     const attempts: string[] = [];
     const deliver = async (record: typeof cash) => { attempts.push(record.id); if (attempts.length === 1) throw new Error("Reply lost after server commit"); };
     await syncSavedPosCashCollections({ outletId: "outlet-1", staffUserId: "cashier-1", now: () => 1000, deliver });
@@ -80,6 +81,7 @@ describe("offline POS durable outbox", () => {
     expect(retry).toEqual({ synced: 1, blocked: null });
     expect(attempts).toEqual([cash.id, cash.id]);
     expect(await storage.readOfflinePosCashCollections("outlet-1")).toEqual([]);
+    await expect(storage.writeOfflinePosCashCollection("outlet-1", { ...cash, id: "cash-record-0003" })).rejects.toThrow(/already recorded locally or reconciled/);
   });
 
   it("drains three consecutive orders in one pass without skipping the middle order", async () => {

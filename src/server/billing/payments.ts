@@ -570,6 +570,7 @@ export async function settleAtCounter(
   now = new Date(),
   allowedRoles: readonly StaffRole[] = ["waiter", "manager", "owner"],
 ) {
+  if (input.expectedDuePaise !== undefined && !input.clientRequestId) throw new AppError("invalid_state", "Offline cash settlement needs a stable request id.");
   if (input.clientRequestId) {
     await requireStaffRole(ctx, allowedRoles);
     if (!/^[a-zA-Z0-9_-]{8,64}$/.test(input.clientRequestId) || !["cash", "card", "upi"].includes(input.method)) throw new AppError("invalid_state", "Invalid settlement request.");

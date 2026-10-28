@@ -1,4 +1,4 @@
-import { readOfflinePosCashCollections, readOfflinePosOrders, removeOfflinePosCashCollection, withOfflinePosSyncLock, writeOfflinePosCashCollection, type OfflinePosCashCollection } from "./pos-offline-queue";
+import { markOfflinePosBillSettled, readOfflinePosCashCollections, readOfflinePosOrders, withOfflinePosSyncLock, writeOfflinePosCashCollection, type OfflinePosCashCollection } from "./pos-offline-queue";
 
 /** Cash is posted only after its existing server bill is still owed the exact locally recorded amount. */
 export async function syncSavedPosCashCollections(input: {
@@ -20,7 +20,7 @@ export async function syncSavedPosCashCollections(input: {
       try {
         if (cash.staffUserId !== input.staffUserId) throw new Error("This offline cash record belongs to a different staff session. Ask a manager to review it.");
         await input.deliver(cash);
-        await removeOfflinePosCashCollection(input.outletId, cash.id);
+        await markOfflinePosBillSettled(input.outletId, cash.sessionId, cash.id);
         synced++;
       } catch (error) {
         const retryCount = (cash.retryCount ?? 0) + 1;

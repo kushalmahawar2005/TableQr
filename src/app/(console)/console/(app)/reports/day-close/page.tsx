@@ -12,5 +12,5 @@ export default async function DayClosePage(props: PageProps<"/console/reports/da
   if (!staff || !canSee(staff, "reports")) notFound();
   const { date } = await props.searchParams;
   const report = await getDayClose(staff, typeof date === "string" ? date : istToday());
-  return <DayCloseScreen report={report} outletName={staff.outlet.name} today={istToday()} />;
+  return <DayCloseScreen report={report} outletName={staff.outlet.name} outletId={staff.outletId} today={istToday()} />;
 }

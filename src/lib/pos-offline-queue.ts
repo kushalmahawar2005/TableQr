@@ -218,23 +218,28 @@ export async function importOfflinePosRecoveryFile(outletId: string, raw: string
   if (new Set(cashCollections.map((cash) => cash.id)).size !== cashCollections.length) throw new Error("This recovery file contains duplicate cash record IDs.");
 
   const db = await openDatabase();
-  const tx = db.transaction(["orders", "cashCollections"], "readwrite");
+  const tx = db.transaction(["orders", "cashCollections", "meta"], "readwrite");
   const store = tx.objectStore("orders");
   const cashStore = tx.objectStore("cashCollections");
+  const metaStore = tx.objectStore("meta");
   let imported = 0, importedCash = 0, collision: string | null = null;
-  const checks = orders.length + cashCollections.length;
+  const checks = orders.length + cashCollections.length * 3;
   let checked = 0;
   const currentOrders = new Map<string, StoredOrder | undefined>();
   const currentCash = new Map<string, (OfflinePosCashCollection & { key: string; outletId: string }) | undefined>();
+  const cashBySession = new Map<string, (OfflinePosCashCollection & { key: string; outletId: string }) | undefined>();
+  const alreadySettled = new Set<string>();
+  const checkedOne = () => { checked++; applyImport(); };
   const applyImport = () => {
-    if (++checked !== checks) return;
+    if (checked !== checks) return;
     for (const candidate of orders) {
       const current = currentOrders.get(candidate.id);
       if (current && stableJson(toOfflinePosOrder(current)) !== stableJson(candidate)) collision = candidate.id;
     }
     for (const candidate of cashCollections) {
       const current = currentCash.get(candidate.id);
-      if (current && stableJson(toOfflinePosCashCollection(current)) !== stableJson(candidate)) collision = candidate.id;
+      const sessionRecord = cashBySession.get(candidate.sessionId);
+      if (alreadySettled.has(candidate.sessionId) || sessionRecord && sessionRecord.id !== candidate.id || current && stableJson(toOfflinePosCashCollection(current)) !== stableJson(candidate)) collision = candidate.id;
     }
     if (collision) return;
     for (const candidate of orders) if (!currentOrders.get(candidate.id)) {
@@ -248,13 +253,21 @@ export async function importOfflinePosRecoveryFile(outletId: string, raw: string
   };
   for (const order of orders) {
     const get = store.get(`${outletId}:${order.id}`) as IDBRequest<StoredOrder | undefined>;
-    get.onsuccess = () => { currentOrders.set(order.id, get.result); applyImport(); };
+    get.onsuccess = () => { currentOrders.set(order.id, get.result); checkedOne(); };
   }
   for (const cash of cashCollections) {
     const get = cashStore.get(`${outletId}:${cash.id}`) as IDBRequest<(OfflinePosCashCollection & { key: string; outletId: string }) | undefined>;
-    get.onsuccess = () => { currentCash.set(cash.id, get.result); applyImport(); };
+    const bySession = cashStore.index("outletSession").get([outletId, cash.sessionId]) as IDBRequest<(OfflinePosCashCollection & { key: string; outletId: string }) | undefined>;
+    const settled = metaStore.get(`cash-settled:${outletId}:${cash.sessionId}`) as IDBRequest<{ key: string } | undefined>;
+    get.onsuccess = () => { currentCash.set(cash.id, get.result); checkedOne(); };
+    bySession.onsuccess = () => { cashBySession.set(cash.sessionId, bySession.result); checkedOne(); };
+    settled.onsuccess = () => { if (settled.result) alreadySettled.add(cash.sessionId); checkedOne(); };
   }
-  await transactionDone(tx);
+  try { await transactionDone(tx); }
+  catch (error) {
+    if (error instanceof DOMException && error.name === "ConstraintError") throw new Error("This recovery file contains another cash record for a bill already saved on this device.");
+    throw error;
+  }
   if (collision) throw new Error(`Request ID ${collision} already exists here with different order details. Nothing from this file was imported.`);
   return { imported, importedCash, total: orders.length, totalCash: cashCollections.length };
 }

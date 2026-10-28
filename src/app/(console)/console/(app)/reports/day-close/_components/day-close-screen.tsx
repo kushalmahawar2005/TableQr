@@ -1,11 +1,14 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { BackToReports } from "../../_components/back-to-reports";
 import { usePrint } from "@/components/print/print-provider";
 import { PaperToggle } from "@/app/pos/_components/paper-toggle";
 import type { DayClose } from "@/server/staff/day-close";
 import { dayCloseHtml, dayEndsAt } from "./day-close-print";
+import { readOfflinePosCashCollections, readOfflinePosOrders } from "@/lib/pos-offline-queue";
+import { useEffect, useState } from "react";
 
 // Day close: one page to count the drawer against, print, or send to the owner on WhatsApp.
 
@@ -38,13 +41,22 @@ function Stat({ label, value, note }: { label: string; value: string; note?: str
   );
 }
 
-export function DayCloseScreen({ report: r, outletName, today }: { report: DayClose; outletName: string; today: string }) {
+export function DayCloseScreen({ report: r, outletName, outletId, today }: { report: DayClose; outletName: string; outletId: string; today: string }) {
   const router = useRouter();
   const printer = usePrint().manager;
+  const [offlineWork, setOfflineWork] = useState<{ orders: number; cash: number; duePaise: number } | null>(null);
   const go = (date: string) => router.push(`/console/reports/day-close?date=${date}`);
   const shift = (days: number) => go(new Date(Date.parse(`${r.date}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10));
   const text = shareText(r, outletName);
   const btn = "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-line bg-surface px-4 text-sm font-semibold text-ink hover:border-ink/40 print:hidden";
+
+  useEffect(() => {
+    let live = true;
+    void Promise.all([readOfflinePosOrders(outletId), readOfflinePosCashCollections(outletId)]).then(([orders, cash]) => {
+      if (live) setOfflineWork({ orders: orders.length, cash: cash.length, duePaise: cash.reduce((sum, item) => sum + item.expectedDuePaise, 0) });
+    }).catch(() => { if (live) setOfflineWork({ orders: 0, cash: -1, duePaise: 0 }); });
+    return () => { live = false; };
+  }, [outletId]);
 
   return (
     <main className="mx-auto w-full max-w-[1000px] px-4 py-5 text-ink sm:px-6 lg:px-8 lg:py-7">
@@ -67,6 +79,7 @@ export function DayCloseScreen({ report: r, outletName, today }: { report: DayCl
           {r.openTables.length} {r.openTables.length === 1 ? "table is" : "tables are"} still open: {r.openTables.map((t) => `${t.table}${t.totalPaise ? ` (${rs(t.totalPaise)})` : ""}`).join(", ")}. Settle them before closing the day.
         </p>
       )}
+      {offlineWork && (offlineWork.orders > 0 || offlineWork.cash !== 0) && <p role="alert" className="mt-4 rounded-xl border border-warning/40 bg-warning/10 p-3 text-sm font-semibold text-warning">{offlineWork.cash < 0 ? "Could not check this device’s offline POS queue. Verify POS before using these totals as the final day close." : `This server report excludes ${offlineWork.orders} unsynced KOT${offlineWork.orders === 1 ? "" : "s"}${offlineWork.cash ? ` and ${offlineWork.cash} provisional cash record${offlineWork.cash === 1 ? "" : "s"} (₹${(offlineWork.duePaise / 100).toLocaleString("en-IN")})` : ""}. Sync or reconcile them in POS before using these totals as the final day close.`} <Link className="underline" href="/console/pos">Open POS</Link></p>}
 
       <section className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="Collected" value={rs(r.netPaise)} note={r.refunds.paise ? `after ${rs(r.refunds.paise)} refunds` : "cash, card and online"} />
