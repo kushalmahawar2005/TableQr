@@ -80,6 +80,7 @@ export function LiveMap({ points, className = "h-56", onHomeMove, route = false,
     let cancelled = false;
     void import("maplibre-gl").then((ml) => {
       if (cancelled || !box.current) return;
+      ml.setWorkerUrl(new URL("maplibre-gl/dist/maplibre-gl-worker.mjs", import.meta.url).toString());
       const m = new ml.Map({ container: box.current, style: STYLE, center: INDIA, zoom: 4, attributionControl: { compact: true } });
       m.addControl(new ml.NavigationControl({ showCompass: false }), "top-right");
       m.on("click", (e) => moveRef.current?.({ lat: e.lngLat.lat, lng: e.lngLat.lng }));
@@ -91,7 +92,7 @@ export function LiveMap({ points, className = "h-56", onHomeMove, route = false,
       });
       m.on("error", (e) => { console.error("[map]", e.error?.message ?? e); if (!m.loaded()) setFailed(true); });
       map.current = m;
-    }, () => setFailed(true));
+    }).catch((error) => { console.error("[map] could not initialize", error); setFailed(true); });
     const all = markers.current;
     return () => { cancelled = true; all.clear(); map.current?.remove(); map.current = null; };
   }, []);

@@ -11,7 +11,7 @@ import { connectRealtime } from "@/lib/realtime-client";
 import type { AnyDraftLine } from "@/server/guest/order";
 import type { PosBillDetail } from "@/server/staff/pos-read";
 import type { PosTerminal } from "@/server/staff/pos-terminal";
-import { buildOfflinePosRecoveryFile, importOfflinePosRecoveryFile, loadPosDraft, queueOfflinePosOrder, readOfflinePosOrders, savePosDraft, savePosSnapshot, writeOfflinePosOrder, type OfflinePosOrder } from "@/lib/pos-offline-queue";
+import { buildOfflinePosRecoveryFile, checkOfflinePosStorage, importOfflinePosRecoveryFile, loadPosDraft, queueOfflinePosOrder, readOfflinePosOrders, savePosDraft, savePosSnapshot, writeOfflinePosOrder, type OfflinePosOrder } from "@/lib/pos-offline-queue";
 import { syncSavedPosOrders } from "@/lib/pos-offline-sync";
 import { billAction, newTakeawayAction, openTableAction, orderAction, sendOrderAction, terminalAction, tokenAction } from "../actions";
 
@@ -103,6 +103,7 @@ export function PosTerminalScreen({ initial, outletId, staffUserId, sessionExpir
   const [queuedCount, setQueuedCount] = useState(0);
   const [queuedOrders, setQueuedOrders] = useState<OfflinePosOrder[]>([]);
   const [draftReady, setDraftReady] = useState(false);
+  const [storageWarning, setStorageWarning] = useState<string | null>(null);
   const [lastSyncedAt, setLastSyncedAt] = useState(initialSavedAt);
   const [message, setMessage] = useState<{ tone: "ok" | "bad"; text: string } | null>(null);
   const [now, setNow] = useState(() => Date.now());
@@ -158,6 +159,18 @@ export function PosTerminalScreen({ initial, outletId, staffUserId, sessionExpir
     });
   }, [outletId, current, detail, cart, guest, pax, draftReady, L]);
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(t); }, []);
+  useEffect(() => {
+    if (!draftReady) return;
+    let live = true;
+    void checkOfflinePosStorage().then((storage) => {
+      if (!live) return;
+      const nearlyFull = storage.quota && storage.usage !== null && storage.usage / storage.quota >= 0.9;
+      if (nearlyFull) setStorageWarning(L(`This device is nearly out of storage (${Math.max(0, Math.floor((storage.quota! - storage.usage!) / (1024 * 1024)))} MB left). Download a recovery copy and free space.`, `इस डिवाइस की स्टोरेज लगभग भर गई है (${Math.max(0, Math.floor((storage.quota! - storage.usage!) / (1024 * 1024)))} MB बची है)। रिकवरी कॉपी डाउनलोड करके जगह खाली करें।`));
+      else if (!storage.supported || !storage.persistent) setStorageWarning(L("The browser may clear saved offline data. Keep a recovery copy on another device.", "ब्राउज़र सेव ऑफ़लाइन डेटा हटा सकता है। रिकवरी कॉपी किसी दूसरी जगह सुरक्षित रखें।"));
+      else setStorageWarning(null);
+    });
+    return () => { live = false; };
+  }, [draftReady, L]);
   const refresh = useCallback(async () => {
     if (!navigator.onLine) return;
     try {
@@ -184,6 +197,14 @@ export function PosTerminalScreen({ initial, outletId, staffUserId, sessionExpir
         deliver: async (saved, checkpoint) => {
           let order = saved;
           if (order.staffUserId !== staffUserId) throw new Error(L("This saved order belongs to a different staff session. Ask a manager to review it.", "यह सेव ऑर्डर दूसरे स्टाफ़ सेशन का है। मैनेजर से जाँच करवाएँ।"));
+          // A previous request may have reached the server even when its reply was lost. Ask the
+          // idempotent endpoint first for an already-open session so a later menu change cannot
+          // strand an order the kitchen has already received.
+          if (order.current.sessionId) {
+            const replay = await sendOrderAction({ sessionId: order.current.sessionId, clientRequestId: order.id, lines: order.lines, quote: order.quote ?? {}, guestName: order.guestName.trim() || null });
+            if (replay.ok) return;
+            if (!/prices have changed/i.test(replay.error)) throw new Error(replay.error);
+          }
           const hasMenuLines = order.lines.some((line) => "itemId" in line);
           if (hasMenuLines) {
             if (!order.quote) throw new Error(L("This saved order has no saved menu prices. Review the current prices before syncing it.", "इस सेव ऑर्डर की मेन्यू कीमतें सेव नहीं हैं। सिंक से पहले अभी की कीमतें जाँचें।"));
@@ -509,6 +530,7 @@ export function PosTerminalScreen({ initial, outletId, staffUserId, sessionExpir
   return (
     <div className="mx-auto w-full max-w-[1600px] px-4 py-4 sm:px-6">
       {offline && <p role="status" className="mb-3 flex items-center gap-2 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-caption font-semibold text-warning"><WifiOff className="size-4" aria-hidden="true" /><span>{L(`Offline. KOTs can be saved on this device; bills and kitchen delivery wait for internet. Menu and tables last synced ${savedTime}.`, `ऑफ़लाइन। KOT इस डिवाइस पर सेव होंगे; बिल और किचन भेजना इंटरनेट आने तक रुकेगा। मेन्यू और टेबल आख़िरी बार ${savedTime} पर अपडेट हुए थे।`)}</span></p>}
+      {storageWarning && <p role="status" className="mb-3 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-caption font-semibold text-warning">{storageWarning}</p>}
       <input ref={recoveryFile} type="file" accept="application/json,.json" className="hidden" onChange={importSavedOrders} aria-label={L("Choose a POS recovery copy", "POS रिकवरी कॉपी चुनें")} />
       {queuedCount > 0 ? <div role="status" className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-caption font-semibold text-warning"><span>{L(`${queuedCount} KOT ${queuedCount === 1 ? "is" : "are"} saved here and waiting to sync.`, `${queuedCount} KOT यहाँ सेव ${queuedCount === 1 ? "है" : "हैं"} और सिंक होने की प्रतीक्षा में ${queuedCount === 1 ? "है" : "हैं"}।`)}</span><div className="flex flex-wrap gap-2"><button type="button" onClick={() => recoveryFile.current?.click()} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-warning/50 bg-surface px-3 text-ink"><FileUp className="size-4" aria-hidden="true" />{L("Restore copy", "कॉपी वापस लाएँ")}</button><button type="button" onClick={() => void exportSavedOrders()} className="min-h-9 rounded-lg border border-warning/50 bg-surface px-3 text-ink">{L("Download recovery copy", "रिकवरी कॉपी डाउनलोड करें")}</button></div></div> : <div className="mb-3 flex justify-end"><button type="button" onClick={() => recoveryFile.current?.click()} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-line bg-surface px-3 text-caption font-semibold text-ink"><FileUp className="size-4" aria-hidden="true" />{L("Restore POS recovery copy", "POS रिकवरी कॉपी वापस लाएँ")}</button></div>}
       {queuedOrders.map((order) => {

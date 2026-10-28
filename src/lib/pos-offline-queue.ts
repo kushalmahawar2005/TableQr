@@ -106,6 +106,18 @@ export async function loadPosDraft<T>(outletId: string): Promise<{ savedAt: numb
   return record ?? null;
 }
 
+export async function checkOfflinePosStorage() {
+  if (typeof navigator === "undefined" || !navigator.storage) return { supported: false, persistent: false, usage: null, quota: null };
+  try {
+    let persistent = await navigator.storage.persisted();
+    if (!persistent && navigator.storage.persist) persistent = await navigator.storage.persist();
+    const { usage, quota } = await navigator.storage.estimate();
+    return { supported: true, persistent, usage: usage ?? null, quota: quota ?? null };
+  } catch {
+    return { supported: true, persistent: false, usage: null, quota: null };
+  }
+}
+
 export async function readOfflinePosOrders(outletId: string): Promise<OfflinePosOrder[]> {
   const db = await openDatabase();
   await importLegacyOrders(db, outletId);
@@ -178,16 +190,20 @@ function validateRecoveryOrder(value: unknown): OfflinePosOrder {
   if (typeof order.id !== "string" || !/^[a-zA-Z0-9_-]{8,64}$/.test(order.id)
     || !Number.isSafeInteger(order.createdAt) || typeof order.staffUserId !== "string" || !order.staffUserId
     || !order.current || typeof order.current !== "object" || typeof order.current.code !== "string"
-    || typeof order.current.takeaway !== "boolean" || !Number.isSafeInteger(order.current.seats)
-    || typeof order.guestName !== "string" || !Number.isSafeInteger(order.partySize)
+    || !(order.current.sessionId === null || typeof order.current.sessionId === "string")
+    || !(order.current.tableId === null || typeof order.current.tableId === "string")
+    || typeof order.current.takeaway !== "boolean" || !Number.isSafeInteger(order.current.seats) || order.current.seats < 1 || order.current.seats > 200
+    || typeof order.guestName !== "string" || order.guestName.length > 120 || !Number.isSafeInteger(order.partySize) || order.partySize < 1 || order.partySize > 200
     || !Array.isArray(order.lines) || order.lines.length < 1 || order.lines.length > 100) {
     throw new Error("The recovery file contains an invalid order.");
   }
+  if (order.quote !== undefined && (!order.quote || typeof order.quote !== "object" || Object.values(order.quote).some((price) => !Number.isSafeInteger(price) || price < 0))) throw new Error("The recovery file contains an invalid saved price quote.");
+  if (order.retryCount !== undefined && (!Number.isSafeInteger(order.retryCount) || order.retryCount < 0) || order.nextRetryAt !== undefined && !Number.isSafeInteger(order.nextRetryAt) || order.error !== undefined && (typeof order.error !== "string" || order.error.length > 1000)) throw new Error("The recovery file contains invalid retry information.");
   for (const line of order.lines) {
-    if (!line || typeof line !== "object" || !Number.isSafeInteger(line.qty) || line.qty < 1 || line.qty > 99) throw new Error("The recovery file contains an invalid order line.");
+    if (!line || typeof line !== "object" || !Number.isSafeInteger(line.qty) || line.qty < 1 || line.qty > 99 || line.note !== undefined && (typeof line.note !== "string" || line.note.length > 140) || line.personalForPickup !== undefined && typeof line.personalForPickup !== "boolean") throw new Error("The recovery file contains an invalid order line.");
     if ("itemId" in line) {
-      if (typeof line.itemId !== "string" || !Array.isArray(line.modifierIds) || line.modifierIds.some((id) => typeof id !== "string")) throw new Error("The recovery file contains an invalid menu item.");
-    } else if (!line.open || typeof line.open.name !== "string" || !Number.isSafeInteger(line.open.pricePaise) || !Number.isSafeInteger(line.open.taxRateBp) || typeof line.open.station !== "string") {
+      if (typeof line.itemId !== "string" || !Array.isArray(line.modifierIds) || line.modifierIds.length > 20 || line.modifierIds.some((id) => typeof id !== "string")) throw new Error("The recovery file contains an invalid menu item.");
+    } else if (!line.open || typeof line.open.name !== "string" || !line.open.name.trim() || line.open.name.length > 120 || !Number.isSafeInteger(line.open.pricePaise) || line.open.pricePaise < 1 || !Number.isSafeInteger(line.open.taxRateBp) || line.open.taxRateBp < 0 || line.open.taxRateBp > 10000 || typeof line.open.station !== "string" || !line.open.station.trim()) {
       throw new Error("The recovery file contains an invalid open item.");
     }
   }
