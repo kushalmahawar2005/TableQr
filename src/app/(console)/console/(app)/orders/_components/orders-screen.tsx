@@ -131,22 +131,22 @@ export function OrdersScreen({ orders, outlet, tabs }: { orders: OrderRow[]; out
             <h2 className="font-display text-section font-bold text-ink">{filter === "active" ? "Current orders" : `${FILTERS.find(([key]) => key === filter)?.[1] ?? "Orders"} orders`}</h2>
             <p className="text-caption text-muted">Showing {shown.length} of {orders.length} · newest updates automatically</p>
           </div>
-        <ul className="grid gap-3 lg:grid-cols-2">
+        <ul className="grid grid-cols-2 gap-2 sm:gap-3 lg:gap-4">
           {shown.map((o) => {
             const age = minutes(o.placedAt);
             const isSlow = (o.status === "placed" || o.status === "accepted") && age >= SLOW_MINUTES;
             const stepIndex = STEPS.findIndex((s) => s.key === o.status);
             const took = o.servedAt ? Math.max(0, Math.round((new Date(o.servedAt).getTime() - new Date(o.placedAt).getTime()) / 60_000)) : null;
             return (
-              <li key={o.id} className={`overflow-hidden rounded-card border bg-surface shadow-[0_1px_2px_rgb(31_41_55/0.04)] ${isSlow ? "border-danger/50" : "border-line"}`}>
+              <li key={o.id} className={`min-w-0 overflow-hidden rounded-card border bg-surface shadow-[0_1px_2px_rgb(31_41_55/0.04)] ${isSlow ? "border-danger/50" : "border-line"}`}>
                 <div className={`h-1 ${o.status === "ready" ? "bg-[var(--state-available)]" : isSlow ? "bg-danger" : o.status === "preparing" ? "bg-[var(--state-held)]" : "bg-ink/10"}`} aria-hidden="true" />
-                <div className="p-4 sm:p-5">
-                <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 p-2.5 sm:p-5">
+                <div className="flex flex-wrap items-start justify-between gap-2 sm:flex-nowrap sm:gap-3">
                   <div className="min-w-0">
-                    <p className="font-display text-section font-bold text-ink">{o.delivery ? <><span className="mr-2 inline-flex items-center gap-1 rounded-full bg-brand-soft px-2 py-0.5 align-middle text-label font-bold tracking-wide text-brand-strong uppercase"><Bike className="size-3.5" aria-hidden="true" />Delivery</span>{o.delivery.name || "Guest"}</> : o.takeaway ? `Takeaway ${o.table}` : placeEn(o.table)}{o.roundNo > 1 && <span className="ml-2 text-body font-semibold text-muted">· Round {o.roundNo}</span>}</p>
+                    <p className="break-words font-display text-body font-bold text-ink sm:text-section">{o.delivery ? <><span className="mr-1 inline-flex items-center gap-1 rounded-full bg-brand-soft px-1.5 py-0.5 align-middle text-[10px] font-bold tracking-wide text-brand-strong uppercase sm:mr-2 sm:px-2 sm:text-label"><Bike className="size-3.5" aria-hidden="true" />Delivery</span>{o.delivery.name || "Guest"}</> : o.takeaway ? `Takeaway ${o.table}` : placeEn(o.table)}{o.roundNo > 1 && <span className="ml-1 text-caption font-semibold text-muted sm:ml-2 sm:text-body">· Round {o.roundNo}</span>}</p>
                     <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-muted tabular"><span>Placed {clock(o.placedAt)}</span><span aria-hidden="true">·</span><span className={isSlow ? "font-semibold text-danger" : ""}>{ago(age)}</span>{took !== null && <><span aria-hidden="true">·</span><span>Served in {took} min</span></>}</p>
                   </div>
-                  <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-caption font-semibold ${TONE[o.status]}`}><span className={`size-1.5 rounded-full ${o.status === "ready" ? "bg-[var(--state-available)]" : o.status === "cancelled" ? "bg-[var(--state-seated)]" : "bg-current"}`} aria-hidden="true" />{LABEL[o.status]}</span>
+                  <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold sm:gap-1.5 sm:px-2.5 sm:text-caption ${TONE[o.status]}`}><span className={`size-1.5 rounded-full ${o.status === "ready" ? "bg-[var(--state-available)]" : o.status === "cancelled" ? "bg-[var(--state-seated)]" : "bg-current"}`} aria-hidden="true" />{LABEL[o.status]}</span>
                 </div>
 
                 {o.status !== "cancelled" && (
@@ -161,23 +161,23 @@ export function OrdersScreen({ orders, outlet, tabs }: { orders: OrderRow[]; out
                   </ol>
                 )}
 
-                <ul className="mt-4 divide-y divide-line rounded-input border border-line bg-ink/[0.02]">
-                  {o.items.length ? o.items.map((it, i) => <li key={i} className="flex items-center gap-3 px-3 py-2.5 text-body"><span className="grid size-7 shrink-0 place-items-center rounded-md bg-surface text-caption font-bold tabular text-ink">{it.qty}×</span><span className="font-medium text-ink">{it.name}</span></li>) : <li className="px-3 py-2 text-body text-muted">No items</li>}
+                <ul className="mt-3 divide-y divide-line rounded-input border border-line bg-ink/[0.02] sm:mt-4">
+                  {o.items.length ? o.items.map((it, i) => <li key={i} className="flex min-w-0 items-center gap-2 px-2 py-2 text-caption sm:gap-3 sm:px-3 sm:py-2.5 sm:text-body"><span className="grid size-6 shrink-0 place-items-center rounded-md bg-surface text-[10px] font-bold tabular text-ink sm:size-7 sm:text-caption">{it.qty}×</span><span className="min-w-0 truncate font-medium text-ink">{it.name}</span></li>) : <li className="px-2 py-2 text-caption text-muted sm:px-3 sm:text-body">No items</li>}
                 </ul>
                 {o.note && <p className="mt-2 rounded-input bg-[var(--state-held-soft)] px-3 py-1.5 text-body text-[var(--state-held-text)]">Note: {o.note}</p>}
                 {isSlow && <p className="mt-2 text-caption font-semibold text-danger">Nobody has started this yet. Check the kitchen screen.</p>}
 
-                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-3">
-                  <span><span className="block text-caption text-muted">Order total</span><span className="font-display text-section font-bold tabular text-ink">{money(o.totalPaise)}</span></span>
+                <div className="mt-3 grid grid-cols-2 items-center gap-2 border-t border-line pt-3 sm:mt-4 sm:flex sm:flex-wrap sm:justify-between sm:gap-3">
+                  <span className="col-span-2 sm:col-span-1"><span className="block text-caption text-muted">Order total</span><span className="font-display text-section font-bold tabular text-ink">{money(o.totalPaise)}</span></span>
                   {o.status === "ready" && o.readyLineIds.length > 0 && (
-                    <button type="button" disabled={pending} onClick={() => serve(o)} className="print-hidden ml-auto min-h-11 rounded-input bg-brand px-4 text-body font-semibold text-white shadow-sm hover:bg-brand/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:opacity-50">
+                    <button type="button" disabled={pending} onClick={() => serve(o)} className="print-hidden min-h-11 w-full rounded-input bg-brand px-2 text-caption font-semibold text-white shadow-sm hover:bg-brand/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:opacity-50 sm:ml-auto sm:w-auto sm:px-4 sm:text-body">
                       Mark served
                     </button>
                   )}
-                  <button type="button" onClick={() => printOrder(o)} aria-label={`Print ${o.takeaway ? "takeaway" : "table"} ${o.table} order`} className="inline-flex min-h-11 items-center gap-2 rounded-input border border-line bg-surface px-3 text-body font-semibold text-ink hover:border-ink/40 focus-visible:outline-2 focus-visible:outline-ink">
+                  <button type="button" onClick={() => printOrder(o)} aria-label={`Print ${o.takeaway ? "takeaway" : "table"} ${o.table} order`} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-input border border-line bg-surface px-2 text-caption font-semibold text-ink hover:border-ink/40 focus-visible:outline-2 focus-visible:outline-ink sm:w-auto sm:px-3 sm:text-body">
                     <Printer className="size-4" aria-hidden="true" />Print
                   </button>
-                  <VisitRecord sessionId={o.sessionId} className="print-hidden rounded-input px-2 py-1 text-body font-semibold text-ink underline underline-offset-4 hover:bg-ink/5 focus-visible:outline-2 focus-visible:outline-ink">View table record</VisitRecord>
+                  <VisitRecord sessionId={o.sessionId} className="print-hidden col-span-2 rounded-input px-2 py-1 text-caption font-semibold text-ink underline underline-offset-4 hover:bg-ink/5 focus-visible:outline-2 focus-visible:outline-ink sm:col-span-1 sm:text-body">View table record</VisitRecord>
                 </div>
                 </div>
               </li>

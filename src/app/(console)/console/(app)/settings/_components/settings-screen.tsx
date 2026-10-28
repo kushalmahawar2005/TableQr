@@ -376,8 +376,8 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
           </Section>
 
           <Section id="guest-link" icon={Store} title="Public restaurant link" desc="Choose the services shown after guests select their language.">
-            <Row label="Customer app install" hint={o.guestPwaCustomizationAvailable ? "When enabled, guests can install your restaurant app from its public link. Turning this off keeps the website and booking link working." : "This option is not included in the current plan. Ask Tableeqr to enable branded guest app installation."}>
-              <div className="flex sm:justify-end"><Toggle on={guestPwaInstallEnabled} onChange={setGuestPwaInstallEnabled} label="Show customer app install option" disabled={!canEdit || !o.guestPwaCustomizationAvailable} /></div>
+            <Row label="Customer app install" hint={o.guestPwaCustomizationAvailable ? "Off by default. When enabled, guests can install your restaurant app from its public link. Turning this off keeps the website and booking link working." : guestPwaInstallEnabled ? "This option is not included in the current plan. Turn it off here; ask Tableeqr to enable branded guest app installation before turning it on again." : "Off. Branded guest app installation is not included in the current plan."}>
+              <div className="flex sm:justify-end"><Toggle on={guestPwaInstallEnabled} onChange={setGuestPwaInstallEnabled} label="Show customer app install option" disabled={!canEdit || (!o.guestPwaCustomizationAvailable && !guestPwaInstallEnabled)} /></div>
             </Row>
             {o.availableGuestServices.map(service => <Row key={service} label={GUEST_SERVICE_LABELS[service].title} hint={GUEST_SERVICE_LABELS[service].hint}>
               <div className="flex sm:justify-end"><Toggle on={publicServices.includes(service)} onChange={enabled => setPublicServices(current => enabled ? [...current, service] : current.filter(value => value !== service))} label={`Show ${GUEST_SERVICE_LABELS[service].title}`} disabled={!canEdit} /></div>

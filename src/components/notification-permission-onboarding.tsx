@@ -14,7 +14,7 @@ const SEEN_KEY = "tq_notification_setup_seen_v1";
  * Browsers require the permission request to follow a direct user action, so this is an
  * explainer with an explicit button rather than an automatic permission popup.
  */
-export function NotificationPermissionOnboarding({ lang = "en" }: { lang?: Lang }) {
+export function NotificationPermissionOnboarding({ lang = "en", audience = "staff" }: { lang?: Lang; audience?: "staff" | "rider" }) {
   const [visible, setVisible] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -24,7 +24,8 @@ export function NotificationPermissionOnboarding({ lang = "en" }: { lang?: Lang 
   useEffect(() => {
     const installed = window.matchMedia("(display-mode: standalone)").matches
       || (navigator as Navigator & { standalone?: boolean }).standalone === true;
-    if (!installed || !("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window) || Notification.permission === "denied") return;
+    const capacitor = (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor;
+    if ((!installed && !capacitor?.isNativePlatform?.()) || !("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window) || Notification.permission === "denied") return;
     let active = true;
     void pushSetupAction().then((config) => {
       if (!active || !config.enabled) return;
@@ -83,8 +84,8 @@ export function NotificationPermissionOnboarding({ lang = "en" }: { lang?: Lang 
             <BellRing className="size-5" aria-hidden="true" />
           </span>
           <div className="min-w-0 flex-1">
-            <p className="break-words font-semibold text-ink">{hi ? "नए ऑर्डर और अनुरोधों के अलर्ट पाएं" : "Get alerts for new orders and requests"}</p>
-            <p className="mt-0.5 break-words text-sm text-muted">{needsPermission ? (hi ? "नए ऑर्डर और टेबल अनुरोधों के अलर्ट ऐप बंद होने पर भी पाएं।" : "Get alerts for new orders and table requests, even when the app is closed.") : (hi ? "इस फ़ोन पर नोटिफिकेशन चालू हैं। नए ऑर्डर अलर्ट सेटअप पूरा करें।" : "Notifications are allowed on this phone. Finish setting up new order alerts.")}</p>
+            <p className="break-words font-semibold text-ink">{audience === "rider" ? (hi ? "नई डिलीवरी के अलर्ट पाएं" : "Get alerts for assigned deliveries") : (hi ? "नए ऑर्डर और अनुरोधों के अलर्ट पाएं" : "Get alerts for new orders and requests")}</p>
+            <p className="mt-0.5 break-words text-sm text-muted">{audience === "rider" ? (needsPermission ? (hi ? "डिलीवरी मिलने पर स्क्रीन लॉक होने पर भी अलर्ट पाएं।" : "Get an alert when a delivery is assigned, even with your screen locked.") : (hi ? "नोटिफिकेशन चालू हैं। नई डिलीवरी का अलर्ट पाने के लिए सेटअप पूरा करें।" : "Notifications are allowed. Finish setup to receive delivery alerts.")) : needsPermission ? (hi ? "नए ऑर्डर और टेबल अनुरोधों के अलर्ट ऐप बंद होने पर भी पाएं।" : "Get alerts for new orders and table requests, even when the app is closed.") : (hi ? "इस फ़ोन पर नोटिफिकेशन चालू हैं। नए ऑर्डर अलर्ट सेटअप पूरा करें।" : "Notifications are allowed on this phone. Finish setting up new order alerts.")}</p>
             {error && <p role="alert" className="mt-1 break-words text-sm font-medium text-danger">{error}</p>}
           </div>
         </div>

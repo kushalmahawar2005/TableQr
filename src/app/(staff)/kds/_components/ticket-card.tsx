@@ -73,16 +73,16 @@ export function TicketCard({ card, lang, c, showStation, canAct, busy, busyLines
   return (
     <article
       aria-label={`${card.tableCodes.join(" + ")} · ${c.round(card.roundNo)} · ${waiting ? c.awaiting : c.urgency[card.urgency]}`}
-      className={`flex flex-col overflow-hidden rounded-xl border-[3px] bg-kds-card transition-opacity duration-500 ${waiting ? "border-dashed border-kds-muted" : EDGE[card.urgency]} ${leaving ? "opacity-0" : "opacity-100"}`}
+      className={`kds-ticket-card flex min-w-0 flex-col overflow-hidden rounded-xl border-[3px] bg-kds-card transition-opacity duration-500 ${waiting ? "border-dashed border-kds-muted" : EDGE[card.urgency]} ${leaving ? "opacity-0" : "opacity-100"}`}
     >
-      <header className={`px-4 py-3 ${waiting ? "bg-kds-line text-kds-text" : HEAD[card.urgency]}`}>
+      <header className={`kds-ticket-header px-4 py-3 ${waiting ? "bg-kds-line text-kds-text" : HEAD[card.urgency]}`}>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="flex items-center gap-3 font-display text-[34px] font-bold leading-[38px] tracking-tight">
+            <h2 className="kds-ticket-title flex items-center gap-2 font-display text-[34px] font-bold leading-[38px] tracking-tight">
               {card.tableCodes.some(isDeliveryTable) ? <span className="flex items-center gap-2"><span className="rounded-md bg-kds-text px-2 py-0.5 font-sans text-[18px] font-bold leading-6 tracking-wide text-kds-bg">DELIVERY</span>{card.placedBy?.name ?? ""}</span> : card.tableCodes.join(" + ")}
               {fresh && <span className="rounded-md bg-kds-text px-2 py-0.5 font-sans text-[16px] font-bold leading-5 tracking-wide text-kds-bg">{c.newTag}</span>}
             </h2>
-            <p className="text-[20px] font-semibold leading-7">
+            <p className="kds-ticket-subtitle text-[20px] font-semibold leading-7">
               {c.round(card.roundNo)}
               {showStation && <span> · {card.station}</span>}
             </p>
@@ -94,10 +94,10 @@ export function TicketCard({ card, lang, c, showStation, canAct, busy, busyLines
             </p>
           ) : (
           <div className="shrink-0 text-right">
-            <p className="tabular font-display text-[34px] font-bold leading-[38px]" aria-label="elapsed">
+            <p className="kds-ticket-timer tabular font-display text-[34px] font-bold leading-[38px]" aria-label="elapsed">
               {formatElapsed(card.elapsedMs)}
             </p>
-            <p className="flex items-center justify-end gap-1.5 text-[18px] font-semibold leading-6">
+            <p className="kds-ticket-status flex items-center justify-end gap-1.5 text-[18px] font-semibold leading-6">
               <HugeiconsIcon icon={ICON[card.urgency]} size={20} strokeWidth={2.2} aria-hidden />
               {c.urgency[card.urgency]}
             </p>
@@ -111,7 +111,7 @@ export function TicketCard({ card, lang, c, showStation, canAct, busy, busyLines
         )}
       </header>
 
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-kds-line px-4 py-2 text-[18px] leading-7 text-kds-muted">
+      <div className="kds-ticket-meta flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-kds-line px-4 py-2 text-[18px] leading-7 text-kds-muted">
         {!waiting && <span className="tabular">{c.target(card.targetMinutes)}</span>}
         {card.guests ? (
           <span className="flex items-center gap-1.5">
@@ -124,7 +124,7 @@ export function TicketCard({ card, lang, c, showStation, canAct, busy, busyLines
       </div>
 
       {card.orderNote && (
-        <div className="mx-4 mt-3 flex gap-2 rounded-lg border-2 border-kds-amber px-3 py-2 text-[20px] font-semibold leading-7 text-kds-text">
+        <div className="kds-ticket-note mx-4 mt-3 flex gap-2 rounded-lg border-2 border-kds-amber px-3 py-2 text-[20px] font-semibold leading-7 text-kds-text">
           <HugeiconsIcon icon={Note01Icon} size={22} className="mt-0.5 shrink-0 text-kds-amber" aria-hidden />
           <span>
             <span className="sr-only">{c.orderNote}: </span>
@@ -133,7 +133,7 @@ export function TicketCard({ card, lang, c, showStation, canAct, busy, busyLines
         </div>
       )}
 
-      <ul className="flex flex-1 flex-col py-1">
+      <ul className="kds-ticket-lines flex flex-1 flex-col py-1">
         {card.lines.map((line) => {
           const mine = !line.otherStation;
           const actionable = mine && linesActive && !line.done;
@@ -149,7 +149,7 @@ export function TicketCard({ card, lang, c, showStation, canAct, busy, busyLines
               >
                 <span className={`tabular w-10 text-[24px] font-bold leading-8 ${line.done ? "text-kds-muted" : "text-kds-text"}`}>{line.qty}×</span>
                 <span className="min-w-0">
-                  <span className={`block text-kds font-semibold ${line.done ? "text-kds-muted line-through decoration-2" : "text-kds-text"}`}>{name(line.nameEn, line.nameHi)}</span>
+                  <span className={`kds-ticket-item-name block text-kds font-semibold ${line.done ? "text-kds-muted line-through decoration-2" : "text-kds-text"}`}>{name(line.nameEn, line.nameHi)}</span>
                   {line.modifiers.length > 0 && (
                     <span className="block text-[19px] leading-7 text-kds-text/90">{line.modifiers.map((m) => `+ ${name(m.en, m.hi)}`).join("  ")}</span>
                   )}
@@ -181,7 +181,7 @@ export function TicketCard({ card, lang, c, showStation, canAct, busy, busyLines
         })}
       </ul>
 
-      <footer className="p-3 pt-1">
+      <footer className="kds-ticket-footer p-3 pt-1">
         {card.awaitingStaff ? (
           <div className="rounded-lg border-2 border-kds-muted px-3 py-3 text-center">
             <p className="text-[22px] font-bold leading-7 text-kds-text">{c.awaiting}</p>
@@ -194,7 +194,7 @@ export function TicketCard({ card, lang, c, showStation, canAct, busy, busyLines
               type="button"
               disabled={!canAct || !!busy}
               onClick={() => action && onAction(card, action)}
-              className={`flex h-16 w-full items-center justify-center gap-3 rounded-lg text-[24px] font-bold disabled:opacity-50 ${ACTION_STYLE[action ?? "bump"]}`}
+              className={`kds-ticket-action flex h-16 w-full items-center justify-center gap-3 rounded-lg text-[24px] font-bold disabled:opacity-50 ${ACTION_STYLE[action ?? "bump"]}`}
             >
               {!busy && <HugeiconsIcon icon={ACTION_ICON[action ?? "bump"]} size={28} strokeWidth={2.4} aria-hidden />}
               {busy ? c.working : action === "accept" ? c.accept : action === "start" ? c.start : c.bump}

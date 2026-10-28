@@ -53,22 +53,26 @@ export async function removeStaffPushSubscription(staff: StaffSession, rawEndpoi
 }
 
 export type StaffPushMessage = { title: string; body: string; url?: string; tag?: string };
+type PushAudience = { sessionId: string; kind: "service" | "ready" | "order" } | { riderUserId: string };
 
 /** Send after the business transaction commits; push failures never undo an order or request. */
-export async function sendOutletPush(scope: { tenantId: string; outletId: string }, message: StaffPushMessage, audience?: { sessionId: string; kind: "service" | "ready" | "order" }) {
+export async function sendOutletPush(scope: { tenantId: string; outletId: string }, message: StaffPushMessage, audience?: PushAudience) {
   const config = staffPushConfig();
   const privateKey = process.env.VAPID_PRIVATE_KEY?.trim();
   const subject = process.env.VAPID_SUBJECT?.trim();
   try {
-    if (audience) await rebalanceWaiterVisit(scope, audience.sessionId);
+    if (audience && "sessionId" in audience) await rebalanceWaiterVisit(scope, audience.sessionId);
     if (!config.enabled || !privateKey || !subject) return;
-    const owner = audience ? await sessionOwner(scope, audience.sessionId) : null;
+    const owner = audience && "sessionId" in audience ? await sessionOwner(scope, audience.sessionId) : null;
     const roles = await db.select({ id: s.users.id, duty: s.users.dutyStatus, role: s.staffRoles.role }).from(s.users).innerJoin(s.staffRoles, and(eq(s.staffRoles.tenantId, s.users.tenantId), eq(s.staffRoles.userId, s.users.id))).where(and(eq(s.users.tenantId, scope.tenantId), eq(s.users.isActive, true), or(isNull(s.staffRoles.outletId), eq(s.staffRoles.outletId, scope.outletId))));
     // A plan without the waiter app or the kitchen display sends those roles nothing: a restaurant
     // that moved down a plan must not keep ringing phones whose app no longer opens
     const features = await tenantFeatures(scope.tenantId);
     const appFor = (role: string) => (role === "waiter" ? features.waiterApp : role === "kitchen" ? features.kitchenDisplay : true);
-    const eligible = new Set(roles.filter(r => r.role === "owner" || r.role === "manager" || (r.role === "waiter" && features.waiterApp && r.duty === "on" && (!owner || r.id === owner)) || (r.role === "kitchen" && features.kitchenDisplay && (!audience || audience.kind === "order"))).map(r => r.id));
+    const riderTarget = audience && "riderUserId" in audience ? audience.riderUserId : null;
+    const eligible = new Set(roles.filter(r => riderTarget
+      ? r.role === "rider" && r.id === riderTarget
+      : r.role === "owner" || r.role === "manager" || (r.role === "waiter" && features.waiterApp && r.duty === "on" && (!owner || r.id === owner)) || (r.role === "kitchen" && features.kitchenDisplay && (!audience || ("kind" in audience && audience.kind === "order")))).map(r => r.id));
     const devices = await db.select({ userId: s.staffPushSubscriptions.userId, id: s.staffPushSubscriptions.id, subscription: s.staffPushSubscriptions.subscription })
       .from(s.staffPushSubscriptions)
       .where(and(eq(s.staffPushSubscriptions.tenantId, scope.tenantId), eq(s.staffPushSubscriptions.outletId, scope.outletId)));

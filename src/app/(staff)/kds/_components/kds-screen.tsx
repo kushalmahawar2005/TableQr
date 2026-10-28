@@ -304,7 +304,7 @@ function KdsBoardScreen(props: { initial: KdsBoard; device: KdsDeviceView; realt
             <p className="mt-2 max-w-xl text-[20px] text-kds-muted">{c.emptyBody}</p>
           </div>
         ) : (
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(360px,1fr))] items-start gap-4">
+          <div className="grid min-w-0 grid-cols-[repeat(auto-fill,minmax(min(100%,22.5rem),1fr))] items-start gap-3 sm:gap-4">
             {cards.map(renderCard)}
           </div>
         )}

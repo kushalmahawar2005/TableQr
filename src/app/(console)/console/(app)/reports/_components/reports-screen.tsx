@@ -155,21 +155,21 @@ export function ReportsScreen({ report, outlet }: { report: Report; outlet: stri
           <h1 className="mt-1 font-display text-title font-bold text-ink">Reports</h1>
           <p className="mt-0.5 text-body text-muted">{dateRange} · {report.range} days</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2 print:hidden">
-          <Link href="/console/reports/day-close" className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-line bg-surface px-3.5 text-sm font-semibold text-ink hover:border-ink/40"><Receipt className="size-4" aria-hidden="true" />Day close</Link>
-          <Link href="/console/reports/gst" className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-line bg-surface px-3.5 text-sm font-semibold text-ink hover:border-ink/40"><Receipt className="size-4" aria-hidden="true" />GST report</Link>
-          <Link href="/console/reports/items" className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-line bg-surface px-3.5 text-sm font-semibold text-ink hover:border-ink/40"><Receipt className="size-4" aria-hidden="true" />Items &amp; staff</Link>
-          <nav aria-label="Period" className="flex overflow-hidden rounded-xl border border-line bg-surface">
+        <div className="grid w-full grid-cols-2 items-center gap-2 print:hidden sm:flex sm:w-auto sm:flex-wrap">
+          <Link href="/console/reports/day-close" className="inline-flex min-h-11 min-w-0 items-center justify-center gap-1.5 rounded-xl border border-line bg-surface px-2 text-xs font-semibold text-ink hover:border-ink/40 sm:gap-2 sm:px-3.5 sm:text-sm"><Receipt className="size-4 shrink-0" aria-hidden="true" />Day close</Link>
+          <Link href="/console/reports/gst" className="inline-flex min-h-11 min-w-0 items-center justify-center gap-1.5 rounded-xl border border-line bg-surface px-2 text-xs font-semibold text-ink hover:border-ink/40 sm:gap-2 sm:px-3.5 sm:text-sm"><Receipt className="size-4 shrink-0" aria-hidden="true" />GST report</Link>
+          <Link href="/console/reports/items" className="inline-flex min-h-11 min-w-0 items-center justify-center gap-1.5 rounded-xl border border-line bg-surface px-2 text-xs font-semibold text-ink hover:border-ink/40 sm:gap-2 sm:px-3.5 sm:text-sm"><Receipt className="size-4 shrink-0" aria-hidden="true" />Items &amp; staff</Link>
+          <nav aria-label="Period" className="col-span-2 flex justify-center overflow-hidden rounded-xl border border-line bg-surface sm:col-span-1">
             {([7, 30, 90] as const).map((d) => (
-              <Link key={d} href={`/console/reports?days=${d}`} aria-current={report.range === d ? "page" : undefined} className={`flex min-h-11 items-center px-3.5 text-sm font-semibold ${report.range === d ? "bg-ink text-paper" : "text-muted hover:text-ink"}`}>{d} days</Link>
+              <Link key={d} href={`/console/reports?days=${d}`} aria-current={report.range === d ? "page" : undefined} className={`flex min-h-11 flex-1 items-center justify-center px-2 text-xs font-semibold sm:flex-none sm:px-3.5 sm:text-sm ${report.range === d ? "bg-ink text-paper" : "text-muted hover:text-ink"}`}>{d} days</Link>
             ))}
           </nav>
-          <button type="button" onClick={exportCsv} className="inline-flex min-h-11 items-center gap-1.5 rounded-xl border border-line bg-surface px-3.5 text-sm font-semibold hover:border-ink/40"><Download className="size-4" aria-hidden="true" />Excel (CSV)</button>
-          <button type="button" onClick={() => window.print()} className="inline-flex min-h-11 items-center gap-1.5 rounded-xl border border-line bg-surface px-3.5 text-sm font-semibold hover:border-ink/40"><Printer className="size-4" aria-hidden="true" />Print</button>
+          <button type="button" onClick={exportCsv} className="inline-flex min-h-11 min-w-0 items-center justify-center gap-1.5 rounded-xl border border-line bg-surface px-2 text-xs font-semibold hover:border-ink/40 sm:px-3.5 sm:text-sm"><Download className="size-4 shrink-0" aria-hidden="true" />Excel (CSV)</button>
+          <button type="button" onClick={() => window.print()} className="inline-flex min-h-11 min-w-0 items-center justify-center gap-1.5 rounded-xl border border-line bg-surface px-2 text-xs font-semibold hover:border-ink/40 sm:px-3.5 sm:text-sm"><Printer className="size-4 shrink-0" aria-hidden="true" />Print</button>
         </div>
       </header>
 
-      <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 print:grid-cols-4 print:[&>*]:min-w-0">
+      <div className="mt-5 grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4 print:grid-cols-4 print:[&>*]:min-w-0">
         <Kpi icon={TrendingUp} label="Total sales" value={money(t.revenuePaise)}><Delta now={t.revenuePaise} before={p.revenuePaise} period={report.range} /></Kpi>
         <Kpi icon={Receipt} label="Paid bills" value={String(t.bills)}><Delta now={t.bills} before={p.bills} period={report.range} /></Kpi>
         <Kpi icon={Banknote} label="Average bill" value={money(avg)}><Delta now={avg} before={prevAvg} period={report.range} /></Kpi>
@@ -202,7 +202,7 @@ export function ReportsScreen({ report, outlet }: { report: Report; outlet: stri
         </CardContent>
       </Card>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-2 print:grid-cols-2 print:[&>*]:min-w-0 print:[&>*]:break-inside-avoid">
+      <div className="mt-4 grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-2 print:grid-cols-2 print:[&>*]:min-w-0 print:[&>*]:break-inside-avoid">
         <Card>
           <CardHeader><CardTitle className="font-display text-section font-bold">Best selling dishes</CardTitle><CardDescription>Most ordered first. Amount is before discount and tax.</CardDescription></CardHeader>
           <CardContent>
@@ -237,7 +237,7 @@ export function ReportsScreen({ report, outlet }: { report: Report; outlet: stri
         </Card>
       </div>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-2 print:grid-cols-2 print:[&>*]:min-w-0 print:[&>*]:break-inside-avoid">
+      <div className="mt-4 grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-2 print:grid-cols-2 print:[&>*]:min-w-0 print:[&>*]:break-inside-avoid">
         <Card>
           <CardHeader><CardTitle className="font-display text-section font-bold">Which day sells most</CardTitle><CardDescription>{hasSales ? `${WEEKDAYS_LONG[bestDay]} is the strongest day.` : "Sales by day of the week."}</CardDescription></CardHeader>
           <CardContent>
@@ -279,14 +279,14 @@ export function ReportsScreen({ report, outlet }: { report: Report; outlet: stri
         </CardContent>
       </Card>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 print:grid-cols-4 print:[&>*]:min-w-0">
+      <div className="mt-4 grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4 print:grid-cols-4 print:[&>*]:min-w-0">
         <Kpi icon={Timer} label="Time guests stay" value={x.avgStayMin === null ? "—" : `${x.avgStayMin} min`} note={x.visits ? `${x.visits} table visit${x.visits === 1 ? "" : "s"} closed` : "No closed tables yet"} />
         <Kpi icon={ChefHat} label="Kitchen speed" value={x.avgPrepMin === null ? "—" : `${x.avgPrepMin} min`} note="Order placed to food ready" />
         <Kpi icon={Users} label="Guests served" value={String(x.covers)} note={x.covers && t.revenuePaise ? `${money(Math.round(t.revenuePaise / x.covers))} per guest` : "Counted when staff seat a party"} />
         <Kpi icon={ShoppingBag} label="Items sold" value={String(x.itemsSold)} note={x.voidedLines ? `${x.voidedLines} cancelled (${money(x.voidedPaise)})` : "Nothing cancelled"} />
       </div>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-2 print:grid-cols-2 print:[&>*]:min-w-0 print:[&>*]:break-inside-avoid">
+      <div className="mt-4 grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-2 print:grid-cols-2 print:[&>*]:min-w-0 print:[&>*]:break-inside-avoid">
         <Card>
           <CardHeader><CardTitle className="font-display text-section font-bold">Money breakdown</CardTitle><CardDescription>Where the paid bills add up.</CardDescription></CardHeader>
           <CardContent>

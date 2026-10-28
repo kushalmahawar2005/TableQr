@@ -23,6 +23,7 @@ export function RiderScreen({ initialJobs, initialProfile, initialVerification, 
   const [profile, setProfile] = useState(initialProfile);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  const [locationPermission, setLocationPermission] = useState<"checking" | "prompt" | "granted" | "denied" | "unsupported">("checking");
   const [editing, setEditing] = useState(!initialProfile.photoUrl || !initialProfile.vehicleNo);
   // A rider without a photo or vehicle number starts on Me to finish their profile
   const [tab, setTab] = useState<"rides" | "me">(!initialProfile.photoUrl || !initialProfile.vehicleNo ? "me" : "rides");
@@ -44,6 +45,35 @@ export function RiderScreen({ initialJobs, initialProfile, initialVerification, 
 
   const here = useLiveLocation(profile.online);
   useAppTopInset();
+
+  useEffect(() => {
+    if (!navigator.geolocation) { queueMicrotask(() => setLocationPermission("unsupported")); return; }
+    if (!navigator.permissions?.query) { queueMicrotask(() => setLocationPermission("prompt")); return; }
+    void navigator.permissions.query({ name: "geolocation" } as PermissionDescriptor).then((permission) => {
+      setLocationPermission(permission.state === "prompt" ? "prompt" : permission.state);
+      permission.onchange = () => setLocationPermission(permission.state === "prompt" ? "prompt" : permission.state);
+    }).catch(() => setLocationPermission("prompt"));
+  }, []);
+
+  const requestLocation = () => {
+    const background = nativeBackgroundGeolocation();
+    if (background) {
+      void background.addWatcher(
+        { backgroundTitle: "Tableeqr Rider", backgroundMessage: "Location is shared only while you are online", requestPermissions: true, stale: false, distanceFilter: 30 },
+        (_location, reason) => { if (reason) setLocationPermission("denied"); },
+      ).then((id) => {
+        setLocationPermission("granted");
+        return background.removeWatcher({ id });
+      }).catch(() => setLocationPermission("denied"));
+      return;
+    }
+    if (!navigator.geolocation) { setLocationPermission("unsupported"); return; }
+    navigator.geolocation.getCurrentPosition(
+      () => setLocationPermission("granted"),
+      (reason) => setLocationPermission(reason.code === reason.PERMISSION_DENIED ? "denied" : "prompt"),
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 15_000 },
+    );
+  };
 
   const act = (work: () => Promise<{ ok: boolean; error?: string }>) => {
     setError(null);
@@ -81,6 +111,10 @@ export function RiderScreen({ initialJobs, initialProfile, initialVerification, 
           {profile.online ? "Online" : "Offline"}
         </button>
       </header>
+
+      {!profile.online && locationPermission === "prompt" && <aside className="mt-3 flex flex-col gap-2 rounded-2xl border border-line bg-surface p-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-start gap-2"><MapPin className="mt-0.5 size-4 shrink-0 text-brand-strong" aria-hidden="true" /><p className="text-caption text-muted">Allow location so the restaurant and customers can track your delivery while you are online.</p></div><button type="button" onClick={requestLocation} className="min-h-10 shrink-0 rounded-xl bg-brand px-3 text-caption font-bold text-brand-on">Allow location</button></aside>}
+      {!profile.online && locationPermission === "denied" && <p role="status" className="mt-3 rounded-xl bg-[var(--state-held-soft)] p-3 text-caption text-[var(--state-held-text)]">Location is blocked. Allow it for Tableeqr Rider in your phone or browser settings, then go online to share your location.</p>}
+      {!profile.online && locationPermission === "unsupported" && <p role="status" className="mt-3 rounded-xl bg-[var(--state-held-soft)] p-3 text-caption text-[var(--state-held-text)]">This device does not support location sharing.</p>}
 
       {error && <p role="alert" className="mt-4 rounded-2xl border border-danger/30 bg-[var(--state-seated-soft)] p-3 text-body font-semibold text-danger">{error}</p>}
 

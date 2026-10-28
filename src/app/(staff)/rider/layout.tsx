@@ -36,7 +36,7 @@ export default async function RiderLayout({ children }: LayoutProps<"/rider">) {
           <InstallApp name="Tableeqr Rider" logoUrl={brand?.logoUrl} title="Get the Rider app" downloadHref="/download/rider" />
         </div>
         <div className="mx-auto w-full max-w-xl px-4">
-          <NotificationPermissionOnboarding />
+          <NotificationPermissionOnboarding audience="rider" />
         </div>
       </>}
       {children}

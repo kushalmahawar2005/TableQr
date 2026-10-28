@@ -238,13 +238,14 @@ export function BillingScreen({ initial, realtimeUrl, embedded = false, openSess
                         {detail.people.length > 0 && <span>{detail.people.map((p) => p.name).join(", ")}</span>}
                       </p>
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                      {!isPaidBill && (detail.status === "open" || (detail.status === "bill_requested" && paidSoFar === 0 && !pendingOnline)) && <button type="button" className={quiet} disabled={offline} onClick={() => setAdding(true)}><PackagePlus className="size-4" aria-hidden="true" />{L("Add items", "आइटम जोड़ें")}</button>}
-                      <button type="button" className={quiet} onClick={() => print(isPaidBill ? "receipt" : "bill")}><Printer className="size-4" aria-hidden="true" />{isPaidBill ? L("Print receipt", "रसीद प्रिंट") : L("Print bill", "बिल प्रिंट")}</button>
-                      <PaperToggle label={L("Paper", "पेपर")} />
+                    <div className="grid w-full min-w-0 grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap">
+                      {!isPaidBill && (detail.status === "open" || (detail.status === "bill_requested" && paidSoFar === 0 && !pendingOnline)) && <button type="button" className={cn(quiet, "w-full justify-center px-2 sm:w-auto sm:px-4")} disabled={offline} onClick={() => setAdding(true)}><PackagePlus className="size-4 shrink-0" aria-hidden="true" />{L("Add items", "आइटम जोड़ें")}</button>}
+                      <button type="button" className={cn(quiet, "w-full justify-center px-2 sm:w-auto sm:px-4")} onClick={() => print(isPaidBill ? "receipt" : "bill")}><Printer className="size-4 shrink-0" aria-hidden="true" />{isPaidBill ? L("Print receipt", "रसीद प्रिंट") : L("Print bill", "बिल प्रिंट")}</button>
+                      <PaperToggle label={L("Paper", "पेपर")} className="w-full justify-center gap-1 rounded-xl border border-line px-1 sm:w-auto sm:justify-start sm:gap-2 sm:border-0 sm:px-0" />
                       <WhatsAppBill
                         key={detail.sessionId}
                         hi={hi}
+                        actionClassName="w-full justify-center px-2 sm:w-auto sm:px-4"
                         defaultPhone={defaultWhatsAppPhone}
                         sendPdf={detail.pdfOnWhatsApp && detail.bill ? async (phone) => { const r = await actions.sendBillAction({ sessionId: detail.sessionId, phone }); return r.ok ? null : r.error; } : undefined}
                         onSend={(phone) => void actions.rememberCustomerAction({ sessionId: detail.sessionId, phone, name: detail.people.find((p) => p.name && !/^guest\b/i.test(p.name))?.name ?? null })}
@@ -259,7 +260,7 @@ export function BillingScreen({ initial, realtimeUrl, embedded = false, openSess
                           link: detail.bill && typeof window !== "undefined" ? `${window.location.origin}/b/${detail.bill.shareToken}` : null,
                         })}
                       />
-                      {!isPaidBill && <button type="button" className={brand} disabled={!canPay} onClick={() => { setMethod("cash"); setSheet({ kind: "pay" }); }}><Banknote className="size-4" aria-hidden="true" />{L("Take payment", "भुगतान लें")}</button>}
+                      {!isPaidBill && <button type="button" className={cn(brand, "col-span-2 w-full justify-center sm:w-auto")} disabled={!canPay} onClick={() => { setMethod("cash"); setSheet({ kind: "pay" }); }}><Banknote className="size-4 shrink-0" aria-hidden="true" />{L("Take payment", "भुगतान लें")}</button>}
                     </div>
                   </div>
                   {detail.takeaway && detail.status === "open" && !isPaidBill && (
@@ -522,18 +523,18 @@ function DiscountBox({ hi, current, disabled, needsApproval, subtotalPaise, onAp
  * Send this bill to the guest's WhatsApp. With WhatsApp Business connected, Send delivers the bill
  * PDF straight to their number; without it, WhatsApp opens with the bill filled in.
  */
-function WhatsAppBill({ hi, text, defaultPhone = "", onSend, sendPdf }: { hi: boolean; text: string; defaultPhone?: string; onSend?: (phone: string) => void; sendPdf?: (phone: string) => Promise<string | null> }) {
+function WhatsAppBill({ hi, text, defaultPhone = "", onSend, sendPdf, actionClassName = "" }: { hi: boolean; text: string; defaultPhone?: string; onSend?: (phone: string) => void; sendPdf?: (phone: string) => Promise<string | null>; actionClassName?: string }) {
   const L = (en: string, hin: string) => (hi ? hin : en);
   const [open, setOpen] = useState(false);
   const [phone, setPhone] = useState(defaultPhone);
   const [state, setState] = useState<{ kind: "idle" | "sending" | "sent" } | { kind: "error"; text: string }>({ kind: "idle" });
   const ok = !!whatsappNumber(phone);
   if (!open && !sendPdf)
-    return <a href={whatsappLink(text, ok ? phone : null)} target="_blank" rel="noreferrer noopener" onClick={() => { if (ok) onSend?.(phone); }} className={quiet}>{L("WhatsApp bill", "WhatsApp पर बिल")}</a>;
+    return <a href={whatsappLink(text, ok ? phone : null)} target="_blank" rel="noreferrer noopener" onClick={() => { if (ok) onSend?.(phone); }} className={cn(quiet, "w-full sm:w-auto", actionClassName)}>{L("WhatsApp bill", "WhatsApp पर बिल")}</a>;
   if (!open)
     return (
-      <span className="inline-flex items-center gap-2">
-        <button type="button" className={quiet} onClick={() => { setOpen(true); setState({ kind: "idle" }); }}>{L("WhatsApp bill", "WhatsApp पर बिल")}</button>
+        <span className="inline-flex w-full items-center gap-2 sm:w-auto">
+        <button type="button" className={cn(quiet, "w-full sm:w-auto", actionClassName)} onClick={() => { setOpen(true); setState({ kind: "idle" }); }}>{L("WhatsApp bill", "WhatsApp पर बिल")}</button>
         {state.kind === "sent" && <span role="status" className="text-sm font-semibold text-[#1f8f4e]">{L("PDF sent", "PDF भेज दी")}</span>}
       </span>
     );

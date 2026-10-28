@@ -16,6 +16,7 @@ import { freshLocation } from "@/domain/delivery";
 import { announceDelivery } from "./events";
 import { verifiedRiders } from "./rider-docs";
 import { deliveryStaffRoles } from "./staff";
+import { sendOutletPush } from "../staff/web-push";
 
 // The restaurant's own riders: who can take a delivery right now, giving one to a rider, and
 // the rider's side of it (pick up, collect cash, delivered). A rider sees only their own jobs.
@@ -95,6 +96,7 @@ export async function assignTeamRider(staff: StaffSession, deliveryId: string, r
     return row.sessionId;
   }, LOCK_THEN_READ);
   await announceDelivery(staff, sessionId, "delivery.updated", [rider.id, previous]);
+  await sendOutletPush(staff, { title: "New delivery assigned", body: "A delivery has been assigned to you. Open the Rider app to view it.", url: "/rider", tag: `delivery-${deliveryId}` }, { riderUserId: rider.id });
 }
 
 /** A rider's jobs: everything given to them that is still out, and what they delivered today */

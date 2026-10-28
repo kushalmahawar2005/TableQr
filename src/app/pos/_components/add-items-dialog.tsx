@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, Minus, Package, Plus, Search, UserPlus } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { buttonVariants } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import type { PosBillDetail } from "@/server/staff/pos-read";
 import type { WaiterMenu } from "@/server/staff/waiter-read";
 import { isRoomCode } from "@/domain/rooms";
 import { isDeliveryTable } from "@/domain/delivery";
+import { checkFirstName, isPlaceholderName } from "@/domain/guest-name";
 
 type Line = { key: string; item: WaiterMenu[number]; qty: number; mods: string[]; parcel: boolean };
 const rs = (paise: number) => `₹${(paise / 100).toLocaleString("en-IN", { minimumFractionDigits: paise % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
@@ -25,6 +26,8 @@ export function AddItemsDialog({ detail, open, hi, onClose, onPlaced }: { detail
   const [cart, setCart] = useState<Line[]>([]);
   const [person, setPerson] = useState("");
   const [newGuest, setNewGuest] = useState("");
+  const [nameError, setNameError] = useState("");
+  const nameInput = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const L = (en: string, h: string) => (hi ? h : en);
   const people = detail.people.filter((p) => !p.paidOutAt);
@@ -36,6 +39,8 @@ export function AddItemsDialog({ detail, open, hi, onClose, onPlaced }: { detail
     return () => { off = true; };
   }, [open, menu]);
   const who = person || people[0]?.id || "";
+  const selectedPerson = people.find((p) => p.id === who);
+  const nameMissing = !newGuest.trim() && (!selectedPerson || isPlaceholderName(selectedPerson.name) || !checkFirstName(selectedPerson.name).ok);
 
   const shown = useMemo(() => (menu ?? []).filter((m) => !query.trim() || `${m.name} ${m.nameHi ?? ""}`.toLowerCase().includes(query.trim().toLowerCase())), [menu, query]);
   const price = (l: Line) => { const r = priceLine(l.item.pricing, l.qty, l.mods); return r.ok ? r.line.linePaise : 0; };
@@ -56,10 +61,22 @@ export function AddItemsDialog({ detail, open, hi, onClose, onPlaced }: { detail
     return same ? c.map((l) => (l === same ? { ...l, qty: Math.min(50, l.qty + 1) } : l)) : [...c, { key: `${item.id}-${Date.now()}`, item, qty: 1, mods: [], parcel: !!detail.takeaway }];
   });
   const change = (key: string, patch: Partial<Line>) => setCart((c) => c.map((l) => (l.key === key ? { ...l, ...patch } : l)).filter((l) => l.qty > 0));
-  const reset = () => { setCart([]); setQuery(""); setError(null); setNewGuest(""); };
+  const reset = () => { setCart([]); setQuery(""); setError(null); setNameError(""); setNewGuest(""); };
 
   const place = async () => {
     setError(null);
+    const enteredName = newGuest.trim();
+    if (enteredName && !checkFirstName(enteredName).ok) {
+      setNameError(L("Enter a valid customer name.", "ग्राहक का सही नाम लिखें।"));
+      nameInput.current?.focus();
+      return;
+    }
+    if (!enteredName && nameMissing) {
+      setNameError(L("Enter the customer’s name before taking an order.", "ऑर्डर लेने से पहले ग्राहक का नाम लिखें।"));
+      nameInput.current?.focus();
+      return;
+    }
+    setNameError("");
     for (const l of cart) { const r = priceLine(l.item.pricing, l.qty, l.mods); if (!r.ok) return setError(`${l.item.name}: ${L("choose valid options", "सही विकल्प चुनें")}`); }
     setBusy(true);
     try {
@@ -88,11 +105,12 @@ export function AddItemsDialog({ detail, open, hi, onClose, onPlaced }: { detail
         </DialogHeader>
 
         <div>
-          <p className="text-sm font-semibold">{detail.takeaway ? L("Guest name (optional)", "ग्राहक का नाम (वैकल्पिक)") : L("For whom?", "किसके लिए?")}</p>
+          <p className="text-sm font-semibold">{detail.takeaway ? L("Customer name", "ग्राहक का नाम") : L("For whom?", "किसके लिए?")}</p>
           <div className="mt-1.5 flex flex-wrap gap-2">
             {people.map((p) => <button key={p.id} type="button" aria-pressed={who === p.id && !newGuest.trim()} onClick={() => { setPerson(p.id); setNewGuest(""); }} className={`min-h-10 rounded-lg border px-3 text-sm font-semibold ${who === p.id && !newGuest.trim() ? "border-primary bg-primary/10" : "border-border text-muted-foreground hover:text-foreground"}`}>{p.name}</button>)}
-            <div className="relative min-w-40 flex-1"><UserPlus className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" /><input value={newGuest} onChange={(e) => setNewGuest(e.target.value)} placeholder={L("New guest name", "नया नाम")} className={`${field} h-10 pl-8`} /></div>
+            <div className="relative min-w-40 flex-1"><UserPlus className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" /><input ref={nameInput} value={newGuest} onChange={(e) => { setNewGuest(e.target.value); setNameError(""); }} placeholder={L("Enter customer name", "ग्राहक का नाम लिखें")} aria-invalid={!!nameError} aria-describedby={nameError ? "counter-customer-name-error" : undefined} className={`${field} h-10 pl-8 ${nameError ? "border-destructive focus:border-destructive focus-visible:ring-destructive/20" : ""}`} /></div>
           </div>
+          {nameError && <p id="counter-customer-name-error" role="alert" className="mt-1.5 text-xs font-semibold text-destructive">{nameError}</p>}
         </div>
 
         <div className="relative"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={L("Search the menu", "मेन्यू खोजें")} aria-label={L("Search the menu", "मेन्यू खोजें")} className={`${field} pl-9`} /></div>
