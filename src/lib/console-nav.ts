@@ -36,6 +36,25 @@ export function isConsoleSection(slug: string): slug is ConsoleSection {
 type Who = Parameters<typeof canSee>[0];
 const rolesOf = (who: Who): readonly StaffRole[] => (Array.isArray(who) ? who : (who as { roles: readonly StaffRole[] }).roles);
 
+/** Roles that enter through the shared Tableeqr Staff App. Riders keep using their separate app. */
+export const staffAppLoginRoles = ["owner", "manager", "accountant", "cashier", "waiter", "host", "reception", "kitchen"] as const satisfies readonly StaffRole[];
+export type StaffAppLoginRole = (typeof staffAppLoginRoles)[number];
+
+/** The selected, already-assigned role chooses the workspace after login; it never grants access. */
+export function homeForSelectedRole(roles: readonly StaffRole[], selected: StaffAppLoginRole): string | null {
+  if (!roles.includes(selected)) return null;
+  switch (selected) {
+    case "owner":
+    case "manager": return "/console/dashboard";
+    case "accountant": return "/console/reports";
+    case "cashier": return "/pos";
+    case "waiter": return "/waiter";
+    case "host": return "/console/floor";
+    case "reception": return "/console/rooms";
+    case "kitchen": return "/console/kitchen";
+  }
+}
+
 /** Where /console sends this person: the first section their roles may open, or null */
 export function landingSection(who: Who): ConsoleSection | null {
   return visibleSections.find((s) => canSee(who, s.slug))?.slug ?? null;

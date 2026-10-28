@@ -7,7 +7,7 @@ import { SalesPerformance } from "@/app/(console)/console/(app)/dashboard/_compo
 import { OPS_POLL_MS, TREND_POLL_MS, createDashboardSync, startDashboardSync } from "@/app/(console)/console/(app)/dashboard/_components/dashboard-sync";
 import { dashboardCases } from "@/app/dev/o1/_fixtures";
 import { addDays, dayRange, deltaLabel, deltaOf, lastDays, lateness } from "@/domain/dashboard";
-import { consoleSections, homeFor, isLiveSection, landingSection, visibleSections } from "@/lib/console-nav";
+import { consoleSections, homeFor, homeForSelectedRole, isLiveSection, landingSection, visibleSections } from "@/lib/console-nav";
 import { canSee, staffRoles, type StaffRole } from "@/lib/staff-permissions";
 import type { DashboardData, RevenueTrend } from "@/server/staff/dashboard";
 
@@ -105,6 +105,18 @@ describe("home after sign-in", () => {
     expect(homeFor(["kitchen"])).toBe("/console/kitchen");
     expect(homeFor(["host", "waiter"])).toBe("/console/floor"); // unchanged: a host-waiter kept the floor
     expect(homeFor(["cashier", "manager"])).toBe("/console/dashboard");
+  });
+
+  it("opens the selected assigned workspace without letting a role card grant access", () => {
+    expect(homeForSelectedRole(["owner"], "owner")).toBe("/console/dashboard");
+    expect(homeForSelectedRole(["manager"], "manager")).toBe("/console/dashboard");
+    expect(homeForSelectedRole(["accountant"], "accountant")).toBe("/console/reports");
+    expect(homeForSelectedRole(["cashier"], "cashier")).toBe("/pos");
+    expect(homeForSelectedRole(["waiter"], "waiter")).toBe("/waiter");
+    expect(homeForSelectedRole(["host"], "host")).toBe("/console/floor");
+    expect(homeForSelectedRole(["reception"], "reception")).toBe("/console/rooms");
+    expect(homeForSelectedRole(["kitchen"], "kitchen")).toBe("/console/kitchen");
+    expect(homeForSelectedRole(["waiter"], "owner")).toBeNull();
   });
 });
 

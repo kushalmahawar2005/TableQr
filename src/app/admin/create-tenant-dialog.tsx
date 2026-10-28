@@ -51,7 +51,7 @@ const sections: { title: string; help: string; fields: Field[] }[] = [
     { name: "outletName", label: "Outlet name", required: true, hint: "This location, e.g. Spice Route - Jaipur" },
     { name: "outletCode", label: "Outlet code", hint: "Made from the outlet name. You can change it. The owner signs in with it" },
     { name: "city", label: "City", required: true },
-    { name: "tableCount", label: "Number of tables", type: "number", required: true, defaultValue: "4", hint: "Made with QR codes now. The plan sets the most tables; a bigger number here becomes this restaurant's own limit." },
+    { name: "tableCount", label: "Number of tables", type: "number", required: true, defaultValue: "4", hint: "Made with QR codes now. Use 0 for a cloud kitchen or delivery-only outlet. The plan sets the most tables; a bigger number here becomes this restaurant's own limit." },
     { name: "address", label: "Address", required: true, full: true },
   ] },
   { title: "Owner login", help: "How the owner signs in", fields: [
@@ -179,7 +179,7 @@ export function CreateTenantDialog({ open, onOpenChange, plans }: { open: boolea
             </div> : f.name === "city" ? <SuggestInput id="city" name="city" required placeholder="Start typing, e.g. Jai" suggest={suggestCity} />
             : f.name === "address" ? <SuggestInput id="address" name="address" required minChars={4} placeholder="Shop, street or landmark" suggest={suggestAddress} />
             : <Input id={f.name} name={f.name} type={f.type ?? "text"} required={f.required} defaultValue={f.defaultValue}
-              min={f.name === "tableCount" || f.name === "trialDays" ? 1 : undefined} max={f.name === "tableCount" ? 100 : f.name === "trialDays" ? 90 : undefined} />}
+              min={f.name === "tableCount" ? 0 : f.name === "trialDays" ? 1 : undefined} max={f.name === "tableCount" ? 100 : f.name === "trialDays" ? 90 : undefined} />}
             {f.hint && <p className="text-xs text-muted-foreground">{f.hint}</p>}
           </div>)}</div>
         </fieldset>)}
@@ -192,6 +192,8 @@ export function CreateTenantDialog({ open, onOpenChange, plans }: { open: boolea
               <span className="ml-auto text-xs text-muted-foreground">{p.features.rooms ? (p.features.dineIn ? "Hotel + restaurant" : "Hotel") : p.features.kitchenDisplay ? "Kitchen included" : ""}</span>
             </label>)}
           </div>
+          {/* Cloud kitchen: only the menu and delivery, no tables or dine-in extras */}
+          <Button type="button" variant="outline" className="w-full" onClick={() => { setCustomize(true); setKitchen(null); setFeatures({ ...(Object.fromEntries(FEATURE_KEYS.map((k) => [k, false])) as Record<(typeof FEATURE_KEYS)[number], boolean>), delivery: true, poweredBy: features.poweredBy, maxTables: null, maxStaff: features.maxStaff, maxRooms: null }); }}>Cloud kitchen: menu + delivery only</Button>
           <label className="flex items-start gap-3 rounded-xl border p-3 text-sm has-[:checked]:border-primary has-[:checked]:bg-primary/5">
             <input type="checkbox" checked={customize} onChange={(e) => setCustomize(e.target.checked)} className="mt-0.5 size-4 accent-[var(--primary)]" />
             <span><span className="block font-medium">Customize this restaurant&apos;s package</span><span className="block text-xs text-muted-foreground">Choose which existing features this tenant gets. You can adjust these later from the tenant&apos;s package settings.</span></span>

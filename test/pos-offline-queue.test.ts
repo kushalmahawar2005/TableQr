@@ -24,9 +24,35 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllGlobals(); });
 
 describe("offline POS durable outbox", () => {
+  it("restores the same outlet snapshot after reload only while its 12-hour session is valid", async () => {
+    const storage = await import("@/lib/pos-offline-queue");
+    const data = { loadedAt: 10, tables: [], zones: [], takeaways: [], categories: [], menu: [], openItem: { stations: ["kitchen"], gst: false, taxRateBp: 0 } } as unknown as import("@/server/staff/pos-terminal").PosTerminal;
+    const saved = { outletId: "outlet-1", savedAt: Date.now(), data, sessionExpiresAt: Date.now() + 12 * 60 * 60_000, staffUserId: "cashier-1", hi: false };
+    await storage.savePosSnapshot(saved.outletId, data, saved.sessionExpiresAt, saved.staffUserId, saved.hi, saved.savedAt);
+
+    vi.resetModules();
+    const reopened = await import("@/lib/pos-offline-queue");
+    expect(await reopened.loadOfflinePosSnapshot()).toEqual(saved);
+  });
+
+  it("rejects expired sessions and clears offline access on sign-out while preserving the recovery queue", async () => {
+    const storage = await import("@/lib/pos-offline-queue");
+    const data = { loadedAt: 10, tables: [], zones: [], takeaways: [], categories: [], menu: [], openItem: { stations: ["kitchen"], gst: false, taxRateBp: 0 } } as unknown as import("@/server/staff/pos-terminal").PosTerminal;
+    await storage.savePosSnapshot("outlet-1", data, Date.now() - 1, "cashier-1", false);
+    await storage.writeOfflinePosOrder("outlet-1", makeOrder("order-kept-after-signout"));
+    expect(await storage.loadOfflinePosSnapshot()).toBeNull();
+
+    await storage.savePosSnapshot("outlet-1", data, Date.now() + 60_000, "cashier-1", false);
+    await storage.savePosDraft("outlet-1", { tableId: "table-1", cart: [{ itemId: "dish-1", qty: 2 }] });
+    await storage.clearOfflinePosAccess();
+    expect(await storage.loadOfflinePosSnapshot()).toBeNull();
+    expect(await storage.loadPosDraft("outlet-1")).toBeNull();
+    expect(await storage.readOfflinePosOrders("outlet-1")).toHaveLength(1);
+  });
+
   it("restores price quotes and retry state from IndexedDB after the app reloads", async () => {
     const storage = await import("@/lib/pos-offline-queue");
-    const order = { ...makeOrder("order-1"), error: "Connection dropped", retryCount: 3, nextRetryAt: 9000 };
+    const order = { ...makeOrder("order-1"), managerApprovedByUserId: "manager-1", error: "Connection dropped", retryCount: 3, nextRetryAt: 9000 };
     await storage.writeOfflinePosOrder("outlet-1", order);
 
     vi.resetModules();

@@ -177,6 +177,8 @@ export const outlets = mysqlTable(
     stockSoldOut: boolean("stock_sold_out").notNull().default(false),
     /** Owner can disable guest gateway checkout and collect every bill at the counter instead. */
     guestOnlinePayments: boolean("guest_online_payments").notNull().default(true),
+    /** Owner can hide the branded customer PWA install option while keeping the guest website live. */
+    guestPwaInstallEnabled: boolean("guest_pwa_install_enabled").notNull().default(true),
     /** Choices shown on the public restaurant entry link; null follows the tenant's package. */
     deliveryPolicy: json("delivery_policy").$type<DeliveryPolicy>(),
     guestServices: json("guest_services").$type<GuestService[]>(),

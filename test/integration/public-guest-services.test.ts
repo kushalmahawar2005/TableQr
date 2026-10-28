@@ -6,6 +6,7 @@ import * as s from "@/db/schema";
 import { serviceDate } from "@/domain/booking-policy";
 import { bookingByToken, createBookingHold, createGroupRequest, getBookingAvailability, getBookingZones } from "@/server/booking/core";
 import { getRestaurantHome } from "@/server/guest/restaurant-home";
+import { restaurantApp } from "@/server/guest/restaurant-app";
 import { getOutletSettings } from "@/server/staff/settings-read";
 import { saveRestaurantCashfree, updateBookingPaymentQr, updateBrandLogo, updateOutletSettings, type SettingsPatch } from "@/server/staff/settings-write";
 import { resetTestDb } from "./setup-db";
@@ -54,6 +55,22 @@ describe("public restaurant service choices", () => {
     const [outlet] = await env.db.select().from(s.outlets).where(eq(s.outlets.id, env.demo.outletId));
     expect(outlet.guestServices).toEqual([]);
     expect(outlet.guestOnlinePayments).toBe(false);
+  });
+
+  it("shows the branded customer app only when the plan and owner both allow it", async () => {
+    await updateBrandLogo(owner(), "/uploads/customer-app-logo.png");
+    await updateOutletSettings(owner(), patch({ guestPwaInstallEnabled: true }));
+    expect(await restaurantApp("SRJ01")).toMatchObject({ name: "Spice Route", logoUrl: "/uploads/customer-app-logo.png" });
+
+    await updateOutletSettings(owner(), patch({ guestPwaInstallEnabled: false }));
+    expect(await restaurantApp("SRJ01")).toBeNull();
+    // Disabling installation leaves the ordinary guest restaurant page and service data available.
+    expect((await getRestaurantHome("SRJ01")).outlet.name).toBe("Spice Route");
+
+    await env.db.update(s.outlets).set({ guestPwaInstallEnabled: true }).where(eq(s.outlets.id, env.demo.outletId));
+    await env.db.update(s.tenants).set({ customFeatures: { guestPwaCustomization: false } }).where(eq(s.tenants.id, env.demo.tenantId));
+    expect(await restaurantApp("SRJ01")).toBeNull();
+    await expect(updateOutletSettings(owner(), patch({ guestPwaInstallEnabled: true }))).rejects.toMatchObject({ code: "invalid_state" });
   });
 
   it("keeps payment, QR, service, and Wi-Fi settings isolated per outlet while sharing the tenant brand", async () => {

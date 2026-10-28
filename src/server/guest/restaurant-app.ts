@@ -15,10 +15,10 @@ export const restaurantApp = cache(async (code: string) => {
   const brand = await staffAppBrandForOutletCode(code);
   if (!brand) return null;
   // isolation-exempt: the outlet code is public and globally unique; this resolves its tenant
-  const [outlet] = await db.select({ tenantId: s.outlets.tenantId }).from(s.outlets).where(eq(s.outlets.code, brand.code));
+  const [outlet] = await db.select({ tenantId: s.outlets.tenantId, guestPwaInstallEnabled: s.outlets.guestPwaInstallEnabled }).from(s.outlets).where(eq(s.outlets.code, brand.code));
   if (!outlet) return null;
   const f = await tenantFeatures(outlet.tenantId);
-  return f.delivery || f.reservations ? brand : null;
+  return outlet.guestPwaInstallEnabled && f.guestPwaCustomization && (f.delivery || f.reservations) ? brand : null;
 });
 
 export function restaurantAppMetadata(app: NonNullable<Awaited<ReturnType<typeof restaurantApp>>> | null): Pick<Metadata, "manifest" | "appleWebApp" | "icons"> {
@@ -26,6 +26,6 @@ export function restaurantAppMetadata(app: NonNullable<Awaited<ReturnType<typeof
   return {
     manifest: `/r/${encodeURIComponent(app.code)}/app.webmanifest`,
     appleWebApp: { capable: true, title: app.name.slice(0, 30), statusBarStyle: "default" },
-    icons: { apple: staffAppIconUrl(180, app.code) },
+    icons: { apple: app.logoUrl || staffAppIconUrl(180, app.code) },
   };
 }

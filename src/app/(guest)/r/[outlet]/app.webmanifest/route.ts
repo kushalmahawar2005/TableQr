@@ -22,6 +22,7 @@ export async function GET(_req: Request, ctx: RouteContext<"/r/[outlet]/app.webm
     background_color: "#f6f4ef",
     theme_color: /^#[\da-f]{6}$/i.test(app.accentColor ?? "") ? app.accentColor : "#c9482b",
     icons: [
+      ...(app.logoUrl ? [{ src: app.logoUrl, sizes: "any", purpose: "any" }] : []),
       { src: staffAppIconUrl(192, app.code), sizes: "192x192", type: "image/png", purpose: "any" },
       { src: staffAppIconUrl(512, app.code), sizes: "512x512", type: "image/png", purpose: "maskable" },
     ],

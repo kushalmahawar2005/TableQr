@@ -41,6 +41,14 @@ export async function reconcileReservationCredit(provider: string, creditId: str
   return true;
 }
 
+/** Webhook path: finds the booking advance a gateway order belongs to and settles it from the gateway's own status */
+export async function confirmReservationCreditByRef(provider: string, gatewayRef: string) {
+  if (!gatewayRef) return false;
+  // isolation-exempt: a signed gateway webhook names the order; the credit's tenant is read before mutation.
+  const [credit] = await db.select({ id: s.reservationCredits.id }).from(s.reservationCredits).where(and(eq(s.reservationCredits.provider, provider), eq(s.reservationCredits.gatewayRef, gatewayRef))).limit(1);
+  return credit ? reconcileReservationCredit(provider, credit.id) : false;
+}
+
 export async function refundReservationCredit(tenantId: string, reservationId: string) {
   const [credit] = await db.select().from(s.reservationCredits).where(and(eq(s.reservationCredits.tenantId, tenantId), eq(s.reservationCredits.reservationId, reservationId), eq(s.reservationCredits.status, "paid")));
   if (!credit) return { status: "none" as const };

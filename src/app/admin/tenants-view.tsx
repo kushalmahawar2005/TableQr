@@ -14,7 +14,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { addOutletAction, changeTenantPlanAction, markPlanRequestDoneAction, recordFeePaymentAction, setTenantPriceAction, extendTrialAction, getTenantDetailAction, removeSelectedTenantsAction, resetOwnerPinAction, setCustomPackageAction, setRoleAccessAction, setTenantKitchenAction, setTenantStatusAction, setTenantTableLimitAction, updateTenantAction } from "./actions";
+import { addOutletAction, changeTenantPlanAction, markPlanRequestDoneAction, recordFeePaymentAction, setTenantPriceAction, extendTrialAction, getTenantDetailAction, removeSelectedTenantsAction, deleteTenantPermanentlyAction, resetOwnerPinAction, setCustomPackageAction, setRoleAccessAction, setTenantKitchenAction, setTenantStatusAction, setTenantTableLimitAction, updateTenantAction } from "./actions";
 import { CreateTenantDialog } from "./create-tenant-dialog";
 import { FeeForm } from "./subscriptions-view";
 import type { AdminData, AdminTenant, TenantDetail } from "./admin-types";
@@ -378,6 +378,7 @@ function TenantSheet({ tenant, plans, now, onClose }: { tenant: AdminTenant | nu
                 {tenant.status === "suspended" || tenant.status === "cancelled"
                   ? <Button disabled={pending} onClick={() => run(() => setTenantStatusAction(tenant.id, "active"), "Tenant activated.")}>{busy}Activate tenant</Button>
                   : <Button variant="destructive" disabled={pending} onClick={() => { if (window.confirm(`Suspend ${tenant.name}? Their staff will lose access.`)) run(() => setTenantStatusAction(tenant.id, "suspended"), "Tenant suspended."); }}>{busy}Suspend tenant</Button>}
+                {(tenant.status === "suspended" || tenant.status === "cancelled") && <Button variant="destructive" disabled={pending} onClick={() => { const typed = window.prompt(`This deletes ${tenant.name} and all its data forever. Type the name to confirm:`); if (typed !== null) run(() => deleteTenantPermanentlyAction(tenant.id, typed), "Restaurant deleted permanently."); }}>{busy}Delete permanently</Button>}
               </div>
             </section>
           </TabsContent>
