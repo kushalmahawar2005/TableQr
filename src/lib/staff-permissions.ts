@@ -25,6 +25,7 @@ export const consoleSectionRoles = {
   reports: ["manager", "owner", "accountant"],
   /** Phone numbers of guests: owners and managers only */
   customers: ["manager", "owner"],
+  broadcasts: ["manager", "owner"],
   team: ["manager", "owner"],
   /** The daily attendance register: managers and owners mark who was present, absent or on a half day */
   attendance: ["manager", "owner"],

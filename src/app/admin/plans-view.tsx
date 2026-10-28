@@ -12,6 +12,8 @@ import { Label } from "@/components/ui/label";
 import { savePlanAction, type PlanInput } from "./actions";
 import { FEATURE_KEYS, FEATURE_LABELS } from "@/lib/plan-features";
 import type { AdminData, AdminPlan } from "./admin-types";
+import { saveMessageCreditPricingAction } from "./actions";
+import type { messageCreditPrice } from "@/server/whatsapp/credits";
 
 const money = (paise: number) => `₹${Math.round(paise / 100).toLocaleString("en-IN")}`;
 const TONES = ["#5b42f5", "#16c784", "#f08b18", "#ed5368", "#3d91ef", "#e875b1"];
@@ -79,7 +81,8 @@ function PlanDialog({ plan, onClose }: { plan: AdminPlan | "new" | null; onClose
   </Dialog>;
 }
 
-export function PlansView({ data }: { data: AdminData }) {
+export function PlansView({ data, creditPricing }: { data: AdminData; creditPricing: Awaited<ReturnType<typeof messageCreditPrice>> }) {
+  const router = useRouter();
   const [dialog, setDialog] = useState<AdminPlan | "new" | null>(null);
   const plans = [...data.plans].sort((a, b) => a.sortOrder - b.sortOrder);
 
@@ -90,6 +93,18 @@ export function PlansView({ data }: { data: AdminData }) {
   });
   const popular = [...stats].sort((a, b) => b.tenants - a.tenants)[0];
   const totalIncome = stats.reduce((sum, s) => sum + s.income, 0);
+  const [creditPrice, setCreditPrice] = useState(creditPricing ? String(creditPricing.pricePerCreditPaise / 100) : "");
+  const [creditPacks, setCreditPacks] = useState(creditPricing?.packSizes.join(", ") ?? "100, 500, 1000");
+  const [creditThreshold, setCreditThreshold] = useState(String(creditPricing?.lowBalanceThreshold ?? 20));
+  const [creditMessage, setCreditMessage] = useState(creditPricing ? "" : "Online credit packs are off until you save pricing.");
+  const [creditPending, startCreditSave] = useTransition();
+  const saveCreditPricing = () => startCreditSave(async () => {
+    const price = Number(creditPrice);
+    const packs = creditPacks.split(",").map((value) => Number(value.trim()));
+    const result = await saveMessageCreditPricingAction({ pricePerCreditRupees: price, packSizes: packs, lowBalanceThreshold: Number(creditThreshold) });
+    setCreditMessage(result.error ?? "Credit pricing saved.");
+    if (!result.error) router.refresh();
+  });
 
   return <div className="space-y-6">
     <div className="flex flex-wrap items-start justify-between gap-3">
@@ -103,6 +118,11 @@ export function PlansView({ data }: { data: AdminData }) {
       <Stat icon={IndianRupee} label="Monthly income" value={money(totalIncome)} note="From paying tenants" tone="#f08b18" />
       <Stat icon={Layers} label="Most popular" value={popular && popular.tenants ? popular.p.name : "—"} note={popular && popular.tenants ? `${popular.tenants} ${popular.tenants === 1 ? "tenant" : "tenants"}` : "No tenants yet"} tone="#ed5368" />
     </div>
+
+    <Card><CardContent className="space-y-4"><div><h2 className="font-semibold">WhatsApp message credits</h2><p className="text-sm text-muted-foreground">Set the Tableeqr service fee. Meta bills the restaurant separately for WhatsApp messages.</p></div>
+      <div className="grid gap-3 sm:grid-cols-3"><div className="space-y-1.5"><Label htmlFor="credit-price">Price per credit (₹)</Label><Input id="credit-price" type="number" min="0.01" step="0.01" value={creditPrice} onChange={(e) => setCreditPrice(e.target.value)} /></div><div className="space-y-1.5"><Label htmlFor="credit-packs">Pack sizes</Label><Input id="credit-packs" value={creditPacks} onChange={(e) => setCreditPacks(e.target.value)} placeholder="100, 500, 1000" /><p className="text-xs text-muted-foreground">Comma-separated whole credits.</p></div><div className="space-y-1.5"><Label htmlFor="credit-threshold">Low-balance warning at</Label><Input id="credit-threshold" type="number" min="0" max="100000" value={creditThreshold} onChange={(e) => setCreditThreshold(e.target.value)} /></div></div>
+      <div className="flex flex-wrap items-center gap-3"><Button onClick={saveCreditPricing} disabled={creditPending || !creditPrice}>{creditPending && <Loader2 className="animate-spin" />}Save credit pricing</Button><p className="text-sm text-muted-foreground" role="status">{creditMessage}</p></div>
+    </CardContent></Card>
 
     {plans.length ? <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4 [&>*]:min-w-0">{stats.map(({ p, tenants, income }, i) => {
       const tone = TONES[i % TONES.length];

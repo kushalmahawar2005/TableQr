@@ -14,7 +14,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { addOutletAction, changeTenantPlanAction, markPlanRequestDoneAction, recordFeePaymentAction, setTenantPriceAction, extendTrialAction, getTenantDetailAction, removeSelectedTenantsAction, deleteTenantPermanentlyAction, resetOwnerPinAction, setCustomPackageAction, setRoleAccessAction, setTenantKitchenAction, setTenantStatusAction, setTenantTableLimitAction, updateTenantAction } from "./actions";
+import { addOutletAction, adjustTenantMessageCreditsAction, changeTenantPlanAction, markPlanRequestDoneAction, recordFeePaymentAction, setTenantPriceAction, extendTrialAction, getTenantDetailAction, removeSelectedTenantsAction, deleteTenantPermanentlyAction, resetOwnerPinAction, setCustomPackageAction, setRoleAccessAction, setTenantKitchenAction, setTenantStatusAction, setTenantTableLimitAction, updateTenantAction } from "./actions";
 import { CreateTenantDialog } from "./create-tenant-dialog";
 import { FeeForm } from "./subscriptions-view";
 import type { AdminData, AdminTenant, TenantDetail } from "./admin-types";
@@ -157,6 +157,7 @@ function TenantSheet({ tenant, plans, now, onClose }: { tenant: AdminTenant | nu
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [pin, setPin] = useState("");
+  const [creditBalance, setCreditBalance] = useState<number | null>(null);
   const [tab, setTab] = useState("overview");
   const [loaded, setLoaded] = useState<{ id: string; detail: TenantDetail | null; error: string | null } | null>(null);
   const tenantId = tenant?.id;
@@ -355,6 +356,16 @@ function TenantSheet({ tenant, plans, now, onClose }: { tenant: AdminTenant | nu
             {tenant.planCode !== "custom" && <PriceForm key={`${tenant.id}-${tenant.customPricePaise}`} tenant={tenant} planPricePaise={plans.find((p) => p.code === tenant.planCode)?.monthlyPricePaise ?? null} pending={pending}
               onSave={(rupees) => run(() => setTenantPriceAction(tenant.id, rupees), rupees === null ? "Back to the plan's price." : "Price saved.")} />}
             <CustomPackageForm key={tenant.id} tenant={tenant} pending={pending} onSave={(input) => run(() => setCustomPackageAction(tenant.id, input), "Custom package saved.")} />
+            <section className="space-y-2 rounded-lg border p-3">
+              <h3 className="text-sm font-semibold">WhatsApp message credits</h3>
+              <p className="text-xs text-muted-foreground">Grant credits with a positive number, or remove unused credits with a negative number. Every change is recorded in the audit log.</p>
+              {creditBalance !== null && <p className="text-sm">Current balance: <strong>{creditBalance.toLocaleString("en-IN")}</strong></p>}
+              <form className="flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); const form = e.currentTarget; const f = new FormData(form); const delta = Number(f.get("delta")); const note = String(f.get("note") ?? ""); form.reset(); run(async () => { const result = await adjustTenantMessageCreditsAction(tenant.id, { delta, note }); if (!result.error && result.balance !== undefined) setCreditBalance(result.balance); return result; }, "Message credits updated."); }}>
+                <Input name="delta" type="number" step="1" placeholder="e.g. 500 or -50" aria-label="Credit adjustment" className="w-36" required />
+                <Input name="note" placeholder="Reason for adjustment" aria-label="Reason" className="min-w-48 flex-1" minLength={5} maxLength={200} required />
+                <Button size="sm" type="submit" disabled={pending}>Apply</Button>
+              </form>
+            </section>
             <RoleAccessForm key={`roles-${tenant.id}`} roleAccess={tenant.roleAccess} pending={pending} onSave={(access) => run(() => setRoleAccessAction(tenant.id, access), "Roles saved.")} />
             {tenant.status !== "cancelled" && <section className="space-y-3">
               <div>

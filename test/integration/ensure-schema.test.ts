@@ -38,6 +38,8 @@ afterAll(async () => {
 
 describe("schema update at startup", () => {
   it("adds what is missing, fills the defaults, records the migrations, and does nothing the second time", async () => {
+    // This fixture rewinds the fees tables too; remove their newer broadcast dependents first.
+    await env.db.execute(sql`DROP TABLE broadcast_offer_redemptions, message_credit_ledger, broadcast_recipients, broadcast_campaigns, whatsapp_templates, whatsapp_accounts`);
     await env.db.execute(sql`ALTER TABLE tenants DROP COLUMN kitchen_display, DROP COLUMN table_limit, DROP COLUMN custom_features, DROP COLUMN custom_price_paise`);
     await env.db.execute(sql`ALTER TABLE users DROP COLUMN duty_status, DROP COLUMN duty_changed_at, DROP COLUMN last_seen_at`);
     await env.db.execute(sql`ALTER TABLE table_sessions DROP FOREIGN KEY fk_sessions_waiter, DROP COLUMN waiter_user_id`);

@@ -16,7 +16,7 @@ export async function proxy(request: NextRequest) {
     "img-src 'self' data: blob: https:",
     "font-src 'self' data:",
     "connect-src 'self' https: wss:",
-    "frame-src 'self' https://*.cashfree.com",
+    `frame-src 'self' https://*.cashfree.com${request.nextUrl.pathname === "/console/broadcasts" ? " https://www.facebook.com https://web.facebook.com" : ""}`,
     "form-action 'self' https:",
     "object-src 'none'",
     "base-uri 'self'",

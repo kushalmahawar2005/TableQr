@@ -17,6 +17,7 @@ export const consoleSections = [
   { slug: "pricing", label: "Pricing", hi: "प्राइसिंग" },
   { slug: "reports", label: "Reports", hi: "रिपोर्ट" },
   { slug: "customers", label: "Customers", hi: "ग्राहक" },
+  { slug: "broadcasts", label: "WhatsApp broadcasts", hi: "ब्रॉडकास्ट" },
   { slug: "team", label: "Team", hi: "टीम" },
   { slug: "attendance", label: "Attendance", hi: "हाज़िरी" },
   { slug: "settings", label: "Settings", hi: "सेटिंग्स" },

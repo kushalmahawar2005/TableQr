@@ -15,13 +15,14 @@ import { TenantsView } from "./tenants-view";
 import { adminLogoutAction } from "./actions";
 import { AppsView } from "./apps-view";
 import { appReleases } from "@/server/admin/app-releases";
+import { messageCreditPrice } from "@/server/whatsapp/credits";
 
 export const metadata: Metadata = { title: "Platform admin", robots: { index: false, follow: false } };
 
 export default async function AdminPage() {
   const admin = await currentPlatformAdmin();
   if (!admin) return <main className="grid min-h-dvh place-items-center bg-[#f7f8fc] px-4"><AdminLogin /></main>;
-  const [data, releases] = await Promise.all([getAdminData(), appReleases("rider")]);
+  const [data, releases, creditPricing] = await Promise.all([getAdminData(), appReleases("rider"), messageCreditPrice()]);
   const theme = (await cookies()).get("tq_theme")?.value === "dark" ? "dark" : "light";
   const name = admin.name.trim().split(/\s+/)[0] || admin.email.split("@")[0];
   const rupees = (paise: number) => `₹${Math.round(paise / 100).toLocaleString("en-IN")}`;
@@ -38,7 +39,7 @@ export default async function AdminPage() {
       Dashboard: <DashboardView data={data} name={name} />,
       Tenants: <TenantsView data={data} canRemove={admin.role === "super_admin"} />,
       Subscriptions: <SubscriptionsView data={data} />,
-      "Plans & Pricing": <PlansView data={data} />,
+      "Plans & Pricing": <PlansView data={data} creditPricing={creditPricing} />,
       Fees: <FeesView data={data} />,
       Analytics: <AnalyticsView data={data} />,
       Apps: <AppsView initial={releases} />,

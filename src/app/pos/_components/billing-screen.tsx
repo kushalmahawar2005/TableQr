@@ -334,7 +334,7 @@ export function BillingScreen({ initial, realtimeUrl, embedded = false, openSess
                         disabled={offline || busy}
                         needsApproval={detail.needsApproval}
                         subtotalPaise={detail.bill?.subtotalPaise ?? 0}
-                        onApply={(kind, value, reason, approval) => void run(() => actions.discountAction({ sessionId: detail.sessionId, kind, value, reason, approval }), async () => { setMessage({ tone: "ok", text: L("Discount applied.", "छूट लग गई।") }); const d = await actions.detailAction(detail.sessionId); if (d.ok) setDetail(d.data); })}
+                        onApply={(kind, value, reason, offerCode, approval) => void run(() => actions.discountAction({ sessionId: detail.sessionId, kind, value, reason, offerCode: offerCode || undefined, approval }), async () => { setMessage({ tone: "ok", text: L("Discount applied.", "छूट लग गई।") }); const d = await actions.detailAction(detail.sessionId); if (d.ok) setDetail(d.data); })}
                         onClear={() => void run(() => actions.clearDiscountAction(detail.sessionId), async () => { setMessage({ tone: "ok", text: L("Discount removed.", "छूट हटा दी।") }); const d = await actions.detailAction(detail.sessionId); if (d.ok) setDetail(d.data); })}
                       />
                     )}
@@ -453,12 +453,12 @@ export function BillingScreen({ initial, realtimeUrl, embedded = false, openSess
 /** Give, change or remove the bill's discount: a percent or rupees, always with a reason */
 function DiscountBox({ hi, current, disabled, needsApproval, subtotalPaise, onApply, onClear }: {
   hi: boolean;
-  current: { kind: string; value: number; amountPaise: number; reason: string } | null;
+  current: { kind: string; value: number; amountPaise: number; reason: string; offerCode?: string | null } | null;
   disabled: boolean;
   /** This staff member is not a manager or owner */
   needsApproval: boolean;
   subtotalPaise: number;
-  onApply: (kind: "percent" | "flat", value: number, reason: string, approval?: { phone: string; pin: string }) => void;
+  onApply: (kind: "percent" | "flat", value: number, reason: string, offerCode: string, approval?: { phone: string; pin: string }) => void;
   onClear: () => void;
 }) {
   const L = (en: string, hin: string) => (hi ? hin : en);
@@ -466,6 +466,7 @@ function DiscountBox({ hi, current, disabled, needsApproval, subtotalPaise, onAp
   const [kind, setKind] = useState<"percent" | "flat">("percent");
   const [value, setValue] = useState("");
   const [reason, setReason] = useState("");
+  const [offerCode, setOfferCode] = useState("");
   const [phone, setPhone] = useState("");
   const [pin, setPin] = useState("");
   const n = Number(value);
@@ -484,9 +485,10 @@ function DiscountBox({ hi, current, disabled, needsApproval, subtotalPaise, onAp
   return (
     <form
       className="rounded-card border border-line bg-surface p-4 sm:p-5"
-      onSubmit={(e) => { e.preventDefault(); if (valid) { onApply(kind, n, reason.trim(), askManager ? { phone: phone.trim(), pin } : undefined); setOpen(false); setPin(""); } }}
+      onSubmit={(e) => { e.preventDefault(); if (valid) { onApply(kind, n, reason.trim(), offerCode.trim(), askManager ? { phone: phone.trim(), pin } : undefined); setOpen(false); setPin(""); } }}
     >
       <h3 className="font-display text-section font-bold">{L("Discount on this bill", "इस बिल पर छूट")}</h3>
+      {current?.offerCode && <p className="mt-2 text-xs text-muted">{L("Current WhatsApp offer", "मौजूदा WhatsApp ऑफ़र")}: {current.offerCode}</p>}
       <div className="mt-3 flex gap-2">
         {(["percent", "flat"] as const).map((k) => (
           <button key={k} type="button" aria-pressed={kind === k} onClick={() => setKind(k)} className={cn("h-10 rounded-full border px-4 text-sm font-semibold", kind === k ? "border-ink bg-ink text-white" : "border-line")}>{k === "percent" ? L("Percent %", "प्रतिशत %") : L("Rupees ₹", "रुपये ₹")}</button>
@@ -497,6 +499,10 @@ function DiscountBox({ hi, current, disabled, needsApproval, subtotalPaise, onAp
       </label>
       <label className="mt-3 block text-sm font-semibold">{L("Reason", "कारण")}
         <input className={field} value={reason} maxLength={200} onChange={(e) => setReason(e.target.value)} placeholder={L("e.g. Regular guest, birthday, late food", "जैसे रेगुलर ग्राहक, जन्मदिन, खाना देर से")} />
+      </label>
+      <label className="mt-3 block text-sm font-semibold">{L("WhatsApp campaign offer code (optional)", "WhatsApp कैंपेन ऑफ़र कोड (ज़रूरी नहीं)")}
+        <input className={field} autoComplete="off" value={offerCode} maxLength={30} onChange={(e) => setOfferCode(e.target.value)} placeholder={L("Enter the code shown by the guest", "ग्राहक का दिखाया कोड डालें")} />
+        <span className="mt-1 block text-xs font-normal text-muted">{L("Recorded only if this code was sent to a verified guest at this table within 7 days.", "कोड तभी रिकॉर्ड होगा जब यह 7 दिनों में इस टेबल के verified ग्राहक को भेजा गया हो।")}</span>
       </label>
       {askManager && (
         <div className="mt-3 rounded-input bg-paper p-3">

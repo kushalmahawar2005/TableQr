@@ -67,6 +67,7 @@ const ICONS: Record<string, IconSvgElement> = {
   pricing: Tag01Icon,
   reports: ChartHistogramIcon,
   customers: UserGroupIcon,
+  broadcasts: UserGroupIcon,
   team: UserMultipleIcon,
   settings: Settings01Icon,
   plan: CreditCardIcon,

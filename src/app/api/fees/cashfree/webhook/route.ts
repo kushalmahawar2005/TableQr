@@ -1,4 +1,5 @@
 import { settleCashfreeFeeByGatewayRef } from "@/server/fees";
+import { settleMessageCreditPurchaseByGatewayRef } from "@/server/whatsapp/credits";
 import { platformGateway } from "@/server/payments/gateway";
 import { readRequestTextLimited } from "@/server/http-body";
 
@@ -20,13 +21,14 @@ export async function POST(request: Request) {
   }
   if (event.kind !== "payment") return Response.json({ ok: true, ignored: true });
   try {
-    const result = await settleCashfreeFeeByGatewayRef(event.gatewayRef, {
+    const verdict = {
       status: event.status,
       amountPaise: event.amountPaise,
       currency: event.currency,
       gatewayPaymentId: event.gatewayPaymentId,
       reason: event.reason,
-    });
+    };
+    const result = await settleCashfreeFeeByGatewayRef(event.gatewayRef, verdict) ?? await settleMessageCreditPurchaseByGatewayRef(event.gatewayRef, verdict);
     return Response.json({ ok: true, known: !!result });
   } catch (error) {
     console.error("[fees] Cashfree webhook failed", error);

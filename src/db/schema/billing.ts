@@ -15,6 +15,7 @@ import { orderLines } from "./orders";
 import { participants, tableSessions } from "./sessions";
 import { outlets, users } from "./tenancy";
 import { reservations } from "./booking";
+import { broadcastCampaigns, broadcastRecipients } from "./broadcast";
 
 // Bills, split shares, payments, GST invoices and credit notes (PS 3.6, 6).
 
@@ -200,6 +201,27 @@ export const discounts = mysqlTable(
     sameTenant("fk_discounts_approved_by", t, t.approvedByUserId, users),
   ],
 );
+
+/** A bill's redeemed campaign offer; reversal history stays for auditable reporting. */
+export const broadcastOfferRedemptions = mysqlTable("broadcast_offer_redemptions", {
+  id: id(),
+  tenantId: tenantId(),
+  campaignId: ref("campaign_id").notNull(),
+  recipientId: ref("recipient_id").notNull(),
+  billId: ref("bill_id").notNull(),
+  offerCode: varchar("offer_code", { length: 30 }).notNull(),
+  discountPaise: int("discount_paise").notNull(),
+  appliedByUserId: ref("applied_by_user_id").notNull(),
+  createdAt: createdAt(),
+  reversedAt: at("reversed_at"),
+}, (t) => [
+  uniqueIndex("broadcast_offer_redemptions_guest_uq").on(t.tenantId, t.campaignId, t.recipientId),
+  index("broadcast_offer_redemptions_campaign_idx").on(t.tenantId, t.campaignId, t.createdAt),
+  sameTenant("fk_broadcast_offer_redemptions_campaign", t, t.campaignId, broadcastCampaigns),
+  sameTenant("fk_broadcast_offer_redemptions_recipient", t, t.recipientId, broadcastRecipients),
+  sameTenant("fk_broadcast_offer_redemptions_bill", t, t.billId, bills),
+  sameTenant("fk_broadcast_offer_redemptions_user", t, t.appliedByUserId, users),
+]);
 
 /** Gapless counter per outlet per financial year, incremented under a row lock */
 export const invoiceSeries = mysqlTable(

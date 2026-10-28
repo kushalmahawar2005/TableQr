@@ -32,6 +32,14 @@ export const guests = mysqlTable(
     consentAt: at("consent_at"),
     dietaryFlags: json("dietary_flags").$type<string[]>(),
     noShowCount: int("no_show_count").notNull().default(0),
+    /** Set when the guest replies STOP or staff opt them out; broadcasts never reach them again */
+    marketingOptOutAt: at("marketing_opt_out_at"),
+    /** Set before the single best-effort STOP acknowledgement is sent. */
+    marketingOptOutReplyAt: at("marketing_opt_out_reply_at"),
+    /** Optional, for birthday broadcasts (YYYY-MM-DD; the year may be 1900 when unknown) */
+    birthday: varchar("birthday", { length: 10 }),
+    /** Last marketing message this tenant sent them, for the frequency cap */
+    lastMarketingAt: at("last_marketing_at"),
     firstSeenAt: createdAt("first_seen_at"),
     lastSeenAt: at("last_seen_at"),
   },

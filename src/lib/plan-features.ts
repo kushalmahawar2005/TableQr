@@ -18,6 +18,7 @@ export const FEATURE_KEYS = [
   "guestPwaCustomization",
   "pos",
   "attendance",
+  "broadcast",
 ] as const;
 export type FeatureKey = (typeof FEATURE_KEYS)[number];
 
@@ -37,6 +38,7 @@ export const FEATURE_LABELS: Record<FeatureKey, { label: string; hint: string }>
   guestPwaCustomization: { label: "Branded guest app install", hint: "Let guests install this restaurant's booking and delivery experience with its name and logo" },
   pos: { label: "POS counter", hint: "Punch orders at the counter for a table or takeaway, including offline POS" },
   attendance: { label: "Staff attendance", hint: "Daily register: present, half day, absent, leave and week off" },
+  broadcast: { label: "WhatsApp broadcasts", hint: "Send approved WhatsApp campaigns to opted-in customers using message credits" },
   inventory: { label: "Inventory & recipes", hint: "Stock that goes down as dishes sell, with low-stock alerts" },
 };
 
@@ -63,7 +65,7 @@ export function readFeatures(raw: unknown): Features {
   // Older plan rows said "full" bookings for reservations plus waitlist
   const reservationsFallback = r.bookings === undefined ? true : r.bookings === "full";
   // Inventory, rooms and delivery came later: missing flags must not grant them.
-  for (const k of FEATURE_KEYS) out[k] = on(r[k], k === "reservations" ? reservationsFallback : k !== "inventory" && k !== "rooms" && k !== "delivery" && k !== "guestPwaCustomization");
+  for (const k of FEATURE_KEYS) out[k] = on(r[k], k === "reservations" ? reservationsFallback : k !== "inventory" && k !== "rooms" && k !== "delivery" && k !== "guestPwaCustomization" && k !== "broadcast");
   // Preserve prior eligibility for plans saved before this explicit feature existed.
   if (r.guestPwaCustomization === undefined || r.guestPwaCustomization === null) out.guestPwaCustomization = out.delivery || out.reservations;
   return out;
@@ -78,6 +80,7 @@ export const SECTION_FEATURE: Partial<Record<string, FeatureKey>> = {
   pricing: "pricingRules",
   reports: "fullReports",
   customers: "whatsappBills",
+  broadcasts: "broadcast",
   inventory: "inventory",
   pos: "pos",
   attendance: "attendance",

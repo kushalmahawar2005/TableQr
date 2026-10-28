@@ -21,6 +21,8 @@ import { randomInt } from "node:crypto";
 import { effectiveFeatures, tenantFeatures } from "@/server/plan";
 import { FEATURE_KEYS, readFeatures, type Features } from "@/lib/plan-features";
 import { cleanRoleAccess } from "@/lib/staff-permissions";
+import { adjustMessageCredits } from "@/server/broadcast";
+import { saveMessageCreditPrice } from "@/server/whatsapp/credits";
 
 export type AdminLoginState = { error: string | null };
 export type TenantState = { error: string | null; success: string | null; outletCode?: string };
@@ -524,6 +526,21 @@ export async function getTenantDetailAction(tenantId: string): Promise<{ detail:
   }
 }
 
+export async function adjustTenantMessageCreditsAction(tenantId: string, input: { delta: number; note: string }) {
+  try {
+    const admin = await requireSuperAdmin();
+    const delta = Math.trunc(Number(input.delta));
+    const note = String(input.note ?? "").trim();
+    if (!Number.isSafeInteger(delta) || delta === 0 || Math.abs(delta) > 100_000) return { error: "Enter a credit adjustment from 1 to 100,000 (or a negative number to remove credits)." };
+    if (note.length < 5 || note.length > 200) return { error: "Add a reason between 5 and 200 characters." };
+    const result = await adjustMessageCredits({ tenantId, delta, reason: "adjust", actorLabel: admin.email, note });
+    revalidatePath("/admin");
+    return { error: null, balance: result.balance };
+  } catch (error) {
+    return { error: friendlyError(error, "Message credits could not be adjusted.") };
+  }
+}
+
 export type PlanInput = {
   code: string;
   name: string;
@@ -568,6 +585,18 @@ export async function savePlanAction(input: PlanInput, mode: "create" | "edit"):
     return { error: null };
   } catch (error) {
     return { error: friendlyError(error, "Plan could not be saved.") };
+  }
+}
+
+export async function saveMessageCreditPricingAction(input: { pricePerCreditRupees: number; packSizes: number[]; lowBalanceThreshold: number }): Promise<TenantActionState> {
+  try {
+    await requireSuperAdmin();
+    if (!Number.isFinite(input.pricePerCreditRupees)) return { error: "Enter a valid price per credit." };
+    await saveMessageCreditPrice({ pricePerCreditPaise: Math.round(input.pricePerCreditRupees * 100), packSizes: input.packSizes, lowBalanceThreshold: input.lowBalanceThreshold });
+    revalidatePath("/admin"); revalidatePath("/console/broadcasts");
+    return { error: null };
+  } catch (error) {
+    return { error: friendlyError(error, "Credit pricing could not be saved.") };
   }
 }
 

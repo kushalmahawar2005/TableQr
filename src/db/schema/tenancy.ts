@@ -52,6 +52,8 @@ export const tenants = mysqlTable(
     customPricePaise: int("custom_price_paise"),
     /** Console sections the platform admin changed for this restaurant, role by role; null follows the defaults */
     roleAccess: json("role_access").$type<RoleAccess>(),
+    /** Prepaid WhatsApp broadcast credits; a cache of message_credit_ledger, changed only with it under a row lock */
+    messageCredits: int("message_credits").notNull().default(0),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -135,6 +137,7 @@ export const feePayments = mysqlTable(
     index("fee_payments_status_idx").on(t.status),
     uniqueIndex("fee_payments_request_uq").on(t.tenantId, t.clientRequestId),
     uniqueIndex("fee_payments_gateway_ref_uq").on(t.gatewayRef),
+    tenantKey("fee_payments", t),
   ],
 );
 

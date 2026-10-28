@@ -1,0 +1,1 @@
+ALTER TABLE `guests` ADD `marketing_opt_out_reply_at` datetime(3);

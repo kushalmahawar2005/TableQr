@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, gt, inArray, isNotNull, isNull, lt } from "drizzle-orm";
 import * as s from "@/db/schema";
 import { db } from "@/db";
 import { LOCK_THEN_READ } from "../db-types";
@@ -20,7 +20,7 @@ import { managerApproval, type Approval } from "../staff/waiter-mutations";
 export const discountRoles = ["owner", "manager", "accountant", "cashier", "reception"] as const;
 
 type Staff = Pick<StaffSession, "tenantId" | "outletId" | "userId" | "name" | "roles">;
-type DiscountInput = { sessionId: string; kind: "percent" | "flat"; /** percent: 1-100; flat: rupees */ value: number; reason: string; /** A manager's PIN, needed above the free limit */ approval?: Approval };
+type DiscountInput = { sessionId: string; kind: "percent" | "flat"; /** percent: 1-100; flat: rupees */ value: number; reason: string; offerCode?: string; /** A manager's PIN, needed above the free limit */ approval?: Approval };
 
 const guard = (staff: Staff) => {
   if (!staff.roles.some((r) => (discountRoles as readonly string[]).includes(r))) throw new AppError("forbidden", "Your role cannot give discounts.");
@@ -40,6 +40,22 @@ async function openBill(tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
     throw new AppError("invalid_state", "Someone has already paid on this bill. Reopen it before changing the discount.", { reason: "paid" });
   }
   return billId;
+}
+
+async function campaignOffer(tx: Parameters<Parameters<typeof db.transaction>[0]>[0], scope: BillScope, billId: string, rawCode: string, now: Date) {
+  const code = rawCode.trim();
+  if (!/^[a-zA-Z0-9_-]{1,30}$/.test(code)) throw new AppError("invalid_state", "Enter the offer code exactly as it appears in the campaign.");
+  await requireFeature(scope.tenantId, "broadcast");
+  const participants = await tx.select({ guestId: s.participants.guestId }).from(s.participants).where(and(eq(s.participants.tenantId, scope.tenantId), eq(s.participants.sessionId, scope.sessionId), isNotNull(s.participants.guestId)));
+  const guestIds = participants.map((p) => p.guestId).filter((id): id is string => !!id);
+  if (!guestIds.length) throw new AppError("invalid_state", "This table has no verified campaign recipient. The offer was not recorded.");
+  const sentAfter = new Date(now.getTime() - 7 * 86_400_000);
+  const candidates = await tx.select({ campaignId: s.broadcastCampaigns.id, recipientId: s.broadcastRecipients.id, sentAt: s.broadcastRecipients.sentAt, offerCode: s.broadcastCampaigns.offerCode }).from(s.broadcastRecipients).innerJoin(s.broadcastCampaigns, and(eq(s.broadcastCampaigns.tenantId, s.broadcastRecipients.tenantId), eq(s.broadcastCampaigns.id, s.broadcastRecipients.campaignId))).where(and(eq(s.broadcastRecipients.tenantId, scope.tenantId), inArray(s.broadcastRecipients.guestId, guestIds), inArray(s.broadcastRecipients.status, ["sent", "delivered", "read"]), isNotNull(s.broadcastRecipients.sentAt), gt(s.broadcastRecipients.sentAt, sentAfter), lt(s.broadcastRecipients.sentAt, now), inArray(s.broadcastCampaigns.status, ["sending", "sent"])));
+  const match = candidates.find((row) => row.offerCode?.toLowerCase() === code.toLowerCase());
+  if (!match?.sentAt) throw new AppError("invalid_state", "No matching offer was sent to this table in the last seven days.");
+  const [used] = await tx.select({ billId: s.broadcastOfferRedemptions.billId, reversedAt: s.broadcastOfferRedemptions.reversedAt }).from(s.broadcastOfferRedemptions).where(and(eq(s.broadcastOfferRedemptions.tenantId, scope.tenantId), eq(s.broadcastOfferRedemptions.campaignId, match.campaignId), eq(s.broadcastOfferRedemptions.recipientId, match.recipientId)));
+  if (used && !used.reversedAt && used.billId !== billId) throw new AppError("invalid_state", "This guest has already used that campaign offer.");
+  return { campaignId: match.campaignId, recipientId: match.recipientId, code };
 }
 
 export async function setBillDiscount(staff: StaffSession, input: DiscountInput, now = new Date()) {
@@ -62,7 +78,9 @@ export async function setBillDiscount(staff: StaffSession, input: DiscountInput,
     const amountPaise = kind === "percent" ? Math.round((base * Math.round(value * 100)) / 10000) : Math.min(base, Math.round(value * 100));
     // Over the free limit a manager approves: the signed-in manager or owner, or one's PIN
     const approverUserId = discountNeedsApproval(amountPaise, base) ? await managerApproval(staff, input.approval, discountRoles) : null;
+    const offer = input.offerCode?.trim() ? await campaignOffer(tx, scope, billId, input.offerCode, now) : null;
     const before = inputs.discounts.filter((d) => !d.orderLineId).reduce((n, d) => n + d.amountPaise, 0);
+    await tx.update(s.broadcastOfferRedemptions).set({ reversedAt: now }).where(and(eq(s.broadcastOfferRedemptions.tenantId, scope.tenantId), eq(s.broadcastOfferRedemptions.billId, billId), isNull(s.broadcastOfferRedemptions.reversedAt)));
     await tx.delete(s.discounts).where(and(eq(s.discounts.tenantId, scope.tenantId), eq(s.discounts.billId, billId), isNull(s.discounts.orderLineId)));
     await tx.insert(s.discounts).values({
       tenantId: scope.tenantId,
@@ -74,8 +92,9 @@ export async function setBillDiscount(staff: StaffSession, input: DiscountInput,
       reason,
       appliedByUserId: staff.userId,
     });
+    if (offer) await tx.insert(s.broadcastOfferRedemptions).values({ tenantId: scope.tenantId, campaignId: offer.campaignId, recipientId: offer.recipientId, billId, offerCode: offer.code, discountPaise: amountPaise, appliedByUserId: staff.userId, createdAt: now, reversedAt: null }).onDuplicateKeyUpdate({ set: { billId, offerCode: offer.code, discountPaise: amountPaise, appliedByUserId: staff.userId, createdAt: now, reversedAt: null } });
     await syncBill(tx, scope, now);
-    await audit(tx, staff, { action: "bill.discount_set", entity: "bill", entityId: billId, before: { discountPaise: before }, after: { kind, value, amountPaise, approverUserId }, reason, now });
+    await audit(tx, staff, { action: "bill.discount_set", entity: "bill", entityId: billId, before: { discountPaise: before }, after: { kind, value, amountPaise, approverUserId, campaignId: offer?.campaignId ?? null, offerCode: offer?.code ?? null }, reason, now });
     return { billId, amountPaise };
   }, LOCK_THEN_READ);
   announceBill(scope);
@@ -87,6 +106,7 @@ export async function clearBillDiscount(staff: Staff, sessionId: string, now = n
   const scope: BillScope = { tenantId: staff.tenantId, outletId: staff.outletId, sessionId: String(sessionId) };
   await db.transaction(async (tx) => {
     const billId = await openBill(tx, scope, now);
+    await tx.update(s.broadcastOfferRedemptions).set({ reversedAt: now }).where(and(eq(s.broadcastOfferRedemptions.tenantId, scope.tenantId), eq(s.broadcastOfferRedemptions.billId, billId), isNull(s.broadcastOfferRedemptions.reversedAt)));
     await tx.delete(s.discounts).where(and(eq(s.discounts.tenantId, scope.tenantId), eq(s.discounts.billId, billId), isNull(s.discounts.orderLineId)));
     await syncBill(tx, scope, now);
     await audit(tx, staff, { action: "bill.discount_removed", entity: "bill", entityId: billId, now });
@@ -100,5 +120,7 @@ export async function billDiscount(staff: Pick<StaffSession, "tenantId">, billId
     .select({ kind: s.discounts.kind, value: s.discounts.value, amountPaise: s.discounts.amountPaise, reason: s.discounts.reason })
     .from(s.discounts)
     .where(and(eq(s.discounts.tenantId, staff.tenantId), eq(s.discounts.billId, billId), isNull(s.discounts.orderLineId)));
-  return row ?? null;
+  if (!row) return null;
+  const [offer] = await db.select({ offerCode: s.broadcastOfferRedemptions.offerCode }).from(s.broadcastOfferRedemptions).where(and(eq(s.broadcastOfferRedemptions.tenantId, staff.tenantId), eq(s.broadcastOfferRedemptions.billId, billId), isNull(s.broadcastOfferRedemptions.reversedAt)));
+  return { ...row, offerCode: offer?.offerCode ?? null };
 }

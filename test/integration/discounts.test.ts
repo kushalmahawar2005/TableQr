@@ -1,6 +1,7 @@
 import { and, desc, eq, isNull } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db as appDb } from "@/db";
+import { uuidv7 } from "@/db/id";
 import * as s from "@/db/schema";
 import { clearBillDiscount, setBillDiscount } from "@/server/billing/discounts";
 import { requestBill, settleAtCounter } from "@/server/billing/payments";
@@ -10,6 +11,7 @@ import { getGuestContext, type GuestContext } from "@/server/guest/context";
 import { placeOrder } from "@/server/guest/order";
 import { startOrJoinTable } from "@/server/guest/session";
 import { resolveStaff, signInStaff, type StaffSession } from "@/server/staff/auth";
+import { broadcastWorkspace } from "@/server/whatsapp/campaigns";
 import { attachVerifiedTestGuest, resetTestDb } from "./setup-db";
 
 // Bill discounts from the billing screen: percent or rupees, with a reason, before anyone pays.
@@ -59,6 +61,36 @@ describe("bill discount", () => {
     expect((await bill()).discountPaise).toBe(0);
     const logged = await env.db.select({ action: s.auditLog.action }).from(s.auditLog).where(eq(s.auditLog.entityId, b.id));
     expect(logged.map((l) => l.action)).toEqual(expect.arrayContaining(["bill.discount_set", "bill.discount_removed"]));
+  });
+
+  it("records a verified WhatsApp offer on a paid bill, reports it, and reverses it when removed", async () => {
+    const now = new Date();
+    const [participant] = await env.db.select({ guestId: s.participants.guestId }).from(s.participants).where(eq(s.participants.sessionId, guest.sessionId));
+    expect(participant?.guestId).toBeTruthy();
+    await env.db.update(s.tenants).set({ customFeatures: { broadcast: true, discounts: true } }).where(eq(s.tenants.id, owner.tenantId));
+    const accountId = uuidv7();
+    const templateId = uuidv7();
+    const campaignId = uuidv7();
+    const recipientId = uuidv7();
+    const sentAt = new Date(now.getTime() - 60 * 60 * 1000);
+    await env.db.insert(s.whatsappAccounts).values({ id: accountId, tenantId: owner.tenantId, wabaId: `1${accountId.slice(-11)}`, phoneNumberId: `2${accountId.slice(-11)}`, accessToken: "test", status: "connected" });
+    await env.db.insert(s.whatsappTemplates).values({ id: templateId, tenantId: owner.tenantId, accountId, name: `offer-${templateId}`, language: "en", category: "MARKETING", header: "none", body: "Offer {{1}}", status: "approved" });
+    await env.db.insert(s.broadcastCampaigns).values({ id: campaignId, tenantId: owner.tenantId, name: "Offer attribution test", templateId, variables: ["SAVE10"], offerCode: "SAVE10", segment: {}, status: "sent", startedAt: sentAt, finishedAt: now, audienceCount: 1, creditsReserved: 1, creditsUsed: 1, createdBy: owner.userId, timezone: "Asia/Kolkata" });
+    await env.db.insert(s.broadcastRecipients).values({ id: recipientId, tenantId: owner.tenantId, campaignId, guestId: participant!.guestId!, phone: "+919000000001", status: "delivered", sentAt });
+
+    const activeBill = await bill();
+    await setBillDiscount(owner, { sessionId: guest.sessionId, kind: "percent", value: 10, reason: "Campaign offer", offerCode: "save10" }, now);
+    const [redemption] = await env.db.select().from(s.broadcastOfferRedemptions).where(eq(s.broadcastOfferRedemptions.billId, activeBill.id));
+    expect(redemption).toMatchObject({ campaignId, recipientId, offerCode: "save10", discountPaise: Math.round(activeBill.subtotalPaise * 0.1), reversedAt: null });
+
+    await env.db.update(s.bills).set({ status: "paid", closedAt: now }).where(eq(s.bills.id, activeBill.id));
+    expect((await broadcastWorkspace(owner)).campaigns.find((campaign) => campaign.id === campaignId)?.report.offerRedemptions).toBe(1);
+    await env.db.update(s.bills).set({ status: "open", closedAt: null }).where(eq(s.bills.id, activeBill.id));
+
+    await clearBillDiscount(owner, guest.sessionId, now);
+    const [reversed] = await env.db.select().from(s.broadcastOfferRedemptions).where(eq(s.broadcastOfferRedemptions.billId, activeBill.id));
+    expect(reversed?.reversedAt).toEqual(now);
+    expect((await broadcastWorkspace(owner)).campaigns.find((campaign) => campaign.id === campaignId)?.report.offerRedemptions).toBe(0);
   });
 
   it("lets a cashier give up to 10% alone, and more only with a manager's PIN", async () => {
