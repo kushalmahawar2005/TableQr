@@ -1,6 +1,6 @@
 "use client";
 
-import { BUSINESS_TYPES, type BusinessType } from "@/lib/subscription-pricing";
+import { BUSINESS_PACKAGE_PROFILES, BUSINESS_TYPES, BUSINESS_SIZES, businessPackageLabel, businessSizesFor, type BusinessSize, type BusinessType } from "@/lib/subscription-pricing";
 import { useActionState, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, Check, Copy, Dices, Loader2, MessageCircle } from "lucide-react";
@@ -89,9 +89,12 @@ export function CreateTenantDialog({ open, onOpenChange, plans }: { open: boolea
   };
   const [step, setStep] = useState(0);
   const [businessType,setBusinessType] = useState<BusinessType>("restaurant");
-  const [planCode, setPlanCode] = useState(plans[0]?.code ?? "");
+  const [businessSize,setBusinessSize] = useState<BusinessSize | "">("small");
+  const sizeOptions = businessSizesFor(businessType);
+  const basePlan = plans.find(plan => plan.code === BUSINESS_PACKAGE_PROFILES.restaurant.defaultPlanCode) ?? plans[0];
+  const [planCode, setPlanCode] = useState(basePlan?.code ?? "");
   const [customize, setCustomize] = useState(false);
-  const [features, setFeatures] = useState<Features>(() => plans[0]?.features ?? readFeatures(null));
+  const [features, setFeatures] = useState<Features>(() => basePlan?.features ?? readFeatures(null));
   // Kitchen screen follows the chosen plan until the admin sets it themselves
   const [kitchen, setKitchen] = useState<boolean | null>(null);
   const kitchenOn = kitchen ?? features.kitchenDisplay;
@@ -156,7 +159,7 @@ export function CreateTenantDialog({ open, onOpenChange, plans }: { open: boolea
           <Button render={<a href={`https://wa.me/${waNumber}?text=${encodeURIComponent(message)}`} target="_blank" rel="noreferrer noopener" />} nativeButton={false}><MessageCircle />Send on WhatsApp</Button>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>Done</Button>
         </div>
-      </div> : <form ref={form} onSubmit={(e) => { if (step < last) e.preventDefault(); }} action={(fd) => { setCreds({ tenant: String(fd.get("brandName") ?? ""), outlet: String(fd.get("outletCode") ?? "").toUpperCase(), phone: String(fd.get("ownerPhone") ?? ""), pin: String(fd.get("ownerPin") ?? "") }); action(fd); }} onKeyDown={(e) => { if (e.key === "Enter" && step < last && (e.target as HTMLElement).tagName === "INPUT") { e.preventDefault(); next(); } }} className="space-y-5"><div><Label htmlFor="businessType">Business category</Label><select id="businessType" name="businessType" value={businessType} onChange={e=>setBusinessType(e.target.value as BusinessType)} className="mt-1 w-full rounded-lg border bg-background p-3">{Object.entries(BUSINESS_TYPES).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select><p className="mt-1 text-xs text-muted-foreground">Remote setup ₹4,999 + ₹1,500 per extra outlet. Start the free month from Subscriptions after setup and payment are complete.</p></div>
+      </div> : <form ref={form} onSubmit={(e) => { if (step < last) e.preventDefault(); }} action={(fd) => { setCreds({ tenant: String(fd.get("brandName") ?? ""), outlet: String(fd.get("outletCode") ?? "").toUpperCase(), phone: String(fd.get("ownerPhone") ?? ""), pin: String(fd.get("ownerPin") ?? "") }); action(fd); }} onKeyDown={(e) => { if (e.key === "Enter" && step < last && (e.target as HTMLElement).tagName === "INPUT") { e.preventDefault(); next(); } }} className="space-y-5"><div><Label htmlFor="businessType">Business category</Label><select id="businessType" name="businessType" value={businessType} onChange={e=>{const nextType=e.target.value as BusinessType;setBusinessType(nextType);setBusinessSize(businessSizesFor(nextType)[0]?.[0]??"")}} className="mt-1 w-full rounded-lg border bg-background p-3">{Object.entries(BUSINESS_TYPES).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select>{sizeOptions.length>0&&<div className="mt-3"><Label htmlFor="businessSize">Business size</Label><select id="businessSize" name="businessSize" required value={businessSize} onChange={e=>setBusinessSize(e.target.value as BusinessSize)} className="mt-1 w-full rounded-lg border bg-background p-3">{sizeOptions.map(([key])=><option key={key} value={key}>{BUSINESS_SIZES[key]}</option>)}</select><p className="mt-1 text-xs text-muted-foreground">Used to identify the right package for this business.</p></div>}{sizeOptions.length===0&&<input type="hidden" name="businessSize" value=""/>}<p className="mt-1 text-xs text-muted-foreground">Remote setup ₹4,999 + ₹1,500 per extra outlet. Start the free month from Subscriptions after setup and payment are complete.</p></div>
         <ol className="grid grid-cols-4 gap-2" aria-label="Steps">
           {[...sections.map((s) => s.title), "Plan"].map((title, i) => <li key={title} aria-current={i === step ? "step" : undefined} className="space-y-1.5">
             <span className={`block h-1.5 rounded-full transition-colors ${i <= step ? "bg-primary" : "bg-muted"}`} />
@@ -190,12 +193,10 @@ export function CreateTenantDialog({ open, onOpenChange, plans }: { open: boolea
           <div role="radiogroup" aria-label="Plan" className="grid gap-2 sm:grid-cols-2">
             {plans.map((p) => <label key={p.code} className="flex cursor-pointer items-center gap-3 rounded-xl border p-3 text-sm transition-colors hover:bg-muted/50 has-[:checked]:border-primary has-[:checked]:bg-primary/5 has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring/50">
               <input type="radio" name="planCode" value={p.code} checked={planCode === p.code} onChange={() => { setPlanCode(p.code); setFeatures(p.features); setKitchen(null); }} required className="size-4 accent-[var(--primary)]" />
-              <span className="font-medium">{p.name}</span>
+              <span className="min-w-0 font-medium">{businessPackageLabel(businessType, businessSize || null, p.name)}</span>
               <span className="ml-auto text-xs text-muted-foreground">{p.features.rooms ? (p.features.dineIn ? "Hotel + restaurant" : "Hotel") : p.features.kitchenDisplay ? "Kitchen included" : ""}</span>
             </label>)}
           </div>
-          {/* Cloud kitchen: only the menu and delivery, no tables or dine-in extras */}
-          <Button type="button" variant="outline" className="w-full" onClick={() => { setCustomize(true); setKitchen(null); setFeatures({ ...(Object.fromEntries(FEATURE_KEYS.map((k) => [k, false])) as Record<(typeof FEATURE_KEYS)[number], boolean>), delivery: true, poweredBy: features.poweredBy, maxTables: null, maxStaff: features.maxStaff, maxRooms: null }); }}>Cloud kitchen: menu + delivery only</Button>
           <label className="flex items-start gap-3 rounded-xl border p-3 text-sm has-[:checked]:border-primary has-[:checked]:bg-primary/5">
             <input type="checkbox" checked={customize} onChange={(e) => setCustomize(e.target.checked)} className="mt-0.5 size-4 accent-[var(--primary)]" />
             <span><span className="block font-medium">Customize this restaurant&apos;s package</span><span className="block text-xs text-muted-foreground">Choose which existing features this tenant gets. You can adjust these later from the tenant&apos;s package settings.</span></span>
@@ -207,7 +208,7 @@ export function CreateTenantDialog({ open, onOpenChange, plans }: { open: boolea
             <input type="hidden" name="customizeFeatures" value="on" />
             <input type="hidden" name="customFeatures" value={JSON.stringify(features)} />
           </div>}
-          {(businessType === "hotel" || businessType === "hotel_restaurant") && <div className="space-y-1.5 rounded-xl border p-3">
+          {BUSINESS_PACKAGE_PROFILES[businessType].rooms && <div className="space-y-1.5 rounded-xl border p-3">
             <Label htmlFor="roomCount">Number of rooms</Label>
             <Input id="roomCount" name="roomCount" type="number" min={0} max={200} value={roomCount} onChange={(e) => setRoomCount(e.target.value)} />
             <p className="text-xs text-muted-foreground">Made with a QR code each, numbered 101, 102 … The owner can change numbers in Rooms.{(customize ? features.dineIn : chosen?.features.dineIn) ? "" : " This package has no restaurant tables, so no tables are made."}</p>
@@ -226,7 +227,7 @@ export function CreateTenantDialog({ open, onOpenChange, plans }: { open: boolea
             ].map(option => <label key={option.value} className="flex cursor-pointer items-start gap-3 rounded-lg border p-3 text-sm has-[:checked]:border-primary has-[:checked]:bg-primary/5"><input type="radio" name="guestPayments" value={option.value} checked={guestPayments === option.value} onChange={() => setGuestPayments(option.value)} className="mt-0.5 size-4 accent-[var(--primary)]" /><span><span className="block font-medium">{option.title}</span><span className="block text-xs text-muted-foreground">{option.hint}</span></span></label>)}
           </fieldset>
           <dl className="divide-y rounded-xl border text-sm">
-            {([["Brand", review.brandName], ["Contact", [review.contactName, review.contactPhone].filter(Boolean).join(" · ")], ["Outlet", [review.outletName, review.city].filter(Boolean).join(", ")], ["Outlet code", review.outletCode || "Made when created"], ["Tables", (customize ? features.dineIn : chosen?.features.dineIn) ? review.tableCount : "None"], ...((businessType === "hotel" || businessType === "hotel_restaurant") ? [["Rooms", roomCount]] as const : []), ["Owner", [review.ownerName, review.ownerPhone].filter(Boolean).join(" · ")], ["Kitchen screen", kitchenOn ? "Yes" : "No"], ...(customize ? [["Package", "Custom tenant feature set"]] as const : [])] as const).map(([k, v]) => <div key={k} className="flex items-center justify-between gap-4 px-4 py-2.5"><dt className="text-muted-foreground">{k}</dt><dd className="min-w-0 break-words text-right font-medium">{v}</dd></div>)}
+            {([["Brand", review.brandName], ["Business", `${BUSINESS_TYPES[businessType]}${sizeOptions.length ? ` · ${BUSINESS_SIZES[businessSize as BusinessSize]}` : ""}`], ["Package", businessPackageLabel(businessType, businessSize || null, customize ? "Custom" : chosen?.name ?? "Base")], ["Contact", [review.contactName, review.contactPhone].filter(Boolean).join(" · ")], ["Outlet", [review.outletName, review.city].filter(Boolean).join(", ")], ["Outlet code", review.outletCode || "Made when created"], ["Tables", BUSINESS_PACKAGE_PROFILES[businessType].floor && (customize ? features.dineIn : chosen?.features.dineIn) ? review.tableCount : "None"], ...((businessType === "hotel" || businessType === "hotel_restaurant") ? [["Rooms", roomCount]] as const : []), ["Owner", [review.ownerName, review.ownerPhone].filter(Boolean).join(" · ")], ["Kitchen screen", kitchenOn ? "Yes" : "No"], ...(customize ? [["Package", "Custom tenant feature set"]] as const : [])] as const).map(([k, v]) => <div key={k} className="flex items-center justify-between gap-4 px-4 py-2.5"><dt className="text-muted-foreground">{k}</dt><dd className="min-w-0 break-words text-right font-medium">{v}</dd></div>)}
           </dl>
         </fieldset>
         {state.error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{state.error}</p>}

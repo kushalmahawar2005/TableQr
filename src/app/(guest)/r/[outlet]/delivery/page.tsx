@@ -14,10 +14,11 @@ import { DeliveryScreen } from "./screen";
 export async function generateMetadata(props: PageProps<"/r/[outlet]/delivery">): Promise<Metadata> {
   return { title: "Delivery order", robots: { index: false, follow: false }, ...restaurantAppMetadata(await restaurantApp((await props.params).outlet)) };
 }
-export default async function DeliveryPage({ params, searchParams }: { params: Promise<{ outlet: string }>; searchParams: Promise<{ lang?: string; new?: string; reorder?: string }> }) {
+export default async function DeliveryPage({ params, searchParams }: { params: Promise<{ outlet: string }>; searchParams: Promise<{ lang?: string; new?: string; reorder?: string; mode?: string }> }) {
   const { outlet } = await params;
   const query = await searchParams;
   const { lang } = query;
+  const serviceMode = query.mode === "pickup" ? "pickup" : "delivery";
   const jar = await cookies();
   const token = jar.get(`tq_delivery_${outlet.trim().toUpperCase().replace(/[^A-Z0-9]/g, "")}`)?.value;
   let initialStatus: Awaited<ReturnType<typeof deliveryStatus>> | undefined;
@@ -35,13 +36,13 @@ export default async function DeliveryPage({ params, searchParams }: { params: P
   let data: Awaited<ReturnType<typeof deliveryMenu>> | undefined;
   let menuError: string | undefined;
   try {
-    data = await deliveryMenu(outlet);
+    data = await deliveryMenu(outlet, serviceMode);
   }
   catch (error) {
     if (!(error instanceof AppError)) throw error;
     if (error.code === "not_found" || error.code === "outlet_unavailable") notFound();
     menuError = error.message;
   }
-  if (menuError) return <main className="py-10"><Link href={`${await guestBase(outlet)}`} className="text-brand-strong">← Guest link</Link><h1 className="mt-6 text-2xl font-bold">Delivery</h1><p className="mt-3 text-muted">{menuError}</p></main>;
-  return <DeliveryScreen key={query.reorder ?? "new-order"} initialCart={initialCart} outletCode={outlet} installable={installable} data={data} hindi={lang === "hi"} realtimeUrl={process.env.REALTIME_URL?.replace(/^http/, "ws") ?? null} />;
+  if (menuError) return <main className="py-10"><Link href={`${await guestBase(outlet)}`} className="text-brand-strong">← Guest link</Link><h1 className="mt-6 text-2xl font-bold">{serviceMode === "pickup" ? "Pickup / takeaway" : "Delivery"}</h1><p className="mt-3 text-muted">{menuError}</p></main>;
+  return <DeliveryScreen key={`${query.reorder ?? "new-order"}-${serviceMode}`} initialCart={initialCart} outletCode={outlet} installable={installable} data={data} initialServiceMode={serviceMode} hindi={lang === "hi"} realtimeUrl={process.env.REALTIME_URL?.replace(/^http/, "ws") ?? null} />;
 }

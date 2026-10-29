@@ -3,7 +3,27 @@ export const BUSINESS_TYPES = {
   hotel: "Hotel", hotel_restaurant: "Restaurant / Café + Hotel",
 } as const;
 export type BusinessType = keyof typeof BUSINESS_TYPES;
-export const ADDONS = { waiterApp: { label: "Waiter App", paise: 29900 }, reservations: { label: "Reservations + party booking", paise: 29900 }, riderTracking: { label: "Rider assignment/tracking", paise: 39900 } } as const;
+export const BUSINESS_SIZES = { small: "Small", big: "Big", large: "Large" } as const;
+export type BusinessSize = keyof typeof BUSINESS_SIZES;
+/** A package is the selected category, optional size and one of the shared plan tiers. */
+export const BUSINESS_PACKAGE_PROFILES = {
+  cloud_kitchen: { sizeKeys: [], defaultPlanCode: "starter", floor: false, rooms: false, reservations: false, delivery: true, pickup: true },
+  cafe: { sizeKeys: [], defaultPlanCode: "starter", floor: true, rooms: false, reservations: true, delivery: true, pickup: true },
+  restaurant: { sizeKeys: ["small", "big", "large"], defaultPlanCode: "starter", floor: true, rooms: false, reservations: true, delivery: true, pickup: true },
+  hotel: { sizeKeys: ["small", "big", "large"], defaultPlanCode: "starter", floor: false, rooms: true, reservations: false, delivery: false, pickup: false },
+  hotel_restaurant: { sizeKeys: ["small", "big", "large"], defaultPlanCode: "starter", floor: true, rooms: true, reservations: true, delivery: true, pickup: true },
+} as const satisfies Record<BusinessType, { sizeKeys: readonly BusinessSize[]; defaultPlanCode: string; floor: boolean; rooms: boolean; reservations: boolean; delivery: boolean; pickup: boolean }>;
+export const businessSizesFor = (type: BusinessType) => (BUSINESS_PACKAGE_PROFILES[type].sizeKeys as readonly BusinessSize[]).map(key => [key, BUSINESS_SIZES[key]] as [BusinessSize, string]);
+export const isBusinessSizeFor = (type: BusinessType, size: unknown): size is BusinessSize => {
+  const sizeKeys = BUSINESS_PACKAGE_PROFILES[type].sizeKeys as readonly BusinessSize[];
+  return sizeKeys.length ? sizeKeys.some(key => key === size) : size === null || size === "" || size === undefined;
+};
+export function businessPackageLabel(type: BusinessType, size: BusinessSize | null | undefined, tierName: string) {
+  const sizeKeys = BUSINESS_PACKAGE_PROFILES[type].sizeKeys as readonly BusinessSize[];
+  const sizeLabel = size && sizeKeys.includes(size) ? ` · ${BUSINESS_SIZES[size]}` : "";
+  return `${BUSINESS_TYPES[type]}${sizeLabel} · ${tierName}`;
+}
+export const ADDONS = { waiterApp: { label: "Waiter App", paise: 29900 }, reservations: { label: "Reservations + party booking", paise: 0 }, riderTracking: { label: "Rider assignment/tracking", paise: 39900 } } as const;
 export type AddonKey = keyof typeof ADDONS;
 export type CommercialSettings = {
   version: 1;

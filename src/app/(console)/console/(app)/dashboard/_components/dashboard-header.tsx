@@ -30,7 +30,7 @@ export function DashboardHeader({
         <h1 className="font-display text-2xl font-bold tracking-tight text-ink sm:text-[28px]">
           {data.greeting}, {data.outletName}!
         </h1>
-        <p className="mt-1 text-sm font-medium text-muted">Here&apos;s what&apos;s happening at your restaurant today.</p>
+        <p className="mt-1 text-sm font-medium text-muted">Here&apos;s what&apos;s happening at your business today.</p>
       </div>
 
       <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:justify-start">

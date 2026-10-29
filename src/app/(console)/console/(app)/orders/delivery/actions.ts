@@ -5,7 +5,7 @@ import { advanceDelivery, assignDeliveryCourier, cancelDeliveryOrder, deliverySt
 import { staffFor } from "@/server/staff/request";
 import { staffRealtimeToken, topics } from "@/server/realtime/token";
 import { AppError } from "@/server/errors";
-export async function advanceDeliveryAction(id: string, status: "dispatched" | "delivered") {
+export async function advanceDeliveryAction(id: string, status: "dispatched" | "delivered" | "collected") {
   try { await advanceDelivery(await staffFor(deliveryStaffRoles, "orders"), id, status); revalidatePath("/console/orders"); return { ok: true as const }; }
   catch (error) { if (!(error instanceof AppError)) console.error("[delivery] status update", error); return { ok: false as const, message: error instanceof AppError ? error.message : "Could not update delivery. Please try again." }; }
 }

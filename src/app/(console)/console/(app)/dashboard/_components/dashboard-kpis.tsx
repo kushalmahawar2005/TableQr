@@ -66,7 +66,7 @@ export function DashboardKpis({ data, trend, features }: { data: DashboardData; 
           <div className={`${footer} justify-start`}><span className="text-[11px] font-medium text-muted">Across open bills</span></div>
         </Link>
 
-        {(!features || features.delivery) && <Link href="/console/orders?view=delivery" className={`${card} xl:col-span-1`}>
+        {features?.delivery === true && <Link href="/console/orders?view=delivery" className={`${card} xl:col-span-1`}>
           <div className="flex items-center justify-between gap-2">
             <p className="text-[12px] font-semibold leading-4 text-muted sm:text-[13px]">Delivery Orders</p>
             <span className={`${iconBox} bg-sage text-forest`} aria-hidden="true"><Truck className="size-[18px]" /></span>
@@ -78,7 +78,7 @@ export function DashboardKpis({ data, trend, features }: { data: DashboardData; 
           <div className={`${footer} justify-start`}><span className="text-[11px] font-medium text-muted">{k.delivery.deliveredToday} delivered today</span></div>
         </Link>}
 
-        {(!features || features.dineIn) && <Link href="/console/floor" className={`${card} xl:col-span-1`}>
+        {features?.dineIn === true && <Link href="/console/floor" className={`${card} xl:col-span-1`}>
           <div className="flex items-center justify-between gap-2">
             <p className="text-[12px] font-semibold leading-4 text-muted sm:text-[13px]">Tables in Use</p>
             <span className={`${iconBox} bg-terracotta/10 text-terracotta`} aria-hidden="true"><Receipt className="size-[18px]" /></span>

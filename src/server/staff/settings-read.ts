@@ -10,7 +10,7 @@ import type { StaffSession } from "./auth";
 import { configuredGuestServices, guestServices, type GuestService } from "@/domain/guest-services";
 import { tenantFeatures } from "../plan";
 import { outletPaymentGatewayStatus } from "../payments/outlet-gateway";
-import type { BusinessType } from "@/lib/subscription-pricing";
+import { BUSINESS_PACKAGE_PROFILES, type BusinessType } from "@/lib/subscription-pricing";
 
 // Outlet profile (read-only): the signed-in outlet's details and its setup counts, scoped to the
 // tenant and outlet.
@@ -19,7 +19,7 @@ type Staff = Pick<StaffSession, "tenantId" | "outletId" | "roles">;
 
 export type OutletSettings = {
   businessType: BusinessType | null;
-  deliveryPolicy: DeliveryPolicy; deliveryAvailable: boolean;
+  deliveryPolicy: DeliveryPolicy; deliveryAvailable: boolean; pickupAvailable: boolean;
   guestOnlinePaymentAvailable: boolean; bookingGatewayAvailable: boolean;
   paymentGateway: Awaited<ReturnType<typeof outletPaymentGatewayStatus>>;
   name: string; code: string; city: string; address: string; gstin: string | null; fssai: string | null; timezone: string; logoUrl: string | null;
@@ -56,16 +56,20 @@ export async function getOutletSettings(staff: Staff): Promise<OutletSettings> {
     tenantFeatures(staff.tenantId, staff.outletId),
   ]);
   const paymentGateway = await outletPaymentGatewayStatus(staff.tenantId, staff.outletId);
+  const businessType = (plan?.businessType ?? "restaurant") as BusinessType;
   return {
-    businessType: plan?.businessType ?? null,
+    businessType,
     // Delivery not set up yet: start on the restaurant's own Cashfree when it is connected
-    deliveryPolicy: outlet.deliveryPolicy ? readDeliveryPolicy(outlet.deliveryPolicy) : { ...readDeliveryPolicy(null), paymentMode: paymentGateway.configured && paymentGateway.available ? "gateway" : "cod" }, deliveryAvailable: features.delivery,
+    deliveryPolicy: outlet.deliveryPolicy ? readDeliveryPolicy(outlet.deliveryPolicy) : { ...readDeliveryPolicy(null), paymentMode: paymentGateway.configured && paymentGateway.available ? "gateway" : "cod" }, deliveryAvailable: features.delivery && BUSINESS_PACKAGE_PROFILES[businessType].delivery, pickupAvailable: features.delivery && BUSINESS_PACKAGE_PROFILES[businessType].pickup,
     guestOnlinePaymentAvailable: paymentGateway.available, bookingGatewayAvailable: paymentGateway.available, paymentGateway,
     name: outlet.name, code: outlet.code, city: outlet.city, address: outlet.address, gstin: outlet.gstin, fssai: outlet.fssai, timezone: outlet.timezone, logoUrl: brand?.logoUrl ?? null,
     sessionMode: outlet.sessionMode, autoAcceptOrders: outlet.autoAcceptOrders, guestOnlinePayments: outlet.guestOnlinePayments, guestPwaInstallEnabled: outlet.guestPwaInstallEnabled, guestPwaCustomizationAvailable: features.guestPwaCustomization && (features.delivery || features.reservations), serviceChargeBp: outlet.serviceChargeBp, tipPresetsBp: outlet.tipPresetsBp,
     reviewUrl: outlet.reviewUrl, openingHours: outlet.openingHours, tables: Number(tables.n), staff: Number(team.n), plan: plan?.name ?? "",
     roomServices: configuredRoomRequestKinds(outlet.roomServices), wifiSsid: outlet.wifiSsid ?? "", wifiPassword: outlet.wifiPassword ?? "",
-    guestServices: configuredGuestServices(outlet.guestServices), availableGuestServices: guestServices.filter(service => features[service]),
+    // Stored guest toggles can outlive a category/package change. Only return services this
+    // outlet is actually allowed to offer so the UI cannot resurrect an unrelated service.
+    guestServices: configuredGuestServices(outlet.guestServices).filter(service => features[service]),
+    availableGuestServices: guestServices.filter(service => features[service]),
     bookingPaymentMode: outlet.bookingPaymentMode, bookingPaymentQrUrl: outlet.bookingPaymentQrUrl, upiId: outlet.upiId, upiName: outlet.upiName,
     bookingAdvancePaise: outlet.bookingAdvancePaise,
     announcementActive: outlet.announcementActive, announcementTitle: outlet.announcementTitle ?? "", announcementBody: outlet.announcementBody ?? "",

@@ -30,13 +30,35 @@ describe("public restaurant service choices", () => {
     expect((await getOutletSettings(owner())).availableGuestServices).not.toContain("rooms");
   });
 
+  it("keeps room and reservation journeys out of a cloud kitchen even if saved as enabled", async () => {
+    const [tenant] = await env.db.select({ businessType: s.tenants.businessType, businessSize: s.tenants.businessSize, customFeatures: s.tenants.customFeatures, commercial: s.tenants.commercial }).from(s.tenants).where(eq(s.tenants.id, env.demo.tenantId));
+    const [outlet] = await env.db.select({ guestServices: s.outlets.guestServices }).from(s.outlets).where(eq(s.outlets.id, env.demo.outletId));
+    await env.db.update(s.tenants).set({
+      businessType: "cloud_kitchen", businessSize: null,
+      customFeatures: { dineIn: true, rooms: true, reservations: true, delivery: true },
+      commercial: { version: 1, outletCount: 1, addons: { reservations: [env.demo.outletId] }, goLiveAt: null, setupReceivedPaise: 0, setupReference: "" },
+    }).where(eq(s.tenants.id, env.demo.tenantId));
+    try {
+      await updateOutletSettings(owner(), patch({ guestServices: ["dineIn", "reservations", "rooms"] }));
+      expect((await getRestaurantHome("SRJ01")).services).toMatchObject({ dineIn: false, reservations: false, rooms: false });
+      expect((await getOutletSettings(owner())).guestServices).toEqual([]);
+      const [saved] = await env.db.select({ services: s.outlets.guestServices }).from(s.outlets).where(eq(s.outlets.id, env.demo.outletId));
+      expect(saved.services).toEqual([]);
+      expect((await getOutletSettings(owner())).availableGuestServices).not.toContain("reservations");
+      await expect(getBookingAvailability("SRJ01", { date: serviceDate(new Date(Date.now() + 24 * 3600_000), "Asia/Kolkata"), partySize: 2 })).rejects.toMatchObject({ code: "forbidden" });
+    } finally {
+      await env.db.update(s.tenants).set(tenant).where(eq(s.tenants.id, env.demo.tenantId));
+      await env.db.update(s.outlets).set({ guestServices: outlet.guestServices }).where(eq(s.outlets.id, env.demo.outletId));
+    }
+  });
+
   it("pauses new online reservations while preserving existing booking links and other tenants", async () => {
     const date = serviceDate(new Date(Date.now() + 24 * 3600_000), "Asia/Kolkata");
     const slot = (await getBookingAvailability("SRJ01", { date, partySize: 2 })).slots.find(value => value.available)!;
     const held = await createBookingHold("SRJ01", { date, startAt: slot.startAt, partySize: 2, requestId: "public-choice-hold", holdToken: "public-choice-token" });
     const otherBefore = await getRestaurantHome("CNJ01");
     await updateOutletSettings(owner(), patch({ guestServices: ["dineIn"], guestOnlinePayments: false }));
-    expect((await getRestaurantHome("SRJ01")).services).toEqual({ delivery: false, dineIn: true, reservations: false, rooms: false });
+    expect((await getRestaurantHome("SRJ01")).services).toEqual({ delivery: false, pickup: false, dineIn: true, reservations: false, rooms: false });
     expect((await getOutletSettings(owner())).guestOnlinePayments).toBe(false);
     await expect(getBookingAvailability("SRJ01", { date, partySize: 2 })).rejects.toMatchObject({ code: "forbidden" });
     await expect(getBookingZones("SRJ01")).rejects.toMatchObject({ code: "forbidden" });
@@ -48,7 +70,7 @@ describe("public restaurant service choices", () => {
 
   it("allows an empty selection, validates choices and requires owner access", async () => {
     await updateOutletSettings(owner(), patch({ guestServices: [] }));
-    expect((await getRestaurantHome("SRJ01")).services).toEqual({ delivery: false, dineIn: false, reservations: false, rooms: false });
+    expect((await getRestaurantHome("SRJ01")).services).toEqual({ delivery: false, pickup: false, dineIn: false, reservations: false, rooms: false });
     await expect(updateOutletSettings({ ...owner(), roles: ["manager"] }, patch({ guestServices: ["reservations"] }))).rejects.toMatchObject({ code: "forbidden" });
     await expect(updateOutletSettings(owner(), patch({ guestServices: ["unknown"] as never }))).rejects.toMatchObject({ code: "invalid_state" });
     await expect(updateOutletSettings(owner(), patch({ guestOnlinePayments: "false" as never }))).rejects.toMatchObject({ code: "invalid_state" });
@@ -59,8 +81,13 @@ describe("public restaurant service choices", () => {
 
   it("shows the branded customer app only when the plan and owner both allow it", async () => {
     await updateBrandLogo(owner(), "/uploads/customer-app-logo.png");
-    await updateOutletSettings(owner(), patch({ guestPwaInstallEnabled: true }));
+    await updateOutletSettings(owner(), patch({ guestServices: ["reservations"], guestPwaInstallEnabled: true }));
     expect(await restaurantApp("SRJ01")).toMatchObject({ name: "Spice Route", logoUrl: "/uploads/customer-app-logo.png" });
+
+    await updateOutletSettings(owner(), patch({ guestServices: ["dineIn"], guestPwaInstallEnabled: true }));
+    expect(await restaurantApp("SRJ01")).toBeNull();
+    await updateOutletSettings(owner(), patch({ guestServices: ["reservations"], guestPwaInstallEnabled: true }));
+    expect(await restaurantApp("SRJ01")).toMatchObject({ name: "Spice Route" });
 
     await updateOutletSettings(owner(), patch({ guestPwaInstallEnabled: false }));
     expect(await restaurantApp("SRJ01")).toBeNull();

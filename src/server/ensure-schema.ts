@@ -3,9 +3,9 @@ import { DELIVERY_TABLE_SQL } from "./delivery/schema-sql";
 import type { Pool, RowDataPacket } from "mysql2/promise";
 
 // Brings the live database up to what this release needs, once, when the server starts.
-// Hostinger builds and starts the app straight from Git and never runs `db:migrate`, so these
-// steps mirror drizzle/0016-0032. Every step checks first, so running it again (another server
-// instance, a restart) changes nothing. Works on MySQL and MariaDB.
+// Hostinger builds and starts the app straight from Git and may not run `db:migrate`, so these
+// steps mirror the schema changes this startup path owns. Every step is safe to repeat after a
+// restart or when multiple app instances start. Works on MySQL and MariaDB.
 
 type Step = { tag: string; when: number; hash: string; apply: (db: Pool) => Promise<void> };
 
@@ -413,6 +413,22 @@ const STEPS: Step[] = [
     tag: "0047_serious_iron_man", when: 1792790150697, hash: "1154b1dda4aa08a0133fd52309e12315dfeed1f1bbe1225aca57212f4c0e6b00",
     apply: async (db) => {
       await db.query("CREATE TABLE IF NOT EXISTS `platform_admin_login_buckets` (`admin_key_hash` char(64) NOT NULL, `attempts` int NOT NULL DEFAULT 0, `window_started_at` datetime(3) NOT NULL, `locked_until` datetime(3), CONSTRAINT `platform_admin_login_buckets_admin_key_hash` PRIMARY KEY (`admin_key_hash`))");
+    },
+  },
+  {
+    tag: "0075_rich_iron_lad", when: 1793283288124, hash: "af8b56f2d1c415909833270afa3d3af1cdc95fcf54b0e9e55b11ad53ae968f04",
+    apply: async (db) => {
+      await addColumn(db, "tenants", "business_size", "varchar(16)");
+    },
+  },
+  {
+    tag: "0076_odd_starbolt", when: 1793286230727, hash: "d5966ee5d59dbd5bcdba34cba13a52c9cdf39c7d26a9fc98851b773b7f56898e",
+    apply: async (db) => {
+      // Pickup checkouts intentionally have no address; existing delivery rows remain unchanged.
+      await db.query("ALTER TABLE `delivery_checkouts` MODIFY COLUMN `address` json");
+      await db.query("ALTER TABLE `delivery_checkouts` MODIFY COLUMN `status` enum('draft','placed','dispatched','delivered','collected','cancelled') NOT NULL DEFAULT 'draft'");
+      await addColumn(db, "delivery_checkouts", "service_mode", "enum('delivery','pickup') DEFAULT 'delivery' NOT NULL");
+      await addColumn(db, "delivery_checkouts", "collected_at", "datetime(3)");
     },
   },
 ];

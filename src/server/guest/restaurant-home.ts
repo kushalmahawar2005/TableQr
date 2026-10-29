@@ -8,9 +8,10 @@ import { tenantAccess } from "@/server/access";
 import { AppError } from "@/server/errors";
 import { configuredGuestServices } from "@/domain/guest-services";
 import { outletGatewayFromConfig } from "@/server/payments/outlet-gateway";
+import { BUSINESS_PACKAGE_PROFILES } from "@/lib/subscription-pricing";
 
-/** Public restaurant entry point. Resolve the tenant from the public outlet code, then scope all
- * other reads to that tenant so an untrusted URL cannot reveal another restaurant's details. */
+/** Public business entry point. Resolve the tenant from the public outlet code, then scope all
+ * other reads to that tenant so an untrusted URL cannot reveal another outlet's details. */
 export async function getRestaurantHome(outletCode: string) {
   const [row] = await db.select({
     id: s.outlets.id,
@@ -37,16 +38,24 @@ export async function getRestaurantHome(outletCode: string) {
     .innerJoin(s.brands, and(eq(s.brands.id, s.outlets.brandId), eq(s.brands.tenantId, s.outlets.tenantId)))
     .where(eq(s.outlets.code, String(outletCode).trim().toUpperCase()))
     .limit(1);
-  if (!row) throw new AppError("not_found", "We could not find this restaurant.");
+  if (!row) throw new AppError("not_found", "We could not find this business.");
   if (row.tenantStatus === "suspended" || row.tenantStatus === "cancelled" || (await tenantAccess(row.tenantId)).state === "blocked") {
-    throw new AppError("outlet_unavailable", "This restaurant is not available right now.");
+    throw new AppError("outlet_unavailable", "This business is not available right now.");
   }
   const features = await tenantFeatures(row.tenantId,row.id);
+  const profile = BUSINESS_PACKAGE_PROFILES[row.businessType ?? "restaurant"];
   const selected = configuredGuestServices(row.guestServices);
   const deliveryPolicy = readDeliveryPolicy(row.deliveryPolicy);
   const deliveryPaymentReady = deliveryPolicy.paymentMode === "cod" || (deliveryPolicy.paymentMode === "manual_qr" && !!row.paymentQrUrl) || (deliveryPolicy.paymentMode === "gateway" && !!outletGatewayFromConfig(row.paymentGatewayConfig));
+  const pickupPaymentReady = deliveryPolicy.pickupCodEnabled || !!row.paymentQrUrl || !!outletGatewayFromConfig(row.paymentGatewayConfig);
   return {
     outlet: { code: row.code, name: row.name, city: row.city, businessType: row.businessType, logoUrl: row.logoUrl, accentColor: row.accentColor, announcement: row.announcementActive && row.announcementTitle && row.announcementBody ? { title: row.announcementTitle, body: row.announcementBody } : null },
-    services: { delivery: features.delivery && deliveryPolicy.acceptingOrders && deliveryPaymentReady, dineIn: features.dineIn && selected.includes("dineIn"), reservations: features.reservations && selected.includes("reservations"), rooms: features.rooms && selected.includes("rooms") },
+    services: {
+      delivery: profile.delivery && features.delivery && deliveryPolicy.acceptingOrders && deliveryPaymentReady,
+      pickup: profile.pickup && features.delivery && deliveryPolicy.acceptingPickupOrders && pickupPaymentReady,
+      dineIn: profile.floor && features.dineIn && selected.includes("dineIn"),
+      reservations: features.reservations && selected.includes("reservations"),
+      rooms: profile.rooms && features.rooms && selected.includes("rooms"),
+    },
   };
 }

@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { canSee } from "@/lib/staff-permissions";
 import { outletRiders } from "@/server/delivery/riders";
-import { deliveryQueue, deliveryStaffRoles, pendingManualDeliveryPayments } from "@/server/delivery/staff";
+import { availableGuestOrderModes, deliveryQueue, deliveryStaffRoles, pendingManualDeliveryPayments } from "@/server/delivery/staff";
 import { getRecentOrders } from "@/server/staff/orders-read";
 import { currentStaff } from "@/server/staff/request";
 import { OrdersScreen } from "./_components/orders-screen";
@@ -26,16 +26,25 @@ export default async function OrdersPage(props: PageProps<"/console/orders">) {
   }
   const { view } = await props.searchParams;
   const features = await tenantFeatures(staff.tenantId, staff.outletId);
-  const runsDelivery = features.delivery && staff.roles.some(role => (deliveryStaffRoles as readonly string[]).includes(role));
-  const showDelivery = runsDelivery && view === "delivery";
-  const [orders, deliveries, pendingPayments, riders] = await Promise.all([
+  const canManageGuestOrders = staff.roles.some(role => (deliveryStaffRoles as readonly string[]).includes(role));
+  const showDelivery = canManageGuestOrders && view === "delivery";
+  const [orders, deliveries, pendingPayments, riders, configuredModes] = await Promise.all([
     getRecentOrders(staff, new Date()),
-    runsDelivery ? deliveryQueue(staff) : Promise.resolve([]),
-    runsDelivery ? pendingManualDeliveryPayments(staff) : Promise.resolve([]),
+    canManageGuestOrders ? deliveryQueue(staff) : Promise.resolve([]),
+    canManageGuestOrders ? pendingManualDeliveryPayments(staff) : Promise.resolve([]),
     showDelivery ? outletRiders(staff) : Promise.resolve([]),
+    canManageGuestOrders ? availableGuestOrderModes(staff) : Promise.resolve({ pickup: false, delivery: false }),
   ]);
+  // Keep old orders reachable if a service is paused or removed from the current package.
+  const modes = {
+    pickup: configuredModes.pickup || deliveries.some(row => row.serviceMode === "pickup") || pendingPayments.some(row => row.serviceMode === "pickup"),
+    delivery: configuredModes.delivery || deliveries.some(row => row.serviceMode === "delivery") || pendingPayments.some(row => row.serviceMode === "delivery"),
+  };
+  const hasGuestOrderSection = canManageGuestOrders && (modes.pickup || modes.delivery);
+  const showGuestOrders = showDelivery && hasGuestOrderSection;
   const tableLive = orders.filter(o => !o.delivery && o.status !== "served" && o.status !== "cancelled").length;
-  const deliveryLive = deliveries.filter(d => d.status !== "delivered").length + pendingPayments.length;
+  const deliveryLive = deliveries.filter(d => d.status !== "delivered" && d.status !== "collected" && d.status !== "cancelled").length + pendingPayments.length;
+  const mainOrdersLabel = features.dineIn ? "Table / counter orders" : features.rooms ? "Room orders" : features.pos ? "Counter orders" : "Orders";
 
   const tab = (href: string, label: string, n: number, on: boolean) => (
     <Link href={href} aria-current={on ? "page" : undefined} className={`inline-flex min-h-11 items-center gap-2 rounded-full border px-4 text-body font-semibold transition-colors ${on ? "border-brand bg-brand text-brand-on" : "border-line bg-surface text-ink hover:border-ink/40"}`}>
@@ -43,24 +52,26 @@ export default async function OrdersPage(props: PageProps<"/console/orders">) {
       {n > 0 && <span className={`grid h-5 min-w-5 place-items-center rounded-full px-1.5 text-label font-bold tabular ${on ? "bg-white/25 text-brand-on" : "bg-brand text-brand-on"}`}>{n}</span>}
     </Link>
   );
-  const tabs = runsDelivery ? (
+  const guestOrderLabel = modes.pickup && modes.delivery ? "Guest pickup & delivery" : modes.pickup ? "Guest pickup" : "Guest delivery";
+  const tabs = hasGuestOrderSection ? (
     <nav aria-label="Order type" className="mt-4 flex flex-wrap gap-2">
-      {tab("/console/orders", features.dineIn ? "Table orders" : features.rooms ? "Room orders" : "Pickup / counter orders", tableLive, !showDelivery)}
-      {tab("/console/orders?view=delivery", "Delivery orders", deliveryLive, showDelivery)}
+      {tab("/console/orders", mainOrdersLabel, tableLive, !showGuestOrders)}
+      {tab("/console/orders?view=delivery", guestOrderLabel, deliveryLive, showGuestOrders)}
     </nav>
   ) : null;
 
-  if (showDelivery) {
+  if (showGuestOrders) {
     return <DeliveryQueueScreen
       outlet={staff.outlet.name}
       tabs={tabs}
       riders={riders}
       realtimeUrl={process.env.REALTIME_URL?.replace(/^http/, "ws") ?? null}
       canAssignCourier={features.riderTracking && staff.roles.some(role => role === "owner" || role === "manager")}
-      rows={deliveries.map(row => ({ ...row, placedAt: row.placedAt?.toISOString() ?? null }))}
+      availableModes={modes}
+      rows={deliveries.map(row => ({ ...row, address: row.address ?? { line: "", locality: "", pincode: "", instructions: "" }, placedAt: row.placedAt?.toISOString() ?? null }))}
       pendingPayments={pendingPayments.map(row => ({ ...row, claimedAt: row.claimedAt?.toISOString() ?? null }))}
     />;
   }
   // Delivery orders have their own section, so the table queue leaves them out
-  return <OrdersScreen orders={runsDelivery ? orders.filter(o => !o.delivery) : orders} outlet={staff.outlet.name} tabs={tabs} />;
+  return <OrdersScreen orders={hasGuestOrderSection ? orders.filter(o => !o.delivery) : orders} outlet={staff.outlet.name} tabs={tabs} />;
 }

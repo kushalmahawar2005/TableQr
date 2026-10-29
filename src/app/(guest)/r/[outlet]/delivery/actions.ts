@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { headers } from "next/headers";
 import { uuidv7 } from "@/db/id";
 import type { DeliveryAddress, DeliveryCartLine } from "@/db/schema/delivery";
+import type { OrderServiceMode } from "@/domain/delivery";
 import { claimManualQrDeliveryPayment, createDeliveryCheckout, deliveryRealtimeToken, deliveryStatus, placeDeliveryOrder, rateDeliveryRider } from "@/server/delivery/checkout";
 import { priceDeliveryCart, deliveryOutlet } from "@/server/delivery/catalog";
 import { sendDeliveryOtp, verifyDeliveryOtp } from "@/server/delivery/otp";
@@ -28,13 +29,13 @@ async function result<T>(fn: () => Promise<T>): Promise<{ ok: true; data: T } | 
     return { ok: false, message: error instanceof AppError ? error.message : "Could not complete that request. Please try again." };
   }
 }
-export async function quoteDeliveryAction(outlet: string, lines: DeliveryCartLine[], pincode: string) {
-  return result(async () => priceDeliveryCart(db, await deliveryOutlet(outlet), lines, pincode));
+export async function quoteDeliveryAction(outlet: string, lines: DeliveryCartLine[], pincode: string, serviceMode: OrderServiceMode = "delivery") {
+  return result(async () => priceDeliveryCart(db, await deliveryOutlet(outlet, true, new Date(), serviceMode), lines, serviceMode === "delivery" ? pincode : undefined, new Date(), serviceMode));
 }
-export async function startDeliveryAction(outlet: string, lines: DeliveryCartLine[], address: DeliveryAddress, phone: string) {
+export async function startDeliveryAction(outlet: string, lines: DeliveryCartLine[], address: DeliveryAddress, phone: string, serviceMode: OrderServiceMode = "delivery", paymentMode?: "cod" | "gateway" | "manual_qr") {
   return result(async () => {
     const identityData = await identity(outlet);
-    const checkout = await createDeliveryCheckout(outlet, identityData.deviceId, { lines, address });
+    const checkout = await createDeliveryCheckout(outlet, identityData.deviceId, { lines, address, serviceMode, paymentMode });
     identityData.jar.set(cookieName(outlet), checkout.token, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 7 * 86400 });
     if (await identifyCustomerCheckout(outlet,identityData.jar.get(customerCookie(outlet))?.value,checkout.token,identityData.deviceId)) return {quote:checkout.quote,otp:null};
     const otp = await sendDeliveryOtp(outlet, checkout.token, identityData.deviceId, phone);

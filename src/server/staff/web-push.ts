@@ -1,5 +1,5 @@
 import "server-only";
-import { createHash } from "node:crypto";
+import { createECDH, createHash } from "node:crypto";
 import webpush, { type PushSubscription as WebPushSubscription } from "web-push";
 import { and, eq, inArray, isNull, or } from "drizzle-orm";
 import { db } from "@/db";
@@ -15,7 +15,20 @@ export function staffPushConfig() {
   const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY?.trim() ?? "";
   const privateKey = process.env.VAPID_PRIVATE_KEY?.trim() ?? "";
   const subject = process.env.VAPID_SUBJECT?.trim() ?? "";
-  return { enabled: !!(publicKey && privateKey && subject), publicKey };
+  if (!publicKey || !privateKey || !subject) return { enabled: false, publicKey: "", error: "Push notifications are not configured on the server yet." };
+  try {
+    if (!subject.startsWith("mailto:") && !/^https:\/\//i.test(subject)) throw new Error("Set VAPID_SUBJECT to a mailto: address or HTTPS contact URL.");
+    const publicBytes = Buffer.from(publicKey, "base64url");
+    const privateBytes = Buffer.from(privateKey, "base64url");
+    if (publicBytes.length !== 65 || publicBytes[0] !== 4 || privateBytes.length !== 32) throw new Error("VAPID keys have an invalid format. Generate a matching P-256 key pair.");
+    const ecdh = createECDH("prime256v1");
+    ecdh.setPrivateKey(privateBytes);
+    const derivedBytes = ecdh.getPublicKey(undefined, "uncompressed");
+    if (!derivedBytes.equals(publicBytes)) throw new Error("The VAPID public and private keys do not match. Generate and install both keys from the same key pair.");
+    return { enabled: true, publicKey, error: "" };
+  } catch (error) {
+    return { enabled: false, publicKey: "", error: error instanceof Error ? error.message : "The VAPID keys are invalid." };
+  }
 }
 
 export function validateSubscription(value: PushSubscriptionInput): PushSubscriptionInput {

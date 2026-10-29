@@ -7,7 +7,7 @@ import { removeStaffPushSubscription, saveStaffPushSubscription, staffPushConfig
 
 export async function pushSetupAction(audience: "staff" | "rider" = "staff") {
   const staff = await (audience === "rider" ? currentRider() : currentStaff());
-  if (!staff) return { enabled: false, publicKey: "" };
+  if (!staff) return { enabled: false, publicKey: "", error: "Please sign in again." };
   return staffPushConfig();
 }
 

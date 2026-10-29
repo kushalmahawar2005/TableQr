@@ -1,4 +1,4 @@
-import type { BusinessType, CommercialSettings } from "@/lib/subscription-pricing";
+import { BUSINESS_PACKAGE_PROFILES, type BusinessType, type CommercialSettings } from "@/lib/subscription-pricing";
 import "server-only";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
@@ -22,13 +22,21 @@ export function effectiveFeatures(row: { features: unknown; customFeatures: unkn
   if (row.kitchenOverride !== null) f.kitchenDisplay = row.kitchenOverride;
   if (row.tableLimit !== null) f.maxTables = row.tableLimit;
   if (row.businessType) {
-    f.dineIn = (row.businessType === "restaurant" || row.businessType === "cafe" || row.businessType === "hotel_restaurant") && (row.customFeatures ? f.dineIn : true);
-    f.rooms = row.businessType === "hotel" || row.businessType === "hotel_restaurant";
-    if (row.businessType === "hotel") f.delivery = false;
+    const profile = BUSINESS_PACKAGE_PROFILES[row.businessType];
+    f.dineIn = profile.floor && (row.customFeatures ? f.dineIn : true);
+    f.rooms = profile.rooms && (row.customFeatures ? f.rooms : true);
+    f.delivery = profile.delivery && (row.customFeatures ? f.delivery : true);
   }
   for (const key of ["waiterApp", "reservations", "riderTracking"] as const) {
     const enabled = row.commercial?.addons[key] ?? [];
     if (enabled.length && (!row.outletId || enabled.includes(row.outletId))) f[key] = true;
+  }
+  // Reservations are table/party bookings. Keep them available in the agreed base package for
+  // food businesses that support tables, while preventing a plan or add-on from exposing them
+  // for a delivery-only kitchen or a room-only hotel.
+  if (row.businessType) {
+    const profile = BUSINESS_PACKAGE_PROFILES[row.businessType];
+    f.reservations = profile.reservations && (row.customFeatures ? f.reservations : true);
   }
   return f;
 }

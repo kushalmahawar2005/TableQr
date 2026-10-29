@@ -25,7 +25,7 @@ const active = (row: typeof s.deliveryCheckouts.$inferSelect, now: Date) => {
 
 export async function sendDeliveryOtp(code: string, token: string, deviceId: string, phoneInput: string, now = new Date()) {
   const { outlet, row } = await deliveryCheckout(code, token, deviceId, now);
-  await deliveryOutlet(code, true, now);
+  await deliveryOutlet(code, true, now, row.serviceMode);
   active(row, now);
   const digits = normaliseIndianMobile(phoneInput);
   if (!isValidIndianMobile(digits)) throw new AppError("invalid_phone", "Enter a valid Indian mobile number.");

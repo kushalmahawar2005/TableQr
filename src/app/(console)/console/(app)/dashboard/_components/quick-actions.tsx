@@ -1,28 +1,34 @@
 import type { Features } from "@/lib/plan-features";
-import { BarChart3, Calendar, ChevronRight, Clock, CreditCard, FileText, Plus, ShoppingBag } from "lucide-react";
+import { BarChart3, Calendar, ChevronRight, Clock, CreditCard, FileText, Plus } from "lucide-react";
 import Link from "next/link";
 import { focusRing } from "./dashboard-shared";
 
 /** Every quick action is a real route that already exists; Day Close keeps its own safety flow */
 export function QuickActions({ features }: { features?: Features }) {
+  const primary = features?.dineIn
+    ? { href: "/console/floor", label: "Open Floor" }
+    : features?.rooms
+      ? { href: "/console/rooms", label: "Open Rooms" }
+      : features?.pos
+        ? { href: "/console/pos", label: "New counter order" }
+        : null;
   return (
     <nav aria-label="Quick links" className="grid grid-cols-2 items-stretch gap-2 pb-1 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
-      {(!features || features.dineIn || features.rooms || features.pos) && <Link
-        href={features?.dineIn === false ? features.rooms ? "/console/rooms" : "/console/pos" : "/console/floor"}
+      {primary && <Link
+        href={primary.href}
         className={`col-span-2 inline-flex h-11 items-center justify-center gap-2 rounded-card bg-forest px-4 text-sm font-semibold text-white shadow-float transition-all hover:bg-forest-hover active:scale-[0.98] sm:col-span-1 ${focusRing}`}
       >
         <Plus className="size-4 stroke-[2.5]" aria-hidden="true" />
-        <span>{features?.dineIn === false ? features.rooms ? "Open Rooms" : "New pickup order" : "Open Floor"}</span>
+        <span>{primary.label}</span>
         <ChevronRight className="size-4 text-white/70" aria-hidden="true" />
       </Link>}
       {[
-        { href: features?.dineIn === false ? "/console/pos" : "/console/floor", label: "New Order", icon: ShoppingBag },
         { href: "/console/billing", label: "Take Payment", icon: CreditCard },
         { href: "/console/reservations", label: "Reservations", icon: Calendar },
         { href: "/console/orders", label: "View Orders", icon: FileText },
         { href: "/console/reports", label: "Reports", icon: BarChart3 },
         { href: "/console/reports/day-close", label: "Day Close", icon: Clock },
-      ].filter(action => !features || (action.label !== "Reservations" || features.reservations) && (action.label !== "Reports" || features.fullReports) && (action.label !== "New Order" || features.dineIn || features.pos)).map(({ href, label, icon: Icon }) => (
+      ].filter(action => action.label !== "Reservations" || features?.reservations).filter(action => action.label !== "Reports" || features?.fullReports).map(({ href, label, icon: Icon }) => (
         <Link
           key={label}
           href={href}

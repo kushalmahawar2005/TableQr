@@ -1,5 +1,5 @@
 "use server";
-import { BUSINESS_TYPES, type BusinessType } from "@/lib/subscription-pricing";
+import { BUSINESS_TYPES, isBusinessSizeFor, type BusinessSize, type BusinessType } from "@/lib/subscription-pricing";
 import { friendlyError } from "@/server/friendly-error";
 import { platformGateway } from "@/server/payments/gateway";
 
@@ -105,6 +105,8 @@ export async function createTenantAction(_prev: TenantState, form: FormData): Pr
     const roomCount = Math.min(200, Math.max(0, Math.floor(Number(text(form, "roomCount") || 0))));
     const businessType = text(form, "businessType") as BusinessType;
     if (!Object.hasOwn(BUSINESS_TYPES,businessType)) return {error:"Choose a business category.",success:null};
+    const businessSize = text(form, "businessSize") || null;
+    if (!isBusinessSizeFor(businessType, businessSize)) return {error:"Choose Small, Big or Large for this business category.",success:null};
     const agreedOutlets = Number(text(form,"agreedOutlets") || 1);
     if (!Number.isInteger(agreedOutlets) || agreedOutlets < 1 || agreedOutlets > 1000) return {error:"Enter 1 to 1000 outlets.",success:null};
     const guestPayments = text(form, "guestPayments") || "online";
@@ -130,7 +132,7 @@ export async function createTenantAction(_prev: TenantState, form: FormData): Pr
       // The plan's table limit applies; only tables beyond it are stored as this restaurant's own limit
       const planTables = planFeatures.maxTables;
       const tableLimit = planTables !== null && tableCount > planTables ? tableCount : null;
-      await tx.insert(s.tenants).values({ id: tenantId, name: tenantName, planCode, contactName, contactPhone, contactEmail: contactEmail || null, createdByAdminId: admin.id, kitchenDisplay, tableLimit, customFeatures: selectedFeatures, businessType, commercial: { version:1,outletCount:agreedOutlets,addons:{},goLiveAt:null,setupReceivedPaise:0,setupReference:"" }, trialEndsAt: null });
+      await tx.insert(s.tenants).values({ id: tenantId, name: tenantName, planCode, contactName, contactPhone, contactEmail: contactEmail || null, createdByAdminId: admin.id, kitchenDisplay, tableLimit, customFeatures: selectedFeatures, businessType, businessSize: businessSize as BusinessSize | null, commercial: { version:1,outletCount:agreedOutlets,addons:{},goLiveAt:null,setupReceivedPaise:0,setupReference:"" }, trialEndsAt: null });
       await tx.insert(s.brands).values({ id: brandId, tenantId, name: brandName });
       await tx.insert(s.outlets).values({ id: outletId, tenantId, brandId, code: outletCode, name: outletName, city, address, guestOnlinePayments: guestPayments === "online" });
       await tx.insert(s.users).values({ id: userId, tenantId, phone: ownerPhone, name: ownerName, pinHash: await hashPin(ownerPin) });

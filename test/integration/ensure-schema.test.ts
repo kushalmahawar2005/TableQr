@@ -10,7 +10,7 @@ import { resetTestDb } from "./setup-db";
 let env: Awaited<ReturnType<typeof resetTestDb>>;
 const rows = async <T,>(q: ReturnType<typeof sql>) => (await env.db.execute(q))[0] as unknown as T[];
 const columns = async () =>
-  (await rows<{ c: string }>(sql`SELECT COLUMN_NAME AS c FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tenants' AND COLUMN_NAME IN ('kitchen_display', 'table_limit', 'custom_features', 'custom_price_paise')`)).map((r) => r.c).sort();
+  (await rows<{ c: string }>(sql`SELECT COLUMN_NAME AS c FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tenants' AND COLUMN_NAME IN ('kitchen_display', 'table_limit', 'custom_features', 'custom_price_paise', 'business_size')`)).map((r) => r.c).sort();
 
 beforeAll(async () => {
   env = await resetTestDb();
@@ -38,7 +38,7 @@ afterAll(async () => {
 
 describe("schema update at startup", () => {
   it("adds what is missing, fills the defaults, records the migrations, and does nothing the second time", async () => {
-    await env.db.execute(sql`ALTER TABLE tenants DROP COLUMN kitchen_display, DROP COLUMN table_limit, DROP COLUMN custom_features, DROP COLUMN custom_price_paise`);
+    await env.db.execute(sql`ALTER TABLE tenants DROP COLUMN kitchen_display, DROP COLUMN table_limit, DROP COLUMN custom_features, DROP COLUMN custom_price_paise, DROP COLUMN business_size`);
     await env.db.execute(sql`ALTER TABLE users DROP COLUMN duty_status, DROP COLUMN duty_changed_at, DROP COLUMN last_seen_at`);
     await env.db.execute(sql`ALTER TABLE table_sessions DROP FOREIGN KEY fk_sessions_waiter, DROP COLUMN waiter_user_id`);
     await env.db.execute(sql`DROP TABLE staff_push_subscriptions`);
@@ -70,7 +70,7 @@ describe("schema update at startup", () => {
     expect(await columns()).toEqual([]);
 
     await ensureSchema(appDb.$client);
-    expect(await columns()).toEqual(["custom_features", "custom_price_paise", "kitchen_display", "table_limit"]);
+    expect(await columns()).toEqual(["business_size", "custom_features", "custom_price_paise", "kitchen_display", "table_limit"]);
     expect(Number((await rows<{ n: number }>(sql`SELECT COUNT(*) AS n FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN ('plan_requests', 'fee_payments', 'rooms', 'room_stays', 'room_requests')`))[0].n)).toBe(5);
     expect(String((await rows<{ t: string }>(sql`SELECT COLUMN_TYPE AS t FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'staff_roles' AND COLUMN_NAME = 'role'`))[0].t)).toContain("'reception'");
     const plans = await rows<{ code: string; kds: string }>(sql`SELECT code, JSON_EXTRACT(features, '$.kitchenDisplay') AS kds FROM plans ORDER BY sort_order`);
@@ -87,7 +87,7 @@ describe("schema update at startup", () => {
     const limits = await rows<{ n: number; lim: number }>(sql`SELECT t.table_limit AS lim, (SELECT COUNT(*) FROM dining_tables d WHERE d.tenant_id = t.id AND d.is_active = 1) AS n FROM tenants t`);
     for (const l of limits) expect(Number(l.lim)).toBe(Math.max(1, Number(l.n)));
     const recorded = await rows<{ n: number }>(sql`SELECT COUNT(*) AS n FROM __drizzle_migrations WHERE created_at > 1791043208000`);
-    expect(Number(recorded[0].n)).toBe(32);
+    expect(Number(recorded[0].n)).toBe(34);
     expect(Number((await rows<{ n: number }>(sql`SELECT COUNT(*) AS n FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'platform_admin_login_buckets'`))[0].n)).toBe(1);
     const deliveryColumns = await rows<{ c: string }>(sql`SELECT COLUMN_NAME AS c FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'delivery_checkouts' AND COLUMN_NAME IN ('payment_mode', 'payment_provider', 'gateway_ref', 'gateway_payment_id', 'payment_status', 'payment_failure_reason', 'refund_gateway_ref', 'refund_status') ORDER BY COLUMN_NAME`);
     expect(deliveryColumns.map((r) => r.c)).toEqual(["gateway_payment_id", "gateway_ref", "payment_failure_reason", "payment_mode", "payment_provider", "payment_status", "refund_gateway_ref", "refund_status"]);
@@ -99,6 +99,11 @@ describe("schema update at startup", () => {
     expect(manualDeliveryIndexes.map((r) => r.i)).toEqual(["delivery_manual_pending_idx", "delivery_manual_reference_uq"]);
     const courierColumns = await rows<{ c: string }>(sql`SELECT COLUMN_NAME AS c FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'delivery_checkouts' AND COLUMN_NAME IN ('courier_name', 'courier_phone', 'courier_assigned_at') ORDER BY COLUMN_NAME`);
     expect(courierColumns.map((r) => r.c)).toEqual(["courier_assigned_at", "courier_name", "courier_phone"]);
+    const pickupColumns = await rows<{ c: string }>(sql`SELECT COLUMN_NAME AS c FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'delivery_checkouts' AND COLUMN_NAME IN ('service_mode', 'collected_at') ORDER BY COLUMN_NAME`);
+    expect(pickupColumns.map((r) => r.c)).toEqual(["collected_at", "service_mode"]);
+    const pickupSchema = await rows<{ addressNullable: string; statusType: string; serviceModeDefault: string }>(sql`SELECT MAX(CASE WHEN COLUMN_NAME = 'address' THEN IS_NULLABLE END) AS addressNullable, MAX(CASE WHEN COLUMN_NAME = 'status' THEN COLUMN_TYPE END) AS statusType, MAX(CASE WHEN COLUMN_NAME = 'service_mode' THEN COLUMN_DEFAULT END) AS serviceModeDefault FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'delivery_checkouts'`);
+    expect(pickupSchema[0]).toMatchObject({ addressNullable: "YES", serviceModeDefault: "delivery" });
+    expect(pickupSchema[0].statusType).toContain("'collected'");
     const feeColumns = await rows<{ c: string }>(sql`SELECT COLUMN_NAME AS c FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'fee_payments' AND COLUMN_NAME IN ('client_request_id', 'gateway_ref', 'gateway_payment_id', 'failure_reason', 'checked_at') ORDER BY COLUMN_NAME`);
     expect(feeColumns.map((r) => r.c)).toEqual(["checked_at", "client_request_id", "failure_reason", "gateway_payment_id", "gateway_ref"]);
     expect(String((await rows<{ t: string }>(sql`SELECT COLUMN_TYPE AS t FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'fee_payments' AND COLUMN_NAME = 'method'`))[0].t)).toContain("'cashfree'");
@@ -121,7 +126,7 @@ describe("schema update at startup", () => {
     // Second start: nothing changes, nothing is recorded twice
     await env.db.execute(sql`UPDATE tenants SET table_limit = 99`);
     await ensureSchema(appDb.$client);
-    expect(Number((await rows<{ n: number }>(sql`SELECT COUNT(*) AS n FROM __drizzle_migrations WHERE created_at > 1791043208000`))[0].n)).toBe(32);
+    expect(Number((await rows<{ n: number }>(sql`SELECT COUNT(*) AS n FROM __drizzle_migrations WHERE created_at > 1791043208000`))[0].n)).toBe(34);
     expect((await rows<{ lim: number }>(sql`SELECT DISTINCT table_limit AS lim FROM tenants`)).map((r) => Number(r.lim))).toEqual([99]);
   });
 });

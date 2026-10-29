@@ -160,4 +160,46 @@ describe("verified delivery checkout", () => {
     expect((await deliveryStatus("SRJ01", created.token, qrDevice)).paid).toBe(true);
     await expect(claimManualQrDeliveryPayment("SRJ01", created.token, qrDevice, created.quote.totalPaise, "UPI202610240001")).rejects.toMatchObject({ code: "invalid_state" });
   });
+
+  it("places pickup without an address, honors the pickup COD switch, and completes counter collection", async () => {
+    const pickupDevice = "guest-pickup-checkout-device";
+    const lines = [{ itemId: env.demo.itemIds["Dal Makhani"], qty: 1, modifierIds: [] }];
+    const basePolicy = {
+      ...DEFAULT_DELIVERY_POLICY,
+      acceptingOrders: false,
+      acceptingPickupOrders: true,
+      pickupCodEnabled: false,
+      pincodes: [],
+      deliveryFeePaise: 3000,
+    };
+    await env.db.update(s.outlets).set({ bookingPaymentQrUrl: null, paymentGatewayConfig: null, deliveryPolicy: basePolicy }).where(eq(s.outlets.id, env.demo.outletId));
+
+    await expect(createDeliveryCheckout("SRJ01", pickupDevice, { lines, serviceMode: "pickup", paymentMode: "cod" })).rejects.toMatchObject({ code: "invalid_state" });
+
+    await env.db.update(s.outlets).set({ deliveryPolicy: { ...basePolicy, pickupCodEnabled: true } }).where(eq(s.outlets.id, env.demo.outletId));
+    const created = await createDeliveryCheckout("SRJ01", pickupDevice, { lines, serviceMode: "pickup", paymentMode: "cod" });
+    expect(created.quote.deliveryFeePaise).toBe(0);
+    const checkout = await deliveryCheckout("SRJ01", created.token, pickupDevice);
+    expect(checkout.row).toMatchObject({ address: null, serviceMode: "pickup", paymentMode: "cod", deliveryFeePaise: 0 });
+
+    const otp = await sendDeliveryOtp("SRJ01", created.token, pickupDevice, "9876543220");
+    await verifyDeliveryOtp("SRJ01", created.token, pickupDevice, otp.challengeId, otp.devCode!, "Nisha");
+    const placed = await placeDeliveryOrder("SRJ01", created.token, pickupDevice, created.quote.totalPaise);
+    const placedCheckout = await deliveryCheckout("SRJ01", created.token, pickupDevice);
+    expect(placedCheckout.row).toMatchObject({ status: "placed", serviceMode: "pickup", address: null, deliveryFeePaise: 0 });
+    expect(await deliveryStatus("SRJ01", created.token, pickupDevice)).toMatchObject({ status: "placed", serviceMode: "pickup" });
+    const [bill] = await env.db.select().from(s.bills).where(eq(s.bills.sessionId, placed.sessionId));
+    expect(bill.totalPaise).toBe(created.quote.totalPaise);
+    expect(bill.deliveryFeePaise).toBe(0);
+    expect((await deliveryQueue(owner)).find(row => row.id === placedCheckout.row.id)).toMatchObject({ serviceMode: "pickup", address: null });
+
+    await expect(assignDeliveryCourier(owner, placedCheckout.row.id, { name: "Ravi Kumar", phone: "9876543213" })).rejects.toMatchObject({ code: "invalid_state" });
+    await expect(advanceDelivery(owner, placedCheckout.row.id, "dispatched")).rejects.toMatchObject({ code: "invalid_state" });
+    await env.db.update(s.orderLines).set({ status: "ready" }).where(and(eq(s.orderLines.tenantId, env.demo.tenantId), eq(s.orderLines.sessionId, placed.sessionId)));
+    await expect(advanceDelivery(owner, placedCheckout.row.id, "collected")).rejects.toMatchObject({ code: "invalid_state" });
+    await settleAtCounter(owner, { sessionId: placed.sessionId, method: "cash", receivedPaise: bill.totalPaise });
+    await advanceDelivery(owner, placedCheckout.row.id, "collected");
+    expect(await deliveryStatus("SRJ01", created.token, pickupDevice)).toMatchObject({ status: "collected", serviceMode: "pickup", paid: true });
+    expect(await deliveryCheckout("SRJ01", created.token, pickupDevice)).toMatchObject({ row: { collectedAt: expect.any(Date), deliveredAt: null, pickedUpAt: null } });
+  });
 });

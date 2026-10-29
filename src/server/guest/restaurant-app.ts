@@ -7,18 +7,23 @@ import * as s from "@/db/schema";
 import { staffAppIconUrl } from "@/lib/staff-app";
 import { tenantFeatures } from "../plan";
 import { staffAppBrandForOutletCode } from "../staff/pwa-branding";
+import { getRestaurantHome } from "./restaurant-home";
 
-// The restaurant's own installable app: its name, logo and colour on the guest's home screen.
-// Only for plans with delivery or reservations; a dine-in-only restaurant has no app.
+// The outlet's own installable app: its name, logo and colour on the guest's home screen.
+// Only show it when the owner enabled installation and at least one matching public service is live.
 
 export const restaurantApp = cache(async (code: string) => {
-  const brand = await staffAppBrandForOutletCode(code);
-  if (!brand) return null;
+  const [brand, home] = await Promise.all([
+    staffAppBrandForOutletCode(code),
+    getRestaurantHome(code).catch(() => null),
+  ]);
+  if (!brand || !home) return null;
   // isolation-exempt: the outlet code is public and globally unique; this resolves its tenant
   const [outlet] = await db.select({ id: s.outlets.id, tenantId: s.outlets.tenantId, guestPwaInstallEnabled: s.outlets.guestPwaInstallEnabled }).from(s.outlets).where(eq(s.outlets.code, brand.code));
   if (!outlet) return null;
   const f = await tenantFeatures(outlet.tenantId,outlet.id);
-  return outlet.guestPwaInstallEnabled && f.guestPwaCustomization && (f.delivery || f.reservations) ? brand : null;
+  const serviceEnabled = home.services.delivery || home.services.pickup || home.services.reservations;
+  return outlet.guestPwaInstallEnabled && f.guestPwaCustomization && serviceEnabled ? brand : null;
 });
 
 export function restaurantAppMetadata(app: NonNullable<Awaited<ReturnType<typeof restaurantApp>>> | null): Pick<Metadata, "manifest" | "appleWebApp" | "icons"> {

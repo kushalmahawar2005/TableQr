@@ -5,20 +5,21 @@ import { outlets, users } from "./tenancy";
 
 export type DeliveryCartLine = { itemId: string; qty: number; modifierIds: string[] };
 export type DeliveryAddress = { line: string; locality: string; pincode: string; instructions: string; /** The exact door, when the guest dropped a pin or shared their location */ lat?: number; lng?: number };
+export type OrderServiceMode = "delivery" | "pickup";
 
 export const deliveryCheckouts = mysqlTable("delivery_checkouts", {
   id: id(), tenantId: tenantId(), outletId: ref("outlet_id").notNull(),
   tokenHash: char("token_hash", { length: 64 }).notNull(), deviceId: varchar("device_id", { length: 64 }).notNull(),
-  lines: json("lines").$type<DeliveryCartLine[]>().notNull(), address: json("address").$type<DeliveryAddress>().notNull(),
+  lines: json("lines").$type<DeliveryCartLine[]>().notNull(), address: json("address").$type<DeliveryAddress>(),
   guestId: ref("guest_id"), name: varchar("name", { length: 40 }), phone: varchar("phone", { length: 15 }), verifiedAt: at("verified_at"),
-  sessionId: ref("session_id"), status: mysqlEnum("status", ["draft", "placed", "dispatched", "delivered", "cancelled"]).notNull().default("draft"),
+  sessionId: ref("session_id"), serviceMode: mysqlEnum("service_mode", ["delivery", "pickup"]).notNull().default("delivery"), status: mysqlEnum("status", ["draft", "placed", "dispatched", "delivered", "collected", "cancelled"]).notNull().default("draft"),
   paymentMode: mysqlEnum("payment_mode", ["cod", "gateway", "manual_qr"]).notNull().default("cod"),
   paymentProvider: varchar("payment_provider", { length: 30 }), gatewayRef: varchar("gateway_ref", { length: 100 }), gatewayPaymentId: varchar("gateway_payment_id", { length: 100 }),
   manualPaymentQrUrl: varchar("manual_payment_qr_url", { length: 500 }), manualPaymentReference: varchar("manual_payment_reference", { length: 40 }),
   manualPaymentClaimedAt: at("manual_payment_claimed_at"), manualPaymentConfirmedAt: at("manual_payment_confirmed_at"),
   courierName: varchar("courier_name", { length: 80 }), courierPhone: varchar("courier_phone", { length: 16 }), courierAssignedAt: at("courier_assigned_at"),
   /** The team rider carrying it; name and phone above stay as given, for a rider outside the team */
-  courierUserId: ref("courier_user_id"), pickedUpAt: at("picked_up_at"), deliveredAt: at("delivered_at"),
+  courierUserId: ref("courier_user_id"), pickedUpAt: at("picked_up_at"), deliveredAt: at("delivered_at"), collectedAt: at("collected_at"),
   /** Four digits the customer tells the rider at the door; set when the rider picks the food up */
   deliveryPin: varchar("delivery_pin", { length: 4 }), pinAttempts: int("pin_attempts").notNull().default(0),
   /** The rider took the money another way (QR glitch, wrong amount...) and said why; the manager follows up */

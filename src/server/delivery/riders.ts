@@ -90,6 +90,7 @@ export async function assignTeamRider(staff: StaffSession, deliveryId: string, r
       .where(and(eq(s.deliveryCheckouts.tenantId, staff.tenantId), eq(s.deliveryCheckouts.outletId, staff.outletId), eq(s.deliveryCheckouts.id, String(deliveryId))))
       .for("update");
     if (!row?.sessionId) throw new AppError("not_found", "Delivery order not found.");
+    if (row.serviceMode !== "delivery") throw new AppError("invalid_state", "Pickup orders do not go to the Rider app.");
     if (!(LIVE as readonly string[]).includes(row.status)) throw new AppError("invalid_state", "This delivery is already finished.");
     if (row.courierUserId === rider.id) return row.sessionId;
     previous = row.courierUserId;

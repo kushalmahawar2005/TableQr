@@ -12,7 +12,7 @@ import { staffPushConfig, validateSubscription, type PushSubscriptionInput } fro
 // Push updates to a customer's phone about their own delivery. Same VAPID keys and service
 // worker as the staff app; a phone follows only its latest order.
 
-export type DeliveryNotice = "placed" | "dispatched" | "delivered" | "cancelled";
+export type DeliveryNotice = "placed" | "dispatched" | "delivered" | "collected" | "cancelled";
 
 /** Saves this phone for updates on the delivery its cookie belongs to */
 export async function saveDeliveryPush(code: string, token: string, deviceId: string, raw: PushSubscriptionInput) {
@@ -29,7 +29,16 @@ const TEXT: Record<DeliveryNotice, (outlet: string, rider: string | null) => { t
   placed: (o) => ({ title: `${o}: order confirmed`, body: "The kitchen has your order. We will tell you when it leaves." }),
   dispatched: (o, r) => ({ title: `${o}: on the way 🛵`, body: r ? `${r} is bringing your food. Tap to track.` : "Your food is on the way. Tap to track." }),
   delivered: (o) => ({ title: `${o}: delivered`, body: "Enjoy your meal! Thank you for ordering." }),
+  collected: (o) => ({ title: `${o}: pickup complete`, body: "Your order has been collected. Enjoy your meal!" }),
   cancelled: (o) => ({ title: `${o}: order cancelled`, body: "Your delivery was cancelled. Anything you paid is refunded." }),
+};
+
+const PICKUP_TEXT: Record<DeliveryNotice, (outlet: string) => { title: string; body: string }> = {
+  placed: (o) => ({ title: `${o}: pickup order confirmed`, body: "The kitchen has your order. We will let you know when it is ready." }),
+  dispatched: (o) => ({ title: `${o}: pickup order update`, body: "Your pickup order is being prepared. We will let you know when it is ready." }),
+  delivered: (o) => ({ title: `${o}: pickup complete`, body: "Your pickup order has been collected. Enjoy your meal!" }),
+  collected: (o) => ({ title: `${o}: pickup complete`, body: "Your pickup order has been collected. Enjoy your meal!" }),
+  cancelled: (o) => ({ title: `${o}: pickup order cancelled`, body: "Your pickup order was cancelled. Anything you paid is refunded." }),
 };
 
 /** Tells the customer's phone(s) what happened to their delivery. Never throws. */
@@ -38,14 +47,14 @@ export async function notifyDeliveryCustomer(scope: { tenantId: string; outletId
     const config = staffPushConfig();
     const privateKey = process.env.VAPID_PRIVATE_KEY?.trim(), subject = process.env.VAPID_SUBJECT?.trim();
     if (!config.enabled || !privateKey || !subject) return;
-    const [row] = await db.select({ id: s.deliveryCheckouts.id, courierName: s.deliveryCheckouts.courierName, code: s.outlets.code, name: s.outlets.name })
+    const [row] = await db.select({ id: s.deliveryCheckouts.id, courierName: s.deliveryCheckouts.courierName, serviceMode: s.deliveryCheckouts.serviceMode, code: s.outlets.code, name: s.outlets.name })
       .from(s.deliveryCheckouts)
       .innerJoin(s.outlets, and(eq(s.outlets.tenantId, s.deliveryCheckouts.tenantId), eq(s.outlets.id, s.deliveryCheckouts.outletId)))
       .where(and(eq(s.deliveryCheckouts.tenantId, scope.tenantId), eq(s.deliveryCheckouts.sessionId, sessionId)));
     if (!row) return;
     const subs = await db.select().from(s.guestPushSubscriptions).where(and(eq(s.guestPushSubscriptions.tenantId, scope.tenantId), eq(s.guestPushSubscriptions.deliveryCheckoutId, row.id)));
     if (!subs.length) return;
-    const text = TEXT[notice](row.name, row.courierName);
+    const text = row.serviceMode === "pickup" ? PICKUP_TEXT[notice](row.name) : TEXT[notice](row.name, row.courierName);
     const payload = JSON.stringify({ ...text, url: `/r/${encodeURIComponent(row.code)}/delivery`, tag: `delivery-${row.id.slice(0, 8)}`, icon: staffAppIconUrl(192, row.code), badge: staffAppIconUrl(180, row.code) });
     await Promise.allSettled(subs.map(async (sub) => {
       try {

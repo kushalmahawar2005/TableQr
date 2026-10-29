@@ -24,7 +24,7 @@ export async function startDeliveryPayment(code: string, token: string, deviceId
   const gateway = await gatewayForOutletPayment(outlet.tenantId, outlet.id, "cashfree") ?? (process.env.NODE_ENV !== "production" ? await gatewayForOutletPayment(outlet.tenantId, outlet.id, "mock") : null);
   if (!gateway) throw noPayment("This restaurant has not connected its own live Cashfree account for delivery payments.");
 
-  const quote = await priceDeliveryCart(db, outlet, row.lines, row.address.pincode);
+  const quote = await priceDeliveryCart(db, outlet, row.lines, row.serviceMode === "delivery" ? row.address?.pincode : undefined, new Date(), row.serviceMode);
   if (quote.totalPaise !== row.totalPaise) throw new AppError("price_changed", "Prices or delivery charges changed. Please start checkout again and review the updated total.");
 
   let gatewayRef = row.gatewayRef;
@@ -72,8 +72,8 @@ export async function confirmDeliveryGatewayPayment(provider: string, verdict: D
     try {
       const [outletRow] = await db.select({ code: s.outlets.code }).from(s.outlets).where(and(eq(s.outlets.tenantId, row.tenantId), eq(s.outlets.id, row.outletId)));
       if (!outletRow) throw new AppError("not_found", "Restaurant not found.");
-      const outlet = await deliveryOutlet(outletRow.code, true, now);
-      const quote = await priceDeliveryCart(db, outlet, row.lines, row.address.pincode, now);
+      const outlet = await deliveryOutlet(outletRow.code, true, now, row.serviceMode);
+      const quote = await priceDeliveryCart(db, outlet, row.lines, row.serviceMode === "delivery" ? row.address?.pincode : undefined, now, row.serviceMode);
       canFulfil = quote.totalPaise === row.totalPaise;
     } catch { canFulfil = false; }
   }
@@ -140,7 +140,7 @@ export async function reconcileDeliveryPaymentById(checkoutId: string, now = new
   if (!row) return null;
   const [outlet] = await db.select().from(s.outlets).where(and(eq(s.outlets.tenantId, row.tenantId), eq(s.outlets.id, row.outletId))).limit(1);
   if (!outlet) return null;
-  const resolvedOutlet = await deliveryOutlet(outlet.code, false, now);
+  const resolvedOutlet = await deliveryOutlet(outlet.code, false, now, row.serviceMode);
   return reconcileRowPayment(row, resolvedOutlet, now);
 }
 

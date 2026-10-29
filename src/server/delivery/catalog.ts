@@ -3,7 +3,7 @@ import { parseAllergens, parseSpice } from "@/domain/allergens";
 import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import * as s from "@/db/schema";
-import { readDeliveryPolicy, deliveryQuote } from "@/domain/delivery";
+import { readDeliveryPolicy, deliveryQuote, type OrderServiceMode } from "@/domain/delivery";
 import { isOpenAt } from "@/domain/hours";
 import { priceLine } from "@/domain/pricing";
 import { tenantFeatures } from "../plan";
@@ -12,27 +12,30 @@ import { AppError } from "../errors";
 import { outletGatewayFromConfig } from "../payments/outlet-gateway";
 import { loadItemsForBrowsing, isWithinCategoryWindow, loadItems } from "../guest/menu";
 import type { Runner } from "../db-types";
+import { BUSINESS_PACKAGE_PROFILES, type BusinessType } from "@/lib/subscription-pricing";
 
-export async function deliveryOutlet(code: string, ordering = true, now = new Date()) {
-  const [row] = await db.select({ outlet: s.outlets, custom: s.tenants.customFeatures, features: s.plans.features, logoUrl: s.brands.logoUrl }).from(s.outlets)
+export async function deliveryOutlet(code: string, ordering = true, now = new Date(), mode: OrderServiceMode = "delivery") {
+  const [row] = await db.select({ outlet: s.outlets, custom: s.tenants.customFeatures, features: s.plans.features, businessType: s.tenants.businessType, logoUrl: s.brands.logoUrl }).from(s.outlets)
     .innerJoin(s.tenants, eq(s.tenants.id, s.outlets.tenantId)).innerJoin(s.plans, eq(s.plans.code, s.tenants.planCode))
     .innerJoin(s.brands, and(eq(s.brands.id, s.outlets.brandId), eq(s.brands.tenantId, s.outlets.tenantId)))
     .where(eq(s.outlets.code, String(code).trim().toUpperCase())).limit(1);
-  if (!row) throw new AppError("not_found", "Restaurant not found.");
-  if ((await tenantAccess(row.outlet.tenantId)).state === "blocked") throw new AppError("outlet_unavailable", "This restaurant is unavailable.");
+  if (!row) throw new AppError("not_found", "Business not found.");
+  if ((await tenantAccess(row.outlet.tenantId)).state === "blocked") throw new AppError("outlet_unavailable", "This business is unavailable.");
   const policy = readDeliveryPolicy(row.outlet.deliveryPolicy);
   if (ordering) {
-    if (!(await tenantFeatures(row.outlet.tenantId,row.outlet.id)).delivery) throw new AppError("forbidden", "Delivery is not available for this restaurant.");
-    if (!policy.acceptingOrders) throw new AppError("outlet_unavailable", "Delivery is paused. Please contact the restaurant.");
-    if (policy.paymentMode === "manual_qr" && !row.outlet.bookingPaymentQrUrl) throw new AppError("outlet_unavailable", "This restaurant has not added its payment QR yet. Please contact staff.");
-    if (policy.paymentMode === "gateway" && !outletGatewayFromConfig(row.outlet.paymentGatewayConfig)) throw new AppError("outlet_unavailable", "Online delivery payment is not available right now. Please contact the restaurant.");
-    if (!isOpenAt(row.outlet.openingHours, row.outlet.timezone, now)) throw new AppError("outlet_unavailable", "This restaurant is closed right now.");
+    const profile = BUSINESS_PACKAGE_PROFILES[(row.businessType ?? "restaurant") as BusinessType];
+    if (!profile.delivery || (mode === "pickup" && !profile.pickup) || !(await tenantFeatures(row.outlet.tenantId,row.outlet.id)).delivery) throw new AppError("forbidden", "Online food orders are not available for this business.");
+    if (mode === "delivery" && !policy.acceptingOrders) throw new AppError("outlet_unavailable", "Delivery is paused. Please contact the business.");
+    if (mode === "pickup" && !policy.acceptingPickupOrders) throw new AppError("outlet_unavailable", "Pickup orders are paused. Please contact the business.");
+    if (mode === "delivery" && policy.paymentMode === "manual_qr" && !row.outlet.bookingPaymentQrUrl) throw new AppError("outlet_unavailable", "This business has not added its payment QR yet. Please contact staff.");
+    if (mode === "delivery" && policy.paymentMode === "gateway" && !outletGatewayFromConfig(row.outlet.paymentGatewayConfig)) throw new AppError("outlet_unavailable", "Online delivery payment is not available right now. Please contact the business.");
+    if (!isOpenAt(row.outlet.openingHours, row.outlet.timezone, now)) throw new AppError("outlet_unavailable", "This business is closed right now.");
   }
   return { ...row.outlet, policy, logoUrl: row.logoUrl };
 }
 
-export async function deliveryMenu(code: string, now = new Date()) {
-  const outlet = await deliveryOutlet(code, true, now);
+export async function deliveryMenu(code: string, mode: OrderServiceMode = "delivery", now = new Date()) {
+  const outlet = await deliveryOutlet(code, true, now, mode);
   const [categories, loaded] = await Promise.all([
     db.select({ id: s.menuCategories.id, nameEn: s.menuCategories.nameEn, nameHi: s.menuCategories.nameHi, imageUrl: s.menuCategories.imageUrl })
       .from(s.menuCategories)
@@ -61,7 +64,8 @@ export async function deliveryMenu(code: string, now = new Date()) {
     ...category,
     items: items.filter(item => item.categoryId === category.id),
   })).filter(category => category.items.length > 0);
-  return { outlet: { code: outlet.code, name: outlet.name, logoUrl: outlet.logoUrl, paymentQrUrl: outlet.policy.paymentMode === "manual_qr" ? outlet.bookingPaymentQrUrl : null, policy: outlet.policy }, categories: menuCategories, items };
+  const gatewayAvailable = !!outletGatewayFromConfig(outlet.paymentGatewayConfig);
+  return { outlet: { code: outlet.code, name: outlet.name, logoUrl: outlet.logoUrl, paymentQrUrl: outlet.bookingPaymentQrUrl, gatewayAvailable, policy: outlet.policy }, categories: menuCategories, items };
 }
 
 export function cleanDeliveryCart(raw: s.DeliveryCartLine[]): s.DeliveryCartLine[] {
@@ -72,7 +76,7 @@ export function cleanDeliveryCart(raw: s.DeliveryCartLine[]): s.DeliveryCartLine
   });
 }
 
-export async function priceDeliveryCart(run: Runner, outlet: Awaited<ReturnType<typeof deliveryOutlet>>, raw: s.DeliveryCartLine[], pincode: string, now = new Date()) {
+export async function priceDeliveryCart(run: Runner, outlet: Awaited<ReturnType<typeof deliveryOutlet>>, raw: s.DeliveryCartLine[], pincode: string | undefined, now = new Date(), mode: OrderServiceMode = "delivery") {
   const lines = cleanDeliveryCart(raw);
   const loaded = new Map((await loadItems(run, { tenantId: outlet.tenantId, outletId: outlet.id, brandId: outlet.brandId }, now, [...new Set(lines.map(line => line.itemId))])).map(item => [item.item.id, item]));
   const quantities = new Map<string, number>();
@@ -88,8 +92,15 @@ export async function priceDeliveryCart(run: Runner, outlet: Awaited<ReturnType<
   const taxByRate = new Map<number, number>();
   for (const line of priced) taxByRate.set(line.taxRateBp, (taxByRate.get(line.taxRateBp) ?? 0) + line.linePaise);
   const taxPaise = [...taxByRate].reduce((sum, [rate, amount]) => sum + Math.round(amount * rate / 10000), 0);
-  let quote;
-  try { quote = deliveryQuote(outlet.policy, pincode, subtotalPaise); } catch (error) { throw new AppError("invalid_state", error instanceof Error ? error.message : "Check your delivery area."); }
+  let deliveryFeePaise = 0, estimatedMinutes = outlet.policy.estimatedMinutes;
+  if (mode === "delivery") {
+    let quote;
+    try { quote = deliveryQuote(outlet.policy, pincode ?? "", subtotalPaise); } catch (error) { throw new AppError("invalid_state", error instanceof Error ? error.message : "Check your delivery area."); }
+    deliveryFeePaise = quote.feePaise; estimatedMinutes = quote.estimatedMinutes;
+  } else {
+    if (!outlet.policy.acceptingPickupOrders) throw new AppError("outlet_unavailable", "Pickup orders are paused.");
+    if (subtotalPaise < outlet.policy.minimumOrderPaise) throw new AppError("invalid_state", `Minimum food order is ₹${(outlet.policy.minimumOrderPaise / 100).toFixed(2)}.`);
+  }
   // Delivery has no dine-in service charge. Fee is the final charge configured by the owner.
-  return { lines: priced, subtotalPaise, taxPaise, deliveryFeePaise: quote.feePaise, totalPaise: Math.round((subtotalPaise + taxPaise) / 100) * 100 + quote.feePaise, estimatedMinutes: quote.estimatedMinutes };
+  return { lines: priced, subtotalPaise, taxPaise, deliveryFeePaise, totalPaise: Math.round((subtotalPaise + taxPaise) / 100) * 100 + deliveryFeePaise, estimatedMinutes };
 }

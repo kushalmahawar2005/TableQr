@@ -13,14 +13,38 @@ import { topics } from "../realtime/token";
 import { releaseVisitTables } from "../floor/assignments";
 import { announceDelivery } from "./events";
 import { notifyDeliveryCustomer } from "../guest/push";
+import { readDeliveryPolicy } from "@/domain/delivery";
+import { BUSINESS_PACKAGE_PROFILES, type BusinessType } from "@/lib/subscription-pricing";
+import { tenantFeatures } from "../plan";
+import { outletGatewayFromConfig } from "../payments/outlet-gateway";
 
 export const deliveryStaffRoles = ["owner", "manager", "cashier"] as const;
+
+/** The order desk only offers guest-order modes the current outlet can actually accept. */
+export async function availableGuestOrderModes(staff: StaffSession) {
+  const [outlet] = await db.select({ businessType: s.tenants.businessType, policy: s.outlets.deliveryPolicy, paymentQrUrl: s.outlets.bookingPaymentQrUrl, gatewayConfig: s.outlets.paymentGatewayConfig })
+    .from(s.outlets).innerJoin(s.tenants, eq(s.tenants.id, s.outlets.tenantId))
+    .where(and(eq(s.outlets.tenantId, staff.tenantId), eq(s.outlets.id, staff.outletId)));
+  if (!outlet) return { pickup: false, delivery: false };
+  const profile = BUSINESS_PACKAGE_PROFILES[(outlet.businessType ?? "restaurant") as BusinessType];
+  const policy = readDeliveryPolicy(outlet.policy);
+  const features = await tenantFeatures(staff.tenantId, staff.outletId);
+  let gatewayAvailable = false;
+  try { gatewayAvailable = !!outletGatewayFromConfig(outlet.gatewayConfig); } catch { /* a broken merchant key must not break the order desk */ }
+  const deliveryPaymentReady = policy.paymentMode === "cod" || (policy.paymentMode === "manual_qr" && !!outlet.paymentQrUrl) || (policy.paymentMode === "gateway" && gatewayAvailable);
+  const pickupPaymentReady = policy.pickupCodEnabled || !!outlet.paymentQrUrl || gatewayAvailable;
+  return {
+    pickup: profile.pickup && features.delivery && policy.acceptingPickupOrders && pickupPaymentReady,
+    delivery: profile.delivery && features.delivery && policy.acceptingOrders && deliveryPaymentReady,
+  };
+}
+
 export async function deliveryQueue(staff: StaffSession) {
   await requireStaffRole(staff, deliveryStaffRoles);
   // Historical orders remain manageable if the package is downgraded or delivery is paused.
-  const rows = await db.select({ id: s.deliveryCheckouts.id, status: s.deliveryCheckouts.status, sessionId: s.deliveryCheckouts.sessionId, name: s.deliveryCheckouts.name, phone: s.deliveryCheckouts.phone, address: s.deliveryCheckouts.address, courierName: s.deliveryCheckouts.courierName, courierPhone: s.deliveryCheckouts.courierPhone, courierUserId: s.deliveryCheckouts.courierUserId, paymentIssue: s.deliveryCheckouts.paymentIssue, riderRating: s.deliveryCheckouts.riderRating, riderRatingNote: s.deliveryCheckouts.riderRatingNote, deliveryPin: s.deliveryCheckouts.deliveryPin, totalPaise: s.bills.totalPaise, paid: s.bills.status, placedAt: s.deliveryCheckouts.placedAt })
+  const rows = await db.select({ id: s.deliveryCheckouts.id, status: s.deliveryCheckouts.status, serviceMode: s.deliveryCheckouts.serviceMode, sessionId: s.deliveryCheckouts.sessionId, name: s.deliveryCheckouts.name, phone: s.deliveryCheckouts.phone, address: s.deliveryCheckouts.address, courierName: s.deliveryCheckouts.courierName, courierPhone: s.deliveryCheckouts.courierPhone, courierUserId: s.deliveryCheckouts.courierUserId, paymentIssue: s.deliveryCheckouts.paymentIssue, riderRating: s.deliveryCheckouts.riderRating, riderRatingNote: s.deliveryCheckouts.riderRatingNote, deliveryPin: s.deliveryCheckouts.deliveryPin, totalPaise: s.bills.totalPaise, paid: s.bills.status, placedAt: s.deliveryCheckouts.placedAt })
     .from(s.deliveryCheckouts).innerJoin(s.bills, and(eq(s.bills.tenantId, s.deliveryCheckouts.tenantId), eq(s.bills.sessionId, s.deliveryCheckouts.sessionId)))
-    .where(and(eq(s.deliveryCheckouts.tenantId, staff.tenantId), eq(s.deliveryCheckouts.outletId, staff.outletId), inArray(s.deliveryCheckouts.status, ["placed", "dispatched", "delivered"])))
+    .where(and(eq(s.deliveryCheckouts.tenantId, staff.tenantId), eq(s.deliveryCheckouts.outletId, staff.outletId), inArray(s.deliveryCheckouts.status, ["placed", "dispatched", "delivered", "collected"])))
     .orderBy(desc(s.deliveryCheckouts.placedAt)).limit(100);
   // What was ordered and where the kitchen is with it, for the delivery desk
   const sessionIds = rows.map(r => r.sessionId).filter((id): id is string => !!id);
@@ -56,8 +80,9 @@ export async function assignDeliveryCourier(staff: StaffSession, id: string, inp
   const courier = cleanCourier(input);
   let sessionId: string | null = null;
   await db.transaction(async tx => {
-    const [row] = await tx.select({ id: s.deliveryCheckouts.id, status: s.deliveryCheckouts.status, sessionId: s.deliveryCheckouts.sessionId, courierName: s.deliveryCheckouts.courierName, courierPhone: s.deliveryCheckouts.courierPhone }).from(s.deliveryCheckouts)
+    const [row] = await tx.select({ id: s.deliveryCheckouts.id, status: s.deliveryCheckouts.status, serviceMode: s.deliveryCheckouts.serviceMode, sessionId: s.deliveryCheckouts.sessionId, courierName: s.deliveryCheckouts.courierName, courierPhone: s.deliveryCheckouts.courierPhone }).from(s.deliveryCheckouts)
       .where(and(eq(s.deliveryCheckouts.tenantId, staff.tenantId), eq(s.deliveryCheckouts.outletId, staff.outletId), eq(s.deliveryCheckouts.id, String(id)))).for("update");
+    if (row?.serviceMode !== "delivery") throw new AppError("invalid_state", "Pickup orders are collected at the counter and cannot be assigned to a rider.");
     if (!row || !["placed", "dispatched"].includes(row.status)) throw new AppError("not_found", "This delivery order can no longer be assigned.");
     if (row.courierName === courier.name && row.courierPhone === courier.phone) return;
     sessionId = row.sessionId;
@@ -73,6 +98,7 @@ export async function pendingManualDeliveryPayments(staff: StaffSession) {
   await requireStaffRole(staff, deliveryStaffRoles);
   return db.select({
     id: s.deliveryCheckouts.id, name: s.deliveryCheckouts.name, phone: s.deliveryCheckouts.phone,
+    serviceMode: s.deliveryCheckouts.serviceMode,
     address: s.deliveryCheckouts.address, totalPaise: s.deliveryCheckouts.totalPaise,
     reference: s.deliveryCheckouts.manualPaymentReference, claimedAt: s.deliveryCheckouts.manualPaymentClaimedAt,
   }).from(s.deliveryCheckouts)
@@ -80,30 +106,36 @@ export async function pendingManualDeliveryPayments(staff: StaffSession) {
     .orderBy(desc(s.deliveryCheckouts.manualPaymentClaimedAt)).limit(100);
 }
 
-export async function advanceDelivery(staff: StaffSession, id: string, next: "dispatched" | "delivered", now = new Date()) {
+export async function advanceDelivery(staff: StaffSession, id: string, next: "dispatched" | "delivered" | "collected", now = new Date()) {
   await requireStaffRole(staff, deliveryStaffRoles);
-  if (!["dispatched", "delivered"].includes(next)) throw new AppError("invalid_state", "Choose a valid delivery status.");
+  if (!["dispatched", "delivered", "collected"].includes(next)) throw new AppError("invalid_state", "Choose a valid order status.");
   let changed: string | null = null, rider: string | null = null;
   await db.transaction(async tx => {
     const [row] = await tx.select().from(s.deliveryCheckouts).where(and(eq(s.deliveryCheckouts.tenantId, staff.tenantId), eq(s.deliveryCheckouts.outletId, staff.outletId), eq(s.deliveryCheckouts.id, String(id)))).for("update");
     if (!row?.sessionId) throw new AppError("not_found", "Delivery order not found.");
     if (row.status === next) return;
-    if (next === "dispatched") {
-      if (row.status !== "placed") throw new AppError("invalid_state", "Only a packed order can be dispatched.");
+    if (next === "collected" && row.serviceMode !== "pickup") throw new AppError("invalid_state", "Only a pickup order can be marked collected.");
+    if (next === "dispatched" && row.serviceMode !== "delivery") throw new AppError("invalid_state", "Pickup orders are collected at the counter.");
+    if (next === "dispatched" || next === "collected") {
+      if (row.status !== "placed") throw new AppError("invalid_state", row.serviceMode === "pickup" ? "Only a ready pickup order can be marked collected." : "Only a packed order can be dispatched.");
       const lines = await tx.select({ status: s.orderLines.status }).from(s.orderLines).where(and(eq(s.orderLines.tenantId, staff.tenantId), eq(s.orderLines.sessionId, row.sessionId)));
       const live = lines.filter(line => !["voided", "cancelled"].includes(line.status));
       if (!live.length || live.some(line => !["ready", "served"].includes(line.status))) throw new AppError("invalid_state", "Wait until the kitchen has packed every item.");
+      if (next === "collected") {
+        const [bill] = await tx.select({ status: s.bills.status }).from(s.bills).where(and(eq(s.bills.tenantId, staff.tenantId), eq(s.bills.sessionId, row.sessionId)));
+        if (bill?.status !== "paid") throw new AppError("invalid_state", "Record the pickup payment in Billing before marking it collected.");
+      }
     } else {
       if (row.status !== "dispatched") throw new AppError("invalid_state", "Dispatch this order before marking it delivered.");
       const [bill] = await tx.select({ status: s.bills.status }).from(s.bills).where(and(eq(s.bills.tenantId, staff.tenantId), eq(s.bills.sessionId, row.sessionId)));
       if (bill?.status !== "paid") throw new AppError("invalid_state", "Record the payment in Billing before completing delivery.");
     }
-    await tx.update(s.deliveryCheckouts).set({ status: next, ...(next === "dispatched" ? { pickedUpAt: now } : { deliveredAt: now }) }).where(and(eq(s.deliveryCheckouts.tenantId, staff.tenantId), eq(s.deliveryCheckouts.id, row.id)));
+    await tx.update(s.deliveryCheckouts).set({ status: next, ...(next === "dispatched" ? { pickedUpAt: now } : next === "collected" ? { collectedAt: now } : { deliveredAt: now }) }).where(and(eq(s.deliveryCheckouts.tenantId, staff.tenantId), eq(s.deliveryCheckouts.id, row.id)));
     await audit(tx, staff, { action: `delivery.${next}`, entity: "delivery", entityId: row.id, before: { status: row.status }, after: { status: next }, now });
     changed = row.sessionId;
     rider = row.courierUserId;
   }, LOCK_THEN_READ);
-  if (changed) await announceDelivery(staff, changed, "delivery.updated", [rider], next);
+  if (changed) await announceDelivery(staff, changed, "delivery.updated", [rider], next === "dispatched" ? "dispatched" : next === "collected" ? "collected" : "delivered");
 }
 
 /**

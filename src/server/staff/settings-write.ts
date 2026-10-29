@@ -37,6 +37,7 @@ const bad = (message: string) => new AppError("invalid_state", message, { reason
 
 export async function updateOutletSettings(staff: Staff, input: SettingsPatch, now = new Date()) {
   if (!staff.roles.includes("owner")) throw new AppError("forbidden", "Only the owner can change settings.");
+  const allowedFeatures = await tenantFeatures(staff.tenantId, staff.outletId);
   if (input.guestOnlinePayments !== undefined && typeof input.guestOnlinePayments !== "boolean") throw bad("Choose a valid online payment preference.");
   if (input.guestPwaInstallEnabled !== undefined && typeof input.guestPwaInstallEnabled !== "boolean") throw bad("Choose whether guests can install the restaurant app.");
   if (input.guestPwaInstallEnabled === true) {
@@ -107,7 +108,7 @@ export async function updateOutletSettings(staff: Staff, input: SettingsPatch, n
     const guestPwaInstallEnabled = input.guestPwaInstallEnabled ?? before.guestPwaInstallEnabled;
     if (announcementWillBeActive && (!savedAnnouncementTitle || !savedAnnouncementBody)) throw bad("Add a title and message before publishing the announcement.");
     const next = { city, address, gstin: gstin || null, fssai: fssai || null, serviceChargeBp: sc, tipPresetsBp: tips, autoAcceptOrders: !!input.autoAcceptOrders, guestOnlinePayments: input.guestOnlinePayments ?? before.guestOnlinePayments, reviewUrl: reviewUrl || null, openingHours: hours, roomServices, wifiSsid: wifiSsid || null, wifiPassword: wifiPassword || null, announcementActive: announcementWillBeActive, announcementTitle: savedAnnouncementTitle, announcementBody: savedAnnouncementBody };
-    const nextGuestServices = input.guestServices === undefined ? before.guestServices : [...input.guestServices];
+    const nextGuestServices = input.guestServices === undefined ? before.guestServices : input.guestServices.filter(service => allowedFeatures[service]);
     const bookingPaymentMode = input.bookingPaymentMode ?? before.bookingPaymentMode;
     const onlinePayments = input.guestOnlinePayments ?? before.guestOnlinePayments;
     if (onlinePayments && !outletGatewayFromConfig(before.paymentGatewayConfig)) throw bad("Connect this restaurant’s own Cashfree account before enabling guest online payments.");

@@ -28,7 +28,7 @@ export async function enableStaffPushNotifications(audience: "staff" | "rider" =
   if (permission !== "granted") return { ok: false as const, permission, error: permission === "denied" ? "Notifications are blocked in your device settings." : "Notification permission was not granted." };
 
   const config = await pushSetupAction(audience);
-  if (!config.enabled || !config.publicKey) return { ok: false as const, permission, error: "Push notifications are not configured on the server yet." };
+  if (!config.enabled || !config.publicKey) return { ok: false as const, permission, error: config.error || "Push notifications are not configured on the server yet." };
 
   try {
     const registration = await navigator.serviceWorker.register("/sw.js", { scope: "/" });

@@ -526,6 +526,20 @@
       "when": 1793276877691,
       "tag": "0074_customer_party_history",
       "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "5",
+      "when": 1793283288124,
+      "tag": "0075_rich_iron_lad",
+      "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "5",
+      "when": 1793286230727,
+      "tag": "0076_odd_starbolt",
+      "breakpoints": true
     }
   ]
 }

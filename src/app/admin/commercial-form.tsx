@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ADDONS, BUSINESS_TYPES, setupFee, type BusinessType, type CommercialSettings } from "@/lib/subscription-pricing";
+import { ADDONS, BUSINESS_TYPES, BUSINESS_SIZES, businessSizesFor, setupFee, type BusinessSize, type BusinessType, type CommercialSettings } from "@/lib/subscription-pricing";
 import { getCommercialAction, saveCommercialAction } from "./actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,17 +9,19 @@ export function CommercialForm({ tenantId }: { tenantId: string }) {
   const router = useRouter();
   const [data,setData] = useState<NonNullable<Awaited<ReturnType<typeof getCommercialAction>>["data"]>|null>(null);
   const [category,setCategory] = useState<BusinessType>("restaurant");
+  const [businessSize,setBusinessSize] = useState<BusinessSize | "">("");
   const [count,setCount] = useState(1), [received,setReceived] = useState("0"), [reference,setReference] = useState("");
   const [addons,setAddons] = useState<CommercialSettings["addons"]>({});
   const [message,setMessage] = useState(""); const [busy,start] = useTransition();
-  useEffect(()=>{let active=true;void getCommercialAction(tenantId).then(r=>{if(!active)return;if(!r.data){setMessage(r.error??"Could not load");return;}setData(r.data);setCategory(r.data.businessType??"restaurant");setCount(r.data.commercial?.outletCount??Math.max(1,r.data.outlets.length));setAddons(r.data.commercial?.addons??{});setReceived(String((r.data.commercial?.setupReceivedPaise??0)/100));setReference(r.data.commercial?.setupReference??"");});return()=>{active=false}},[tenantId]);
-  const save=(goLive:boolean)=>start(async()=>{const r=await saveCommercialAction(tenantId,{businessType:category,outletCount:count,addons,setupReceivedRupees:Number(received),setupReference:reference,goLive});setMessage(r.error??"Saved subscription settings.");if(!r.error){const next=await getCommercialAction(tenantId);setData(next.data);router.refresh();}});
+  useEffect(()=>{let active=true;void getCommercialAction(tenantId).then(r=>{if(!active)return;if(!r.data){setMessage(r.error??"Could not load");return;}setData(r.data);setCategory(r.data.businessType??"restaurant");setBusinessSize(r.data.businessSize??"");setCount(r.data.commercial?.outletCount??Math.max(1,r.data.outlets.length));setAddons(r.data.commercial?.addons??{});setReceived(String((r.data.commercial?.setupReceivedPaise??0)/100));setReference(r.data.commercial?.setupReference??"");});return()=>{active=false}},[tenantId]);
+  const save=(goLive:boolean)=>start(async()=>{const r=await saveCommercialAction(tenantId,{businessType:category,businessSize:businessSizesFor(category).length?businessSize as BusinessSize:null,outletCount:count,addons,setupReceivedRupees:Number(received),setupReference:reference,goLive});setMessage(r.error??"Saved subscription settings.");if(!r.error){const next=await getCommercialAction(tenantId);setData(next.data);router.refresh();}});
   if(!data)return <p role="status">{message||"Loading subscription settings…"}</p>;
   return <section className="space-y-3 rounded-lg border p-3 text-sm"><h3 className="font-semibold">Business & subscription setup</h3>
-    <label className="block">Business category<select className="mt-1 w-full rounded border bg-background p-2" value={category} onChange={e=>setCategory(e.target.value as BusinessType)}>{Object.entries(BUSINESS_TYPES).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></label>
+    <label className="block">Business category<select className="mt-1 w-full rounded border bg-background p-2" value={category} onChange={e=>{const next=e.target.value as BusinessType;setCategory(next);setBusinessSize(businessSizesFor(next)[0]?.[0]??"")}}>{Object.entries(BUSINESS_TYPES).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></label>
+    {businessSizesFor(category).length>0&&<label className="block">Business size<select className="mt-1 w-full rounded border bg-background p-2" value={businessSize} onChange={e=>setBusinessSize(e.target.value as BusinessSize)}><option value="">Choose size</option>{businessSizesFor(category).map(([key])=><option key={key} value={key}>{BUSINESS_SIZES[key]}</option>)}</select></label>}
     <label className="block">Total outlets agreed<Input type="number" min={Math.max(1,data.outlets.length)} max={1000} value={count} onChange={e=>setCount(Number(e.target.value))}/></label>
     <p>Setup total: ₹{(setupFee(count)/100).toLocaleString("en-IN")} · Extra outlets: ₹400/month each.</p>
-    {Object.entries(ADDONS).map(([key,addon])=><fieldset key={key} className="space-y-1 rounded border p-2"><legend>{addon.label} · ₹{addon.paise/100}/outlet/month</legend><p className="text-xs text-muted-foreground">Already included in the plan? No extra charge.</p>{data.outlets.map(o=><label key={o.id} className="flex items-center gap-2"><input type="checkbox" checked={addons[key as keyof typeof ADDONS]?.includes(o.id)??false} onChange={e=>setAddons(old=>({...old,[key]:e.target.checked?[...(old[key as keyof typeof ADDONS]??[]),o.id]:(old[key as keyof typeof ADDONS]??[]).filter(id=>id!==o.id)}))}/>{o.name}</label>)}</fieldset>)}
+    {Object.entries(ADDONS).map(([key,addon])=><fieldset key={key} className="space-y-1 rounded border p-2"><legend>{addon.label} · {addon.paise === 0 ? "Included · no extra charge" : `₹${addon.paise/100}/outlet/month`}</legend>{addon.paise === 0 && <p className="text-xs text-muted-foreground">Switch it on for the outlets that need it. It does not change their monthly price.</p>}{data.outlets.map(o=><label key={o.id} className="flex items-center gap-2"><input type="checkbox" checked={addons[key as keyof typeof ADDONS]?.includes(o.id)??false} onChange={e=>setAddons(old=>({...old,[key]:e.target.checked?[...(old[key as keyof typeof ADDONS]??[]),o.id]:(old[key as keyof typeof ADDONS]??[]).filter(id=>id!==o.id)}))}/>{o.name}</label>)}</fieldset>)}
     <label className="block">Total setup amount received (₹)<Input type="number" min={0} step="0.01" value={received} onChange={e=>setReceived(e.target.value)}/></label>
     <label className="block">Setup payment reference<Input value={reference} maxLength={120} onChange={e=>setReference(e.target.value)}/></label>
     <p className="text-xs text-muted-foreground">Remote onboarding. Hardware not provided. All selected recurring features are free for one month from go-live. Setup fees do not extend the subscription.</p>

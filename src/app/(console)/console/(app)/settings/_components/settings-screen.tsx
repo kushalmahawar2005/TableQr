@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { useEffect, useState, useTransition } from "react";
-import { Check, CheckCircle2, Circle, ClipboardList, Clock, Copy, CreditCard, Lock, Plus, Receipt, Store, Trash2, Upload, Wallet, Wifi, X, type LucideIcon } from "lucide-react";
+import { Check, ClipboardList, Clock, Copy, CreditCard, Lock, Plus, Receipt, Store, Trash2, Upload, Wallet, Wifi, X, type LucideIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { OutletSettings } from "@/server/staff/settings-read";
@@ -13,11 +13,12 @@ import { shrinkPhoto } from "@/lib/shrink-photo";
 import { DeliverySettings } from "./delivery-settings";
 import { GUEST_SERVICE_LABELS, type GuestService } from "@/domain/guest-services";
 import { LogoCropDialog } from "./logo-crop-dialog";
+import { BUSINESS_PACKAGE_PROFILES } from "@/lib/subscription-pricing";
 
 const DAYS = [["mon", "Monday"], ["tue", "Tuesday"], ["wed", "Wednesday"], ["thu", "Thursday"], ["fri", "Friday"], ["sat", "Saturday"], ["sun", "Sunday"]] as const;
 const MODE: Record<string, string> = { open: "Open: anyone who scans can order", verified: "Verified: guests confirm their phone number first", host_confirmed: "Host confirms: staff approve each table" };
 const TIP_OPTIONS = [5, 10, 15, 20];
-// Left-hand list of sections; "hours" is also the target of the setup guide's link
+// Left-hand list of settings sections available to this business category.
 const NAV = [
   ["restaurant", "Restaurant", Store], ["tax", "Tax and licences", Receipt], ["bill", "Bill and tips", Wallet],
   ["orders", "Orders", ClipboardList], ["guest-link", "Guest entry link", Store], ["delivery", "Delivery setup", Store], ["room-guest", "Room guest page", Wifi], ["hours", "Opening hours", Clock], ["plan", "Plan", CreditCard],
@@ -73,13 +74,14 @@ function Fixed({ children }: { children: React.ReactNode }) {
 export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boolean }) {
   const router = useRouter();
   const businessType = o.businessType ?? "restaurant";
+  const businessProfile = BUSINESS_PACKAGE_PROFILES[businessType];
   const businessLabel = businessType === "cloud_kitchen" ? "Cloud kitchen" : businessType === "cafe" ? "Café" : businessType === "hotel" ? "Hotel" : businessType === "hotel_restaurant" ? "Hotel + restaurant" : "Restaurant";
-  const hasDiningFloor = businessType === "restaurant" || businessType === "cafe" || businessType === "hotel_restaurant";
-  const showRoomGuest = o.availableGuestServices.includes("rooms");
-  const showDelivery = businessType !== "hotel" || o.deliveryAvailable;
+  const hasDiningFloor = businessProfile.floor;
+  const showRoomGuest = businessProfile.rooms && o.availableGuestServices.includes("rooms");
+  const showDelivery = businessProfile.delivery && (o.deliveryAvailable || o.pickupAvailable);
   const showBookingSettings = o.availableGuestServices.includes("reservations");
   const guestLinkSummary = businessType === "cloud_kitchen"
-    ? "Guests see the ordering and booking services enabled for this kitchen."
+    ? "Guests see only the pickup and delivery options enabled for this kitchen."
     : businessType === "hotel"
       ? "Share this link for available hotel services. Checked-in guests use their room QR for requests."
       : businessType === "hotel_restaurant"
@@ -98,6 +100,7 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
   const [auto, setAuto] = useState(o.autoAcceptOrders);
   const [guestOnlinePayments, setGuestOnlinePayments] = useState(o.guestOnlinePayments);
   const [guestPwaInstallEnabled, setGuestPwaInstallEnabled] = useState(o.guestPwaInstallEnabled);
+  const showGuestAppInstall = o.guestPwaCustomizationAvailable || guestPwaInstallEnabled;
   const [publicServices, setPublicServices] = useState<GuestService[]>(o.guestServices);
   const [announcementActive, setAnnouncementActive] = useState(o.announcementActive);
   const [announcementTitle, setAnnouncementTitle] = useState(o.announcementTitle);
@@ -132,11 +135,6 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
   const setDay = (d: string, ranges: [string, string][]) => setHours((h) => ({ ...h, [d]: ranges }));
   const scNum = sc.trim() === "" ? 0 : Number(sc);
   const bookingAdvanceNum = bookingAdvance.trim() === "" ? 0 : Number(bookingAdvance);
-
-  const checklist = [
-    ["GST number", !!o.gstin, "tax"], ["FSSAI licence", !!o.fssai, "tax"], ["Opening hours", !!o.openingHours, "hours"], ["Review link", !!o.reviewUrl, "orders"],
-  ] as const;
-  const done = checklist.filter(([, v]) => v).length;
 
   // Light up the section in the left list that is at the top of the screen
   useEffect(() => {
@@ -265,7 +263,7 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
         bookingAdvancePaise: Math.round(bookingAdvanceNum * 100),
         upiId,
         upiName,
-        ...(o.deliveryAvailable ? { deliveryPolicy } : {}),
+        ...(o.deliveryAvailable || o.pickupAvailable ? { deliveryPolicy } : {}),
         openingHours: hoursOn ? hours : null,
       });
       setMsg(res.ok ? { ok: true, text: "Saved." } : { ok: false, text: res.message });
@@ -287,22 +285,6 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
         </span>
       </header>
 
-      {done < checklist.length && (
-        <div className="mt-5 grid gap-4 rounded-2xl border border-brand-border bg-brand-soft/40 p-4 sm:grid-cols-[minmax(13rem,0.8fr)_2fr] sm:items-center sm:p-5">
-          <div className="min-w-0">
-            <div className="flex items-center justify-between gap-3">
-              <p className="font-display text-section font-bold">Finish your setup</p>
-              <span className="rounded-full bg-surface px-2.5 py-1 text-xs font-bold tabular-nums">{done}/{checklist.length}</span>
-            </div>
-            <p className="mt-1 text-xs text-muted">Complete these basics for your guests.</p>
-            <div className="mt-3 h-2 overflow-hidden rounded-full bg-ink/10"><div className="h-full rounded-full bg-brand transition-[width]" style={{ width: `${(done / checklist.length) * 100}%` }} /></div>
-          </div>
-          <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-            {checklist.map(([k, v, to]) => <li key={k}><a href={`#${to}`} className={`flex min-h-10 items-center gap-2 rounded-xl border px-3 py-2 text-sm transition-colors ${v ? "border-success/20 bg-surface text-muted" : "border-line bg-surface font-semibold text-ink hover:border-brand hover:text-brand"}`}>{v ? <CheckCircle2 className="size-4 shrink-0 text-success" aria-hidden="true" /> : <Circle className="size-4 shrink-0 text-muted" aria-hidden="true" />}{k}</a></li>)}
-          </ul>
-        </div>
-      )}
-
       <nav aria-label="Settings sections" className="no-scrollbar -mx-4 mt-5 flex gap-1.5 overflow-x-auto px-4 pb-1 lg:hidden">
         {visibleNav.map(([id, label]) => <a key={id} href={`#${id}`} onClick={() => setActiveId(id)} className={`shrink-0 rounded-full border px-3 py-1.5 text-sm font-semibold ${activeId === id ? "border-ink bg-ink text-paper" : "border-line text-muted hover:text-ink"}`}>{id === "restaurant" ? "Business profile" : id === "guest-link" ? "Guest link" : label}</a>)}
       </nav>
@@ -320,7 +302,6 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
               </li>
             ))}
           </ul>
-          <div className="mx-2 mt-3 border-t border-line pt-3 text-xs text-muted">{done} of {checklist.length} setup steps complete</div>
           </div>
         </nav>
 
@@ -355,7 +336,7 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
                 <button type="button" onClick={copyCode} aria-label="Copy outlet code" className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-line px-2 text-xs font-semibold hover:border-ink/40">{copied ? <Check className="size-3.5" aria-hidden="true" /> : <Copy className="size-3.5" aria-hidden="true" />}{copied ? "Copied" : "Copy"}</button>
               </div>
             </Row>
-            <Row label="Guest link" hint="Share this link so guests can order or book the services you offer.">
+            <Row label="Guest link" hint="Share this link so guests can use the services you offer.">
               <div className="flex min-w-0 items-center gap-2 sm:justify-end">
                 <a href={`/r/${encodeURIComponent(o.code)}`} target="_blank" rel="noreferrer" className="min-w-0 truncate text-sm font-medium text-brand-strong underline underline-offset-2">/r/{o.code}</a>
                 <button type="button" onClick={copyGuestLink} aria-label="Copy guest link" className="inline-flex min-h-8 shrink-0 items-center gap-1 rounded-lg border border-line px-2 text-xs font-semibold hover:border-ink/40">{guestLinkCopied ? <Check className="size-3.5" aria-hidden="true" /> : <Copy className="size-3.5" aria-hidden="true" />}{guestLinkCopied ? "Copied" : "Copy"}</button>
@@ -395,18 +376,18 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
             <Row label="Guest online payments" hint={!o.guestOnlinePaymentAvailable ? "No business payment gateway is connected yet. Counter payment stays available; online checkout cannot be enabled." : guestOnlinePayments ? "Guests can pay their bill online." : "Guests will request payment at the counter; online checkout is hidden."}>
               <div className="flex sm:justify-end"><Toggle on={guestOnlinePayments} onChange={setGuestOnlinePayments} label="Allow guests to pay online" disabled={!canEdit || (!o.guestOnlinePaymentAvailable && !guestOnlinePayments)} /></div>
             </Row>
-            <Row label="Table mode" hint="Changed by Tableeqr."><Fixed>{MODE[o.sessionMode] ?? o.sessionMode}</Fixed></Row>
+            {hasDiningFloor && <Row label="Table mode" hint="Changed by Tableeqr."><Fixed>{MODE[o.sessionMode] ?? o.sessionMode}</Fixed></Row>}
             <Row label="Google review link" htmlFor="review" hint="Guests see this after paying."><Input id="review" className={fieldCls} type="url" placeholder="https://g.page/r/…" value={review} onChange={(e) => setReview(e.target.value)} disabled={!canEdit} /></Row>
           </Section>
 
-          <Section id="guest-link" icon={Store} title="Guest link" desc="Choose the services guests can see after they select their language.">
-            <Row label="Customer app install" hint={o.guestPwaCustomizationAvailable ? "Off by default. When enabled, guests can install your branded guest app from its public link. Turning this off keeps the website and booking link working." : guestPwaInstallEnabled ? "This option is not included in the current plan. Turn it off here; ask Tableeqr to enable branded guest app installation before turning it on again." : "Off. Branded guest app installation is not included in the current plan."}>
+          <Section id="guest-link" icon={Store} title="Guest link" desc={`Choose the services guests can see for this ${businessLabel.toLowerCase()} after they select their language.`}>
+            {showGuestAppInstall && <Row label="Customer app install" hint={o.guestPwaCustomizationAvailable ? "Off by default. When enabled, guests can install your branded guest app from its public link. Turning this off keeps the guest website working." : "This option is not included in the current plan. Turn it off here; ask Tableeqr to enable branded guest app installation before turning it on again."}>
               <div className="flex sm:justify-end"><Toggle on={guestPwaInstallEnabled} onChange={setGuestPwaInstallEnabled} label="Show customer app install option" disabled={!canEdit || (!o.guestPwaCustomizationAvailable && !guestPwaInstallEnabled)} /></div>
-            </Row>
+            </Row>}
             {o.availableGuestServices.map(service => <Row key={service} label={GUEST_SERVICE_LABELS[service].title} hint={GUEST_SERVICE_LABELS[service].hint}>
               <div className="flex sm:justify-end"><Toggle on={publicServices.includes(service)} onChange={enabled => setPublicServices(current => enabled ? [...current, service] : current.filter(value => value !== service))} label={`Show ${GUEST_SERVICE_LABELS[service].title}`} disabled={!canEdit} /></div>
             </Row>)}
-            <div className="py-4 text-sm text-muted">{guestLinkSummary} Turning off party reservations pauses new public bookings.</div>
+            <div className="py-4 text-sm text-muted">{guestLinkSummary}{showBookingSettings ? " Turning off party reservations pauses new public bookings." : ""}</div>
             <div className="space-y-3 py-4">
               <div className="flex items-center justify-between gap-4"><div><p className="text-sm font-semibold">Guest announcement</p><p className="mt-0.5 text-xs text-muted">Publish a short message guests see on your guest link.</p></div><Toggle on={announcementActive} onChange={setAnnouncementActive} label="Publish guest announcement" disabled={!canEdit} /></div>
               <Input aria-label="Announcement title" maxLength={80} placeholder="Title, e.g. Weekend special" className={fieldCls} value={announcementTitle} onChange={event => setAnnouncementTitle(event.target.value)} disabled={!canEdit} />
@@ -436,8 +417,8 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
             <a className="inline-flex min-h-11 items-center py-3 font-semibold text-brand-strong underline underline-offset-4" href={`/r/${encodeURIComponent(o.code)}`} target="_blank" rel="noreferrer">Preview guest link ↗</a>
           </Section>
 
-          {showDelivery && <Section id="delivery" icon={Store} title="Delivery setup" desc="Service areas, delivery charges and payment preferences for this outlet.">
-            {o.deliveryAvailable ? <DeliverySettings value={deliveryPolicy} onChange={setDeliveryPolicy} disabled={!canEdit} hasGateway={o.paymentGateway.configured && o.paymentGateway.available} hasPaymentQr={!!paymentQr} /> : <p className="py-4 text-sm text-muted">Delivery is not included in this package. Tableeqr can enable it from the tenant’s feature settings.</p>}
+          {showDelivery && <Section id="delivery" icon={Store} title={o.deliveryAvailable && o.pickupAvailable ? "Online orders" : o.deliveryAvailable ? "Delivery setup" : "Pickup setup"} desc="Choose which online order types guests can place and how they pay.">
+            <DeliverySettings value={deliveryPolicy} onChange={setDeliveryPolicy} disabled={!canEdit} hasGateway={o.paymentGateway.configured && o.paymentGateway.available} hasPaymentQr={!!paymentQr} hasDelivery={o.deliveryAvailable} hasPickup={o.pickupAvailable} />
           </Section>}
 
           {showRoomGuest && <Section id="room-guest" icon={Wifi} title="Room guest page" desc="Choose what checked-in guests can request and share your Wi-Fi details.">

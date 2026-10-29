@@ -196,9 +196,15 @@ export function RiderScreen({ initialJobs, initialProfile, initialVerification, 
 }
 
 function JobCard({ job, pickup, pending, act, here, photoUrl }: { job: Job; pickup: Jobs["pickup"]; pending: boolean; act: (w: () => Promise<{ ok: boolean; error?: string }>) => void; here: { lat: number; lng: number } | null; photoUrl: string | null }) {
-  const drop = `${job.address.line}, ${job.address.locality}, ${job.address.pincode}`;
+  const address = job.address;
+  if (!address) return <article className="rounded-3xl border border-amber-300 bg-amber-50 p-4 text-amber-950">
+    <h2 className="font-bold">Delivery address missing</h2>
+    <p className="mt-1 text-sm">This order has no delivery address, so don’t start the delivery. Call the customer and ask the outlet team to check it.</p>
+    <a href={`tel:${job.phone}`} className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-xl border border-amber-300 bg-white px-4 text-sm font-semibold"><Phone className="size-4" aria-hidden="true" />Call customer</a>
+  </article>;
+  const drop = `${address.line}, ${address.locality}, ${address.pincode}`;
   // Navigation goes to the customer's pin when they dropped one, else to the typed address
-  const dropTarget = job.address.lat !== undefined && job.address.lng !== undefined ? `${job.address.lat},${job.address.lng}` : drop;
+  const dropTarget = address.lat !== undefined && address.lng !== undefined ? `${address.lat},${address.lng}` : drop;
   const onWay = job.status === "dispatched";
   return (
     <article className="overflow-hidden rounded-3xl border border-line bg-surface shadow-[0_4px_18px_rgb(31_41_55/0.06)]">
@@ -222,14 +228,14 @@ function JobCard({ job, pickup, pending, act, here, photoUrl }: { job: Job; pick
           <p className="text-label font-semibold text-muted uppercase">Drop</p>
           <p className="text-body font-semibold">{job.name}</p>
           <p className="text-caption text-ink">{drop}</p>
-          {job.address.instructions && <p className="mt-0.5 text-caption text-muted">Note: {job.address.instructions}</p>}
+          {address.instructions && <p className="mt-0.5 text-caption text-muted">Note: {address.instructions}</p>}
         </li>
       </ol>
 
-      {onWay && here && job.address.lat !== undefined && job.address.lng !== undefined && (
+      {onWay && here && address.lat !== undefined && address.lng !== undefined && (
         <div className="mx-4 mt-4">
-          <LiveMap className="h-56" route points={[{ id: "me", kind: "rider", lat: here.lat, lng: here.lng, photoUrl, label: "You" }, { id: "home", kind: "home", lat: job.address.lat, lng: job.address.lng!, label: job.name ?? "Customer" }]}
-            overlay={<p className="text-caption font-bold text-ink">🛵 {etaMinutes(distanceKm(here, { lat: job.address.lat, lng: job.address.lng! }))} min <span className="font-medium text-muted">· {distanceKm(here, { lat: job.address.lat, lng: job.address.lng! }).toFixed(1)} km</span></p>} />
+          <LiveMap className="h-56" route points={[{ id: "me", kind: "rider", lat: here.lat, lng: here.lng, photoUrl, label: "You" }, { id: "home", kind: "home", lat: address.lat, lng: address.lng!, label: job.name ?? "Customer" }]}
+            overlay={<p className="text-caption font-bold text-ink">🛵 {etaMinutes(distanceKm(here, { lat: address.lat, lng: address.lng! }))} min <span className="font-medium text-muted">· {distanceKm(here, { lat: address.lat, lng: address.lng! }).toFixed(1)} km</span></p>} />
         </div>
       )}
 

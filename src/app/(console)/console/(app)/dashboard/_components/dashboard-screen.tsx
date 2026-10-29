@@ -158,7 +158,7 @@ export function DashboardScreen({
         {data.view !== "money" && (
           <div className="grid items-start gap-5 xl:grid-cols-12">
             <div className="min-w-0 space-y-5 xl:col-span-6">
-              {(!features || features.dineIn) && <LiveFloor data={data} />}
+              {features?.dineIn === true && <LiveFloor data={data} />}
               {data.view !== "operations" && <RecentPayments payments={data.operations.recentPayments} timezone={data.timezone} />}
             </div>
 
