@@ -1,5 +1,5 @@
-UPDATE plans SET features = JSON_SET(features, '$.purchasing', CAST('false' AS JSON), '$.recipeCosting', CAST('false' AS JSON)) WHERE code = 'starter';
+UPDATE plans SET features = JSON_SET(features, '$.purchasing', JSON_EXTRACT('false', '$'), '$.recipeCosting', JSON_EXTRACT('false', '$')) WHERE code = 'starter';
 --> statement-breakpoint
-UPDATE plans SET features = JSON_SET(features, '$.purchasing', CAST('true' AS JSON), '$.recipeCosting', CAST('false' AS JSON)) WHERE code = 'growth';
+UPDATE plans SET features = JSON_SET(features, '$.purchasing', JSON_EXTRACT('true', '$'), '$.recipeCosting', JSON_EXTRACT('false', '$')) WHERE code = 'growth';
 --> statement-breakpoint
-UPDATE plans SET features = JSON_SET(features, '$.purchasing', CAST('true' AS JSON), '$.recipeCosting', CAST('true' AS JSON)) WHERE code = 'pro';
+UPDATE plans SET features = JSON_SET(features, '$.purchasing', JSON_EXTRACT('true', '$'), '$.recipeCosting', JSON_EXTRACT('true', '$')) WHERE code = 'pro';
