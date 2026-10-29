@@ -331,7 +331,7 @@ export function StaffShell({
             )}
           </div>
           {!preview && !folded && (
-            <div className="mb-1 px-1">
+            <div className="mb-1 hidden px-1 lg:block">
               <InstallApp name={staff.outlet} logoUrl={logoUrl} compact />
             </div>
           )}
