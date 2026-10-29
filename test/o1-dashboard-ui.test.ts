@@ -29,7 +29,7 @@ vi.mock("next/navigation", async (importOriginal) => ({
 const caseOf = (id: string) => dashboardCases().find((c) => c.id === id)!;
 const render = (id: string) => {
   const c = caseOf(id);
-  return renderToStaticMarkup(createElement(DashboardScreen, { initial: c.data, initialTrend: c.trend, preview: c.preview ?? {} }));
+  return renderToStaticMarkup(createElement(DashboardScreen, { initial: c.data, initialTrend: c.trend, features: DEFAULT_PLANS.find(p => p.code === "pro")!.features, preview: c.preview ?? {} }));
 };
 const ok = <T,>(data: T) => ({ ok: true as const, data });
 
@@ -273,4 +273,4 @@ describe("live floor sizing", () => {
   });
 });
 
-describe("business-aware dashboard",()=>{it("hides floor and booking panels for a cloud kitchen",()=>{const c=dashboardCases()[0];const features={...DEFAULT_PLANS[0].features,dineIn:false,rooms:false,reservations:false};const html=renderToStaticMarkup(createElement(DashboardScreen,{initial:c.data,initialTrend:c.trend,features}));for(const text of ["Live Floor","Tables in Use","Open Floor","Bookings Coming Up","Waiting List"])expect(html).not.toContain(text);expect(html).toContain("New Order");});});
+describe("business-aware dashboard",()=>{it("hides floor and booking panels for a cloud kitchen",()=>{const c=dashboardCases()[0];const features={...DEFAULT_PLANS[0].features,dineIn:false,rooms:false,reservations:false};const html=renderToStaticMarkup(createElement(DashboardScreen,{initial:c.data,initialTrend:c.trend,features}));for(const text of ["Live Floor","Tables in Use","Open Floor","Bookings Coming Up","Waiting List"])expect(html).not.toContain(text);expect(html).toContain("New counter order");});});

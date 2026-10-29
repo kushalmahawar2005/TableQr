@@ -60,7 +60,7 @@ export async function updateOutletSettings(staff: Staff, input: SettingsPatch, n
     await requireFeature(staff.tenantId, "delivery");
     try { deliveryPolicy = validateDeliveryPolicy(input.deliveryPolicy); }
     catch (error) { throw bad(error instanceof Error ? error.message : "Choose valid delivery settings."); }
-    if (deliveryPolicy.paymentMode === "gateway" && !outletGatewayFromConfig((await db.select({ paymentGatewayConfig: s.outlets.paymentGatewayConfig }).from(s.outlets).where(and(eq(s.outlets.tenantId, staff.tenantId), eq(s.outlets.id, staff.outletId))))[0]?.paymentGatewayConfig)) throw bad("Connect this restaurant’s own live Cashfree account before enabling online delivery prepayment.");
+    if (deliveryPolicy.acceptingOrders && deliveryPolicy.paymentMode === "gateway" && !outletGatewayFromConfig((await db.select({ paymentGatewayConfig: s.outlets.paymentGatewayConfig }).from(s.outlets).where(and(eq(s.outlets.tenantId, staff.tenantId), eq(s.outlets.id, staff.outletId))))[0]?.paymentGatewayConfig)) throw bad("Connect this restaurant’s own live Cashfree account before enabling online delivery prepayment.");
   }
   const city = String(input.city ?? "").trim();
   const address = String(input.address ?? "").trim();
@@ -112,11 +112,11 @@ export async function updateOutletSettings(staff: Staff, input: SettingsPatch, n
     const bookingPaymentMode = input.bookingPaymentMode ?? before.bookingPaymentMode;
     const onlinePayments = input.guestOnlinePayments ?? before.guestOnlinePayments;
     if (onlinePayments && !outletGatewayFromConfig(before.paymentGatewayConfig)) throw bad("Connect this restaurant’s own Cashfree account before enabling guest online payments.");
-    if (bookingPaymentMode === "gateway" && before.bookingPaymentMode !== "gateway" && !outletGatewayFromConfig(before.paymentGatewayConfig)) throw bad("Connect this restaurant’s own Cashfree account before enabling online booking advances, or use the restaurant QR option.");
-    if (bookingPaymentMode === "manual_qr" && !before.bookingPaymentQrUrl) throw bad("Upload your payment QR before enabling manual booking advances.");
-    if ((input.bookingAdvancePaise ?? before.bookingAdvancePaise) > 0 && bookingPaymentMode === "gateway" && !outletGatewayFromConfig(before.paymentGatewayConfig)) throw bad("Connect this restaurant’s own Cashfree account or choose its QR before requiring reservation advances.");
-    if ((input.bookingAdvancePaise ?? before.bookingAdvancePaise) > 0 && bookingPaymentMode === "manual_qr" && !before.bookingPaymentQrUrl) throw bad("Upload your restaurant payment QR before requiring reservation advances.");
-    if (deliveryPolicy?.paymentMode === "manual_qr" && !before.bookingPaymentQrUrl) throw bad("Upload your restaurant payment QR before selecting manual delivery payments.");
+    if (allowedFeatures.reservations && bookingPaymentMode === "gateway" && before.bookingPaymentMode !== "gateway" && !outletGatewayFromConfig(before.paymentGatewayConfig)) throw bad("Connect this restaurant’s own Cashfree account before enabling online booking advances, or use the restaurant QR option.");
+    if (allowedFeatures.reservations && bookingPaymentMode === "manual_qr" && !before.bookingPaymentQrUrl) throw bad("Upload your payment QR before enabling manual booking advances.");
+    if (allowedFeatures.reservations && (input.bookingAdvancePaise ?? before.bookingAdvancePaise) > 0 && bookingPaymentMode === "gateway" && !outletGatewayFromConfig(before.paymentGatewayConfig)) throw bad("Connect this restaurant’s own Cashfree account or choose its QR before requiring reservation advances.");
+    if (allowedFeatures.reservations && (input.bookingAdvancePaise ?? before.bookingAdvancePaise) > 0 && bookingPaymentMode === "manual_qr" && !before.bookingPaymentQrUrl) throw bad("Upload your restaurant payment QR before requiring reservation advances.");
+    if (deliveryPolicy?.acceptingOrders && deliveryPolicy.paymentMode === "manual_qr" && !before.bookingPaymentQrUrl) throw bad("Upload your restaurant payment QR before selecting manual delivery payments.");
     const bookingAdvancePaise = input.bookingAdvancePaise ?? before.bookingAdvancePaise;
     await tx.update(s.outlets).set({ ...next, guestPwaInstallEnabled, ...(deliveryPolicy ? { deliveryPolicy } : {}), guestServices: nextGuestServices, bookingPaymentMode, bookingAdvancePaise, ...(upiId !== undefined ? { upiId: upiId || null } : {}), ...(upiName !== undefined ? { upiName: upiName || null } : {}) }).where(and(eq(s.outlets.tenantId, staff.tenantId), eq(s.outlets.id, staff.outletId)));
     await audit(tx, staff, {

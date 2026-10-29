@@ -329,6 +329,7 @@ export async function getDashboard(staff: Staff, now = new Date()) {
       .where(and(
         eq(s.deliveryCheckouts.tenantId, scope.tenantId),
         eq(s.deliveryCheckouts.outletId, scope.outletId),
+        eq(s.deliveryCheckouts.serviceMode, "delivery"),
         sql`(${s.deliveryCheckouts.status} in ('placed', 'dispatched') or (${s.deliveryCheckouts.status} = 'delivered' and ${s.deliveryCheckouts.placedAt} >= ${today.start}))`,
       )),
   ]);

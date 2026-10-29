@@ -28,7 +28,7 @@ export function QuickActions({ features }: { features?: Features }) {
         { href: "/console/orders", label: "View Orders", icon: FileText },
         { href: "/console/reports", label: "Reports", icon: BarChart3 },
         { href: "/console/reports/day-close", label: "Day Close", icon: Clock },
-      ].filter(action => action.label !== "Reservations" || features?.reservations).filter(action => action.label !== "Reports" || features?.fullReports).map(({ href, label, icon: Icon }) => (
+      ].filter(action => action.label !== "Reservations" || features?.reservations).filter(action => !["Reports", "Day Close"].includes(action.label) || features?.fullReports).map(({ href, label, icon: Icon }) => (
         <Link
           key={label}
           href={href}

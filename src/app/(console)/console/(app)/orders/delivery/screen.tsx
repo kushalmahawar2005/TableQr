@@ -54,16 +54,12 @@ export function DeliveryQueueScreen({ rows, pendingPayments, canAssignCourier, o
   const [view, setView] = useState<"active" | "completed">("active");
   const hasPickup = availableModes.pickup || rows.some(row => row.serviceMode === "pickup") || pendingPayments.some(payment => payment.serviceMode === "pickup");
   const hasDelivery = availableModes.delivery || rows.some(row => row.serviceMode === "delivery") || pendingPayments.some(payment => payment.serviceMode === "delivery");
-  const [mode, setMode] = useState<"all" | "pickup" | "delivery">(() => hasPickup && hasDelivery ? "all" : hasPickup ? "pickup" : hasDelivery ? "delivery" : "all");
+  const [selectedMode, setMode] = useState<"all" | "pickup" | "delivery">(() => hasPickup && hasDelivery ? "all" : hasPickup ? "pickup" : hasDelivery ? "delivery" : "all");
   const [now, setNow] = useState(() => Date.now());
   // Rider dots move from live events without reloading the page
   const [moved, setMoved] = useState<Record<string, { lat: number; lng: number; at: number }>>({});
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(timer); }, []);
-  useEffect(() => {
-    if (mode === "pickup" && !hasPickup) setMode(hasDelivery ? "delivery" : "all");
-    else if (mode === "delivery" && !hasDelivery) setMode(hasPickup ? "pickup" : "all");
-    else if (mode === "all" && hasPickup !== hasDelivery) setMode(hasPickup ? "pickup" : "delivery");
-  }, [hasDelivery, hasPickup, mode]);
+  const mode = hasPickup && hasDelivery ? selectedMode : hasPickup ? "pickup" : hasDelivery ? "delivery" : "all";
   // Any delivery or kitchen change reloads this screen's data once, a moment later, so a burst of
   // events is one reload. With the live connection down it falls back to checking every 12 s.
   useEffect(() => {

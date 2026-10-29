@@ -168,7 +168,7 @@ export function DashboardScreen({
             </div>
 
             <div className="min-w-0 space-y-5 xl:col-span-3">
-              <CustomerRequests initialRequests={data.operations.customerRequests} />
+              {(!features || features.dineIn || features.rooms) && <CustomerRequests initialRequests={data.operations.customerRequests} />}
               {(!features || features.reservations) && <UpcomingReservations data={data} />}
               <LiveActivity feed={data.operations.activityFeed} />
             </div>
@@ -178,7 +178,7 @@ export function DashboardScreen({
         {data.view !== "operations" && (
           <div className="grid items-start gap-5 xl:grid-cols-2">
             {data.view === "money" && <RecentPayments payments={data.operations.recentPayments} timezone={data.timezone} />}
-            <SalesPerformance trend={trend} />
+            {(!features || features.fullReports) && <SalesPerformance trend={trend} />}
             <TopDishes data={data} />
           </div>
         )}

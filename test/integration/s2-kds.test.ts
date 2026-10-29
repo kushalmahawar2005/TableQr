@@ -110,8 +110,8 @@ describe("trusted kitchen screen", () => {
     expect((await audits("kds.revoke")).length).toBe(1);
   });
   it("is a plan feature: a plan without it refuses setup and turns existing screens off", async () => {
-    const [tenant] = await env.db.select({ planCode: s.tenants.planCode }).from(s.tenants).where(eq(s.tenants.id, env.demo.tenantId));
-    await env.db.update(s.tenants).set({ planCode: "starter" }).where(eq(s.tenants.id, env.demo.tenantId));
+    const [tenant] = await env.db.select({ planCode: s.tenants.planCode, customFeatures: s.tenants.customFeatures }).from(s.tenants).where(eq(s.tenants.id, env.demo.tenantId));
+    await env.db.update(s.tenants).set({ planCode: "starter", customFeatures: { kitchenDisplay: false, waiterApp: false } }).where(eq(s.tenants.id, env.demo.tenantId));
     try {
       await failsWith(setupKdsDevice({ ...MANAGER, station: "Main", expeditor: false }), "forbidden", "plan");
       expect(await resolveKdsDevice(tandoorToken)).toBeNull();
@@ -119,10 +119,10 @@ describe("trusted kitchen screen", () => {
       // (Starter has no waiter app either)
       expect(await assignableRoles(env.demo.tenantId)).toEqual(["manager", "accountant"]);
     } finally {
-      await env.db.update(s.tenants).set({ planCode: tenant.planCode }).where(eq(s.tenants.id, env.demo.tenantId));
+      await env.db.update(s.tenants).set({ planCode: tenant.planCode, customFeatures: tenant.customFeatures }).where(eq(s.tenants.id, env.demo.tenantId));
     }
     expect(await resolveKdsDevice(tandoorToken)).not.toBeNull();
-    expect(await assignableRoles(env.demo.tenantId)).toEqual(["manager", "waiter", "accountant", "kitchen"]);
+    expect(await assignableRoles(env.demo.tenantId)).toEqual(["manager", "waiter", "accountant", "kitchen", "rider"]);
   });
 });
 

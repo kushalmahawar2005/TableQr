@@ -16,6 +16,7 @@ afterAll(async () => { await env.conn.end(); await appDb.$client.end(); });
 
 describe("outlet delivery settings", () => {
   it("requires the package feature and owner role on the server", async () => {
+    await env.db.update(s.tenants).set({ customFeatures: { delivery: false } }).where(eq(s.tenants.id, owner().tenantId));
     expect((await getOutletSettings(owner())).deliveryAvailable).toBe(false);
     await expect(updateOutletSettings(owner(), patch())).rejects.toMatchObject({ code: "forbidden" });
     await env.db.update(s.tenants).set({ customFeatures: { delivery: true } }).where(eq(s.tenants.id, owner().tenantId));
@@ -44,4 +45,10 @@ describe("outlet delivery settings", () => {
     await env.db.update(s.outlets).set({ bookingPaymentQrUrl: null }).where(eq(s.outlets.id, owner().outletId));
     await expect(updateOutletSettings(owner(), patch(manual))).rejects.toMatchObject({ code: "invalid_state" });
   });
+  it("saves pickup-only settings without requiring the paused delivery payment QR", async () => {
+    const pickup = { ...DEFAULT_DELIVERY_POLICY, acceptingPickupOrders: true, pickupCodEnabled: true, paymentMode: "manual_qr" as const };
+    await updateOutletSettings(owner(), patch(pickup));
+    expect((await getOutletSettings(owner())).deliveryPolicy).toMatchObject({ acceptingOrders: false, acceptingPickupOrders: true, pickupCodEnabled: true });
+  });
+
 });
