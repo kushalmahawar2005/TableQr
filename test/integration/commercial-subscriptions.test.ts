@@ -1,0 +1,46 @@
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { eq } from "drizzle-orm";
+import { db } from "@/db";
+import * as s from "@/db/schema";
+import { saveCommercial } from "@/server/admin/commercial";
+import { monthlyFee, claimFee } from "@/server/fees";
+import { saveMenuItem } from "@/server/staff/menu-manager";
+import { tenantFeatures } from "@/server/plan";
+import { resolveStaff, signInStaff } from "@/server/staff/auth";
+import { resetTestDb } from "./setup-db";
+let env:Awaited<ReturnType<typeof resetTestDb>>;
+beforeAll(async()=>{env=await resetTestDb();});
+afterAll(async()=>{await env.conn.end();await db.$client.end();});
+const admin={id:'test-admin',email:'admin@example.com',role:'super_admin'};
+describe('commercial subscriptions',()=>{
+ it('validates admin controls, records setup separately and starts the free month once',async()=>{
+  await env.db.update(s.tenants).set({planCode:'starter',customFeatures:null,customPricePaise:null}).where(eq(s.tenants.id,env.demo.tenantId));
+  const input={businessType:'cloud_kitchen' as const,outletCount:2,addons:{waiterApp:[env.demo.outletId]},setupReceivedRupees:6499,setupReference:'BANK-SETUP',goLive:true};
+  await expect(saveCommercial({...admin,role:'support'},env.demo.tenantId,input)).rejects.toThrow('super admin');
+  await expect(saveCommercial(admin,env.demo.tenantId,{...input,addons:{waiterApp:[env.other.outletId]}})).rejects.toThrow();
+  await env.db.delete(s.subscriptions).where(eq(s.subscriptions.tenantId,env.demo.tenantId));
+  await saveCommercial(admin,env.demo.tenantId,input);
+  const [first]=await env.db.select().from(s.tenants).where(eq(s.tenants.id,env.demo.tenantId));
+  expect(first.commercial?.setupReceivedPaise).toBe(649900);
+  expect(first.trialEndsAt!.getTime()).toBeGreaterThan(Date.now()+27*86400000);
+  await saveCommercial(admin,env.demo.tenantId,input);
+  const [again]=await env.db.select().from(s.tenants).where(eq(s.tenants.id,env.demo.tenantId));
+  expect(again.trialEndsAt).toEqual(first.trialEndsAt);
+  expect(await tenantFeatures(env.demo.tenantId,env.demo.outletId)).toMatchObject({dineIn:false,waiterApp:true});
+  expect(await monthlyFee(db,env.demo.tenantId)).toMatchObject({perOutletPaise:69900,outletCount:2,addonPaise:29900,totalPaise:139800});
+  const payment=await claimFee({tenantId:env.demo.tenantId,roles:['owner'],name:'Owner'},{months:3,method:'bank',reference:'RENEWAL'});
+  expect(payment.amountPaise).toBe(393024);
+ });
+ it('creates the dish and required sizes atomically, rejecting malformed sizes without a stray dish',async()=>{
+  const staff=await resolveStaff((await signInStaff({outletCode:'SRJ01',phone:'9000000001',pin:'1111'})).token);
+  const [category]=await env.db.select().from(s.menuCategories).where(eq(s.menuCategories.tenantId,env.demo.tenantId));
+  const input={categoryId:category.id,nameEn:'Sized dish test',pricePaise:0,isVeg:true,prepMinutes:10,station:'Main',sizes:[{name:'Half',pricePaise:10000},{name:'Full',pricePaise:18000}]};
+  await expect(saveMenuItem(staff!,{...input,sizes:[{name:'Half',pricePaise:-10}]})).rejects.toThrow();
+  const id=await saveMenuItem(staff!,input);
+  const [item]=await env.db.select().from(s.menuItems).where(eq(s.menuItems.id,id));
+  const [group]=await env.db.select().from(s.modifierGroups).where(eq(s.modifierGroups.itemId,id));
+  const sizes=await env.db.select().from(s.modifiers).where(eq(s.modifiers.groupId,group.id));
+  expect(item.pricePaise).toBe(10000);expect(group.minSelect).toBe(1);expect(group.maxSelect).toBe(1);
+  expect(sizes.map(x=>x.priceDeltaPaise).sort((a,b)=>a-b)).toEqual([0,8000]);
+ });
+});

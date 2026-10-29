@@ -77,7 +77,7 @@ export async function posBillDetail(staff: StaffSession, sessionId: string) {
   ]);
   const [refundState, features, [seller], [invoice]] = await Promise.all([
     loadRefundState(staff.tenantId, payments),
-    tenantFeatures(staff.tenantId),
+    tenantFeatures(staff.tenantId, staff.outletId),
     db.select({ name: s.outlets.name, address: s.outlets.address, city: s.outlets.city, gstin: s.outlets.gstin, fssai: s.outlets.fssai }).from(s.outlets).where(and(eq(s.outlets.tenantId, staff.tenantId), eq(s.outlets.id, staff.outletId))),
     // Issued once the bill is fully paid; the printed receipt carries its number
     row.bill ? db.select({ number: s.invoices.number, issuedAt: s.invoices.issuedAt }).from(s.invoices).where(and(eq(s.invoices.tenantId, staff.tenantId), eq(s.invoices.billId, row.bill.id))).limit(1) : Promise.resolve([]),

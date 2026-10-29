@@ -4,13 +4,13 @@ import { useEffect, useState } from "react";
 import { BellRing, X } from "lucide-react";
 import type { Lang } from "@/lib/i18n";
 import { notificationSetupMode } from "@/lib/notification-onboarding";
-import { enableStaffPushNotifications, serializePushSubscription } from "@/lib/staff-push-client";
-import { pushSetupAction, savePushSubscriptionAction } from "@/app/(console)/console/(app)/_components/push-actions";
+import { enableStaffPushNotifications } from "@/lib/staff-push-client";
+import { pushSetupAction } from "@/app/(console)/console/(app)/_components/push-actions";
 
 const SEEN_KEY = "tq_notification_setup_seen_v1";
 
 /**
- * Ask for notification permission only on the first launch of the installed staff PWA.
+ * Offer notification setup in supported browsers and installed staff apps.
  * Browsers require the permission request to follow a direct user action, so this is an
  * explainer with an explicit button rather than an automatic permission popup.
  */
@@ -22,31 +22,17 @@ export function NotificationPermissionOnboarding({ lang = "en", audience = "staf
   const hi = lang === "hi";
 
   useEffect(() => {
-    const installed = window.matchMedia("(display-mode: standalone)").matches
-      || (navigator as Navigator & { standalone?: boolean }).standalone === true;
-    const capacitor = (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor;
-    if ((!installed && !capacitor?.isNativePlatform?.()) || !("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window) || Notification.permission === "denied") return;
+    if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window) || Notification.permission === "denied") return;
     let active = true;
-    void pushSetupAction().then((config) => {
+    void pushSetupAction(audience).then((config) => {
       if (!active || !config.enabled) return;
       if (Notification.permission === "granted") {
-        let dismissed = false;
-        try { dismissed = localStorage.getItem(SEEN_KEY) === "yes"; } catch { /* continue with session-only setup */ }
-        void navigator.serviceWorker.getRegistration("/").then(async (registration) => {
-          const subscription = await registration?.pushManager.getSubscription();
-          if (subscription) {
-            const saved = await savePushSubscriptionAction(serializePushSubscription(subscription));
-            if (saved.ok) return;
-            if (!active || dismissed) return;
-            setNeedsPermission(false);
-            setError(saved.error);
-            setVisible(true);
-            return;
-          }
-          if (!active || notificationSetupMode("granted", dismissed, false) === "hidden") return;
+        void enableStaffPushNotifications(audience).then((result) => {
+          if (!active || result.ok) return;
           setNeedsPermission(false);
+          setError(result.error);
           setVisible(true);
-        }).catch(() => {});
+        });
         return;
       }
       let dismissed = false;
@@ -56,7 +42,7 @@ export function NotificationPermissionOnboarding({ lang = "en", audience = "staf
       setVisible(true);
     }).catch(() => {});
     return () => { active = false; };
-  }, []);
+  }, [audience]);
 
   const dismiss = () => {
     try { localStorage.setItem(SEEN_KEY, "yes"); } catch { /* session-only dismissal */ }
@@ -67,7 +53,7 @@ export function NotificationPermissionOnboarding({ lang = "en", audience = "staf
     if (!("Notification" in window) || busy) return;
     setBusy(true);
     setError("");
-    const result = await enableStaffPushNotifications();
+    const result = await enableStaffPushNotifications(audience);
     setBusy(false);
     if (result.ok) dismiss();
     else if (result.permission === "denied" || result.permission === "default") dismiss();

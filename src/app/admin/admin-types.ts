@@ -1,6 +1,7 @@
 import type { Features } from "@/lib/plan-features";
 import type { RoleAccess } from "@/lib/staff-permissions";
 export type AdminTenant = {
+  subscriptionFee?: {perOutletPaise:number;outletCount:number;totalPaise:number;addonPaise:number;pricingVersion:number};
   id: string;
   name: string;
   contactName: string;

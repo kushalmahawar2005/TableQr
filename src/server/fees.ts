@@ -1,3 +1,4 @@
+import { ADDONS, EXTRA_OUTLET_PAISE, subscriptionQuote } from "@/lib/subscription-pricing";
 import "server-only";
 import { and, count, desc, eq, inArray, ne } from "drizzle-orm";
 import { db } from "@/db";
@@ -23,7 +24,7 @@ const DAY = 86_400_000;
 /** What the restaurant pays per month for all its outlets: its own price, else the latest period's, else the plan's */
 export async function monthlyFee(run: Pick<typeof db, "select">, tenantId: string) {
   const [t] = await run
-    .select({ customPricePaise: s.tenants.customPricePaise, planPricePaise: s.plans.monthlyPricePaise, planCode: s.tenants.planCode })
+    .select({ commercial: s.tenants.commercial, customPricePaise: s.tenants.customPricePaise, planPricePaise: s.plans.monthlyPricePaise, planCode: s.tenants.planCode })
     .from(s.tenants)
     .innerJoin(s.plans, eq(s.plans.code, s.tenants.planCode))
     .where(eq(s.tenants.id, tenantId));
@@ -31,10 +32,25 @@ export async function monthlyFee(run: Pick<typeof db, "select">, tenantId: strin
   const [latest] = await run.select({ price: s.subscriptions.pricePerOutletPaise, planCode: s.subscriptions.planCode }).from(s.subscriptions).where(eq(s.subscriptions.tenantId, tenantId)).orderBy(desc(s.subscriptions.periodEnd)).limit(1);
   const [outlets] = await run.select({ n: count() }).from(s.outlets).where(eq(s.outlets.tenantId, tenantId));
   // An agreed price from an earlier period counts only while the restaurant stays on that plan
-  const earlier = latest && latest.planCode === t.planCode ? latest.price : null;
+  const earlier = !t.commercial && latest && latest.planCode === t.planCode ? latest.price : null;
   const perOutletPaise = t.customPricePaise ?? earlier ?? t.planPricePaise ?? 0;
-  const outletCount = Math.max(1, Number(outlets?.n ?? 1));
-  return { perOutletPaise, outletCount, totalPaise: perOutletPaise * outletCount };
+  const outletCount = Math.max(1, Number(outlets?.n ?? 1), t.commercial?.outletCount ?? 1);
+  const included = (key: keyof typeof ADDONS) => key === "waiterApp" ? ["growth", "pro"].includes(t.planCode) : t.planCode === "pro";
+  const addonPaise = t.commercial ? (Object.keys(ADDONS) as (keyof typeof ADDONS)[]).reduce((sum,key) => sum + (included(key) ? 0 : ADDONS[key].paise * new Set(t.commercial?.addons[key] ?? []).size), 0) : 0;
+  return { perOutletPaise, outletCount, totalPaise: t.commercial ? perOutletPaise + (outletCount - 1) * EXTRA_OUTLET_PAISE + addonPaise : perOutletPaise * outletCount, addonPaise, addonCounts: Object.fromEntries((Object.keys(ADDONS) as (keyof typeof ADDONS)[]).map(key=>[key,new Set(t.commercial?.addons[key]??[]).size])), pricingVersion: t.commercial ? 1 : 0 };
+}
+
+function quotedFee(fee: Awaited<ReturnType<typeof monthlyFee>>, months: number, target?: { code: string; monthlyPricePaise: number } | null) {
+  if (!fee.pricingVersion) return (target ? target.monthlyPricePaise * fee.outletCount : fee.totalPaise) * months;
+  // A plan change can include add-ons that used to be paid. Re-read the quote for a target below.
+  return subscriptionQuote(target?.monthlyPricePaise ?? fee.perOutletPaise, fee.outletCount, months, fee.addonPaise).totalPaise;
+}
+
+async function quotedTargetFee(tenantId: string, fee: Awaited<ReturnType<typeof monthlyFee>>, months: number, target: { code: string; monthlyPricePaise: number } | null) {
+  if (!target || !fee.pricingVersion) return quotedFee(fee, months, target);
+  const [row] = await db.select({ commercial: s.tenants.commercial }).from(s.tenants).where(eq(s.tenants.id, tenantId));
+  const addonPaise = (Object.keys(ADDONS) as (keyof typeof ADDONS)[]).reduce((sum,key) => sum + ((target.code === "pro" || (key === "waiterApp" && target.code === "growth")) ? 0 : ADDONS[key].paise * new Set(row?.commercial?.addons[key] ?? []).size),0);
+  return subscriptionQuote(target.monthlyPricePaise, fee.outletCount, months, addonPaise).totalPaise;
 }
 
 /**
@@ -120,17 +136,17 @@ export async function claimFee(staff: Pick<StaffSession, "tenantId" | "roles" | 
   const fee = await monthlyFee(db, staff.tenantId);
   // Upgrading: the new plan's list price for every outlet
   const target = await upgradeTarget(staff.tenantId, input.planCode);
-  const perMonth = target ? target.monthlyPricePaise * fee.outletCount : fee.totalPaise;
+  const amountPaise = await quotedTargetFee(staff.tenantId, fee, months, target);
   const id = uuidv7();
-  await db.insert(s.feePayments).values({ id, tenantId: staff.tenantId, months, amountPaise: perMonth * months, method, reference, planCode: target?.code ?? null, status: "claimed", claimedBy: staff.name.slice(0, 80), createdAt: now });
+  await db.insert(s.feePayments).values({ id, tenantId: staff.tenantId, months, amountPaise, method, reference, planCode: target?.code ?? null, status: "claimed", claimedBy: staff.name.slice(0, 80), createdAt: now });
   const [t] = await db.select({ name: s.tenants.name, phone: s.tenants.contactPhone }).from(s.tenants).where(eq(s.tenants.id, staff.tenantId));
-  const rupees = `₹${((perMonth * months) / 100).toLocaleString("en-IN")}`;
+  const rupees = `₹${(amountPaise / 100).toLocaleString("en-IN")}`;
   emailAdmin(`${t?.name ?? "A restaurant"} says they paid ${rupees}${target ? ` to upgrade to ${target.name}` : ""}`, [
     `${t?.name ?? "A restaurant"} says they paid ${rupees} for ${months} ${months === 1 ? "month" : "months"} by ${method.toUpperCase()}${target ? `, to upgrade to the ${target.name} plan` : ""}.`,
     `Reference: ${reference ?? "not given"} · by ${staff.name} · phone ${t?.phone ?? "—"}`,
     "Check your bank or UPI app, then confirm it in Admin → Fees.",
   ]);
-  return { id, amountPaise: perMonth * months };
+  return { id, amountPaise };
 }
 
 export type StartedFeePayment = { id: string; amountPaise: number; checkout: Checkout; replayed: boolean };
@@ -163,13 +179,13 @@ export async function startFeePayment(
     }
     const fee = await monthlyFee(db, staff.tenantId);
     const target = await upgradeTarget(staff.tenantId, input.planCode);
-    const perMonth = target ? target.monthlyPricePaise * fee.outletCount : fee.totalPaise;
+    const amountPaise = await quotedTargetFee(staff.tenantId, fee, months, target);
     const id = uuidv7();
     await db.insert(s.feePayments).values({
       id,
       tenantId: staff.tenantId,
       months,
-      amountPaise: perMonth * months,
+      amountPaise,
       method: "cashfree",
       clientRequestId: requestId,
       planCode: target?.code ?? null,
@@ -285,7 +301,6 @@ export async function confirmFee(id: string, now = new Date()) {
     const [claim] = await tx.select().from(s.feePayments).where(eq(s.feePayments.id, id)).for("update");
     if (!claim) throw new AppError("not_found", "Payment not found.");
     if (claim.status !== "claimed") throw new AppError("invalid_state", "This payment was already handled.");
-    if (claim.method === "cashfree") throw new AppError("invalid_state", "Cashfree payments are confirmed automatically.");
     // An upgrade: move to the plan they paid for, dropping any custom package or special price
     if (claim.planCode) await tx.update(s.tenants).set({ planCode: claim.planCode, customFeatures: null, customPricePaise: null }).where(eq(s.tenants.id, claim.tenantId));
     const paid = await addPaidMonths(tx, claim.tenantId, claim.months, now);
@@ -296,13 +311,17 @@ export async function confirmFee(id: string, now = new Date()) {
 
 /** The money never arrived: the owner can say "I have paid" again */
 export async function rejectFee(id: string, now = new Date()) {
-  // isolation-exempt: only the platform admin turns a payment down; the row it finds carries the tenant
-  const [claim] = await db.select({ tenantId: s.feePayments.tenantId, status: s.feePayments.status, method: s.feePayments.method }).from(s.feePayments).where(eq(s.feePayments.id, id));
-  if (!claim) throw new AppError("not_found", "Payment not found.");
-  if (claim.status !== "claimed") throw new AppError("invalid_state", "This payment was already handled.");
-  if (claim.method === "cashfree") throw new AppError("invalid_state", "Cashfree payments are settled automatically.");
-  await db.update(s.feePayments).set({ status: "rejected", decidedAt: now }).where(and(eq(s.feePayments.tenantId, claim.tenantId), eq(s.feePayments.id, id)));
-  return { tenantId: claim.tenantId };
+  return db.transaction(async (tx) => {
+    // isolation-exempt: only the platform admin turns a payment down; the row carries the tenant.
+    const [claim] = await tx.select().from(s.feePayments).where(eq(s.feePayments.id, id)).for("update");
+    if (!claim) throw new AppError("not_found", "Payment not found.");
+    if (claim.status !== "claimed") throw new AppError("invalid_state", "This payment was already handled.");
+    await tx.update(s.feePayments).set({
+      status: "rejected", decidedAt: now,
+      failureReason: claim.method === "cashfree" ? "Manually declined by platform admin" : null,
+    }).where(and(eq(s.feePayments.tenantId, claim.tenantId), eq(s.feePayments.id, id)));
+    return { tenantId: claim.tenantId };
+  });
 }
 
 export type FeeRow = { id: string; planCode: string | null; months: number; amountPaise: number; method: FeeMethod; reference: string | null; status: "claimed" | "confirmed" | "rejected"; claimedBy: string; createdAt: string; paidUntil: string | null };
@@ -312,17 +331,17 @@ const feeRow = (r: typeof s.feePayments.$inferSelect): FeeRow => ({
 });
 
 /** The owner's "My plan" screen: what they pay, until when, and how to pay */
-export async function ownerPlan(staff: Pick<StaffSession, "tenantId">, now = new Date()) {
-  const [tenant] = await db.select({ planName: s.plans.name, planCode: s.tenants.planCode, status: s.tenants.status }).from(s.tenants).innerJoin(s.plans, eq(s.plans.code, s.tenants.planCode)).where(eq(s.tenants.id, staff.tenantId));
+export async function ownerPlan(staff: Pick<StaffSession, "tenantId"> & { outletId?: string }, now = new Date()) {
+  const [tenant] = await db.select({ planName: s.plans.name, planCode: s.tenants.planCode, status: s.tenants.status, commercial: s.tenants.commercial, businessType: s.tenants.businessType }).from(s.tenants).innerJoin(s.plans, eq(s.plans.code, s.tenants.planCode)).where(eq(s.tenants.id, staff.tenantId));
   if (!tenant) throw new AppError("not_found", "Restaurant not found.");
   const [fee, access, features, rows, plans] = await Promise.all([
     monthlyFee(db, staff.tenantId),
     tenantAccess(staff.tenantId, now),
-    tenantFeatures(staff.tenantId),
+    tenantFeatures(staff.tenantId, staff.outletId),
     db.select().from(s.feePayments).where(eq(s.feePayments.tenantId, staff.tenantId)).orderBy(desc(s.feePayments.createdAt)).limit(24),
     upgradePlans(),
   ]);
-  return { planName: tenant.planName, planCode: tenant.planCode, status: tenant.status, fee, access, features, plans, payments: rows.map(feeRow), waiting: rows.some((r) => r.status === "claimed") };
+  return { commercial: tenant.commercial, businessType: tenant.businessType, planName: tenant.planName, planCode: tenant.planCode, status: tenant.status, fee, access, features, plans, payments: rows.map(feeRow), waiting: rows.some((r) => r.status === "claimed") };
 }
 
 export type FeesTenant = { id: string; name: string; contactName: string; contactPhone: string; planName: string; monthlyPaise: number; access: { state: string; reason: string; endsAt: string | null } };

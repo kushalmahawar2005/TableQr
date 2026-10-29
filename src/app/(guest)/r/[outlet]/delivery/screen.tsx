@@ -1,4 +1,6 @@
 "use client";
+import { customerAccountAction, saveCustomerAddressAction } from "../profile/actions";
+import type { customerHistory } from "@/server/guest/customer-account";
 import { ArrowLeft01Icon, Call02Icon, Cancel01Icon, CheckmarkCircle02Icon, ChefHatIcon, DeliveryTruck01Icon, FilterHorizontalIcon, Location01Icon, MinusSignIcon, PackageIcon, PlusSignIcon, Search01Icon, ShoppingBasket01Icon, UserIcon } from "@hugeicons/core-free-icons";
 import { useGuestBase } from "@/lib/guest-base";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -31,24 +33,27 @@ type PinInfo = Awaited<ReturnType<typeof pincodeAction>>;
 // Name, phone and address kept on this phone only, so a returning guest does not type them again
 const PROFILE_KEY = "tq_delivery_profile";
 type Profile = { name: string; phone: string; address: DeliveryAddress };
-function readProfile(): Profile | null {
-  try { const raw = localStorage.getItem(PROFILE_KEY); return raw ? JSON.parse(raw) as Profile : null; } catch { return null; }
+function readProfile(outlet:string): Profile | null {
+  try { const raw = localStorage.getItem(`${PROFILE_KEY}_${outlet}`); return raw ? JSON.parse(raw) as Profile : null; } catch { return null; }
 }
-function writeProfile(profile: Profile | null) {
-  try { if (profile) localStorage.setItem(PROFILE_KEY, JSON.stringify(profile)); else localStorage.removeItem(PROFILE_KEY); } catch { /* Private mode: the form still works */ }
+function writeProfile(profile: Profile | null, outlet:string) {
+  try { if (profile) localStorage.setItem(`${PROFILE_KEY}_${outlet}`, JSON.stringify(profile)); else localStorage.removeItem(`${PROFILE_KEY}_${outlet}`); } catch { /* Private mode: the form still works */ }
 }
 const money = (paise: number) => `₹${(paise / 100).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 const control = "min-h-12 w-full rounded-2xl border border-line/70 bg-surface px-4 text-ink outline-none focus:border-brand focus:shadow-[0_0_0_3px_var(--brand-soft)]";
 const button = "min-h-13 w-full rounded-2xl bg-brand px-4 font-bold text-brand-on shadow-[0_8px_20px_-6px_var(--brand-border)] disabled:opacity-50 disabled:shadow-none";
 
-export function DeliveryScreen({ outletCode, data, initialStatus, hindi: initialHindi = false, realtimeUrl = null, installable = null }: { outletCode: string; data?: Menu; initialStatus?: Status; hindi?: boolean; realtimeUrl?: string | null; installable?: { name: string; logoUrl: string | null } | null }) {
+export function DeliveryScreen({ outletCode, data, initialStatus, hindi: initialHindi = false, realtimeUrl = null, installable = null, initialCart = [] }: { initialCart?: DeliveryCartLine[]; outletCode: string; data?: Menu; initialStatus?: Status; hindi?: boolean; realtimeUrl?: string | null; installable?: { name: string; logoUrl: string | null } | null }) {
   const base = useGuestBase(outletCode);
   const [hindi, setHindi] = useState(initialHindi);
   const t = (en: string, hi: string) => hindi ? hi : en;
-  const [cart, setCart] = useState<DeliveryCartLine[]>([]);
+  const [account,setAccount]=useState<Awaited<ReturnType<typeof customerHistory>>|null>(null);
+
+  const [cart, setCart] = useState<DeliveryCartLine[]>(initialCart);
   const [step, setStep] = useState<"menu" | "address" | "otp" | "review">("menu");
   const [address, setAddress] = useState<DeliveryAddress>({ line: "", locality: "", pincode: "", instructions: "" });
   const [name, setName] = useState(""), [phone, setPhone] = useState(""), [otpCode, setOtpCode] = useState("");
+  useEffect(()=>{let active=true;void customerAccountAction(outletCode).then(r=>{if(!active||!r.ok)return;setAccount(r.data);setName(r.data.guest.name??"");setPhone(r.data.guest.phone);if(r.data.addresses[0])setAddress(r.data.addresses[0]);});return()=>{active=false}},[outletCode]);
   const [manualReference, setManualReference] = useState("");
   const [otp, setOtp] = useState<{ challengeId: string; devCode?: string; resendIn: number } | null>(null);
   const [resendAt, setResendAt] = useState(0);
@@ -105,7 +110,7 @@ export function DeliveryScreen({ outletCode, data, initialStatus, hindi: initial
   }
   /** To the address step, with what this phone remembers filled into anything still empty */
   function openCart() {
-    const saved = readProfile();
+    const saved = readProfile(outletCode);
     if (saved) {
       setName(current => current || saved.name || "");
       setPhone(current => current || saved.phone || "");
@@ -165,16 +170,16 @@ export function DeliveryScreen({ outletCode, data, initialStatus, hindi: initial
       return current.map((line, i) => i === index ? { ...line, qty: line.qty - 1 } : line).filter(line => line.qty > 0);
     });
   }
-  const statusMessage = !status ? "" : status.status === "draft" && status.paymentStatus === "pending" && status.paymentMode === "manual_qr" ? t("Payment reference submitted · waiting for restaurant verification", "पेमेंट रेफरेंस भेज दिया · रेस्टोरेंट की पुष्टि का इंतज़ार") : status.status === "draft" && status.paymentStatus === "pending" ? t("Checking your payment securely…", "आपका पेमेंट सुरक्षित रूप से जाँचा जा रहा है…") : status.status === "draft" && status.paymentStatus.startsWith("refund") ? t("Payment received · refund in progress", "पेमेंट मिला · रिफंड चल रहा है") : status.status === "draft" && status.paymentStatus === "failed" ? t("Payment was not completed. No order was placed.", "पेमेंट पूरा नहीं हुआ। ऑर्डर नहीं हुआ।") : status.status === "placed" ? t(status.kitchenStatus === "ready" || status.kitchenStatus === "served" ? "Packed · awaiting dispatch" : "Restaurant is preparing your order", status.kitchenStatus === "ready" || status.kitchenStatus === "served" ? "पैक हो गया · भेजने की तैयारी" : "रेस्टोरेंट आपका ऑर्डर तैयार कर रहा है") : status.status === "dispatched" ? t("Your order is on the way", "आपका ऑर्डर रास्ते में है") : status.status === "delivered" ? t("Delivered", "डिलीवर हो गया") : status.status === "cancelled" ? t("Cancelled", "रद्द किया गया") : t("Complete payment to continue", "जारी रखने के लिए पेमेंट पूरा करें");
+  const statusMessage = !status ? "" : status.status === "draft" && status.paymentStatus === "pending" && status.paymentMode === "manual_qr" ? t("Payment reference submitted · waiting for payment verification", "पेमेंट रेफरेंस भेज दिया · पुष्टि का इंतज़ार") : status.status === "draft" && status.paymentStatus === "pending" ? t("Checking your payment securely…", "आपका पेमेंट सुरक्षित रूप से जाँचा जा रहा है…") : status.status === "draft" && status.paymentStatus.startsWith("refund") ? t("Payment received · refund in progress", "पेमेंट मिला · रिफंड चल रहा है") : status.status === "draft" && status.paymentStatus === "failed" ? t("Payment was not completed. No order was placed.", "पेमेंट पूरा नहीं हुआ। ऑर्डर नहीं हुआ।") : status.status === "placed" ? t(status.kitchenStatus === "ready" || status.kitchenStatus === "served" ? "Packed · awaiting dispatch" : "Your order is being prepared", status.kitchenStatus === "ready" || status.kitchenStatus === "served" ? "पैक हो गया · भेजने की तैयारी" : "आपका ऑर्डर तैयार हो रहा है") : status.status === "dispatched" ? t("Your order is on the way", "आपका ऑर्डर रास्ते में है") : status.status === "delivered" ? t("Delivered", "डिलीवर हो गया") : status.status === "cancelled" ? t("Cancelled", "रद्द किया गया") : t("Complete payment to continue", "जारी रखने के लिए पेमेंट पूरा करें");
   return <main lang={hindi ? "hi" : "en"} className="flex w-full min-w-0 flex-col pt-5 pb-[calc(7rem+env(safe-area-inset-bottom))] text-ink">
     <header className="flex items-center gap-2.5">
-      {data ? <Link href={`${base}`} aria-label={t("Back to restaurant", "रेस्टोरेंट पर वापस")} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl focus-visible:outline-2 focus-visible:outline-brand">
+      {data ? <Link href={`${base}`} aria-label={t("Back to guest link", "मुख्य पेज पर वापस")} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl focus-visible:outline-2 focus-visible:outline-brand">
         <OutletLogo name={data.outlet.name} logoUrl={data.outlet.logoUrl} size={44} />
         <span className="min-w-0">
           <span className="block truncate font-display text-section leading-tight font-bold">{data.outlet.name}</span>
           <span className="block text-caption text-muted">{t("Home delivery", "घर पर डिलीवरी")} · {data.outlet.policy.estimatedMinutes} {t("min", "मिनट")}</span>
         </span>
-      </Link> : <Link href={`${base}`} className="flex-1 text-caption font-semibold text-muted">← {t("Restaurant", "रेस्टोरेंट")}</Link>}
+      </Link> : <Link href={`${base}`} className="flex-1 text-caption font-semibold text-muted">← {t("Guest link", "मुख्य पेज")}</Link>}
       <div role="group" aria-label={t("Language", "भाषा")} className="flex shrink-0 rounded-full border border-line/70 bg-surface p-0.5 text-caption font-semibold shadow-[0_1px_3px_rgb(31_41_55/0.05)]">
         {([[false, "EN"], [true, "HI"]] as const).map(([hi, label]) => <button key={label} type="button" aria-pressed={hindi === hi} onClick={() => setHindi(hi)} className={`min-h-9 min-w-10 rounded-full px-2.5 transition-colors ${hindi === hi ? "bg-ink text-white" : "text-muted hover:text-ink"}`}>{label}</button>)}
       </div>
@@ -261,8 +266,9 @@ export function DeliveryScreen({ outletCode, data, initialStatus, hindi: initial
       </div>}
     </>}
     {selected && <section role="dialog" aria-modal="true" aria-label={selected.name} className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 sm:items-center"><div className="max-h-[85dvh] w-full max-w-md space-y-4 overflow-y-auto rounded-2xl bg-surface p-5"><div className="flex justify-between gap-3"><h2 className="font-bold">{selected.name}</h2><button type="button" onClick={() => setSelected(null)} className="min-h-11 px-3" aria-label="Close">✕</button></div>{selected.pricing.groups.map(group => <fieldset key={group.id} className="space-y-2"><legend className="font-semibold">{group.nameEn} · {group.minSelect > 0 ? t("Required", "ज़रूरी") : t("Optional", "वैकल्पिक")}</legend>{group.modifiers.map(option => <label key={option.id} className="flex min-h-11 items-center gap-3 text-sm"><input type="checkbox" checked={choices.includes(option.id)} onChange={event => setChoices(current => event.target.checked ? group.maxSelect === 1 ? [...current.filter(id => !group.modifiers.some(modifier => modifier.id === id)), option.id] : [...current, option.id] : current.filter(id => id !== option.id))} />{option.nameEn} {option.priceDeltaPaise ? `+ ${money(option.priceDeltaPaise)}` : ""}</label>)}</fieldset>)}<button type="button" className={button} onClick={() => add(selected, choices)}>{t("Add to cart", "कार्ट में जोड़ें")}</button></div></section>}
+    {step === "address" && <section className="mt-4 rounded-2xl border border-line bg-surface p-4">{account?<><p className="text-sm font-semibold">Signed in as {account.guest.name} · {account.guest.phone}</p>{account.addresses.length>0&&<label className="mt-2 block text-sm">Saved address<select className={control} defaultValue="" onChange={e=>{const a=account.addresses.find(a=>a.id===e.target.value);if(a)setAddress(a)}}><option value="">Choose a saved address</option>{account.addresses.map(a=><option key={a.id} value={a.id}>{a.label} · {a.locality}</option>)}</select></label>}</>:<Link href={`${base}/profile`} className="text-sm font-semibold underline">Sign in for saved addresses and order history</Link>}</section>}
     {step !== "menu" && <div className="mt-5 space-y-4"><button type="button" disabled={pending} onClick={() => { setStep("menu"); setQuote(null); }} className="relative -ml-1 inline-flex items-center gap-0.5 rounded-full px-1 py-0.5 text-caption font-semibold text-muted before:absolute before:-inset-2.5 hover:text-ink focus-visible:outline-2 focus-visible:outline-brand"><HugeiconsIcon icon={ArrowLeft01Icon} size={16} strokeWidth={2} aria-hidden />{t("Back to menu", "मेन्यू पर वापस")}</button><h1 className="font-display text-[1.625rem] leading-tight font-bold tracking-tight">{t(step === "otp" ? "Verify your phone" : step === "review" ? "Review and place order" : "Delivery details", step === "otp" ? "फ़ोन सत्यापित करें" : step === "review" ? "ऑर्डर की पुष्टि करें" : "डिलीवरी की जानकारी")}</h1>
-      {step === "address" && <form className="space-y-4" onSubmit={event => { event.preventDefault(); run(async () => { const response = await startDeliveryAction(outletCode, cart, address, phone); if (!response.ok) { setError(response.message); return; } writeProfile(remember ? { name, phone, address } : null); setOtp(response.data.otp); setResendAt(Date.now() + response.data.otp.resendIn * 1000); setQuote(response.data.quote); setStep("otp"); }); }}>
+      {step === "address" && <form className="space-y-4" onSubmit={event => { event.preventDefault(); run(async () => { const response = await startDeliveryAction(outletCode, cart, address, phone); if (!response.ok) { setError(response.message); return; } writeProfile(remember ? { name, phone, address } : null,outletCode); setQuote(response.data.quote); if(response.data.otp){setOtp(response.data.otp);setResendAt(Date.now()+response.data.otp.resendIn*1000);setStep("otp");}else{if(remember&&account&&!account.addresses.some(a=>a.line===address.line&&a.pincode===address.pincode))await saveCustomerAddressAction(outletCode,address,"Home");setStep("review");} }); }}>
         <FormCard icon={ShoppingBasket01Icon} title={t("Your order", "आपका ऑर्डर")} aside={<span className="text-body font-bold tabular">{money(cartPaise)}</span>}>
           <ul className="mt-2 divide-y divide-line/70">
             {cart.map((line, index) => <li key={index} className="flex items-center gap-3 py-2.5">
@@ -407,8 +413,8 @@ function StatusView({ status, hindi, pending, statusMessage, onPay, onRefresh, n
 
     {status.status === "draft" && status.paymentMode === "manual_qr" && status.paymentStatus === "pending" && <section className={`${card} space-y-2 text-caption`}>
       <p>{t("UPI reference", "UPI रेफरेंस")}: <strong className="font-mono">{status.manualPaymentReference}</strong></p>
-      <p className="text-muted">{t("The restaurant will verify the payment before sending your order to the kitchen.", "रेस्टोरेंट किचन में ऑर्डर भेजने से पहले पेमेंट की पुष्टि करेगा।")}</p>
-      {status.manualPaymentQrUrl && <Image src={status.manualPaymentQrUrl} alt={t("Restaurant payment QR", "रेस्टोरेंट का पेमेंट QR")} width={192} height={192} unoptimized className="rounded-lg bg-white p-2" />}
+      <p className="text-muted">{t("The business will verify the payment before sending your order to the kitchen.", "किचन में ऑर्डर भेजने से पहले पेमेंट की पुष्टि की जाएगी।")}</p>
+      {status.manualPaymentQrUrl && <Image src={status.manualPaymentQrUrl} alt={t("Business payment QR", "पेमेंट QR")} width={192} height={192} unoptimized className="rounded-lg bg-white p-2" />}
     </section>}
 
     <section className={card}>

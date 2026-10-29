@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { whatsAppTo } from "@/lib/support";
 import type { FeesData, FeesTenant } from "@/server/fees";
 import { FEATURE_LABELS } from "@/lib/plan-features";
-import { confirmFeeAction, getFeesAction, markPlanRequestDoneAction, recordFeePaymentAction, rejectFeeAction } from "./actions";
+import { checkFeePaymentAction, confirmFeeAction, getFeesAction, markPlanRequestDoneAction, recordFeePaymentAction, rejectFeeAction } from "./actions";
 import { openAdminPage } from "./admin-nav";
 import type { AdminData } from "./admin-types";
 import { FeeForm } from "./subscriptions-view";
@@ -71,12 +71,12 @@ export function FeesView({ data }: { data: AdminData }) {
   const load = () => getFeesAction().then((r) => { setFees(r.data); setLoadError(r.error); });
   useEffect(() => { void load(); }, []);
 
-  const run = (task: () => Promise<{ error: string | null }>, done: string) => {
+  const run = (task: () => Promise<{ error: string | null; message?: string }>, done: string) => {
     setNotice(null);
     start(async () => {
       const r = await task();
       if (r.error) return setNotice({ ok: false, text: r.error });
-      setNotice({ ok: true, text: done });
+      setNotice({ ok: true, text: r.message ?? done });
       setRecording(null);
       await load();
       router.refresh();
@@ -112,7 +112,7 @@ export function FeesView({ data }: { data: AdminData }) {
         <span className="relative flex size-2.5"><span className="absolute inline-flex size-full animate-ping rounded-full bg-[#5b42f5] opacity-60" /><span className="relative inline-flex size-2.5 rounded-full bg-[#5b42f5]" /></span>
         <h2 className="text-base font-semibold">Payments and requests in progress</h2>
         <Badge className="bg-[#5b42f5] text-white">{waitingCount}</Badge>
-        <p className="w-full text-sm text-muted-foreground sm:ml-2 sm:w-auto">Cashfree payments settle automatically; manual receipts and requests still need your action.</p>
+        <p className="w-full text-sm text-muted-foreground sm:ml-2 sm:w-auto">Cashfree confirms automatically. Check the latest status, or mark Received / Declined after verifying the payment yourself.</p>
       </div>
       <ul className="mt-4 space-y-3">
         {fees.claims.map((c) => <li key={c.id} className="rounded-xl border border-l-4 border-l-emerald-500 bg-card p-4 shadow-sm">
@@ -125,7 +125,15 @@ export function FeesView({ data }: { data: AdminData }) {
               <p className="text-xs text-muted-foreground">{c.tenant.planName} plan · {c.tenant.contactName} · {c.tenant.contactPhone}</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              {c.method === "cashfree" ? <Badge variant="secondary" className="bg-blue-100 text-blue-700">Cashfree is confirming automatically</Badge> : <>
+              {c.method === "cashfree" ? <>
+                <Badge variant="secondary" className="bg-blue-100 text-blue-700">Awaiting Cashfree confirmation</Badge>
+                <Button variant="outline" disabled={pending} onClick={() => run(() => checkFeePaymentAction(c.id), "Payment status checked.")}>
+                  {pending ? <Loader2 className="animate-spin" /> : <Search />}Check payment now
+                </Button>
+                <Button variant="outline" disabled={pending} onClick={() => run(() => rejectFeeAction(c.id), "Payment marked declined.")}><XCircle />Declined</Button>
+                <Button disabled={pending} className="bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => run(() => confirmFeeAction(c.id), `Payment marked received. ${c.tenant.name}'s plan has been updated.`)}><CircleCheck />Received</Button>
+                <p className="w-full text-xs text-muted-foreground">Use Received / Declined after checking the payment in Cashfree or your bank.</p>
+              </> : <>
                 <Reach t={c.tenant} message={`Hi ${c.tenant.contactName}, this is Tableeqr about your ${money(c.amountPaise)} payment.`} />
                 <Button variant="outline" disabled={pending} onClick={() => run(() => rejectFeeAction(c.id), "Marked not received. The owner can try again.")}>Not received</Button>
                 <Button disabled={pending} className="bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => run(() => confirmFeeAction(c.id), `Confirmed. ${c.tenant.name} is paid for ${c.months} ${c.months === 1 ? "month" : "months"}${c.planCode ? ` and moved to ${data.plans.find((p) => p.code === c.planCode)?.name ?? c.planCode}` : ""}.`)}>{pending ? <Loader2 className="animate-spin" /> : <CircleCheck />}Confirm payment</Button>

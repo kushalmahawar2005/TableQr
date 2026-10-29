@@ -1,3 +1,4 @@
+import { monthlyFee } from "../fees";
 import "server-only";
 
 import { and, asc, count, desc, eq, gte, lte, sql, type AnyColumn } from "drizzle-orm";
@@ -69,6 +70,8 @@ export async function getAdminData(): Promise<AdminData> {
       kitchenOverride: s.tenants.kitchenDisplay,
       tableLimit: s.tenants.tableLimit,
       customFeatures: s.tenants.customFeatures,
+      commercial: s.tenants.commercial,
+      businessType: s.tenants.businessType,
       customPricePaise: s.tenants.customPricePaise,
       roleAccess: s.tenants.roleAccess,
     }).from(s.tenants).orderBy(desc(s.tenants.createdAt)),
@@ -201,16 +204,18 @@ export async function getAdminData(): Promise<AdminData> {
   ];
   activity.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
+  const commercialFees = new Map(await Promise.all(tenantRows.filter(t=>t.commercial).map(async t=>[t.id,await monthlyFee(db,t.id)] as const)));
   return {
     tenants: tenantRows.map((tenant) => {
       const plan = planByCode.get(tenant.planCode);
       const subscription = subscriptionByTenant.get(tenant.id);
       const outlets = outletsByTenant.get(tenant.id);
-      const { customFeatures, ...row } = tenant;
-      const features = effectiveFeatures({ features: plan?.features, customFeatures, kitchenOverride: tenant.kitchenOverride, tableLimit: tenant.tableLimit });
+      const { customFeatures, commercial, ...row } = tenant;
+      const features = effectiveFeatures({ features: plan?.features, customFeatures, kitchenOverride: tenant.kitchenOverride, tableLimit: tenant.tableLimit, businessType: tenant.businessType, commercial });
       return {
         ...row,
         features,
+        subscriptionFee: commercialFees.get(tenant.id),
         planName: plan?.name ?? tenant.planCode,
         kitchenDisplay: features.kitchenDisplay,
         kitchenFromPlan: hasKitchenDisplay(plan?.features),

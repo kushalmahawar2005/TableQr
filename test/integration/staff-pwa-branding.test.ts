@@ -15,18 +15,18 @@ afterAll(async () => { await env.conn.end(); await appDb.$client.end(); });
 describe("tenant-branded staff PWA", () => {
   it("uses only the requested outlet's public name, logo and validated accent in the install manifest", async () => {
     await env.db.update(s.outlets).set({ name: "BMW Jaipur", accentColor: "#c9482b" }).where(and(eq(s.outlets.tenantId, env.demo.tenantId), eq(s.outlets.id, env.demo.outletId)));
-    await env.db.update(s.brands).set({ logoUrl: "/uploads/menus/bmw/logo.webp" }).where(and(eq(s.brands.tenantId, env.demo.tenantId), eq(s.brands.id, env.demo.brandId)));
+    await env.db.update(s.brands).set({ name: "BMW", logoUrl: "/uploads/menus/bmw/logo.webp" }).where(and(eq(s.brands.tenantId, env.demo.tenantId), eq(s.brands.id, env.demo.brandId)));
 
     const brand = await staffAppBrandForOutletCode(env.demo.outletCode);
-    expect(brand).toMatchObject({ code: env.demo.outletCode, name: "BMW Jaipur", logoUrl: "/uploads/menus/bmw/logo.webp", accentColor: "#c9482b" });
+    expect(brand).toMatchObject({ code: env.demo.outletCode, name: "BMW", logoUrl: "/uploads/menus/bmw/logo.webp", accentColor: "#c9482b" });
 
     const response = await staffManifest(new Request(`https://tableeqr.example/staff.webmanifest?outlet=${env.demo.outletCode}`));
     const manifest = await response.json();
     expect(response.headers.get("content-type")).toContain("application/manifest+json");
     expect(manifest).toMatchObject({
       id: `/console?outlet=${env.demo.outletCode}`,
-      name: "BMW Jaipur Staff",
-      short_name: "BMW Jaipur",
+      name: "BMW Staff",
+      short_name: "BMW",
       start_url: "/console",
       scope: "/",
       display: "standalone",

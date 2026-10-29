@@ -344,7 +344,7 @@ export async function getDashboard(staff: Staff, now = new Date()) {
           .orderBy(asc(s.diningTables.code))
       : Promise.resolve([]),
     // Only when the plan has Inventory: otherwise there is no stock to run low
-    tenantFeatures(scope.tenantId).then((f) => (f.inventory ? lowStock(scope) : [])),
+    tenantFeatures(scope.tenantId, scope.outletId).then((f) => (f.inventory ? lowStock(scope) : [])),
     db
       .select({
         id: s.diningTables.id,

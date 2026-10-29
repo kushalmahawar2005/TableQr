@@ -12,10 +12,13 @@ export function DeliverySettings({ value, onChange, disabled, hasGateway, hasPay
   const [codes, setCodes] = useState(value.pincodes.join(", "));
   const update = (patch: Partial<DeliveryPolicy>) => onChange({ ...value, ...patch });
   return <div className="space-y-5 py-5">
-    <p className="rounded-xl bg-brand-soft p-3 text-sm text-ink">Online delivery payments go directly to this restaurant’s own Cashfree account. Tableeqr’s Cashfree account is only used for restaurant subscriptions.</p>
-    <label className="flex min-h-11 items-center justify-between gap-4 text-sm font-semibold">
-      Accept delivery orders
-      <input type="checkbox" checked={value.acceptingOrders} disabled={disabled} onChange={event => update({ acceptingOrders: event.target.checked })} className="size-5 accent-[var(--brand)]" />
+    <div className="rounded-2xl border border-brand-border bg-brand-soft/40 p-4">
+      <p className="text-sm font-semibold text-ink">Guest orders go straight to your kitchen.</p>
+      <p className="mt-1 text-sm text-muted">Online payments use this outlet’s Cashfree account. Tableeqr’s account is used only for your software subscription.</p>
+    </div>
+    <label className="flex min-h-[4.5rem] cursor-pointer items-center justify-between gap-4 rounded-2xl border border-line bg-surface px-4 py-3 text-sm font-semibold text-ink">
+      <span><span className="block">Accept delivery orders</span><span className="mt-0.5 block text-xs font-normal text-muted">{value.acceptingOrders ? "Guests can place delivery orders." : "Ordering is paused for guests."}</span></span>
+      <input type="checkbox" checked={value.acceptingOrders} disabled={disabled} onChange={event => update({ acceptingOrders: event.target.checked })} className="size-5 shrink-0 accent-[var(--brand)]" />
     </label>
     <div className="space-y-2"><Label htmlFor="delivery-pincodes">Delivery pincodes</Label>
       <textarea id="delivery-pincodes" value={codes} disabled={disabled} maxLength={800} rows={3} placeholder="302001, 302002" className="w-full rounded-xl border border-line bg-surface p-3 text-sm" onChange={event => { setCodes(event.target.value); update({ pincodes: event.target.value.split(/[\s,;]+/).filter(Boolean) }); }} />
@@ -34,8 +37,8 @@ export function DeliverySettings({ value, onChange, disabled, hasGateway, hasPay
     </div>
     <div className="space-y-2"><Label htmlFor="delivery-payment">Delivery payment method</Label>
       <select id="delivery-payment" value={value.paymentMode} disabled={disabled} className="min-h-11 w-full rounded-xl border border-line bg-surface px-3 text-sm" onChange={event => update({ paymentMode: event.target.value as DeliveryPolicy["paymentMode"] })}>
-        <option value="gateway" disabled={!hasGateway}>Online prepayment · restaurant Cashfree (recommended)</option><option value="cod">Pay on delivery · rider shows a Cashfree QR or takes cash</option><option value="manual_qr" disabled={!hasPaymentQr}>Restaurant UPI QR · staff verifies receipt</option>
-      </select><p className="text-xs text-muted">{value.paymentMode === "gateway" ? "Guests pay before the kitchen receives the order. Payment is verified by Cashfree and added to the bill ledger." : value.paymentMode === "manual_qr" ? "Guests pay to your saved QR and submit the UPI reference. An owner, manager or cashier checks the receipt before the order reaches the kitchen." : !hasGateway && !hasPaymentQr ? "Upload your restaurant payment QR to accept QR prepayments, or connect this restaurant’s own Cashfree account for online prepayment." : "Guests pay the delivery amount when the order arrives."}</p>
+        <option value="gateway" disabled={!hasGateway}>Online prepayment · Cashfree (recommended)</option><option value="cod">Pay on delivery · cash or QR</option><option value="manual_qr" disabled={!hasPaymentQr}>Saved UPI QR · staff verifies receipt</option>
+      </select><p className="text-xs text-muted">{value.paymentMode === "gateway" ? "Guests pay before the kitchen receives the order. Payment is verified by Cashfree and added to the bill ledger." : value.paymentMode === "manual_qr" ? "Guests pay to your saved QR and submit the UPI reference. An owner, manager or cashier checks the receipt before the order reaches the kitchen." : !hasGateway && !hasPaymentQr ? "Upload your payment QR to accept QR prepayments, or connect this outlet’s own Cashfree account for online prepayment." : "Guests pay the delivery amount when the order arrives."}</p>
     </div>
   </div>;
 }

@@ -25,12 +25,12 @@ const LIST_ORDER = ["owner", "manager", "reception", "waiter", "accountant", "ki
 /** The roles this restaurant's owner may give, from its plan */
 export async function assignableRoles(tenantId: string): Promise<TeamRole[]> {
   const f = await tenantFeatures(tenantId);
-  return TEAM_ROLES.filter((r) => (r !== "kitchen" || f.kitchenDisplay) && (r !== "waiter" || f.waiterApp) && (r !== "reception" || f.rooms) && (r !== "rider" || f.delivery));
+  return TEAM_ROLES.filter((r) => (r !== "kitchen" || f.kitchenDisplay) && (r !== "waiter" || f.waiterApp) && (r !== "reception" || f.rooms) && (r !== "rider" || (f.delivery && f.riderTracking)));
 }
 
 /** Stops the owner going past the plan's staff logins; the owner's own login does not count */
 async function assertRoomForStaff(tx: Pick<typeof db, "selectDistinct">, staff: Staff, joining: string | null) {
-  const { maxStaff } = await tenantFeatures(staff.tenantId);
+  const { maxStaff } = await tenantFeatures(staff.tenantId, staff.outletId);
   if (maxStaff === null) return;
   const rows = await tx.selectDistinct({ id: s.users.id }).from(s.users)
     .innerJoin(s.staffRoles, and(eq(s.staffRoles.tenantId, s.users.tenantId), eq(s.staffRoles.userId, s.users.id)))

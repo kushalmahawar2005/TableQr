@@ -1,5 +1,6 @@
 "use client";
 
+import { BUSINESS_TYPES, type BusinessType } from "@/lib/subscription-pricing";
 import { useActionState, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, Check, Copy, Dices, Loader2, MessageCircle } from "lucide-react";
@@ -45,7 +46,7 @@ const sections: { title: string; help: string; fields: Field[] }[] = [
     { name: "contactName", label: "Contact person", required: true },
     { name: "contactPhone", label: "Contact phone", type: "tel", required: true },
     { name: "contactEmail", label: "Contact email", type: "email" },
-    { name: "trialDays", label: "Free trial (days)", type: "number", required: true, defaultValue: "14", hint: "Everything works for these days. Then 3 more days with a warning, then the app stops until you record their fees" },
+    { name: "agreedOutlets", label: "Total outlets", type: "number", required: true, defaultValue: "1", hint: "One subscription. Extra outlets cost ₹400/month and ₹1,500 setup each." },
   ] },
   { title: "Location", help: "Where it is and how many tables", fields: [
     { name: "outletName", label: "Outlet name", required: true, hint: "This location, e.g. Spice Route - Jaipur" },
@@ -87,6 +88,7 @@ export function CreateTenantDialog({ open, onOpenChange, plans }: { open: boolea
     setCode(suggest(outletName, d));
   };
   const [step, setStep] = useState(0);
+  const [businessType,setBusinessType] = useState<BusinessType>("restaurant");
   const [planCode, setPlanCode] = useState(plans[0]?.code ?? "");
   const [customize, setCustomize] = useState(false);
   const [features, setFeatures] = useState<Features>(() => plans[0]?.features ?? readFeatures(null));
@@ -154,7 +156,7 @@ export function CreateTenantDialog({ open, onOpenChange, plans }: { open: boolea
           <Button render={<a href={`https://wa.me/${waNumber}?text=${encodeURIComponent(message)}`} target="_blank" rel="noreferrer noopener" />} nativeButton={false}><MessageCircle />Send on WhatsApp</Button>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>Done</Button>
         </div>
-      </div> : <form ref={form} onSubmit={(e) => { if (step < last) e.preventDefault(); }} action={(fd) => { setCreds({ tenant: String(fd.get("brandName") ?? ""), outlet: String(fd.get("outletCode") ?? "").toUpperCase(), phone: String(fd.get("ownerPhone") ?? ""), pin: String(fd.get("ownerPin") ?? "") }); action(fd); }} onKeyDown={(e) => { if (e.key === "Enter" && step < last && (e.target as HTMLElement).tagName === "INPUT") { e.preventDefault(); next(); } }} className="space-y-5">
+      </div> : <form ref={form} onSubmit={(e) => { if (step < last) e.preventDefault(); }} action={(fd) => { setCreds({ tenant: String(fd.get("brandName") ?? ""), outlet: String(fd.get("outletCode") ?? "").toUpperCase(), phone: String(fd.get("ownerPhone") ?? ""), pin: String(fd.get("ownerPin") ?? "") }); action(fd); }} onKeyDown={(e) => { if (e.key === "Enter" && step < last && (e.target as HTMLElement).tagName === "INPUT") { e.preventDefault(); next(); } }} className="space-y-5"><div><Label htmlFor="businessType">Business category</Label><select id="businessType" name="businessType" value={businessType} onChange={e=>setBusinessType(e.target.value as BusinessType)} className="mt-1 w-full rounded-lg border bg-background p-3">{Object.entries(BUSINESS_TYPES).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select><p className="mt-1 text-xs text-muted-foreground">Remote setup ₹4,999 + ₹1,500 per extra outlet. Start the free month from Subscriptions after setup and payment are complete.</p></div>
         <ol className="grid grid-cols-4 gap-2" aria-label="Steps">
           {[...sections.map((s) => s.title), "Plan"].map((title, i) => <li key={title} aria-current={i === step ? "step" : undefined} className="space-y-1.5">
             <span className={`block h-1.5 rounded-full transition-colors ${i <= step ? "bg-primary" : "bg-muted"}`} />
@@ -167,7 +169,7 @@ export function CreateTenantDialog({ open, onOpenChange, plans }: { open: boolea
         <Separator />
         {sections.map((section, i) => <fieldset key={section.title} data-step={i} className={i === step ? "space-y-3" : "hidden"}>
           <legend className="mb-1"><span className="block text-base font-semibold">{section.title}</span><span className="block text-sm text-muted-foreground">{section.help}</span></legend>
-          <div className="grid gap-3 sm:grid-cols-2">{section.fields.map((f) => <div key={f.name} className={f.full ? "space-y-1.5 sm:col-span-2" : "space-y-1.5"}>
+          <div className="grid gap-3 sm:grid-cols-2">{section.fields.filter(f=>f.name!=="tableCount" || !["hotel","cloud_kitchen"].includes(businessType)).map((f) => <div key={f.name} className={f.full ? "space-y-1.5 sm:col-span-2" : "space-y-1.5"}>
             <Label htmlFor={f.name}>{f.label}{f.required && <span className="text-red-500"> *</span>}</Label>
             {f.name === "outletCode" ? <div className="flex gap-2">
               <Input id={f.name} name={f.name} value={code} onChange={(e) => { setCodeEdited(true); setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12)); }} placeholder="Fills in from the outlet name" maxLength={12} autoComplete="off" className="font-mono uppercase" />
@@ -205,7 +207,7 @@ export function CreateTenantDialog({ open, onOpenChange, plans }: { open: boolea
             <input type="hidden" name="customizeFeatures" value="on" />
             <input type="hidden" name="customFeatures" value={JSON.stringify(features)} />
           </div>}
-          {(customize ? features.rooms : chosen?.features.rooms) && <div className="space-y-1.5 rounded-xl border p-3">
+          {(businessType === "hotel" || businessType === "hotel_restaurant") && <div className="space-y-1.5 rounded-xl border p-3">
             <Label htmlFor="roomCount">Number of rooms</Label>
             <Input id="roomCount" name="roomCount" type="number" min={0} max={200} value={roomCount} onChange={(e) => setRoomCount(e.target.value)} />
             <p className="text-xs text-muted-foreground">Made with a QR code each, numbered 101, 102 … The owner can change numbers in Rooms.{(customize ? features.dineIn : chosen?.features.dineIn) ? "" : " This package has no restaurant tables, so no tables are made."}</p>
@@ -224,7 +226,7 @@ export function CreateTenantDialog({ open, onOpenChange, plans }: { open: boolea
             ].map(option => <label key={option.value} className="flex cursor-pointer items-start gap-3 rounded-lg border p-3 text-sm has-[:checked]:border-primary has-[:checked]:bg-primary/5"><input type="radio" name="guestPayments" value={option.value} checked={guestPayments === option.value} onChange={() => setGuestPayments(option.value)} className="mt-0.5 size-4 accent-[var(--primary)]" /><span><span className="block font-medium">{option.title}</span><span className="block text-xs text-muted-foreground">{option.hint}</span></span></label>)}
           </fieldset>
           <dl className="divide-y rounded-xl border text-sm">
-            {([["Brand", review.brandName], ["Contact", [review.contactName, review.contactPhone].filter(Boolean).join(" · ")], ["Outlet", [review.outletName, review.city].filter(Boolean).join(", ")], ["Outlet code", review.outletCode || "Made when created"], ["Tables", (customize ? features.dineIn : chosen?.features.dineIn) ? review.tableCount : "None"], ...((customize ? features.rooms : chosen?.features.rooms) ? [["Rooms", roomCount]] as const : []), ["Owner", [review.ownerName, review.ownerPhone].filter(Boolean).join(" · ")], ["Kitchen screen", kitchenOn ? "Yes" : "No"], ...(customize ? [["Package", "Custom tenant feature set"]] as const : [])] as const).map(([k, v]) => <div key={k} className="flex items-center justify-between gap-4 px-4 py-2.5"><dt className="text-muted-foreground">{k}</dt><dd className="min-w-0 break-words text-right font-medium">{v}</dd></div>)}
+            {([["Brand", review.brandName], ["Contact", [review.contactName, review.contactPhone].filter(Boolean).join(" · ")], ["Outlet", [review.outletName, review.city].filter(Boolean).join(", ")], ["Outlet code", review.outletCode || "Made when created"], ["Tables", (customize ? features.dineIn : chosen?.features.dineIn) ? review.tableCount : "None"], ...((businessType === "hotel" || businessType === "hotel_restaurant") ? [["Rooms", roomCount]] as const : []), ["Owner", [review.ownerName, review.ownerPhone].filter(Boolean).join(" · ")], ["Kitchen screen", kitchenOn ? "Yes" : "No"], ...(customize ? [["Package", "Custom tenant feature set"]] as const : [])] as const).map(([k, v]) => <div key={k} className="flex items-center justify-between gap-4 px-4 py-2.5"><dt className="text-muted-foreground">{k}</dt><dd className="min-w-0 break-words text-right font-medium">{v}</dd></div>)}
           </dl>
         </fieldset>
         {state.error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{state.error}</p>}

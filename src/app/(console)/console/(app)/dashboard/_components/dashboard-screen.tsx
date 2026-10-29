@@ -1,4 +1,5 @@
 "use client";
+import type { Features } from "@/lib/plan-features";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { connectRealtime, type RealtimeStatus } from "@/lib/realtime-client";
 import type { DashboardData, RevenueTrend } from "@/server/staff/dashboard";
@@ -38,12 +39,14 @@ export type DashboardPreview = { refreshing?: boolean; error?: string };
 
 export function DashboardScreen({
   initial,
+  features,
   initialTrend,
   duty,
   setup,
   preview,
   realtimeUrl,
 }: {
+  features?: Features;
   initial: DashboardData;
   initialTrend: RevenueTrend;
   duty?: { rows: DutyRow[]; canChange?: boolean } | null;
@@ -145,28 +148,28 @@ export function DashboardScreen({
 
         {setup}
 
-        {data.view !== "operations" && <DashboardKpis data={data} trend={trend} />}
+        {data.view !== "operations" && <DashboardKpis data={data} trend={trend} features={features} />}
 
-        {data.view !== "money" && <QuickActions />}
+        {data.view !== "money" && <QuickActions features={features} />}
 
-        <NeedsAttention data={data} />
+        <NeedsAttention data={data} features={features} />
 
         {/* Each column stacks panels end to end, so no column is left with an empty gap beneath it */}
         {data.view !== "money" && (
           <div className="grid items-start gap-5 xl:grid-cols-12">
             <div className="min-w-0 space-y-5 xl:col-span-6">
-              <LiveFloor data={data} />
+              {(!features || features.dineIn) && <LiveFloor data={data} />}
               {data.view !== "operations" && <RecentPayments payments={data.operations.recentPayments} timezone={data.timezone} />}
             </div>
 
             <div className="min-w-0 space-y-5 xl:col-span-3">
               {showStaff && <StaffOnDuty duty={dutyData} />}
-              <KitchenOrders orders={data.operations.kitchenOrders} />
+              {(!features || features.kitchenDisplay) && <KitchenOrders orders={data.operations.kitchenOrders} />}
             </div>
 
             <div className="min-w-0 space-y-5 xl:col-span-3">
               <CustomerRequests initialRequests={data.operations.customerRequests} />
-              <UpcomingReservations data={data} />
+              {(!features || features.reservations) && <UpcomingReservations data={data} />}
               <LiveActivity feed={data.operations.activityFeed} />
             </div>
           </div>
@@ -180,7 +183,7 @@ export function DashboardScreen({
           </div>
         )}
 
-        {data.view !== "operations" && <DashboardSecondaryStats data={data} />}
+        {data.view !== "operations" && <DashboardSecondaryStats data={data} features={features} />}
       </main>
     </div>
   );

@@ -1,5 +1,6 @@
 "use client";
 
+import type { Features } from "@/lib/plan-features";
 import { useMemo, useState } from "react";
 import { Cancel01Icon, PlusSignIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -41,7 +42,7 @@ const KIND = {
 } as const;
 const MOVE_TITLE = { wastage: "Wastage", count: "Count on the shelf" } as const;
 
-export function InventoryScreen({ initial, purchasing }: { initial: Inventory; purchasing: Purchasing }) {
+export function InventoryScreen({ initial, purchasing, features }: { initial: Inventory; purchasing: Purchasing; features?: Features }) {
   const [data, setData] = useState(initial);
   const [buying, setBuying] = useState(purchasing);
   const [tab, setTab] = useState<Tab>("stock");
@@ -100,10 +101,10 @@ export function InventoryScreen({ initial, purchasing }: { initial: Inventory; p
             <HugeiconsIcon icon={PlusSignIcon} size={16} aria-hidden />
             <span className="ml-1.5">Stock item</span>
           </button>
-          <button type="button" className={primary} disabled={!data.items.length} onClick={() => setPanel({ kind: "bill", mode: "purchase" })}>
+          {(!features || features.purchasing) && <button type="button" className={primary} disabled={!data.items.length} onClick={() => setPanel({ kind: "bill", mode: "purchase" })}>
             <HugeiconsIcon icon={PlusSignIcon} size={18} aria-hidden />
             New purchase bill
-          </button>
+          </button>}
         </div>
       </header>
 
@@ -123,7 +124,7 @@ export function InventoryScreen({ initial, purchasing }: { initial: Inventory; p
 
       <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
         <div role="tablist" aria-label="Inventory" className="no-scrollbar flex max-w-full overflow-x-auto rounded-xl border border-line bg-surface p-1">
-          {TABS.map(([k, name]) => (
+          {TABS.filter(([k])=> !features || (["stock","history"].includes(k) || (["purchases","suppliers","count"].includes(k) ? features.purchasing : features.recipeCosting))).map(([k, name]) => (
             <button key={k} role="tab" type="button" aria-selected={tab === k} onClick={() => { setTab(k); setNotice(null); }} className={`min-h-9 shrink-0 whitespace-nowrap rounded-lg px-3.5 text-body font-semibold ${focus} ${tab === k ? "bg-ink text-paper" : "text-muted hover:text-ink"}`}>
               {name}
             </button>
@@ -185,7 +186,7 @@ export function InventoryScreen({ initial, purchasing }: { initial: Inventory; p
                           {i.isPrep
                             ? <button type="button" className={quiet} disabled={!i.prep.length} onClick={() => setPanel({ kind: "make", item: i })}>Make batch</button>
                             : <button type="button" className={quiet} onClick={() => setPanel({ kind: "bill", mode: "purchase" })}>Purchase</button>}
-                          <button type="button" className={quiet} onClick={() => setPanel({ kind: "move", item: i, move: "wastage" })}>Wastage</button>
+                          {(!features || features.purchasing) && <button type="button" className={quiet} onClick={() => setPanel({ kind: "move", item: i, move: "wastage" })}>Wastage</button>}
                           <button type="button" className={quiet} onClick={() => setPanel({ kind: "move", item: i, move: "count" })}>Count</button>
                         </div>
                       </td>

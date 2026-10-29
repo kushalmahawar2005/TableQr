@@ -15,6 +15,7 @@ import { publish } from "../realtime/publish";
 import { signRealtimeToken, topics } from "../realtime/token";
 import { DELIVERY_TABLE_PREFIX, freshLocation } from "@/domain/delivery";
 import { notifyDeliveryCustomer } from "../guest/push";
+import { sendOutletPush } from "../staff/web-push";
 import { verifiedRiders } from "./rider-docs";
 import { riderStats } from "./riders";
 import { TAKEAWAY_CLASS } from "../floor/takeaway-class";
@@ -93,6 +94,7 @@ export async function claimManualQrDeliveryPayment(code: string, token: string, 
     if (used) throw new AppError("conflict", "That UPI reference was already submitted. Check the reference and try again.");
     await tx.update(s.deliveryCheckouts).set({ manualPaymentReference: reference, manualPaymentClaimedAt: now, paymentStatus: "pending", expiresAt: new Date(now.getTime() + 24 * 60 * 60_000) }).where(and(eq(s.deliveryCheckouts.tenantId, outlet.tenantId), eq(s.deliveryCheckouts.id, row.id)));
   }, LOCK_THEN_READ);
+  await sendOutletPush({ tenantId: outlet.tenantId, outletId: outlet.id }, { title: "Delivery payment needs checking", body: "A guest submitted a delivery payment reference. Verify it to accept the order.", url: "/console/orders/delivery", tag: `verify-${row.id}` }, { kind: "management" });
   return { submitted: true as const };
 }
 
@@ -148,6 +150,12 @@ async function placeKnownDeliveryOrder(code: string, found: Awaited<ReturnType<t
     return { sessionId, order, billPayment, replayed: false as const };
   }, LOCK_THEN_READ);
   if (!placed.replayed) {
+    await sendOutletPush(deliveryScope(found), {
+      title: "New delivery order",
+      body: "A guest placed a delivery order. Open the delivery desk to review it.",
+      url: "/console/orders/delivery",
+      tag: `delivery-${found.id}`,
+    }, { kind: "delivery" });
     await publish(deliveryScope(found), [{ topic: topics.kitchen, type: "ticket.created", data: { orderId: placed.order!.orderId, stations: placed.order!.stations } }, { topic: topics.floor, type: "delivery.placed", data: { sessionId: placed.sessionId } }, { topic: topics.session(placed.sessionId), type: "delivery.placed" }]);
     void notifyDeliveryCustomer(deliveryScope(found), placed.sessionId, "placed");
     if (placed.billPayment) announceBill(placed.billPayment.scope, placed.billPayment.closedTableIds ? { tableIds: placed.billPayment.closedTableIds, state: "needs_cleaning" } : undefined, [{ topic: topics.session(placed.sessionId), type: "payment.updated", data: { paymentId: placed.billPayment.paymentId } }, { topic: topics.session(placed.sessionId), type: "session.closed" }]);
@@ -171,6 +179,10 @@ export async function confirmManualQrDeliveryPayment(staff: StaffSession, checko
 
 export async function deliveryStatus(code: string, token: string, deviceId: string, now = new Date()) {
   const { outlet, row } = await deliveryCheckout(code, token, deviceId, now);
+  return deliveryView(outlet,row,now);
+}
+
+async function deliveryView(outlet: {tenantId:string}, row: typeof s.deliveryCheckouts.$inferSelect, now:Date) {
   const orders = row.sessionId ? await db.select({ status: s.orders.status }).from(s.orders).where(and(eq(s.orders.tenantId, outlet.tenantId), eq(s.orders.sessionId, row.sessionId))) : [];
   const [bill] = row.sessionId ? await db.select({ totalPaise: s.bills.totalPaise, status: s.bills.status }).from(s.bills).where(and(eq(s.bills.tenantId, outlet.tenantId), eq(s.bills.sessionId, row.sessionId))) : [];
   const [rider] = row.courierUserId ? await db.select({ photoUrl: s.users.photoUrl, vehicleNo: s.users.vehicleNo, lastLat: s.users.lastLat, lastLng: s.users.lastLng, lastLocAt: s.users.lastLocAt }).from(s.users).where(and(eq(s.users.tenantId, outlet.tenantId), eq(s.users.id, row.courierUserId))) : [];
@@ -180,6 +192,15 @@ export async function deliveryStatus(code: string, token: string, deviceId: stri
     deliveryPin: row.status === "dispatched" ? row.deliveryPin : null,
     courierRating: row.courierUserId ? await riderStats(outlet.tenantId, row.courierUserId, now).then((st) => ({ rating: st.rating, ratings: st.ratings, rides: st.rides })) : null,
     myRating: row.riderRating ?? null, canRate: row.status === "delivered" && !!row.courierUserId && row.riderRating === null };
+}
+
+export async function customerDeliveryView(code:string,token:string|undefined,id:string,now=new Date()) {
+ const { customerFor } = await import("../guest/customer-account");
+ const who=await customerFor(code,token,now);
+ if(!who)throw new AppError("verification_required","Sign in to track your order.");
+ const [row]=await db.select().from(s.deliveryCheckouts).where(and(eq(s.deliveryCheckouts.tenantId,who.tenantId),eq(s.deliveryCheckouts.outletId,who.outletId),eq(s.deliveryCheckouts.guestId,who.id),eq(s.deliveryCheckouts.id,id)));
+ if(!row)throw new AppError("not_found","Order not found.");
+ return deliveryView(who,row,now);
 }
 
 /** The customer's stars for the rider, once, after delivery */

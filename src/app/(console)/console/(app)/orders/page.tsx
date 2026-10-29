@@ -1,3 +1,4 @@
+import { tenantFeatures } from "@/server/plan";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
@@ -24,7 +25,8 @@ export default async function OrdersPage(props: PageProps<"/console/orders">) {
     );
   }
   const { view } = await props.searchParams;
-  const runsDelivery = staff.roles.some(role => (deliveryStaffRoles as readonly string[]).includes(role));
+  const features = await tenantFeatures(staff.tenantId, staff.outletId);
+  const runsDelivery = features.delivery && staff.roles.some(role => (deliveryStaffRoles as readonly string[]).includes(role));
   const showDelivery = runsDelivery && view === "delivery";
   const [orders, deliveries, pendingPayments, riders] = await Promise.all([
     getRecentOrders(staff, new Date()),
@@ -43,7 +45,7 @@ export default async function OrdersPage(props: PageProps<"/console/orders">) {
   );
   const tabs = runsDelivery ? (
     <nav aria-label="Order type" className="mt-4 flex flex-wrap gap-2">
-      {tab("/console/orders", "Table orders", tableLive, !showDelivery)}
+      {tab("/console/orders", features.dineIn ? "Table orders" : features.rooms ? "Room orders" : "Pickup / counter orders", tableLive, !showDelivery)}
       {tab("/console/orders?view=delivery", "Delivery orders", deliveryLive, showDelivery)}
     </nav>
   ) : null;
@@ -54,7 +56,7 @@ export default async function OrdersPage(props: PageProps<"/console/orders">) {
       tabs={tabs}
       riders={riders}
       realtimeUrl={process.env.REALTIME_URL?.replace(/^http/, "ws") ?? null}
-      canAssignCourier={staff.roles.some(role => role === "owner" || role === "manager")}
+      canAssignCourier={features.riderTracking && staff.roles.some(role => role === "owner" || role === "manager")}
       rows={deliveries.map(row => ({ ...row, placedAt: row.placedAt?.toISOString() ?? null }))}
       pendingPayments={pendingPayments.map(row => ({ ...row, claimedAt: row.claimedAt?.toISOString() ?? null }))}
     />;

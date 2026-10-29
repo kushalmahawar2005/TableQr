@@ -17,7 +17,7 @@ export default async function QrSheetPage(props: PageProps<"/console/floor/edito
   const staff = await currentStaff();
   if (!staff) redirect("/console/login");
   if (!staff.roles.some((r) => floorEditorRoles.includes(r as never)) || !canSee(staff, "floor")) return <main className="p-8">Permission denied</main>;
-  if (!(await tenantFeatures(staff.tenantId)).dineIn) return <FeatureLocked feature="dineIn" />;
+  if (!(await tenantFeatures(staff.tenantId, staff.outletId)).dineIn) return <FeatureLocked feature="dineIn" />;
   const q = await props.searchParams;
   const size = (QR_SIZES.find((x) => x.id === q.size)?.id ?? "a6") as QrSize;
   const only = typeof q.table === "string" ? q.table : null;

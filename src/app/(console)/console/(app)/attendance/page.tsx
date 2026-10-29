@@ -17,7 +17,7 @@ export default async function AttendancePage(props: { searchParams: Promise<Reco
   if (!canSee(staff, "attendance")) {
     return <main className="p-8"><h1 className="font-display text-title font-bold text-ink">You don&apos;t have access to attendance.</h1><p className="mt-2 text-body text-muted">Ask an owner if you need it.</p></main>;
   }
-  if (!(await tenantFeatures(staff.tenantId)).attendance) return <FeatureLocked feature="attendance" />;
+  if (!(await tenantFeatures(staff.tenantId, staff.outletId)).attendance) return <FeatureLocked feature="attendance" />;
   const view = one("view") === "month" ? "month" : "day";
   const outletId = one("outlet");
   const [day, month] = await Promise.all([

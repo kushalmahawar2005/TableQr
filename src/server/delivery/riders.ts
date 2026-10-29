@@ -1,3 +1,4 @@
+import { requireFeature, tenantFeatures } from "../plan";
 import "server-only";
 import { and, avg, count, eq, gte, inArray, isNotNull, isNull, or } from "drizzle-orm";
 import { randomInt } from "node:crypto";
@@ -42,6 +43,7 @@ const LIVE = ["placed", "dispatched"] as const;
 
 /** Riders of this outlet (or of every outlet), with whether each is free, busy or off duty */
 export async function outletRiders(staff: StaffSession): Promise<RiderCard[]> {
+  if (!(await tenantFeatures(staff.tenantId, staff.outletId)).riderTracking) return [];
   await requireStaffRole(staff, deliveryStaffRoles);
   const people = await db
     .selectDistinct({ id: s.users.id, name: s.users.name, phone: s.users.phone, photoUrl: s.users.photoUrl, vehicleNo: s.users.vehicleNo, duty: s.users.dutyStatus, lastLat: s.users.lastLat, lastLng: s.users.lastLng, lastLocAt: s.users.lastLocAt })
@@ -73,6 +75,7 @@ export async function outletRiders(staff: StaffSession): Promise<RiderCard[]> {
 
 /** Gives a live delivery to a team rider; their name and phone go to the customer */
 export async function assignTeamRider(staff: StaffSession, deliveryId: string, riderId: string, now = new Date()) {
+  await requireFeature(staff.tenantId,"riderTracking",staff.outletId);
   await requireStaffRole(staff, deliveryStaffRoles);
   const [rider] = await db
     .select({ id: s.users.id, name: s.users.name, phone: s.users.phone })

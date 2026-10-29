@@ -491,6 +491,41 @@
       "when": 1793216278880,
       "tag": "0069_lively_blockbuster",
       "breakpoints": true
+    },
+    {
+      "idx": 70,
+      "version": "5",
+      "when": 1793273766199,
+      "tag": "0070_subscription_pricing",
+      "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "5",
+      "when": 1793273944233,
+      "tag": "0071_agreed_plan_catalogue",
+      "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "5",
+      "when": 1793274056637,
+      "tag": "0072_inventory_plan_levels",
+      "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "5",
+      "when": 1793276417047,
+      "tag": "0073_customer_accounts",
+      "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "5",
+      "when": 1793276877691,
+      "tag": "0074_customer_party_history",
+      "breakpoints": true
     }
   ]
 }

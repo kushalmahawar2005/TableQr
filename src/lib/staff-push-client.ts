@@ -18,7 +18,7 @@ export function serializePushSubscription(subscription: PushSubscription) {
   return { endpoint: value.endpoint, expirationTime: value.expirationTime ?? null, keys: { p256dh: value.keys.p256dh, auth: value.keys.auth } };
 }
 
-export async function enableStaffPushNotifications() {
+export async function enableStaffPushNotifications(audience: "staff" | "rider" = "staff") {
   if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) {
     return { ok: false as const, permission: "unsupported", error: "Push notifications are not supported in this browser." };
   }
@@ -27,7 +27,7 @@ export async function enableStaffPushNotifications() {
   const permission = Notification.permission === "default" ? await Notification.requestPermission() : Notification.permission;
   if (permission !== "granted") return { ok: false as const, permission, error: permission === "denied" ? "Notifications are blocked in your device settings." : "Notification permission was not granted." };
 
-  const config = await pushSetupAction();
+  const config = await pushSetupAction(audience);
   if (!config.enabled || !config.publicKey) return { ok: false as const, permission, error: "Push notifications are not configured on the server yet." };
 
   try {
@@ -41,7 +41,7 @@ export async function enableStaffPushNotifications() {
       subscription = null;
     }
     subscription ??= await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
-    const saved = await savePushSubscriptionAction(serializePushSubscription(subscription));
+    const saved = await savePushSubscriptionAction(serializePushSubscription(subscription), audience);
     if (!saved.ok) return { ok: false as const, permission, error: saved.error };
     return { ok: true as const, permission };
   } catch (error) {

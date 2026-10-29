@@ -1,3 +1,4 @@
+import { requireFeature } from "../plan";
 import "server-only";
 import { and, asc, eq, inArray, isNull, ne, or } from "drizzle-orm";
 import { db } from "@/db";
@@ -15,6 +16,7 @@ import { seatWalkIn } from "../floor/table-actions";
 const staffRoles = ["waiter", "manager", "owner"] as const;
 
 export async function requireStaffRole(ctx: StaffContext, roles: readonly (typeof s.staffRoleNames[number])[] = staffRoles) {
+  if (roles.length === 1 && roles[0] === "rider") await requireFeature(ctx.tenantId,"riderTracking",ctx.outletId);
   if (!ctx.userId) throw new AppError("invalid_state", "A signed-in staff member is required.");
   const [users, rolesForUser] = await Promise.all([
     db.select({ id: s.users.id, name: s.users.name, duty: s.users.dutyStatus }).from(s.users).where(and(eq(s.users.tenantId, ctx.tenantId), eq(s.users.id, ctx.userId), eq(s.users.isActive, true))),

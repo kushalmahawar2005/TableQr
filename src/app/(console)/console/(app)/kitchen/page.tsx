@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { KdsScreen } from "@/app/(staff)/kds/_components/kds-screen";
-import { LANG_COOKIE, parseLang } from "@/lib/i18n";
+import { parseLang } from "@/lib/i18n";
+import { STAFF_LANG_COOKIE } from "@/lib/staff-language";
 import { canSee } from "@/lib/staff-permissions";
 import { consoleKitchen, kdsBoard } from "@/server/kitchen/kds";
 import { currentStaff } from "@/server/staff/request";
@@ -15,7 +16,7 @@ export const metadata: Metadata = { title: "Kitchen" };
 export default async function ConsoleKitchenPage() {
   const staff = await currentStaff();
   if (!staff || !canSee(staff, "kitchen")) notFound();
-  const lang = parseLang((await cookies()).get(LANG_COOKIE)?.value);
+  const lang = parseLang((await cookies()).get(STAFF_LANG_COOKIE)?.value);
   const kitchen = await consoleKitchen(staff);
   const board = await kdsBoard(kitchen, null);
   return (

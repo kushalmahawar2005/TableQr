@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
-import { LANG_COOKIE, parseLang } from "@/lib/i18n";
+import { parseLang } from "@/lib/i18n";
+import { STAFF_LANG_COOKIE } from "@/lib/staff-language";
 import { canSee } from "@/lib/staff-permissions";
 import { getFloor } from "@/server/floor/read";
 import { tenantFeatures } from "@/server/plan";
@@ -15,7 +16,7 @@ export const metadata: Metadata = { title: "Floor", robots: { index: false, foll
 // every action.
 export default async function FloorPage() {
   const staff = await currentStaff();
-  const lang = parseLang((await cookies()).get(LANG_COOKIE)?.value);
+  const lang = parseLang((await cookies()).get(STAFF_LANG_COOKIE)?.value);
   const c = s1Copy[lang];
   if (!staff || !canSee(staff, "floor")) {
     return (
@@ -25,7 +26,7 @@ export default async function FloorPage() {
       </main>
     );
   }
-  if (!(await tenantFeatures(staff.tenantId)).dineIn) return <FeatureLocked feature="dineIn" />;
+  if (!(await tenantFeatures(staff.tenantId, staff.outletId)).dineIn) return <FeatureLocked feature="dineIn" />;
   const data = await getFloor(staff);
   return <FloorScreen data={data} lang={lang} realtimeUrl={process.env.REALTIME_URL?.replace(/^http/, "ws") ?? null} />;
 }

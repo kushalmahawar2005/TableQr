@@ -19,3 +19,5 @@ export * from "./staff-invitations";
 export * from "./delivery";
 export * from "./print";
 export * from "./attendance";
+
+export * from "./customer-accounts";

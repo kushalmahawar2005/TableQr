@@ -1,14 +1,10 @@
 import { tenantFeatures } from "@/server/plan";
 import type { Metadata } from "next";
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { LANG_COOKIE, parseLang } from "@/lib/i18n";
 import { canSee } from "@/lib/staff-permissions";
 import { getDashboard, getRevenueTrend } from "@/server/staff/dashboard";
-import { setupSteps } from "@/server/staff/guide";
 import { teamDuty } from "@/server/staff/duty";
 import { currentStaff } from "@/server/staff/request";
-import { SetupChecklist } from "../_components/guide/setup-checklist";
 import { DashboardScreen } from "./_components/dashboard-screen";
 
 export const metadata: Metadata = { title: "Dashboard", robots: { index: false, follow: false } };
@@ -27,12 +23,11 @@ export default async function DashboardPage() {
     );
   }
   const now = new Date();
-  const [data, trend, duty, setup] = await Promise.all([getDashboard(staff, now), getRevenueTrend(staff, now), canSee(staff, "team") ? teamDuty(staff, now) : null, setupSteps(staff)]);
-  const lang = parseLang((await cookies()).get(LANG_COOKIE)?.value);
+  const [data, trend, duty, features] = await Promise.all([getDashboard(staff, now), getRevenueTrend(staff, now), canSee(staff, "team") ? teamDuty(staff, now) : null, tenantFeatures(staff.tenantId, staff.outletId)]);
   // Who is on duty, set right here by the manager or owner
   const canChange = staff.roles.some((r) => r === "owner" || r === "manager");
   // Riders only matter where the plan has delivery
-  const delivery = duty?.some((r) => r.roles.includes("rider")) ? (await tenantFeatures(staff.tenantId)).delivery : false;
+  const delivery = duty?.some((r) => r.roles.includes("rider")) ? (await tenantFeatures(staff.tenantId, staff.outletId)).delivery : false;
   const dutyRows = duty && !delivery ? duty.filter((r) => !r.roles.includes("rider")) : duty;
-  return <DashboardScreen initial={data} initialTrend={trend} duty={dutyRows ? { rows: dutyRows, canChange } : undefined} setup={setup && <SetupChecklist key="setup-checklist" lang={lang} steps={setup} />} realtimeUrl={process.env.REALTIME_URL?.replace(/^http/, "ws") ?? null} />;
+  return <DashboardScreen features={features} initial={data} initialTrend={trend} duty={dutyRows ? { rows: dutyRows, canChange } : undefined} realtimeUrl={process.env.REALTIME_URL?.replace(/^http/, "ws") ?? null} />;
 }

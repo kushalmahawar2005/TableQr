@@ -16,7 +16,7 @@ import * as sc from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 const roles=["waiter","manager","owner"] as const;
 /** Signed-in waiter, manager or owner of a restaurant whose plan has the waiter app */
-async function waiterStaff(){const staff=await staffFor(roles);await requireFeature(staff.tenantId,"waiterApp");return staff;}
+async function waiterStaff(){const staff=await staffFor(roles);await requireFeature(staff.tenantId,"waiterApp",staff.outletId);return staff;}
 async function run<T>(work:(staff:Awaited<ReturnType<typeof staffFor>>)=>Promise<T>) {
   try{return {ok:true as const,data:await work(await waiterStaff())};}
   catch(e){return {ok:false as const,error:e instanceof AppError?e.message:"Could not complete this action. Try again.",code:e instanceof AppError?e.code:"unknown"};}

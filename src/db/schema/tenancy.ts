@@ -1,3 +1,4 @@
+import type { BusinessType, CommercialSettings } from "../../lib/subscription-pricing";
 import { double,
   boolean,
   char,
@@ -25,6 +26,8 @@ export const tenants = mysqlTable(
     id: id(),
     /** Legal or trading name, e.g. Sharma Hospitality Pvt Ltd */
     name: varchar("name", { length: 120 }).notNull(),
+    businessType: varchar("business_type", { length: 24 }).$type<BusinessType>(),
+    commercial: json("commercial").$type<CommercialSettings>(),
     planCode: varchar("plan_code", { length: 20 })
       .notNull()
       .references(() => plans.code),

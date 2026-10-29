@@ -11,7 +11,7 @@ export const staffAppBrandForOutletCode = cache(async (value: string | null | un
   if (!/^[A-Z0-9]{2,12}$/.test(code)) return null;
   const [row] = await db.select({
     code: s.outlets.code,
-    name: s.outlets.name,
+    name: s.brands.name,
     logoUrl: s.brands.logoUrl,
     accentColor: s.outlets.accentColor,
   })

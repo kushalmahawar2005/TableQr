@@ -23,7 +23,7 @@ export function RestaurantPaymentSettings({ initial, canEdit }: { initial: Outle
       if (!result.ok) { setMessage(result.message); return; }
       setStatus(result.status);
       setClientId(""); setClientSecret("");
-      setMessage("Restaurant Cashfree credentials saved. The first checkout will confirm that Cashfree accepts them.");
+      setMessage("Cashfree credentials saved. The first checkout will confirm that Cashfree accepts them.");
       router.refresh();
     });
   }
@@ -34,21 +34,21 @@ export function RestaurantPaymentSettings({ initial, canEdit }: { initial: Outle
       if (!result.ok) { setMessage(result.message); return; }
       setStatus(result.status);
       setMode("sandbox"); setClientId(""); setClientSecret("");
-      setMessage("Restaurant payment account disconnected.");
+      setMessage("Business payment account disconnected.");
       router.refresh();
     });
   }
 
-  return <section className="mt-5 overflow-hidden rounded-2xl border border-line bg-surface" aria-labelledby="restaurant-payments-heading">
+  return <section className="mt-5 overflow-hidden rounded-2xl border border-line bg-surface" aria-labelledby="business-payments-heading">
     <header className="flex items-start gap-3 border-b border-line px-5 py-4">
       <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-ink/5 text-ink"><CreditCard className="size-4" aria-hidden="true" /></span>
-      <div className="min-w-0"><h2 id="restaurant-payments-heading" className="font-display text-section font-bold text-ink">Restaurant online payments</h2>
-        <p className="text-sm text-muted">Connect this restaurant’s own Cashfree merchant account for guest bill and booking advance payments.</p></div>
+      <div className="min-w-0"><h2 id="business-payments-heading" className="font-display text-section font-bold text-ink">Online payments</h2>
+        <p className="text-sm text-muted">Connect this outlet’s own Cashfree merchant account for guest payments.</p></div>
       <span className={`ml-auto shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${status.configured ? "bg-emerald-500/10 text-emerald-700" : "bg-ink/5 text-muted"}`}>{status.configured ? "Saved" : "Not connected"}</span>
     </header>
     <div className="space-y-4 p-5">
       <div className="rounded-xl border border-line bg-ink/[0.02] p-4 text-sm text-muted">
-        <p className="font-semibold text-ink">Payments go directly to your restaurant.</p>
+        <p className="font-semibold text-ink">Payments go directly to your business.</p>
         <p className="mt-1">Use the App ID and Secret Key from your own Cashfree account. Tableeqr’s separate Cashfree account is used only for your Tableeqr subscription and is never used for guest payments.</p>
         {status.configured && <p className="mt-2">Saved account: {status.appIdHint} · {status.mode === "production" ? "Live" : "Test mode"}</p>}
         {status.configured && <p className="mt-1">Saved means the credentials are encrypted here; Cashfree still has to accept them for an order to work.</p>}

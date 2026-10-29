@@ -32,6 +32,7 @@ export function NotificationBell({ preview = false, className = "", placement = 
   const [open, setOpen] = useState(false);
   const [sound, setSound] = useState(true);
   const [pushReady, setPushReady] = useState(false);
+  const [pushError, setPushError] = useState("");
   const [clock, setClock] = useState(() => Date.now());
   const since = useRef<number | null>(null);
   const seen = useRef(new Set<string>());
@@ -109,7 +110,11 @@ export function NotificationBell({ preview = false, className = "", placement = 
       }
       if (document.hidden && typeof Notification !== "undefined" && Notification.permission === "granted") {
         for (const n of fresh.slice(0, 3)) {
-          try { new Notification(n.title, { body: n.body, tag: n.id }); } catch { /* Android Chrome allows only service-worker notifications */ }
+          void navigator.serviceWorker?.getRegistration("/").then((registration) => {
+            if (registration) return registration.showNotification(n.title, { body: n.body, tag: n.id, data: { url: n.href } });
+            new Notification(n.title, { body: n.body, tag: n.id });
+          }).catch(() => {});
+
         }
       }
     };
@@ -135,7 +140,13 @@ export function NotificationBell({ preview = false, className = "", placement = 
     }
     if (next && audio.current) chime(audio.current);
   };
-  const askDesktop = () => { void enableStaffPushNotifications().then((result) => { if (result.ok) setPushReady(true); }); };
+  const askDesktop = () => {
+    setPushError("");
+    void enableStaffPushNotifications().then((result) => {
+      if (result.ok) setPushReady(true);
+      else setPushError(result.error);
+    }).catch(() => setPushError("Could not enable notifications. Please try again."));
+  };
   const canAskDesktop = typeof window !== "undefined" && typeof Notification !== "undefined" && Notification.permission !== "denied" && !pushReady;
 
   return (
@@ -172,6 +183,9 @@ export function NotificationBell({ preview = false, className = "", placement = 
               Enable background alerts for new orders and requests
             </button>
           )}
+          {pushError && <p role="alert" className="px-4 py-2 text-caption text-danger">{pushError}</p>}
+          {typeof Notification !== "undefined" && Notification.permission === "denied" && <p className="px-4 py-2 text-caption text-danger">Notifications are blocked. Allow them in your browser or phone settings.</p>}
+          {pushReady && <p role="status" className="px-4 py-2 text-caption text-brand">Background alerts enabled on this device.</p>}
           {items.length === 0 ? (
             <div className="flex flex-col items-center gap-2 px-4 py-8 text-center text-caption text-muted">
               <HugeiconsIcon icon={NotificationOff01Icon} size={24} aria-hidden />

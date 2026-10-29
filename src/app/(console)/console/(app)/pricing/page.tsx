@@ -22,6 +22,6 @@ export default async function PricingPage() {
       </main>
     );
   }
-  if (!(await tenantFeatures(staff.tenantId)).pricingRules) return <FeatureLocked feature="pricingRules" />;
+  if (!(await tenantFeatures(staff.tenantId, staff.outletId)).pricingRules) return <FeatureLocked feature="pricingRules" />;
   return <PricingScreen initial={await getPricingData(staff)} />;
 }

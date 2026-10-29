@@ -648,3 +648,74 @@ body {
   .kds-ticket-action { height: 3rem; gap: 0.5rem; font-size: 1rem; }
   .kds-ticket-action svg { width: 1.25rem; height: 1.25rem; }
 }
+
+/* The console kitchen sits between the app header and mobile tab bar. Keep its controls compact
+   on phones; the standalone wall display keeps its deliberately large touch-first layout. */
+@media (max-width: 639px) {
+  .kds-embedded .kds-embedded-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "title time" "controls controls";
+    align-content: center;
+    align-items: center;
+    gap: 0.35rem 0.65rem;
+    min-height: 0;
+    padding: 0.5rem 0.75rem;
+  }
+  .kds-embedded .kds-header-title { grid-area: title; width: 100%; }
+  .kds-embedded .kds-header-title h1 { font-size: 1rem; line-height: 1.25rem; }
+  .kds-embedded .kds-header-title h1 > span.tabular { margin-left: 0.35rem; padding-inline: 0.35rem; font-size: 0.8rem; }
+  .kds-embedded .kds-header-title > p { font-size: 0.75rem; line-height: 1rem; }
+  .kds-embedded .kds-header-time { grid-area: time; margin-left: 0; font-size: 1rem; line-height: 1.25rem; }
+  .kds-embedded .kds-embedded-controls {
+    grid-area: controls;
+    display: flex;
+    min-width: 0;
+    width: 100%;
+    align-items: center;
+    gap: 0.4rem;
+    overflow-x: auto;
+    padding-bottom: 0.1rem;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .kds-embedded .kds-embedded-controls::-webkit-scrollbar { display: none; }
+  .kds-embedded .kds-embedded-controls > button {
+    min-height: 2.5rem;
+    height: 2.5rem;
+    padding-inline: 0.65rem;
+    border-radius: 0.65rem;
+    font-size: 0.78rem;
+  }
+  .kds-embedded .kds-sound-button { width: 2.5rem; justify-content: center; padding: 0; }
+  .kds-embedded .kds-sound-button svg { width: 1.15rem; height: 1.15rem; }
+  .kds-embedded .kds-sound-label { display: none; }
+  .kds-embedded .kds-auto-kot-button { flex: 0 0 auto; }
+  .kds-embedded .kds-paper-button { min-width: 4.5rem; justify-content: center; }
+  .kds-embedded .kds-fullscreen-button { width: 2.5rem; justify-content: center; padding: 0; }
+  .kds-embedded .kds-fullscreen-button svg { width: 1.15rem; height: 1.15rem; }
+  .kds-embedded .kds-connection-status { min-width: 2rem; justify-content: center; font-size: 0.75rem; }
+  .kds-embedded .kds-connection-status svg { width: 1.2rem; height: 1.2rem; }
+
+  .kds-embedded nav[aria-label] { gap: 0.45rem; padding: 0.5rem 0.75rem; }
+  .kds-embedded .kds-station-button { min-width: 5.25rem; height: 2.4rem; gap: 0.4rem; border-radius: 0.65rem; padding-inline: 0.75rem; font-size: 0.88rem; }
+  .kds-embedded .kds-station-button > span { padding-inline: 0.4rem; font-size: 0.8rem; }
+  .kds-embedded .kds-offline-bar { gap: 0.5rem; padding: 0.45rem 0.75rem; font-size: 0.8rem; }
+  .kds-embedded .kds-offline-bar svg { width: 1.1rem; height: 1.1rem; }
+  .kds-embedded .kds-board-main { padding: 0.75rem 0.65rem 1rem; }
+  .kds-embedded .kds-empty-title { font-size: 1.35rem; line-height: 1.7rem; }
+  .kds-embedded .kds-empty-body { max-width: 22rem; margin-top: 0.4rem; font-size: 0.9rem; line-height: 1.3rem; }
+  .kds-embedded .kds-toast { bottom: 5.25rem; }
+  .kds-embedded .kds-toast p { border-radius: 0.65rem; padding: 0.65rem 0.9rem; font-size: 0.85rem; }
+  .kds-embedded .kds-footer {
+    min-height: 3.25rem;
+    flex-wrap: nowrap;
+    gap: 0.5rem;
+    padding: 0.4rem 0.65rem;
+  }
+  .kds-embedded .kds-footer-copy { overflow: hidden; font-size: 0.8rem; text-overflow: ellipsis; white-space: nowrap; }
+  .kds-embedded .kds-recall-button,
+  .kds-embedded .kds-stock-button { min-height: 2.5rem; height: 2.5rem; gap: 0.35rem; padding-inline: 0.65rem; font-size: 0.8rem; }
+  .kds-embedded .kds-recall-button svg,
+  .kds-embedded .kds-stock-button svg { width: 1rem; height: 1rem; }
+}

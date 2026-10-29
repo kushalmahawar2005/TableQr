@@ -15,7 +15,7 @@ export default async function WaiterPage({ searchParams }: { searchParams: Promi
   const staff = await currentStaff();
   if (!staff) redirect("/console/login");
   if (!staff.roles.some((r) => ["waiter", "manager", "owner"].includes(r))) return <main className="p-6">Permission denied. Ask a manager.</main>;
-  if (!(await tenantFeatures(staff.tenantId)).waiterApp) return <main className="p-6"><h1 className="font-display text-title font-bold">{FEATURE_LABELS.waiterApp.label} is not in your plan.</h1><p className="mt-2 text-muted">Ask Tableeqr to upgrade your plan to use it.</p></main>;
+  if (!(await tenantFeatures(staff.tenantId, staff.outletId)).waiterApp) return <main className="p-6"><h1 className="font-display text-title font-bold">{FEATURE_LABELS.waiterApp.label} is not in your plan.</h1><p className="mt-2 text-muted">Ask Tableeqr to upgrade your plan to use it.</p></main>;
   const access = await tenantAccess(staff.tenantId);
   const canAsk = staff.roles.some((r) => r === "owner" || r === "manager");
   if (access.state === "blocked") return <PausedScreen access={access} canAsk={canAsk} staff={staff} />;

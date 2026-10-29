@@ -1,5 +1,7 @@
 "use server";
+import { BUSINESS_TYPES, type BusinessType } from "@/lib/subscription-pricing";
 import { friendlyError } from "@/server/friendly-error";
+import { platformGateway } from "@/server/payments/gateway";
 
 import { insertRoom } from "@/server/staff/rooms";
 import { and, eq, inArray, sql } from "drizzle-orm";
@@ -10,7 +12,7 @@ import * as s from "@/db/schema";
 import { uuidv7 } from "@/db/id";
 import { hashPin, isPin } from "@/server/staff/pin";
 import { getTenantDetail } from "@/server/admin/tenant-detail";
-import { confirmFee, feesData, recordFee, rejectFee, type FeesData } from "@/server/fees";
+import { confirmFee, feesData, recordFee, reconcileCashfreeFee, rejectFee, type FeesData } from "@/server/fees";
 import { getAnalyticsData } from "@/server/admin/analytics";
 import { getAuditData } from "@/server/admin/audit";
 import { getSettingsData } from "@/server/admin/settings";
@@ -101,7 +103,10 @@ export async function createTenantAction(_prev: TenantState, form: FormData): Pr
     const ownerPin = text(form, "ownerPin");
     const tableCount = Math.min(100, Math.max(0, Math.floor(Number(text(form, "tableCount") || 0))));
     const roomCount = Math.min(200, Math.max(0, Math.floor(Number(text(form, "roomCount") || 0))));
-    const trialDays = Math.min(90, Math.max(1, Math.floor(Number(text(form, "trialDays") || 14))));
+    const businessType = text(form, "businessType") as BusinessType;
+    if (!Object.hasOwn(BUSINESS_TYPES,businessType)) return {error:"Choose a business category.",success:null};
+    const agreedOutlets = Number(text(form,"agreedOutlets") || 1);
+    if (!Number.isInteger(agreedOutlets) || agreedOutlets < 1 || agreedOutlets > 1000) return {error:"Enter 1 to 1000 outlets.",success:null};
     const guestPayments = text(form, "guestPayments") || "online";
     if (!["online", "counter"].includes(guestPayments)) return { error: "Choose online checkout or restaurant-collected payments.", success: null };
     // Kitchen screen chosen at onboarding: stored only when it differs from the plan
@@ -120,12 +125,12 @@ export async function createTenantAction(_prev: TenantState, form: FormData): Pr
       const outletId = uuidv7();
       const zoneId = uuidv7();
       const userId = uuidv7();
-      const planFeatures = selectedFeatures ?? readFeatures(plan.features);
+      const planFeatures = effectiveFeatures({features:plan.features,customFeatures:selectedFeatures,kitchenOverride:null,tableLimit:null,businessType});
       const kitchenDisplay = kitchenChoice === null || kitchenChoice === planFeatures.kitchenDisplay ? null : kitchenChoice;
       // The plan's table limit applies; only tables beyond it are stored as this restaurant's own limit
       const planTables = planFeatures.maxTables;
       const tableLimit = planTables !== null && tableCount > planTables ? tableCount : null;
-      await tx.insert(s.tenants).values({ id: tenantId, name: tenantName, planCode, contactName, contactPhone, contactEmail: contactEmail || null, createdByAdminId: admin.id, kitchenDisplay, tableLimit, customFeatures: selectedFeatures, trialEndsAt: new Date(Date.now() + trialDays * 86_400_000) });
+      await tx.insert(s.tenants).values({ id: tenantId, name: tenantName, planCode, contactName, contactPhone, contactEmail: contactEmail || null, createdByAdminId: admin.id, kitchenDisplay, tableLimit, customFeatures: selectedFeatures, businessType, commercial: { version:1,outletCount:agreedOutlets,addons:{},goLiveAt:null,setupReceivedPaise:0,setupReference:"" }, trialEndsAt: null });
       await tx.insert(s.brands).values({ id: brandId, tenantId, name: brandName });
       await tx.insert(s.outlets).values({ id: outletId, tenantId, brandId, code: outletCode, name: outletName, city, address, guestOnlinePayments: guestPayments === "online" });
       await tx.insert(s.users).values({ id: userId, tenantId, phone: ownerPhone, name: ownerName, pinHash: await hashPin(ownerPin) });
@@ -301,6 +306,24 @@ export async function rejectFeeAction(id: string): Promise<TenantActionState> {
     return { error: null };
   } catch (error) {
     return { error: friendlyError(error, "Payment could not be updated.") };
+  }
+}
+
+/** Ask Cashfree for the latest result without manually declaring a payment received. */
+export async function checkFeePaymentAction(id: string): Promise<{ error: string | null; message?: string }> {
+  try {
+    await requireSuperAdmin();
+    if (!platformGateway()) return { error: "Cashfree is not configured. Configure the payment gateway before checking this payment." };
+    const status = await reconcileCashfreeFee(id);
+    if (!status) return { error: "Cashfree payment not found." };
+    revalidatePath("/admin");
+    return { error: null, message: status === "confirmed"
+      ? "Payment confirmed by Cashfree. The plan has been updated."
+      : status === "rejected"
+        ? "Payment was not completed. The owner can try again."
+        : "Payment is still awaiting confirmation. Check again shortly." };
+  } catch (error) {
+    return { error: friendlyError(error, "Could not check Cashfree. Please try again.") };
   }
 }
 
@@ -603,4 +626,20 @@ export async function checkRealtimeAction(): Promise<{ data: RealtimeCheck | nul
   } catch (error) {
     return { data: null, error: friendlyError(error, "The live-updates check could not run.") };
   }
+}
+
+export async function getCommercialAction(tenantId: string) {
+  try {
+    const { commercialFor } = await import("@/server/admin/commercial");
+    return { data: await commercialFor(tenantId), error: null };
+  } catch (error) { return { data: null, error: friendlyError(error, "Could not load subscription settings.") }; }
+}
+export async function saveCommercialAction(tenantId: string, input: import("@/server/admin/commercial").CommercialInput) {
+  try {
+    const admin = await requireSuperAdmin();
+    const { saveCommercial } = await import("@/server/admin/commercial");
+    await saveCommercial(admin, tenantId, input);
+    revalidatePath("/admin"); revalidatePath("/console", "layout");
+    return { error: null };
+  } catch (error) { return { error: friendlyError(error, "Could not save subscription settings.") }; }
 }

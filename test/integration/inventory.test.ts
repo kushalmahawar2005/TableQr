@@ -65,7 +65,8 @@ describe("inventory", () => {
     await refused(setRecipe(owner(), uuidv7(), [{ stockItemId: paneer, qty: "1" }]), "invalid_state");
     await refused(getInventory({ ...owner(), roles: ["waiter"] as never }), "forbidden");
     await env.db.update(s.tenants).set({ planCode: "starter" }).where(eq(s.tenants.id, env.demo.tenantId));
-    await refused(getInventory(owner()), "forbidden");
+    expect((await getInventory(owner())).items.length).toBeGreaterThan(0);
+    await refused(setRecipe(owner(), uuidv7(), []), "forbidden");
     await env.db.update(s.tenants).set({ planCode: "pro" }).where(eq(s.tenants.id, env.demo.tenantId));
   });
 });

@@ -49,7 +49,7 @@ export async function menuManagerData(staff: StaffSession) {
   return { categories, items, overrides, groups, modifiers, pairings, outlets, currentOutlet: staff.outlet.name, canEditPrice: ownerOnly(staff) };
 }
 
-type ItemInput = { id?: string; categoryId: string; nameEn: string; nameHi?: string | null; descriptionEn?: string | null; descriptionHi?: string | null; pricePaise: number; isVeg: boolean; isJain?: boolean; spiceLevel?: number | null; allergens?: string[] | null; searchTerms?: string | null; prepMinutes: number; station: string; bestseller?: boolean; imageUrl?: string | null };
+type ItemInput = { sizes?: { name: string; pricePaise: number }[]; id?: string; categoryId: string; nameEn: string; nameHi?: string | null; descriptionEn?: string | null; descriptionHi?: string | null; pricePaise: number; isVeg: boolean; isJain?: boolean; spiceLevel?: number | null; allergens?: string[] | null; searchTerms?: string | null; prepMinutes: number; station: string; bestseller?: boolean; imageUrl?: string | null };
 export async function saveMenuItem(staff: StaffSession, input: ItemInput) {
   guard(staff);
   const outlet = (await db.select({ brandId: s.outlets.brandId }).from(s.outlets).where(and(eq(s.outlets.tenantId, staff.tenantId), eq(s.outlets.id, staff.outletId))))[0];
@@ -59,7 +59,9 @@ export async function saveMenuItem(staff: StaffSession, input: ItemInput) {
   const nameEn = checkText(input.nameEn, 100, true)!;
   const station = checkText(input.station, 30, true)!;
   const prepMinutes = Number.isFinite(Number(input.prepMinutes)) ? Math.max(0, Math.min(1440, Math.round(Number(input.prepMinutes)))) : 15;
-  const pricePaise = Math.max(0, Math.round(Number(input.pricePaise)));
+  const sizes = !input.id ? (input.sizes ?? []) : [];
+  if (sizes.length && (sizes.length < 2 || sizes.length > 20 || new Set(sizes.map(x => x.name.trim().toLowerCase())).size !== sizes.length || sizes.some(x => !x.name.trim() || x.name.trim().length > 80 || !Number.isSafeInteger(x.pricePaise) || x.pricePaise <= 0 || !isValidNewPrice(x.pricePaise)))) throw new AppError("invalid_state", "Add at least two unique sizes with valid whole-rupee prices.");
+  const pricePaise = sizes.length ? Math.min(...sizes.map(x => x.pricePaise)) : Math.max(0, Math.round(Number(input.pricePaise)));
   if (!ownerOnly(staff) && input.id === undefined) throw new AppError("forbidden", "Only an owner can create menu items.");
   const tags = input.bestseller ? ["bestseller" as const] : [];
   const values = { tenantId: staff.tenantId, brandId: outlet.brandId, categoryId: input.categoryId, nameEn, nameHi: checkText(input.nameHi, 100), descriptionEn: checkText(input.descriptionEn, 300), descriptionHi: checkText(input.descriptionHi, 300), pricePaise, isVeg: !!input.isVeg, isJain: !!input.isJain, spiceLevel: checkSpice(input.spiceLevel), allergens: checkAllergens(input.allergens), searchTerms: cleanAliases(input.searchTerms), prepMinutes, station, tags, imageUrl: checkText(input.imageUrl, 500), isActive: true };
@@ -74,9 +76,16 @@ export async function saveMenuItem(staff: StaffSession, input: ItemInput) {
     return input.id;
   }
   if (!isValidNewPrice(pricePaise)) throw new AppError("invalid_state", "Enter a whole-rupee price.", { reason: "price" });
-  const [row] = await db.insert(s.menuItems).values(values /* tenantId */).$returningId();
-  const id = row.id;
-  await db.insert(s.auditLog).values({ tenantId: staff.tenantId, outletId: staff.outletId, actorUserId: staff.userId, actorLabel: `staff:${staff.name}`, action: "menu.item_created", entity: "menu_item", entityId: id, after: values, createdAt: new Date() });
+  const id = await db.transaction(async tx => {
+    const [row] = await tx.insert(s.menuItems).values({ ...values, tenantId: staff.tenantId }).$returningId();
+    if (sizes.length) {
+      const [group] = await tx.insert(s.modifierGroups).values({ tenantId: staff.tenantId, itemId: row.id, nameEn: "Size", minSelect: 1, maxSelect: 1 }).$returningId();
+      await tx.insert(s.modifiers).values(sizes.map((size, sortOrder) => ({ tenantId: staff.tenantId, groupId: group.id, nameEn: size.name.trim(), priceDeltaPaise: size.pricePaise - pricePaise, isAvailable: true, sortOrder })));
+    }
+    await audit(tx, staff, "menu.item_created", "menu_item", row.id, null, { ...values, sizes });
+    return row.id;
+  });
+  await menuChanged(staff, "item", id, "created");
   return id;
 }
 

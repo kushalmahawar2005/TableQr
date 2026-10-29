@@ -24,6 +24,7 @@ export function validateSubscription(value: PushSubscriptionInput): PushSubscrip
   try { endpoint = new URL(value.endpoint); } catch { throw new Error("Invalid push endpoint."); }
   const allowedHost = endpoint.hostname === "fcm.googleapis.com"
     || endpoint.hostname.endsWith(".fcm.googleapis.com")
+    || (/^jmt[0-9]+\.google\.com$/.test(endpoint.hostname) && endpoint.pathname.startsWith("/fcm/send/"))
     || endpoint.hostname === "web.push.apple.com"
     || endpoint.hostname.endsWith(".push.apple.com")
     || endpoint.hostname === "updates.push.services.mozilla.com"
@@ -53,7 +54,7 @@ export async function removeStaffPushSubscription(staff: StaffSession, rawEndpoi
 }
 
 export type StaffPushMessage = { title: string; body: string; url?: string; tag?: string };
-type PushAudience = { sessionId: string; kind: "service" | "ready" | "order" } | { riderUserId: string };
+type PushAudience = { sessionId: string; kind: "service" | "ready" | "order" } | { riderUserId: string } | { kind: "delivery" | "management" };
 
 /** Send after the business transaction commits; push failures never undo an order or request. */
 export async function sendOutletPush(scope: { tenantId: string; outletId: string }, message: StaffPushMessage, audience?: PushAudience) {
@@ -67,12 +68,12 @@ export async function sendOutletPush(scope: { tenantId: string; outletId: string
     const roles = await db.select({ id: s.users.id, duty: s.users.dutyStatus, role: s.staffRoles.role }).from(s.users).innerJoin(s.staffRoles, and(eq(s.staffRoles.tenantId, s.users.tenantId), eq(s.staffRoles.userId, s.users.id))).where(and(eq(s.users.tenantId, scope.tenantId), eq(s.users.isActive, true), or(isNull(s.staffRoles.outletId), eq(s.staffRoles.outletId, scope.outletId))));
     // A plan without the waiter app or the kitchen display sends those roles nothing: a restaurant
     // that moved down a plan must not keep ringing phones whose app no longer opens
-    const features = await tenantFeatures(scope.tenantId);
+    const features = await tenantFeatures(scope.tenantId, scope.outletId);
     const appFor = (role: string) => (role === "waiter" ? features.waiterApp : role === "kitchen" ? features.kitchenDisplay : true);
     const riderTarget = audience && "riderUserId" in audience ? audience.riderUserId : null;
     const eligible = new Set(roles.filter(r => riderTarget
       ? r.role === "rider" && r.id === riderTarget
-      : r.role === "owner" || r.role === "manager" || (r.role === "waiter" && features.waiterApp && r.duty === "on" && (!owner || r.id === owner)) || (r.role === "kitchen" && features.kitchenDisplay && (!audience || ("kind" in audience && audience.kind === "order")))).map(r => r.id));
+      : r.role === "owner" || r.role === "manager" || (r.role === "waiter" && !(audience && "kind" in audience && (audience.kind === "delivery" || audience.kind === "management")) && features.waiterApp && r.duty === "on" && (!owner || r.id === owner)) || (r.role === "kitchen" && features.kitchenDisplay && (!audience || ("kind" in audience && (audience.kind === "order" || audience.kind === "delivery"))))).map(r => r.id));
     const devices = await db.select({ userId: s.staffPushSubscriptions.userId, id: s.staffPushSubscriptions.id, subscription: s.staffPushSubscriptions.subscription })
       .from(s.staffPushSubscriptions)
       .where(and(eq(s.staffPushSubscriptions.tenantId, scope.tenantId), eq(s.staffPushSubscriptions.outletId, scope.outletId)));

@@ -10,6 +10,7 @@ import type { StaffSession } from "./auth";
 import { configuredGuestServices, guestServices, type GuestService } from "@/domain/guest-services";
 import { tenantFeatures } from "../plan";
 import { outletPaymentGatewayStatus } from "../payments/outlet-gateway";
+import type { BusinessType } from "@/lib/subscription-pricing";
 
 // Outlet profile (read-only): the signed-in outlet's details and its setup counts, scoped to the
 // tenant and outlet.
@@ -17,6 +18,7 @@ import { outletPaymentGatewayStatus } from "../payments/outlet-gateway";
 type Staff = Pick<StaffSession, "tenantId" | "outletId" | "roles">;
 
 export type OutletSettings = {
+  businessType: BusinessType | null;
   deliveryPolicy: DeliveryPolicy; deliveryAvailable: boolean;
   guestOnlinePaymentAvailable: boolean; bookingGatewayAvailable: boolean;
   paymentGateway: Awaited<ReturnType<typeof outletPaymentGatewayStatus>>;
@@ -49,12 +51,13 @@ export async function getOutletSettings(staff: Staff): Promise<OutletSettings> {
   const [[tables], [team], [plan], [brand], features] = await Promise.all([
     db.select({ n: count() }).from(s.diningTables).where(and(eq(s.diningTables.tenantId, staff.tenantId), eq(s.diningTables.outletId, staff.outletId), eq(s.diningTables.isActive, true))),
     db.select({ n: count() }).from(s.staffRoles).where(and(eq(s.staffRoles.tenantId, staff.tenantId))),
-    db.select({ name: s.plans.name }).from(s.tenants).innerJoin(s.plans, eq(s.tenants.planCode, s.plans.code)).where(eq(s.tenants.id, staff.tenantId)),
+    db.select({ name: s.plans.name, businessType: s.tenants.businessType }).from(s.tenants).innerJoin(s.plans, eq(s.tenants.planCode, s.plans.code)).where(eq(s.tenants.id, staff.tenantId)),
     db.select({ logoUrl: s.brands.logoUrl }).from(s.brands).where(and(eq(s.brands.tenantId, staff.tenantId), eq(s.brands.id, outlet.brandId))),
-    tenantFeatures(staff.tenantId),
+    tenantFeatures(staff.tenantId, staff.outletId),
   ]);
   const paymentGateway = await outletPaymentGatewayStatus(staff.tenantId, staff.outletId);
   return {
+    businessType: plan?.businessType ?? null,
     // Delivery not set up yet: start on the restaurant's own Cashfree when it is connected
     deliveryPolicy: outlet.deliveryPolicy ? readDeliveryPolicy(outlet.deliveryPolicy) : { ...readDeliveryPolicy(null), paymentMode: paymentGateway.configured && paymentGateway.available ? "gateway" : "cod" }, deliveryAvailable: features.delivery,
     guestOnlinePaymentAvailable: paymentGateway.available, bookingGatewayAvailable: paymentGateway.available, paymentGateway,

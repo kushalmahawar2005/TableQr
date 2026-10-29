@@ -100,7 +100,7 @@ export async function getRooms(staff: Staff & { outlet?: Pick<StaffSession["outl
       .from(s.roomRequests)
       .where(and(eq(s.roomRequests.tenantId, staff.tenantId), eq(s.roomRequests.outletId, staff.outletId), eq(s.roomRequests.status, "open")))
       .orderBy(asc(s.roomRequests.createdAt)),
-    tenantFeatures(staff.tenantId),
+    tenantFeatures(staff.tenantId, staff.outletId),
   ]);
   const stayOf = new Map(stays.map((x) => [x.roomId, x]));
   const since = new Map(rows.flatMap(({ room }) => (stayOf.has(room.id) ? [[room.tableId, stayOf.get(room.id)!.checkInAt] as const] : [])));
@@ -206,7 +206,7 @@ export async function saveRoom(staff: Staff, input: { id?: string | null; number
       return { id: room.id };
     }
     if (taken.length) throw bad(`Room ${number} is already on your list.`);
-    const { maxRooms } = await tenantFeatures(staff.tenantId);
+    const { maxRooms } = await tenantFeatures(staff.tenantId, staff.outletId);
     if (maxRooms !== null) {
       const [{ n }] = await tx.select({ n: sql<number>`COUNT(*)` }).from(s.rooms).where(and(eq(s.rooms.tenantId, staff.tenantId), eq(s.rooms.isActive, true)));
       if (Number(n) >= maxRooms) throw bad(`Your plan includes ${maxRooms} room${maxRooms === 1 ? "" : "s"}. To add more, ask Tableeqr to upgrade your plan.`);

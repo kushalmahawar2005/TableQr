@@ -21,7 +21,8 @@ export default async function InventoryPage() {
       </main>
     );
   }
-  if (!(await tenantFeatures(staff.tenantId)).inventory) return <FeatureLocked feature="inventory" />;
+  const features = await tenantFeatures(staff.tenantId, staff.outletId);
+  if (!features.inventory) return <FeatureLocked feature="inventory" />;
   const [initial, purchasing] = await Promise.all([getInventory(staff), getPurchasing(staff)]);
-  return <InventoryScreen initial={initial} purchasing={purchasing} />;
+  return <InventoryScreen features={features} initial={initial} purchasing={purchasing} />;
 }

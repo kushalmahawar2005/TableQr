@@ -6,7 +6,7 @@ import * as s from "@/db/schema";
 import { readDeliveryPolicy, deliveryQuote } from "@/domain/delivery";
 import { isOpenAt } from "@/domain/hours";
 import { priceLine } from "@/domain/pricing";
-import { readFeatures } from "@/lib/plan-features";
+import { tenantFeatures } from "../plan";
 import { tenantAccess } from "../access";
 import { AppError } from "../errors";
 import { outletGatewayFromConfig } from "../payments/outlet-gateway";
@@ -22,7 +22,7 @@ export async function deliveryOutlet(code: string, ordering = true, now = new Da
   if ((await tenantAccess(row.outlet.tenantId)).state === "blocked") throw new AppError("outlet_unavailable", "This restaurant is unavailable.");
   const policy = readDeliveryPolicy(row.outlet.deliveryPolicy);
   if (ordering) {
-    if (!readFeatures(row.custom ?? row.features).delivery) throw new AppError("forbidden", "Delivery is not available for this restaurant.");
+    if (!(await tenantFeatures(row.outlet.tenantId,row.outlet.id)).delivery) throw new AppError("forbidden", "Delivery is not available for this restaurant.");
     if (!policy.acceptingOrders) throw new AppError("outlet_unavailable", "Delivery is paused. Please contact the restaurant.");
     if (policy.paymentMode === "manual_qr" && !row.outlet.bookingPaymentQrUrl) throw new AppError("outlet_unavailable", "This restaurant has not added its payment QR yet. Please contact staff.");
     if (policy.paymentMode === "gateway" && !outletGatewayFromConfig(row.outlet.paymentGatewayConfig)) throw new AppError("outlet_unavailable", "Online delivery payment is not available right now. Please contact the restaurant.");

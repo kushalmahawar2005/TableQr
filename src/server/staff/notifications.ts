@@ -13,7 +13,7 @@ type Staff = Pick<StaffSession, "tenantId" | "outletId" | "outlet">;
 
 export type ConsoleNotice = {
   id: string;
-  kind: "order" | "request" | "bill_requested" | "paid" | "booking" | "waitlist";
+  kind: "order" | "request" | "bill_requested" | "paid" | "booking" | "waitlist" | "party";
   title: string;
   body: string;
   at: number;
@@ -33,7 +33,7 @@ const LIMIT = 20;
 
 /** Everything new at this outlet after `since`, newest first, at most a screenful */
 export async function getConsoleNotices(staff: Staff, since: Date): Promise<ConsoleNotice[]> {
-  const [orders, requests, paid, bookings, waitlist] = await Promise.all([
+  const [orders, requests, paid, bookings, waitlist, parties, deliveryClaims, advances] = await Promise.all([
     db
       .select({ id: s.orders.id, roundNo: s.orders.roundNo, at: s.orders.placedAt, table: s.diningTables.code })
       .from(s.orders)
@@ -69,6 +69,16 @@ export async function getConsoleNotices(staff: Staff, since: Date): Promise<Cons
       .where(and(eq(s.waitlistEntries.tenantId, staff.tenantId), eq(s.waitlistEntries.outletId, staff.outletId), gt(s.waitlistEntries.joinedAt, since)))
       .orderBy(desc(s.waitlistEntries.joinedAt))
       .limit(LIMIT),
+    db.select({ id: s.groupRequests.id, name: s.groupRequests.name, party: s.groupRequests.partySize, at: s.groupRequests.createdAt })
+      .from(s.groupRequests)
+      .where(and(eq(s.groupRequests.tenantId, staff.tenantId), eq(s.groupRequests.outletId, staff.outletId), gt(s.groupRequests.createdAt, since)))
+      .orderBy(desc(s.groupRequests.createdAt)).limit(LIMIT),
+    db.select({ id: s.deliveryCheckouts.id, at: s.deliveryCheckouts.manualPaymentClaimedAt })
+      .from(s.deliveryCheckouts).where(and(eq(s.deliveryCheckouts.tenantId, staff.tenantId), eq(s.deliveryCheckouts.outletId, staff.outletId), eq(s.deliveryCheckouts.status, "draft"), eq(s.deliveryCheckouts.paymentStatus, "pending"), gt(s.deliveryCheckouts.manualPaymentClaimedAt, since)))
+      .orderBy(desc(s.deliveryCheckouts.manualPaymentClaimedAt)).limit(LIMIT),
+    db.select({ id: s.reservations.id, at: s.reservations.manualAdvanceClaimedAt })
+      .from(s.reservations).where(and(eq(s.reservations.tenantId, staff.tenantId), eq(s.reservations.outletId, staff.outletId), eq(s.reservations.status, "requested"), gt(s.reservations.manualAdvanceClaimedAt, since)))
+      .orderBy(desc(s.reservations.manualAdvanceClaimedAt)).limit(LIMIT),
   ]);
 
   const items = orders.length
@@ -82,6 +92,12 @@ export async function getConsoleNotices(staff: Staff, since: Date): Promise<Cons
 
   const when = new Intl.DateTimeFormat("en-IN", { timeZone: staff.outlet.timezone, day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
   const notices: ConsoleNotice[] = [
+    ...deliveryClaims.map((d) => ({ id: `delivery-payment:${d.id}`, kind: "request" as const, title: "Delivery payment needs checking", body: "Verify the payment reference to accept the order", at: d.at!.getTime(), href: "/console/orders/delivery" })),
+    ...advances.map((a) => ({ id: `booking-advance:${a.id}`, kind: "booking" as const, title: "Booking advance needs checking", body: "Verify the advance payment reference", at: a.at!.getTime(), href: "/console/reservations" })),
+    ...parties.map((p) => ({
+      id: `party:${p.id}`, kind: "party" as const, title: `New party request · ${p.name}`,
+      body: `${p.party} guests · Review the request`, at: p.at.getTime(), href: "/console/reservations",
+    })),
     ...orders.map((o) => ({
       id: `order:${o.id}`,
       kind: "order" as const,

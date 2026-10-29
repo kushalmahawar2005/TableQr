@@ -15,9 +15,9 @@ export const restaurantApp = cache(async (code: string) => {
   const brand = await staffAppBrandForOutletCode(code);
   if (!brand) return null;
   // isolation-exempt: the outlet code is public and globally unique; this resolves its tenant
-  const [outlet] = await db.select({ tenantId: s.outlets.tenantId, guestPwaInstallEnabled: s.outlets.guestPwaInstallEnabled }).from(s.outlets).where(eq(s.outlets.code, brand.code));
+  const [outlet] = await db.select({ id: s.outlets.id, tenantId: s.outlets.tenantId, guestPwaInstallEnabled: s.outlets.guestPwaInstallEnabled }).from(s.outlets).where(eq(s.outlets.code, brand.code));
   if (!outlet) return null;
-  const f = await tenantFeatures(outlet.tenantId);
+  const f = await tenantFeatures(outlet.tenantId,outlet.id);
   return outlet.guestPwaInstallEnabled && f.guestPwaCustomization && (f.delivery || f.reservations) ? brand : null;
 });
 

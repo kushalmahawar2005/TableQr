@@ -1,5 +1,7 @@
 "use client";
 
+import { subscriptionQuote } from "@/lib/subscription-pricing";
+import { CommercialForm } from "./commercial-form";
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { AlertCircle, ChevronLeft, ChevronRight, CircleCheck, Clock, Download, FileText, Loader2, RotateCcw, Search } from "lucide-react";
@@ -36,7 +38,7 @@ type SortKey = "newest" | "renewal" | "amount";
 const SORTS: Record<SortKey, string> = { newest: "Newest first", renewal: "Renewal soonest", amount: "Highest amount" };
 
 const nextDate = (t: AdminTenant) => (t.status === "trial" ? t.trialEndsAt : t.renewalAt);
-const perMonth = (t: AdminTenant) => (t.monthlyPricePaise ?? 0) * t.outletCount;
+const perMonth = (t: AdminTenant) => t.subscriptionFee?.totalPaise ?? (t.monthlyPricePaise ?? 0) * t.outletCount;
 
 function kindOf(t: AdminTenant, now: number): Kind {
   if (t.status === "suspended" || t.status === "cancelled" || t.subscriptionStatus === "cancelled") return "cancelled";
@@ -77,7 +79,7 @@ export function FeeForm({ t, pending, onSave }: { t: AdminTenant; pending: boole
   const [amount, setAmount] = useState(String(Math.round((perMonth(t) * 1) / 100)));
   const [method, setMethod] = useState<FeeMethod>("upi");
   const [reference, setReference] = useState("");
-  const pickMonths = (m: number) => { setMonths(m); setAmount(String(Math.round((perMonth(t) * m) / 100))); };
+  const pickMonths = (m: number) => { setMonths(m); setAmount(String(Math.round((t.subscriptionFee ? subscriptionQuote(t.subscriptionFee.perOutletPaise,t.subscriptionFee.outletCount,m,t.subscriptionFee.addonPaise).totalPaise : perMonth(t)*m) / 100))); };
   return <div className="space-y-2 rounded-lg border p-3">
     <p className="text-sm font-semibold">Fees received</p>
     <p className="text-xs text-muted-foreground">They paid you? Save it here. The paid months start when the current period ends.</p>
@@ -249,6 +251,7 @@ export function SubscriptionsView({ data }: { data: AdminData }) {
                 </Select>
                 {(kind === "trial" || kind === "expired") && t.status === "trial" && <Button className="w-full" disabled={pending} onClick={() => run(() => extendTrialAction(t.id, 7), "Trial extended by 7 days.")}>{pending && <Loader2 className="animate-spin" />}Give 7 more days</Button>}
               </div>
+              <CommercialForm key={`commercial-${t.id}`} tenantId={t.id} />
               {t.status !== "cancelled" && <FeeForm key={t.id} t={t} pending={pending} onSave={(input) => run(() => recordFeePaymentAction(t.id, input), `Saved. Paid for ${input.months} ${input.months === 1 ? "month" : "months"}.`)} />}
             </>;
           })() : <p className="py-10 text-center text-sm text-muted-foreground">Select a subscription to see its details.</p>}

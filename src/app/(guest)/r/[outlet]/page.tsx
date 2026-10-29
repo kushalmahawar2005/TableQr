@@ -9,7 +9,9 @@ import { RestaurantHome } from "./restaurant-home";
 
 // The restaurant's own app (plans with delivery or reservations) is installable from here
 export async function generateMetadata(props: PageProps<"/r/[outlet]">): Promise<Metadata> {
-  return { title: "Restaurant", ...restaurantAppMetadata(await restaurantApp((await props.params).outlet)) };
+  const code = (await props.params).outlet;
+  const [app, home] = await Promise.all([restaurantApp(code), getRestaurantHome(code).catch(() => null)]);
+  return { title: home?.outlet.name ?? "Guest link", ...restaurantAppMetadata(app) };
 }
 
 export default async function RestaurantPage(props: { params: Promise<{ outlet: string }> }) {

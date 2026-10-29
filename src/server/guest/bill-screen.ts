@@ -18,7 +18,7 @@ export type PaymentView = "pending" | "success" | "failed" | "cancelled" | "unkn
 export async function getBillScreen(outletCode: string, shortCode: string, deviceId: string | null, now = new Date()) {
   const { t, open, ctx } = await guestContextForDevice(outletCode, shortCode, deviceId);
   const scope = { tenantId: ctx.tenantId, outletId: ctx.outletId, sessionId: ctx.sessionId };
-  const [inputs, features, paymentGateway] = await Promise.all([loadBillInputs(db, scope), tenantFeatures(ctx.tenantId), outletPaymentGateway(ctx.tenantId, ctx.outletId)]);
+  const [inputs, features, paymentGateway] = await Promise.all([loadBillInputs(db, scope), tenantFeatures(ctx.tenantId, ctx.outletId), outletPaymentGateway(ctx.tenantId, ctx.outletId)]);
   const draft = computeDraft(inputs);
   const session = open.session;
   const requested = session.status === "bill_requested";

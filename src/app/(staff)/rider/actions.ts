@@ -2,6 +2,7 @@
 import { assignTeamRider, riderReportLocation, riderCollectCash, riderDelivered, riderJobs, riderPickUp, riderProfile, riderSetOnline, saveRiderProfile } from "@/server/delivery/riders";
 import { AppError } from "@/server/errors";
 import { myVerification, submitRiderDocuments } from "@/server/delivery/rider-docs";
+import { riderFor } from "@/server/staff/rider-request";
 import { staffFor } from "@/server/staff/request";
 import { staffRealtimeToken, topics } from "@/server/realtime/token";
 import { deliveryStaffRoles } from "@/server/delivery/staff";
@@ -10,7 +11,7 @@ import { requestOrigin } from "@/server/request-host";
 import { headers } from "next/headers";
 
 async function run<T>(roles: Parameters<typeof staffFor>[0], work: (staff: Awaited<ReturnType<typeof staffFor>>) => Promise<T>) {
-  try { return { ok: true as const, data: await work(await staffFor(roles)) }; }
+  try { return { ok: true as const, data: await work(await riderFor(roles)) }; }
   catch (e) { if (!(e instanceof AppError)) console.error("[rider]", e); return { ok: false as const, error: e instanceof AppError ? e.message : "Could not complete this. Check your connection and try again." }; }
 }
 
@@ -29,11 +30,11 @@ export async function riderSaveProfileAction(form: FormData) {
   });
 }
 /** Console: give a delivery to a team rider */
-export async function assignTeamRiderAction(deliveryId: string, riderId: string) { return run(deliveryStaffRoles, (s) => assignTeamRider(s, deliveryId, riderId)); }
+export async function assignTeamRiderAction(deliveryId: string, riderId: string) { try { return { ok: true as const, data: await assignTeamRider(await staffFor(deliveryStaffRoles), deliveryId, riderId) }; } catch (e) { return { ok: false as const, error: e instanceof AppError ? e.message : "Could not assign rider." }; } }
 export async function riderLocationAction(lat: number, lng: number) { return run(["rider"], (s) => riderReportLocation(s, { lat, lng })); }
 /** Live updates for the rider's phone: their own jobs, and the kitchen (food ready to pick up) */
 export async function riderTokenAction() {
-  try { const s = await staffFor(["rider"]); return staffRealtimeToken(s, [topics.rider(s.userId), topics.kitchen]); }
+  try { const s = await riderFor(["rider"]); return staffRealtimeToken(s, [topics.rider(s.userId), topics.kitchen]); }
   catch { return null; }
 }
 export async function myVerificationAction() { return run(["rider"], (s) => myVerification(s)); }

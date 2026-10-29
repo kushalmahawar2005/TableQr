@@ -1,4 +1,5 @@
 import "server-only";
+import { staffAppLoginRoles } from "@/lib/console-nav";
 import { createHash, randomBytes } from "node:crypto";
 import { and, count, eq, gt, gte, inArray, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/db";
@@ -73,9 +74,10 @@ export async function verifyStaffPin(input: { outletCode: string; phone: string;
 }
 
 /** Signs in at an outlet; returns the cookie token (shown to nobody but the browser) */
-export async function signInStaff(input: { outletCode: string; phone: string; pin: string; asRole?: StaffRole; now?: Date }) {
+export async function signInStaff(input: { outletCode: string; phone: string; pin: string; asRole?: StaffRole; app?: "staff"; now?: Date }) {
   const now = input.now ?? new Date();
   const { user, scope, roles } = await verifyStaffPin({ ...input, now });
+  if (input.app === "staff" && !roles.some(role => (staffAppLoginRoles as readonly StaffRole[]).includes(role))) throw failed("Use the separate Rider app to sign in.", { reason: "rider_app_required" });
   if (input.asRole && !roles.includes(input.asRole)) {
     throw failed("This account isn't assigned to that role. Choose your assigned role or ask the owner.", { reason: "role_mismatch" });
   }

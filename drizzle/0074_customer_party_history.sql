@@ -1,0 +1,2 @@
+ALTER TABLE `group_requests` ADD `guest_id` char(36);--> statement-breakpoint
+ALTER TABLE `group_requests` ADD CONSTRAINT `fk_group_requests_guest` FOREIGN KEY (`tenant_id`,`guest_id`) REFERENCES `guests`(`tenant_id`,`id`) ON DELETE no action ON UPDATE no action;

@@ -4,7 +4,7 @@ import { canSee } from "@/lib/staff-permissions";
 import { currentStaff } from "@/server/staff/request";
 import { ContactTableeqr } from "../_components/contact-tableeqr";
 import { planViewFor } from "../_components/plan-data";
-import { ComparePlans, PayOrPaid, PlanPass, PlanPayments } from "../_components/plan-panel";
+import { CommercialSummary, ComparePlans, PayOrPaid, PlanPass, PlanPayments } from "../_components/plan-panel";
 
 export const metadata: Metadata = { title: "My plan", robots: { index: false, follow: false } };
 
@@ -37,6 +37,7 @@ export default async function PlanPage() {
         </div>
       </div>
       <div className="mt-6 grid gap-6">
+        <CommercialSummary plan={plan} />
         <ComparePlans plan={plan} />
         <PlanPayments plan={plan} />
       </div>

@@ -6,7 +6,6 @@ import {
   ChefHatIcon,
   CreditCardIcon,
   DashboardSquare01Icon,
-  HelpCircleIcon,
   Home01Icon,
   Invoice01Icon,
   ComputerDollarIcon,
@@ -48,7 +47,6 @@ import type { Lang } from "@/lib/i18n";
 import { signOutAction } from "../../login/actions";
 import { shrinkPhotoFile } from "@/lib/shrink-photo";
 import { myPhotoAction, saveMyPhotoAction } from "./profile-actions";
-import { startTour } from "./guide/copy";
 import { NotificationBell } from "./notification-bell";
 import { switchOutletAction } from "./outlet-actions";
 
@@ -112,6 +110,7 @@ export function StaffShell({
   outlets = [],
   plan,
   logoUrl = null,
+  brandName,
 }: {
   lang: Lang;
   sections: { slug: string; label: string }[];
@@ -133,6 +132,7 @@ export function StaffShell({
   outlets?: { id: string; name: string; current: boolean }[];
   /** The signed-in outlet's restaurant logo for the shared header. */
   logoUrl?: string | null;
+  brandName?: string;
   /** The restaurant's plan, shown under the person's name; owners and managers get an Upgrade link */
   plan?: { name: string; canManage: boolean };
 }) {
@@ -216,15 +216,10 @@ export function StaffShell({
         className={`sticky top-[max(env(safe-area-inset-top),var(--staff-app-top,0px))] z-30 flex h-16 shrink-0 items-center justify-between border-b px-4 sm:hidden print:hidden ${active === "dashboard" ? "border-line bg-paper" : "border-line bg-surface"}`}
       >
         <span className="flex min-w-0 items-center gap-2.5">
-          <span
-            className="grid size-9 shrink-0 place-items-center rounded-xl bg-forest font-display text-sm font-bold text-white shadow-xs"
-            aria-hidden
-          >
-            T
-          </span>
+          <OutletBrandMark name={brandName ?? staff.outlet} logoUrl={logoUrl} />
           <span className="min-w-0">
             <span className="block truncate font-display text-sm font-bold leading-tight text-ink">
-              Tableeqr
+              {brandName ?? staff.outlet}
             </span>
             <span className="block truncate text-[11px] font-medium leading-tight text-muted">
               {staff.outlet}
@@ -241,7 +236,7 @@ export function StaffShell({
               dashboardAccent={active === "dashboard"}
             />
           )}
-          <HelpButton lang={lang} preview={preview} />
+
           {wide === false && (
             <span data-tour="bell" className="flex">
               <NotificationBell preview={preview} placement="header" />
@@ -269,15 +264,10 @@ export function StaffShell({
         <div
           className={`flex h-18 items-center gap-3 border-b border-line px-3 ${folded ? "" : "lg:px-4"}`}
         >
-          <span
-            className="grid size-10 shrink-0 place-items-center rounded-xl bg-forest font-display text-lg font-bold text-white shadow-xs"
-            aria-hidden
-          >
-            T
-          </span>
+          <OutletBrandMark name={brandName ?? staff.outlet} logoUrl={logoUrl} />
           <span className={`hidden min-w-0 ${folded ? "" : "lg:block"}`}>
             <span className="block truncate font-display text-base font-bold text-ink">
-              Tableeqr
+              {brandName ?? staff.outlet}
             </span>
             <span className="block truncate text-xs font-medium text-muted">
               {staff.outlet}
@@ -401,7 +391,7 @@ export function StaffShell({
                     {staff.outlet}
                   </p>
                   <p className="truncate text-xs font-medium text-muted">
-                    Kitchen &amp; Café
+                    Current outlet
                   </p>
                 </div>
               </div>
@@ -443,7 +433,7 @@ export function StaffShell({
       </div>
       <nav
         aria-label={lang === "hi" ? "स्टाफ मेन्यू" : "Staff menu"}
-        className="fixed inset-x-0 bottom-0 z-30 flex overflow-x-auto border-t border-line bg-surface pb-[env(safe-area-inset-bottom)] sm:hidden print:hidden"
+        className="no-scrollbar fixed inset-x-0 bottom-0 z-30 flex overflow-x-auto border-t border-line bg-surface pb-[env(safe-area-inset-bottom)] sm:hidden print:hidden"
       >
         {sections.map((s) => {
           const current = s.slug === active;
@@ -825,7 +815,7 @@ function OutletSwitcher({
           />
         </label>
         <p className="truncate text-xs font-medium text-muted">
-          Kitchen &amp; Café
+          Current outlet
         </p>
       </div>
       {error && (
@@ -897,18 +887,3 @@ function KitchenButton({
 }
 
 /** Opens the console tour again; the tour's last stop points here */
-function HelpButton({ lang, preview }: { lang: Lang; preview: boolean }) {
-  const label = lang === "hi" ? "टूर देखें" : "Take the tour";
-  return (
-    <button
-      type="button"
-      data-tour="help"
-      onClick={preview ? undefined : startTour}
-      aria-label={label}
-      title={label}
-      className="grid size-11 place-items-center rounded-xl text-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-2 focus-visible:outline-forest cursor-pointer"
-    >
-      <HugeiconsIcon icon={HelpCircleIcon} size={20} aria-hidden />
-    </button>
-  );
-}

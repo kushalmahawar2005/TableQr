@@ -139,6 +139,7 @@ export async function removeStockItem(staff: Staff, id: string) {
 
 /** Stock bought, thrown away, or counted on the shelf */
 export async function moveStock(staff: Staff, input: { stockItemId: string; kind: "purchase" | "wastage" | "count"; qty: string; cost?: string; note?: string }) {
+  if (input.kind === "wastage") await requireFeature(staff.tenantId, "purchasing", staff.outletId);
   await guard(staff);
   if (!["purchase", "wastage", "count"].includes(input.kind)) throw bad("Choose what happened.");
   const qty = toMilli(input.qty);
@@ -166,6 +167,7 @@ export async function moveStock(staff: Staff, input: { stockItemId: string; kind
 
 /** What one plate of a dish uses; replaces the dish's whole recipe */
 export async function setRecipe(staff: Staff, itemId: string, lines: { stockItemId: string; qty: string }[]) {
+  await requireFeature(staff.tenantId, "recipeCosting", staff.outletId);
   await guard(staff);
   const clean = new Map<string, number>();
   for (const l of lines ?? []) {

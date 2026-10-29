@@ -16,7 +16,7 @@ export async function GET(_req: Request, ctx: RouteContext<"/r/[outlet]/app.webm
     short_name: app.name.slice(0, 12),
     description: `Order and book a table at ${app.name}.`,
     start_url: start,
-    scope: `${start}/`,
+    scope: start,
     display: "standalone",
     orientation: "portrait",
     background_color: "#f6f4ef",

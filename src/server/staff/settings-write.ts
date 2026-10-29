@@ -40,7 +40,7 @@ export async function updateOutletSettings(staff: Staff, input: SettingsPatch, n
   if (input.guestOnlinePayments !== undefined && typeof input.guestOnlinePayments !== "boolean") throw bad("Choose a valid online payment preference.");
   if (input.guestPwaInstallEnabled !== undefined && typeof input.guestPwaInstallEnabled !== "boolean") throw bad("Choose whether guests can install the restaurant app.");
   if (input.guestPwaInstallEnabled === true) {
-    const features = await tenantFeatures(staff.tenantId);
+    const features = await tenantFeatures(staff.tenantId, staff.outletId);
     if (!features.guestPwaCustomization || (!features.delivery && !features.reservations)) throw bad("Branded guest app install is not included in this restaurant’s plan. Ask Tableeqr to enable it.");
   }
   if (input.bookingPaymentMode !== undefined && !["gateway", "manual_qr"].includes(input.bookingPaymentMode)) throw bad("Choose a valid booking payment method.");

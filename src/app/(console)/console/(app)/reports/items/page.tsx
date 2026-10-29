@@ -13,7 +13,7 @@ export default async function ItemsReportPage(props: PageProps<"/console/reports
   const staff = await currentStaff();
   if (!staff) redirect("/console/login");
   if (!canSee(staff, "reports")) notFound();
-  if (!(await tenantFeatures(staff.tenantId)).fullReports) return <FeatureLocked feature="fullReports" extra={[{ href: "/console/reports/day-close", label: "Open Day close" }, { href: "/console/reports/gst", label: "Open GST report" }]} />;
+  if (!(await tenantFeatures(staff.tenantId, staff.outletId)).fullReports) return <FeatureLocked feature="fullReports" extra={[{ href: "/console/reports/day-close", label: "Open Day close" }, { href: "/console/reports/gst", label: "Open GST report" }]} />;
   const { from, to } = await props.searchParams;
   const report = await getSalesDetail(staff, { from: typeof from === "string" ? from : undefined, to: typeof to === "string" ? to : undefined });
   return <ItemsScreen report={report} outletName={staff.outlet.name} />;

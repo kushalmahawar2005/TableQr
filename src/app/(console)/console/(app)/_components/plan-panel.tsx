@@ -1,4 +1,5 @@
 "use client";
+import { ADDONS, BUSINESS_TYPES, setupFee, EXTRA_OUTLET_PAISE, subscriptionQuote, type CommercialSettings, type BusinessType } from "@/lib/subscription-pricing";
 
 import { useCallback, useState } from "react";
 import { ArrowLeft01Icon, Cancel01Icon, CheckmarkCircle02Icon, Tick02Icon } from "@hugeicons/core-free-icons";
@@ -12,10 +13,12 @@ import { refreshFeePaymentAction, startFeePaymentAction } from "./plan-request-a
 
 export type PlanOption = { code: string; name: string; monthlyPricePaise: number | null; features: Features };
 export type PlanView = {
+  commercial?: CommercialSettings | null;
+  businessType?: BusinessType | null;
   planName: string;
   planCode: string;
   outlet: string;
-  fee: { perOutletPaise: number; outletCount: number; totalPaise: number };
+  fee: { perOutletPaise: number; outletCount: number; totalPaise: number; pricingVersion?: number; addonPaise?: number; addonCounts?: Partial<Record<keyof typeof ADDONS, number>> };
   access: { state: "ok" | "grace" | "blocked"; reason: string; endsAt: number | null };
   features: Features;
   plans: PlanOption[];
@@ -26,7 +29,7 @@ export type PlanView = {
 };
 
 const focus = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand";
-const money = (paise: number) => `₹${Math.round(paise / 100).toLocaleString("en-IN")}`;
+const money = (paise: number) => `₹${(paise / 100).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 const day = (v: number | string | null) => (v === null ? "—" : new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" }).format(new Date(v)));
 const MONTHS = [1, 3, 6, 12] as const;
 const PERIOD: Record<number, string> = { 1: "1 month", 3: "3 months", 6: "6 months", 12: "1 year" };
@@ -141,8 +144,8 @@ export function PayCard({ plan, target, bare = false }: { plan: PlanView; target
   const [error, setError] = useState<string | null>(null);
   const [startedPaymentId, setStartedPaymentId] = useState<string | undefined>();
 
-  const perMonth = target?.monthlyPricePaise != null ? target.monthlyPricePaise * plan.fee.outletCount : plan.fee.totalPaise;
-  const amount = perMonth * months;
+  const perMonth = target?.monthlyPricePaise != null ? planMonthly(plan, target) : plan.fee.totalPaise;
+  const amount = periodPrice(plan, target, months);
 
   const pay = async () => {
     setState("busy");
@@ -198,8 +201,8 @@ export function PayCard({ plan, target, bare = false }: { plan: PlanView; target
                 onClick={() => setMonths(m)}
                 className={`flex min-h-[4.25rem] flex-col items-center justify-center rounded-xl border text-center transition-colors ${focus} ${months === m ? "border-brand bg-brand-soft text-brand-strong shadow-[inset_0_0_0_1px_var(--brand-main)]" : "border-line bg-surface text-ink hover:border-ink/40"}`}
               >
-                <span className="text-body font-semibold">{m === 12 ? "1 yr" : `${m} mo`}</span>
-                <span className={`mt-0.5 text-[11px] tabular ${months === m ? "text-brand-strong" : "text-muted"}`}>{money(perMonth * m)}</span>
+                <span className="text-body font-semibold">{m === 12 ? "1 yr" : `${m} mo`}{plan.fee.pricingVersion ? ` · ${({1:0,3:8,6:12,12:18})[m]}% off` : ""}</span>
+                <span className={`mt-0.5 text-[11px] tabular ${months === m ? "text-brand-strong" : "text-muted"}`}>{money(periodPrice(plan, target, m))}</span>
               </button>
             ))}
           </div>
@@ -236,8 +239,10 @@ export function PayCard({ plan, target, bare = false }: { plan: PlanView; target
 
 /** Paid and not due yet: a calm panel, with paying in advance one tap away */
 export function PayOrPaid({ plan }: { plan: PlanView }) {
+
   const { due, days } = planDue(plan);
   const [open, setOpen] = useState(false);
+  if (plan.commercial && !plan.commercial.goLiveAt) return <section className="rounded-2xl border border-line bg-surface p-5"><h2 className="font-semibold">Remote setup in progress</h2><p className="mt-2 text-sm text-muted">Your first month, outlets and selected add-ons are free from go-live. The Tableeqr team will activate your free month when setup is complete.</p><p className="mt-2 font-semibold">Setup: {money(setupFee(plan.fee.outletCount))}</p></section>;
   if (due || open || plan.waiting) return <PayCard plan={plan} />;
   return (
     <section aria-label="Payment" className="rounded-[22px] border border-line bg-surface p-6">
@@ -257,8 +262,8 @@ export function PayOrPaid({ plan }: { plan: PlanView }) {
 
 const TAGLINE: Record<string, string> = {
   starter: "QR ordering and billing for a small cafe",
-  growth: "For busy restaurants with waiters and bookings",
-  pro: "Kitchen screen, pricing and full reports",
+  growth: "Waiter app, purchasing and detailed reports",
+  pro: "Reservations, party bookings, riders and recipe costing",
   chain: "For many outlets under one brand",
 };
 
@@ -285,7 +290,7 @@ export function ComparePlans({ plan }: { plan: PlanView }) {
       <div className="mt-4 grid items-stretch gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {orderedPlans.map((p) => {
           const current = p.code === plan.planCode;
-          const monthlyTotal = p.monthlyPricePaise === null ? null : p.monthlyPricePaise * plan.fee.outletCount;
+          const monthlyTotal = p.monthlyPricePaise === null ? null : planMonthly(plan, p);
           const cheaper = monthlyTotal !== null && monthlyTotal < currentPrice;
           return (
             <article key={p.code} className={`relative flex h-full flex-col rounded-2xl border bg-surface p-5 ${current ? "border-brand shadow-[0_0_0_1px_var(--brand-main)]" : "border-line"}`}>
@@ -350,7 +355,7 @@ function SwitchPlan({ plan, target, onClose }: { plan: PlanView; target: PlanOpt
   const gained = FEATURE_KEYS.filter((k) => target.features[k] && !plan.features[k]);
   const lost = FEATURE_KEYS.filter((k) => plan.features[k] && !target.features[k]);
   const currentMonthly = plan.fee.totalPaise;
-  const targetMonthly = (target.monthlyPricePaise ?? 0) * plan.fee.outletCount;
+  const targetMonthly = planMonthly(plan, target);
   const diff = target.monthlyPricePaise === null ? null : targetMonthly - currentMonthly;
   const limit = (included: boolean, value: number | null) => !included ? "Not included" : value === null ? "No limit" : `${value}`;
   const limits = [
@@ -524,4 +529,20 @@ export function PlanPayments({ plan }: { plan: PlanView }) {
 /** Only the payment card, for the paused screen */
 export function PlanPanel({ plan }: { plan: PlanView; compact?: boolean }) {
   return <PayCard plan={plan} />;
+}
+
+function targetAddons(plan: PlanView, target?: PlanOption | null) {
+ if (!target) return plan.fee.addonPaise ?? 0;
+ return (Object.keys(ADDONS) as (keyof typeof ADDONS)[]).reduce((n,k) => n + ((target.code === "pro" || (k === "waiterApp" && target.code === "growth")) ? 0 : (plan.fee.addonCounts?.[k] ?? 0)*ADDONS[k].paise),0);
+}
+function planMonthly(plan: PlanView, target: PlanOption) {
+ return plan.fee.pricingVersion ? (target.monthlyPricePaise ?? 0) + (plan.fee.outletCount-1)*EXTRA_OUTLET_PAISE + targetAddons(plan,target) : (target.monthlyPricePaise ?? 0)*plan.fee.outletCount;
+}
+function periodPrice(plan: PlanView, target: PlanOption | null | undefined, months: number) {
+ return plan.fee.pricingVersion ? subscriptionQuote(target?.monthlyPricePaise ?? plan.fee.perOutletPaise,plan.fee.outletCount,months,targetAddons(plan,target)).totalPaise : (target ? planMonthly(plan,target) : plan.fee.totalPaise)*months;
+}
+
+export function CommercialSummary({plan}:{plan:PlanView}) {
+ if (!plan.commercial) return null;
+ return <section className="rounded-2xl border border-line bg-surface p-5"><h2 className="font-display text-section font-bold">Subscription details</h2><dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2"><div><dt>Business</dt><dd className="font-semibold">{plan.businessType ? BUSINESS_TYPES[plan.businessType] : "Custom"}</dd></div><div><dt>Plan / month</dt><dd>{money(plan.fee.perOutletPaise)}</dd></div><div><dt>Extra outlets / month</dt><dd>{plan.fee.outletCount-1} × ₹400</dd></div><div><dt>Paid feature add-ons / month</dt><dd>{money(plan.fee.addonPaise??0)}</dd></div><div><dt>Setup fee (one-time)</dt><dd>{money(setupFee(plan.fee.outletCount))} · {money(plan.commercial.setupReceivedPaise)} received</dd></div><div><dt>Go-live</dt><dd>{plan.commercial.goLiveAt ? new Date(plan.commercial.goLiveAt).toLocaleDateString("en-IN") : "Setup in progress"}</dd></div></dl><p className="mt-3 text-xs text-muted">First month free from go-live, including all selected add-ons and extra outlets. Remote setup; hardware not provided. No extra GST added. Advance discounts: 3 months 8%, 6 months 12%, 12 months 18% on plan + outlets; feature add-ons remain at their monthly rate.</p></section>;
 }

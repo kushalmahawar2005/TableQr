@@ -2,7 +2,8 @@ import { cookies } from "next/headers";
 import type { Metadata, Viewport } from "next";
 import { redirect } from "next/navigation";
 import { visibleSections } from "@/lib/console-nav";
-import { LANG_COOKIE, parseLang } from "@/lib/i18n";
+import { parseLang } from "@/lib/i18n";
+import { STAFF_LANG_COOKIE } from "@/lib/staff-language";
 import { SECTION_FEATURE } from "@/lib/plan-features";
 import { canSee } from "@/lib/staff-permissions";
 import { tenantFeatures, tenantPlanName } from "@/server/plan";
@@ -37,12 +38,12 @@ export default async function ConsoleLayout({ children }: LayoutProps<"/console"
   const staff = await currentStaff();
   if (!staff) redirect("/console/login");
   const jar = await cookies();
-  const lang = parseLang(jar.get(LANG_COOKIE)?.value);
+  const lang = parseLang(jar.get(STAFF_LANG_COOKIE)?.value);
   const theme = jar.get("tq_theme")?.value === "dark" ? "dark" : "light";
   const sidebar = jar.get("tq_sidebar")?.value === "folded" ? "folded" : "open";
   // The kitchen board is a button in the top bar, not a sidebar row
   // Sections outside the plan are left out of the menu; My plan shows what more there is
-  const [features, outlets, access, planName, guide, logoUrl] = await Promise.all([tenantFeatures(staff.tenantId), outletsFor(staff), tenantAccess(staff.tenantId), tenantPlanName(staff.tenantId), getGuide(staff), outletLogoFor(staff)]);
+  const [features, outlets, access, planName, guide, logoUrl] = await Promise.all([tenantFeatures(staff.tenantId, staff.outletId), outletsFor(staff), tenantAccess(staff.tenantId), tenantPlanName(staff.tenantId), getGuide(staff), outletLogoFor(staff)]);
   const canAsk = staff.roles.some((r) => r === "owner" || r === "manager");
   if (access.state === "blocked") return <PausedScreen access={access} canAsk={canAsk} staff={staff} />;
   const sections = visibleSections
@@ -53,9 +54,9 @@ export default async function ConsoleLayout({ children }: LayoutProps<"/console"
     })
     .filter((s) => s.inPlan)
     .map(({ slug, label }) => ({ slug, label }));
-  const kitchen = canSee(staff, "kitchen");
+  const kitchen = features.kitchenDisplay && canSee(staff, "kitchen");
   return (
-    <StaffShell theme={theme} sidebar={sidebar} lang={lang} sections={sections} kitchen={kitchen} plan={planName ? { name: planName, canManage: canAsk } : undefined} logoUrl={logoUrl} outlets={outlets.map((o) => ({ id: o.id, name: o.name, current: o.id === staff.outletId }))} staff={{ name: staff.name, roles: staff.roles, outlet: staff.outlet.name, shiftEnds: staff.expiresAt }}>
+    <StaffShell theme={theme} sidebar={sidebar} lang={lang} sections={sections} kitchen={kitchen} plan={planName ? { name: planName, canManage: canAsk } : undefined} logoUrl={logoUrl} brandName={(await consoleAppBrand())?.name ?? staff.outlet.name} outlets={outlets.map((o) => ({ id: o.id, name: o.name, current: o.id === staff.outletId }))} staff={{ name: staff.name, roles: staff.roles, outlet: staff.outlet.name, shiftEnds: staff.expiresAt }}>
       <StaffPrintProvider outletId={staff.outletId}>
         <AccessBanner access={access} canAsk={canAsk} outlet={staff.outlet.name} />
         {children}

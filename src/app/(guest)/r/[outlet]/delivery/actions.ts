@@ -1,4 +1,5 @@
 "use server";
+import { customerCookie, identifyCustomerCheckout } from "@/server/guest/customer-account";
 import { cookies } from "next/headers";
 import { headers } from "next/headers";
 import { uuidv7 } from "@/db/id";
@@ -35,6 +36,7 @@ export async function startDeliveryAction(outlet: string, lines: DeliveryCartLin
     const identityData = await identity(outlet);
     const checkout = await createDeliveryCheckout(outlet, identityData.deviceId, { lines, address });
     identityData.jar.set(cookieName(outlet), checkout.token, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 7 * 86400 });
+    if (await identifyCustomerCheckout(outlet,identityData.jar.get(customerCookie(outlet))?.value,checkout.token,identityData.deviceId)) return {quote:checkout.quote,otp:null};
     const otp = await sendDeliveryOtp(outlet, checkout.token, identityData.deviceId, phone);
     return { quote: checkout.quote, otp };
   });

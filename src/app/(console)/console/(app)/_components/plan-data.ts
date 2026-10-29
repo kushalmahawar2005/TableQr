@@ -7,6 +7,8 @@ import type { PlanView } from "./plan-panel";
 export async function planViewFor(staff: Pick<StaffSession, "tenantId" | "outlet">): Promise<PlanView> {
   const p = await ownerPlan(staff);
   return {
+    commercial: p.commercial,
+    businessType: p.businessType,
     planName: p.planName,
     planCode: p.planCode,
     plans: p.plans,

@@ -1,4 +1,5 @@
 "use server";
+import { customerCookie, customerFor, identifyCustomerBooking } from "@/server/guest/customer-account";
 
 import { saveBookingPush } from "@/server/guest/push";
 import { staffPushConfig, type PushSubscriptionInput } from "@/server/staff/web-push";
@@ -25,7 +26,7 @@ export async function availabilityAction(outletCode: string, input: { date: stri
 }
 
 export async function holdAction(outletCode: string, input: { date: string; startAt: number; partySize: number; requestId: string; holdToken: string; seatingPreference?: string | null; tableClass?: string | null; zoneId?: string | null }) {
-  try { return { ok: true as const, data: await createBookingHold(outletCode, { ...input, preference: { seatingPreference: input.seatingPreference, tableClass: input.tableClass, zoneId: input.zoneId } }) }; } catch (e) { return fail(e); }
+  try { const data = await createBookingHold(outletCode, { ...input, preference: { seatingPreference: input.seatingPreference, tableClass: input.tableClass, zoneId: input.zoneId } }); await identifyCustomerBooking(outletCode,(await cookies()).get(customerCookie(outletCode))?.value,data.manageToken); return { ok: true as const, data }; } catch (e) { return fail(e); }
 }
 
 export async function bookingSummaryAction(outletCode: string, token: string) {
@@ -73,7 +74,7 @@ export async function arriveBookingAction(outletCode: string, token: string) {
 }
 
 export async function groupRequestAction(outletCode: string, input: { requestId: string; name: string; phone: string; partySize: number; desiredDate: string; desiredLocalDateTime: string; notes?: string }) {
-  try { return { ok: true as const, data: await createGroupRequest(outletCode, input) }; } catch (e) { return fail(e); }
+  try { const who=await customerFor(outletCode,(await cookies()).get(customerCookie(outletCode))?.value); return { ok: true as const, data: await createGroupRequest(outletCode, {...input,guestId:who?.id,...(who?{name:who.name??input.name,phone:who.phone}:{})}) }; } catch (e) { return fail(e); }
 }
 
 export async function startBookingCreditAction(outletCode: string, token: string, requestId: string) {

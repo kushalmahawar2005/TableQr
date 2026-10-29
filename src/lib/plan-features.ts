@@ -18,10 +18,16 @@ export const FEATURE_KEYS = [
   "guestPwaCustomization",
   "pos",
   "attendance",
+  "riderTracking",
+  "purchasing",
+  "recipeCosting",
 ] as const;
 export type FeatureKey = (typeof FEATURE_KEYS)[number];
 
 export const FEATURE_LABELS: Record<FeatureKey, { label: string; hint: string }> = {
+  purchasing: { label: "Purchasing & wastage", hint: "Supplier bills, purchases and stock usage" },
+  recipeCosting: { label: "Recipes & costing", hint: "Dish recipes, prep items and detailed stock cost controls" },
+  riderTracking: { label: "Rider assignment & tracking", hint: "Assign delivery riders and track deliveries" },
   dineIn: { label: "Restaurant tables", hint: "Floor, table QR codes and dine-in. Off for a hotel without a restaurant" },
   rooms: { label: "Hotel rooms", hint: "Room QR for room service and housekeeping, check-in and check-out, and the Reception role" },
   waiterApp: { label: "Waiter app & shifts", hint: "Waiters get their own phone app, table alerts and shifts" },
@@ -63,7 +69,10 @@ export function readFeatures(raw: unknown): Features {
   // Older plan rows said "full" bookings for reservations plus waitlist
   const reservationsFallback = r.bookings === undefined ? true : r.bookings === "full";
   // Inventory, rooms and delivery came later: missing flags must not grant them.
-  for (const k of FEATURE_KEYS) out[k] = on(r[k], k === "reservations" ? reservationsFallback : k !== "inventory" && k !== "rooms" && k !== "delivery" && k !== "guestPwaCustomization");
+  for (const k of FEATURE_KEYS) out[k] = on(r[k], k === "reservations" ? reservationsFallback : k !== "riderTracking" && k !== "inventory" && k !== "rooms" && k !== "delivery" && k !== "guestPwaCustomization");
+  if (r.riderTracking == null) out.riderTracking = out.delivery;
+  if (r.purchasing == null) out.purchasing = out.inventory;
+  if (r.recipeCosting == null) out.recipeCosting = out.inventory;
   // Preserve prior eligibility for plans saved before this explicit feature existed.
   if (r.guestPwaCustomization === undefined || r.guestPwaCustomization === null) out.guestPwaCustomization = out.delivery || out.reservations;
   return out;
@@ -88,9 +97,9 @@ export const notInPlanMessage = (key: FeatureKey) =>
 
 const NONE: Record<FeatureKey, boolean> = Object.fromEntries(FEATURE_KEYS.map((k) => [k, false])) as Record<FeatureKey, boolean>;
 /** A restaurant: tables, no rooms */
-const LITE = { ...NONE, dineIn: true, pos: true, attendance: true };
-const PLUS = { ...LITE, waiterApp: true, discounts: true, whatsappBills: true, groupSplit: true, reservations: true, guestPwaCustomization: true };
-const PRO = { ...PLUS, kitchenDisplay: true, pricingRules: true, fullReports: true, inventory: true };
+const LITE = { ...NONE, dineIn: true, pos: true, kitchenDisplay: true, inventory: true, delivery: true, multiOutlet: true, discounts: true, guestPwaCustomization: true };
+const PLUS = { ...LITE, purchasing: true, waiterApp: true, fullReports: true, whatsappBills: true, attendance: true };
+const PRO = { ...PLUS, recipeCosting: true, reservations: true, riderTracking: true, pricingRules: true, groupSplit: true };
 
 /** A hotel without a restaurant floor: rooms, room service through the kitchen, and the bills */
 export const HOTEL: Features = { ...NONE, rooms: true, pos: true, attendance: true, discounts: true, whatsappBills: true, kitchenDisplay: true, fullReports: true, maxTables: null, maxStaff: 10, maxRooms: 30, poweredBy: false };
@@ -101,12 +110,12 @@ export const HOTEL_PLUS: Features = { ...PRO, rooms: true, maxTables: 20, maxSta
  * The plans a fresh database starts with. Names, prices and features are then the platform
  * admin's to change in Plans & Pricing; codes never change.
  */
-export const DEFAULT_PLANS: { code: string; name: string; monthlyPricePaise: number | null; sortOrder: number; features: Features }[] = [
-  { code: "starter", name: "Lite", monthlyPricePaise: 99900, sortOrder: 0, features: { ...LITE, maxTables: 6, maxStaff: 3, maxRooms: null, poweredBy: true } },
-  { code: "growth", name: "Plus", monthlyPricePaise: 249900, sortOrder: 1, features: { ...PLUS, maxTables: 12, maxStaff: 6, maxRooms: null, poweredBy: true } },
-  { code: "pro", name: "Pro", monthlyPricePaise: 499900, sortOrder: 2, features: { ...PRO, maxTables: 20, maxStaff: 20, maxRooms: null, poweredBy: false } },
-  { code: "chain", name: "Chain", monthlyPricePaise: null, sortOrder: 3, features: { ...PRO, multiOutlet: true, maxTables: null, maxStaff: null, maxRooms: null, poweredBy: false } },
-  { code: "hotel", name: "Hotel", monthlyPricePaise: 299900, sortOrder: 4, features: HOTEL },
-  { code: "hotel_plus", name: "Hotel + Restaurant", monthlyPricePaise: 699900, sortOrder: 5, features: HOTEL_PLUS },
+export const DEFAULT_PLANS: { code: string; name: string; monthlyPricePaise: number | null; sortOrder: number; features: Features; isPublic?: boolean }[] = [
+  { code: "starter", name: "Base", monthlyPricePaise: 69900, sortOrder: 0, features: { ...LITE, maxTables: null, maxStaff: null, maxRooms: null, poweredBy: true } },
+  { code: "growth", name: "Growth", monthlyPricePaise: 129900, sortOrder: 1, features: { ...PLUS, maxTables: null, maxStaff: null, maxRooms: null, poweredBy: true } },
+  { code: "pro", name: "Advanced", monthlyPricePaise: 220000, sortOrder: 2, features: { ...PRO, maxTables: null, maxStaff: null, maxRooms: null, poweredBy: false } },
+  { code: "chain", isPublic: false, name: "Chain", monthlyPricePaise: null, sortOrder: 3, features: { ...PRO, multiOutlet: true, maxTables: null, maxStaff: null, maxRooms: null, poweredBy: false } },
+  { code: "hotel", isPublic: false, name: "Hotel", monthlyPricePaise: 299900, sortOrder: 4, features: HOTEL },
+  { code: "hotel_plus", isPublic: false, name: "Hotel + Restaurant", monthlyPricePaise: 699900, sortOrder: 5, features: HOTEL_PLUS },
   { code: "custom", name: "Custom", monthlyPricePaise: null, sortOrder: 99, features: { ...LITE, maxTables: 5, maxStaff: 2, maxRooms: null, poweredBy: true } },
 ];

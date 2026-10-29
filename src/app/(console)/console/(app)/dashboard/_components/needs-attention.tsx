@@ -1,3 +1,4 @@
+import type { Features } from "@/lib/plan-features";
 import { ArrowRight, CheckCircle2, Clock, Lock, Receipt, UtensilsCrossed, Wallet } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
@@ -7,13 +8,13 @@ import { focusRing, money, timeIn } from "./dashboard-shared";
 type Alert = { key: string; tone: "bad" | "warn" | "info"; icon: typeof Clock; text: ReactNode; href?: string; linkLabel?: string };
 
 /** The alerts in display order; exported for the tests */
-export function alertsOf(data: DashboardData): Alert[] {
+export function alertsOf(data: DashboardData, features?: Features): Alert[] {
   const a = data.alerts;
   const out: Alert[] = [];
-  for (const b of a.slowBills) {
+  for (const b of (features && !features.dineIn ? [] : a.slowBills)) {
     out.push({ key: `bill-${b.sessionId}`, tone: "bad", icon: Receipt, text: <><strong>{b.tableCode}</strong> · bill requested {b.waitedMinutes} min ago</>, href: "/console/floor", linkLabel: "Floor" });
   }
-  for (const r of a.late) {
+  for (const r of (features && !features.reservations ? [] : a.late)) {
     out.push({
       key: `late-${r.id}`,
       tone: r.noShowEligible ? "bad" : "warn",
@@ -35,7 +36,7 @@ export function alertsOf(data: DashboardData): Alert[] {
   if (a.lowStock.length > 0) {
     out.push({ key: "low-stock", tone: "warn", icon: UtensilsCrossed, text: <><strong>{a.lowStock.length}</strong> running low: {a.lowStock.slice(0, 3).join(", ")}{a.lowStock.length > 3 ? "…" : ""}</>, href: "/console/inventory", linkLabel: "Inventory" });
   }
-  if (a.blockedTables > 0) out.push({ key: "blocked", tone: "info", icon: Lock, text: <><strong>{a.blockedTables}</strong> {a.blockedTables === 1 ? "table" : "tables"} blocked</>, href: "/console/floor", linkLabel: "Floor" });
+  if ((!features || features.dineIn) && a.blockedTables > 0) out.push({ key: "blocked", tone: "info", icon: Lock, text: <><strong>{a.blockedTables}</strong> {a.blockedTables === 1 ? "table" : "tables"} blocked</>, href: "/console/floor", linkLabel: "Floor" });
   return out;
 }
 
@@ -49,8 +50,8 @@ const TONE_CLASSES = {
  * Compact priority strip (spec §18): with alerts it lists them; when calm it is a single line,
  * never a whole card spent on "everything is fine".
  */
-export function NeedsAttention({ data }: { data: DashboardData }) {
-  const alerts = alertsOf(data);
+export function NeedsAttention({ data, features }: { data: DashboardData; features?: Features }) {
+  const alerts = alertsOf(data, features);
   if (alerts.length === 0) {
     return (
       <p className="flex items-center gap-2 rounded-card border border-line bg-surface px-4 py-2.5 text-[13px] font-medium text-muted" role="status">

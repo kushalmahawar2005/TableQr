@@ -1,3 +1,4 @@
+import type { Features } from "@/lib/plan-features";
 import { Calendar, CreditCard, FileText, Receipt, Truck, Wallet } from "lucide-react";
 import Link from "next/link";
 import type { DashboardData, RevenueTrend } from "@/server/staff/dashboard";
@@ -7,7 +8,7 @@ import { Delta, dayLabel, focusRing, money } from "./dashboard-shared";
  * Five headline KPIs, each linked to its source screen. The sales sparkline uses the same real
  * seven-day data as the main sales panel.
  */
-export function DashboardKpis({ data, trend }: { data: DashboardData; trend: RevenueTrend }) {
+export function DashboardKpis({ data, trend, features }: { data: DashboardData; trend: RevenueTrend; features?: Features }) {
   const k = data.kpis;
   const tablePct = k.openTables.total > 0 ? Math.round((k.openTables.open / k.openTables.total) * 100) : 0;
   const preparingCount = (data.operations.kitchenOrders || []).filter((o) => o.status === "preparing").length;
@@ -65,7 +66,7 @@ export function DashboardKpis({ data, trend }: { data: DashboardData; trend: Rev
           <div className={`${footer} justify-start`}><span className="text-[11px] font-medium text-muted">Across open bills</span></div>
         </Link>
 
-        <Link href="/console/orders?view=delivery" className={`${card} xl:col-span-1`}>
+        {(!features || features.delivery) && <Link href="/console/orders?view=delivery" className={`${card} xl:col-span-1`}>
           <div className="flex items-center justify-between gap-2">
             <p className="text-[12px] font-semibold leading-4 text-muted sm:text-[13px]">Delivery Orders</p>
             <span className={`${iconBox} bg-sage text-forest`} aria-hidden="true"><Truck className="size-[18px]" /></span>
@@ -75,9 +76,9 @@ export function DashboardKpis({ data, trend }: { data: DashboardData; trend: Rev
             <p className="mt-1 min-h-7 text-xs font-medium leading-4 text-muted sm:mt-2 sm:min-h-8">{k.delivery.onTheWay} on the way · {money(k.delivery.cashToCollectPaise)} cash</p>
           </div>
           <div className={`${footer} justify-start`}><span className="text-[11px] font-medium text-muted">{k.delivery.deliveredToday} delivered today</span></div>
-        </Link>
+        </Link>}
 
-        <Link href="/console/floor" className={`${card} xl:col-span-1`}>
+        {(!features || features.dineIn) && <Link href="/console/floor" className={`${card} xl:col-span-1`}>
           <div className="flex items-center justify-between gap-2">
             <p className="text-[12px] font-semibold leading-4 text-muted sm:text-[13px]">Tables in Use</p>
             <span className={`${iconBox} bg-terracotta/10 text-terracotta`} aria-hidden="true"><Receipt className="size-[18px]" /></span>
@@ -94,7 +95,7 @@ export function DashboardKpis({ data, trend }: { data: DashboardData; trend: Rev
             </div>
           </div>
           <div className={`${footer} justify-start`}><span className="text-[11px] font-medium text-muted">Current floor occupancy</span></div>
-        </Link>
+        </Link>}
 
         <Link href="/console/billing" className={`${card} xl:col-span-1`}>
           <div className="flex items-center justify-between gap-2">
@@ -114,9 +115,10 @@ export function DashboardKpis({ data, trend }: { data: DashboardData; trend: Rev
 }
 
 /** Lower-priority operational counts sit at the bottom of the dashboard, under the main panels. */
-export function DashboardSecondaryStats({ data }: { data: DashboardData }) {
+export function DashboardSecondaryStats({ data, features }: { data: DashboardData; features?: Features }) {
   const k = data.kpis;
   const wl = data.operations.waitlist;
+  if (features && !features.reservations) return null;
   const stripCell = `block bg-surface p-4 transition-colors hover:bg-paper ${focusRing}`;
 
   return (

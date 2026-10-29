@@ -1,17 +1,18 @@
 "use server";
 import { friendlyError } from "@/server/friendly-error";
 
+import { currentRider } from "@/server/staff/rider-request";
 import { currentStaff } from "@/server/staff/request";
 import { removeStaffPushSubscription, saveStaffPushSubscription, staffPushConfig, type PushSubscriptionInput } from "@/server/staff/web-push";
 
-export async function pushSetupAction() {
-  const staff = await currentStaff();
+export async function pushSetupAction(audience: "staff" | "rider" = "staff") {
+  const staff = await (audience === "rider" ? currentRider() : currentStaff());
   if (!staff) return { enabled: false, publicKey: "" };
   return staffPushConfig();
 }
 
-export async function savePushSubscriptionAction(subscription: PushSubscriptionInput) {
-  const staff = await currentStaff();
+export async function savePushSubscriptionAction(subscription: PushSubscriptionInput, audience: "staff" | "rider" = "staff") {
+  const staff = await (audience === "rider" ? currentRider() : currentStaff());
   if (!staff) return { ok: false as const, error: "Please sign in again." };
   try {
     await saveStaffPushSubscription(staff, subscription);

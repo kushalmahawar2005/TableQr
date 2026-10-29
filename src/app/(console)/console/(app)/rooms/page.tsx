@@ -21,7 +21,7 @@ export default async function RoomsPage() {
       </main>
     );
   }
-  if (!(await tenantFeatures(staff.tenantId)).rooms) return <FeatureLocked feature="rooms" />;
+  if (!(await tenantFeatures(staff.tenantId, staff.outletId)).rooms) return <FeatureLocked feature="rooms" />;
   const [initial, history] = await Promise.all([getRooms(staff), stayHistory(staff)]);
   return <RoomsScreen initial={initial} history={history} />;
 }

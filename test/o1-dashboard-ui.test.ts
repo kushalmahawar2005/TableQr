@@ -1,3 +1,4 @@
+import { DEFAULT_PLANS } from "@/lib/plan-features";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
@@ -271,3 +272,5 @@ describe("live floor sizing", () => {
     expect(largeFloor.some((table) => table.state === "seated")).toBe(true);
   });
 });
+
+describe("business-aware dashboard",()=>{it("hides floor and booking panels for a cloud kitchen",()=>{const c=dashboardCases()[0];const features={...DEFAULT_PLANS[0].features,dineIn:false,rooms:false,reservations:false};const html=renderToStaticMarkup(createElement(DashboardScreen,{initial:c.data,initialTrend:c.trend,features}));for(const text of ["Live Floor","Tables in Use","Open Floor","Bookings Coming Up","Waiting List"])expect(html).not.toContain(text);expect(html).toContain("New Order");});});

@@ -75,6 +75,8 @@ function EditorForm({item,data,canEditPrice,onSaved,onPanel,seed}:{item:Data["it
  const seedCategory=seed?data.categories.find(c=>c.nameEn.trim().toLowerCase()===seed.categoryName.trim().toLowerCase()):undefined;
  const draft=item??{id:"",categoryId:seed?(seedCategory?.id??`lib:${seed.categoryKey}`):data.categories[0]?.id??"",nameEn:seed?.nameEn??"",nameHi:seed?.nameHi??null,pricePaise:0,isVeg:seed?.isVeg??true,isJain:false,spiceLevel:seed?seed.spice:null,allergens:null,searchTerms:seed?.searchTerms??null,prepMinutes:seed?.prepMinutes??15,station:seed?.station??"Main"};
  const newItem=!item;
+ const [useSizes,setUseSizes]=useState(false);
+ const [newSizes,setNewSizes]=useState([{name:"Half",price:""},{name:"Full",price:""}]);
  const known=Array.isArray(draft.allergens)?draft.allergens:[];
  const [photo,setPhoto]=useState((draft as {imageUrl?:string|null}).imageUrl??""),[veg,setVeg]=useState(draft.isVeg),[jain,setJain]=useState(!!draft.isJain),[spice,setSpice]=useState(draft.spiceLevel==null?"":String(draft.spiceLevel));
  const [allergenMode,setAllergenMode]=useState<"unknown"|"none"|"some">(known.length===0?"unknown":known.length===1&&known[0].toLowerCase()==="none"?"none":"some");
@@ -87,7 +89,7 @@ function EditorForm({item,data,canEditPrice,onSaved,onPanel,seed}:{item:Data["it
   const allergens=allergenMode==="unknown"?[]:allergenMode==="none"?["none"]:picked;
   let categoryId=String(q.get("categoryId"));
   if(categoryId.startsWith("lib:")){const c=await actions.libraryEnsureCategoryAction(categoryId.slice(4));if(!c.ok){setBusy(false);await onSaved(c.error||"Failed");return}categoryId=c.data}
-  const r=await actions.saveItemAction({id:newItem?undefined:draft.id,categoryId,nameEn:String(q.get("nameEn")),nameHi:String(q.get("nameHi")||""),pricePaise:Math.round(Number(q.get("price"))*100),isVeg:veg,isJain:jain,spiceLevel:spice===""?null:Number(spice),allergens,searchTerms:String(q.get("aliases")||""),prepMinutes:Number(prep),station:String(q.get("station")),imageUrl:photo});
+  const r=await actions.saveItemAction({id:newItem?undefined:draft.id,categoryId,nameEn:String(q.get("nameEn")),nameHi:String(q.get("nameHi")||""),pricePaise:Math.round(Number(q.get("price"))*100),isVeg:veg,isJain:jain,spiceLevel:spice===""?null:Number(spice),allergens,searchTerms:String(q.get("aliases")||""),prepMinutes:Number(prep),station:String(q.get("station")),imageUrl:photo,sizes:newItem&&useSizes?newSizes.map(x=>({name:x.name,pricePaise:Math.round(Number(x.price)*100)})):undefined});
   setBusy(false);await onSaved(r.ok?(newItem?"Dish added.":"Dish saved."):r.error||"Failed")}}>
   <p className={hint}>{data.outlets.length>1?`Dish details and base prices are shared by all ${data.outlets.length} outlets. Availability and portions are set for this outlet; custom prices are in Pricing.`:"Dish details show up on your menu right away. Availability and portions are set for this outlet."}</p>
 
@@ -109,6 +111,7 @@ function EditorForm({item,data,canEditPrice,onSaved,onPanel,seed}:{item:Data["it
     {override?.pricePaise!=null&&<p className={hint}>At this outlet the price is ₹{(override.pricePaise/100).toFixed(2)} (set in Pricing).</p>}</div>
   </Block>
 
+  {newItem&&<Block title="Sizes · Half / Full plate" note="Set different prices while adding this dish."><label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={useSizes} onChange={e=>setUseSizes(e.target.checked)}/>This dish has sizes</label>{useSizes&&<><p className={hint}>The lowest size price becomes the base price.</p>{newSizes.map((size,i)=><div key={i} className="flex flex-wrap gap-2"><Input aria-label={`Size ${i+1} name`} className="min-w-0 flex-1" value={size.name} required maxLength={80} onChange={e=>setNewSizes(old=>old.map((x,j)=>i===j?{...x,name:e.target.value}:x))}/><Input aria-label={`Size ${i+1} price`} className="w-28" type="number" min="1" step="1" value={size.price} required onChange={e=>setNewSizes(old=>old.map((x,j)=>i===j?{...x,price:e.target.value}:x))}/><button type="button" disabled={newSizes.length<=2} onClick={()=>setNewSizes(old=>old.filter((_,j)=>j!==i))}>Remove</button></div>)}<button type="button" className="rounded-xl border px-3 py-2 text-sm" disabled={newSizes.length>=20} onClick={()=>setNewSizes(old=>[...old,{name:"",price:""}])}>+ Add size</button></>}</Block>}
   <Block title="Food details" note="Shown to guests so they can choose safely.">
    <div><p className={lab}>Type</p><div className="mt-1.5 flex flex-wrap gap-2">
     <button type="button" aria-pressed={veg} onClick={()=>setVeg(true)} className={`${chip(veg)} inline-flex items-center gap-2`}><i className="size-2.5 rounded-full bg-[#237a68]"/>Veg</button>

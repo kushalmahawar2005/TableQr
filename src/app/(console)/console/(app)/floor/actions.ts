@@ -1,4 +1,5 @@
 "use server";
+import { STAFF_LANG_COOKIE } from "@/lib/staff-language";
 import { assignWaitersToTables } from "@/server/staff/waiter";
 import { AppError } from "@/server/errors";
 import { getOnlineAvailability, setOnlineBookingsPaused, setSlotCapacity } from "@/server/floor/pacing";
@@ -112,7 +113,7 @@ export type OnlineAvailability = Awaited<ReturnType<typeof getOnlineAvailability
 
 export async function setStaffLangAction(lang: "en" | "hi") {
   const { cookies } = await import("next/headers");
-  (await cookies()).set("tq_lang", lang === "hi" ? "hi" : "en", { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 365 * 86400 });
+  (await cookies()).set(STAFF_LANG_COOKIE, lang === "hi" ? "hi" : "en", { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 365 * 86400 });
 }
 
 /** The table's live QR for showing, printing or downloading. Same roles as the floor. */

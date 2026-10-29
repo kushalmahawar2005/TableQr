@@ -41,15 +41,14 @@ afterAll(async () => {
 });
 
 describe("plan features", () => {
-  it("Starter: no reports, pricing, bookings, waiter or kitchen roles, and only 3 staff logins", async () => {
+  it("Base: kitchen included; reports, bookings and waiter app excluded", async () => {
     await setTenant({ planCode: "starter", kitchenDisplay: null, tableLimit: null });
     try {
       await refused(getReport(owner, 30, new Date()), "forbidden");
       await refused(getPricingData(owner), "forbidden");
       await refused(getBookingZones(env.demo.outletCode), "forbidden");
-      expect(await assignableRoles(env.demo.tenantId)).toEqual(["manager", "accountant"]);
-      // The demo already has more than 3 staff besides the owner
-      await refused(createStaffInvitation(owner, { phone: "9333333331", role: "manager" }), "invalid_state");
+      expect(await assignableRoles(env.demo.tenantId)).toEqual(["manager", "accountant", "kitchen"]);
+      expect((await createStaffInvitation(owner, { phone: "9333333331", role: "manager" })).token).toBeTruthy();
     } finally {
       await setTenant({ planCode: "pro" });
     }
@@ -67,7 +66,7 @@ describe("plan features", () => {
       expect(custom.maxTables).toBe(4);
       expect((await getReport(owner, 30, new Date())).range).toBe(30);
       await refused(getPricingData(owner), "forbidden");
-      expect(await assignableRoles(env.demo.tenantId)).toEqual(["manager", "waiter", "accountant"]);
+      expect(await assignableRoles(env.demo.tenantId)).toEqual(["manager", "waiter", "accountant", "rider"]);
       const invitation = await createStaffInvitation(owner, { phone: "9333333332", role: "waiter" });
       expect(invitation.token).toMatch(/^[0-9a-f-]{36}\.[A-Za-z0-9_-]{43}$/i);
       await refused(createStaffInvitation(owner, { phone: "9333333332", role: "waiter" }), "invalid_state");

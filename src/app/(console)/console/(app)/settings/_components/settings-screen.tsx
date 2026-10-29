@@ -12,6 +12,7 @@ import { removeRestaurantLogoAction, saveSettingsAction, uploadBookingPaymentQrA
 import { shrinkPhoto } from "@/lib/shrink-photo";
 import { DeliverySettings } from "./delivery-settings";
 import { GUEST_SERVICE_LABELS, type GuestService } from "@/domain/guest-services";
+import { LogoCropDialog } from "./logo-crop-dialog";
 
 const DAYS = [["mon", "Monday"], ["tue", "Tuesday"], ["wed", "Wednesday"], ["thu", "Thursday"], ["fri", "Friday"], ["sat", "Saturday"], ["sun", "Sunday"]] as const;
 const MODE: Record<string, string> = { open: "Open: anyone who scans can order", verified: "Verified: guests confirm their phone number first", host_confirmed: "Host confirms: staff approve each table" };
@@ -71,6 +72,21 @@ function Fixed({ children }: { children: React.ReactNode }) {
 
 export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boolean }) {
   const router = useRouter();
+  const businessType = o.businessType ?? "restaurant";
+  const businessLabel = businessType === "cloud_kitchen" ? "Cloud kitchen" : businessType === "cafe" ? "Café" : businessType === "hotel" ? "Hotel" : businessType === "hotel_restaurant" ? "Hotel + restaurant" : "Restaurant";
+  const hasDiningFloor = businessType === "restaurant" || businessType === "cafe" || businessType === "hotel_restaurant";
+  const showRoomGuest = o.availableGuestServices.includes("rooms");
+  const showDelivery = businessType !== "hotel" || o.deliveryAvailable;
+  const showBookingSettings = o.availableGuestServices.includes("reservations");
+  const guestLinkSummary = businessType === "cloud_kitchen"
+    ? "Guests see the ordering and booking services enabled for this kitchen."
+    : businessType === "hotel"
+      ? "Share this link for available hotel services. Checked-in guests use their room QR for requests."
+      : businessType === "hotel_restaurant"
+        ? "Guests see enabled bookings and delivery here; dine-in and room service use their QR codes."
+        : "Guests see enabled bookings and delivery here; dine-in orders open from table QR codes.";
+  const planStats: [string, string][] = [["Plan", o.plan || "—"], ...(hasDiningFloor ? [["Tables", String(o.tables)] as [string, string]] : []), ["Team members", String(o.staff)]];
+  const visibleNav = NAV.filter(([id]) => (id !== "room-guest" || showRoomGuest) && (id !== "delivery" || showDelivery));
   const [pending, start] = useTransition();
   const [city, setCity] = useState(o.city);
   const [address, setAddress] = useState(o.address);
@@ -105,6 +121,7 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
   const [logoUrl, setLogoUrl] = useState(o.logoUrl);
   const [logoBusy, setLogoBusy] = useState(false);
   const [selectedLogo, setSelectedLogo] = useState<{ file: File; preview: string } | null>(null);
+  const [logoToCrop, setLogoToCrop] = useState<File | null>(null);
   const [logoMessage, setLogoMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
   // What is on screen against what was last saved, so the save bar can say if anything changed
@@ -162,7 +179,8 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
     const file = event.currentTarget.files?.[0];
     if (!file) return;
     if (selectedLogo) URL.revokeObjectURL(selectedLogo.preview);
-    setSelectedLogo({ file, preview: URL.createObjectURL(file) });
+    setSelectedLogo(null);
+    setLogoToCrop(file);
     setLogoMessage(null);
     event.currentTarget.value = "";
   }
@@ -170,7 +188,13 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
   function cancelLogoSelection() {
     if (selectedLogo) URL.revokeObjectURL(selectedLogo.preview);
     setSelectedLogo(null);
+    setLogoToCrop(null);
     setLogoMessage(null);
+  }
+
+  function acceptLogoCrop(file: File) {
+    setSelectedLogo({ file, preview: URL.createObjectURL(file) });
+    setLogoToCrop(null);
   }
 
   async function saveLogo() {
@@ -215,7 +239,7 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
         return;
       }
       setLogoUrl(null);
-      setLogoMessage({ ok: true, text: "Logo removed. Guests will see your restaurant initial instead." });
+      setLogoMessage({ ok: true, text: "Logo removed. Guests will see your business initial instead." });
       router.refresh();
     } catch {
       setLogoMessage({ ok: false, text: "Could not remove the logo. Try again." });
@@ -253,9 +277,9 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
     <main className="mx-auto w-full max-w-[1280px] px-4 pt-5 pb-28 sm:px-6 lg:px-8 lg:pt-7">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-caption font-semibold uppercase tracking-[0.12em] text-muted">{o.name} · Outlet settings</p>
+          <p className="text-caption font-semibold uppercase tracking-[0.12em] text-muted">{o.name} · {businessLabel} settings</p>
           <h1 className="mt-1 font-display text-title font-bold text-ink">Settings</h1>
-          <p className="mt-1 max-w-2xl text-body text-muted">{canEdit ? "Keep your restaurant details, guest bills and ordering preferences up to date." : "View only. Ask the outlet owner to change these settings."}</p>
+          <p className="mt-1 max-w-2xl text-body text-muted">{canEdit ? "Keep your business details, guest payments and ordering preferences up to date." : "View only. Ask the outlet owner to change these settings."}</p>
         </div>
         <span className="inline-flex items-center gap-2 rounded-full border border-line bg-surface px-3 py-1.5 text-xs font-semibold text-muted">
           <span className={`size-2 rounded-full ${canEdit ? "bg-[var(--state-available)]" : "bg-ink/30"}`} aria-hidden="true" />
@@ -279,8 +303,8 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
         </div>
       )}
 
-      <nav aria-label="Settings sections" className="-mx-4 mt-5 flex gap-1.5 overflow-x-auto px-4 pb-1 lg:hidden">
-        {NAV.map(([id, label]) => <a key={id} href={`#${id}`} onClick={() => setActiveId(id)} className={`shrink-0 rounded-full border px-3 py-1.5 text-sm font-semibold ${activeId === id ? "border-ink bg-ink text-paper" : "border-line text-muted hover:text-ink"}`}>{label}</a>)}
+      <nav aria-label="Settings sections" className="no-scrollbar -mx-4 mt-5 flex gap-1.5 overflow-x-auto px-4 pb-1 lg:hidden">
+        {visibleNav.map(([id, label]) => <a key={id} href={`#${id}`} onClick={() => setActiveId(id)} className={`shrink-0 rounded-full border px-3 py-1.5 text-sm font-semibold ${activeId === id ? "border-ink bg-ink text-paper" : "border-line text-muted hover:text-ink"}`}>{id === "restaurant" ? "Business profile" : id === "guest-link" ? "Guest link" : label}</a>)}
       </nav>
 
       <div className="mt-4 grid gap-6 lg:mt-6 lg:grid-cols-[15rem_minmax(0,1fr)]">
@@ -288,10 +312,10 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
           <div className="sticky top-20 rounded-2xl border border-line bg-surface p-2">
           <p className="px-3 pb-2 pt-1 text-[11px] font-bold uppercase tracking-wider text-muted">Settings menu</p>
           <ul className="space-y-1">
-            {NAV.map(([id, label, Icon]) => (
+            {visibleNav.map(([id, label, Icon]) => (
               <li key={id}>
                 <a href={`#${id}`} onClick={() => setActiveId(id)} aria-current={activeId === id ? "true" : undefined} className={`flex min-h-10 items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-semibold transition-colors ${activeId === id ? "bg-brand-soft text-brand-strong" : "text-muted hover:bg-ink/[0.03] hover:text-ink"}`}>
-                  <Icon className="size-4" aria-hidden="true" />{label}
+                  <Icon className="size-4" aria-hidden="true" />{id === "restaurant" ? "Business profile" : id === "guest-link" ? "Guest link" : label}
                 </a>
               </li>
             ))}
@@ -301,13 +325,13 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
         </nav>
 
         <div className="min-w-0 space-y-4">
-          <Section id="restaurant" icon={Store} title="Restaurant" desc="Shown on bills and the guest page.">
-            <Row label="Restaurant logo" hint="A square image (300 px or larger) works best. Shown on the QR welcome screen and menu across all outlets.">
+          <Section id="restaurant" icon={Store} title="Business profile" desc="Shown on bills and guest pages.">
+            <Row label="Brand logo" hint="Choose a logo, crop it into a circle, and it will show across your guest pages and app.">
               <div className="flex flex-wrap items-center gap-3 sm:justify-end">
-                <div className="grid size-16 shrink-0 place-items-center overflow-hidden rounded-2xl border border-line bg-paper">
+                <div className="grid size-16 shrink-0 place-items-center overflow-hidden rounded-full border border-line bg-paper">
                   {selectedLogo || logoUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={selectedLogo?.preview ?? logoUrl ?? undefined} alt={`${o.name} logo preview`} className="size-full object-contain p-1" />
+                    <img src={selectedLogo?.preview ?? logoUrl ?? undefined} alt={`${o.name} logo preview`} className="size-full object-cover" />
                   ) : <Store className="size-6 text-muted" aria-hidden="true" />}
                 </div>
                 {canEdit && <>
@@ -331,10 +355,10 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
                 <button type="button" onClick={copyCode} aria-label="Copy outlet code" className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-line px-2 text-xs font-semibold hover:border-ink/40">{copied ? <Check className="size-3.5" aria-hidden="true" /> : <Copy className="size-3.5" aria-hidden="true" />}{copied ? "Copied" : "Copy"}</button>
               </div>
             </Row>
-            <Row label="Guest restaurant link" hint="Share this page so guests can see your restaurant and book a table.">
+            <Row label="Guest link" hint="Share this link so guests can order or book the services you offer.">
               <div className="flex min-w-0 items-center gap-2 sm:justify-end">
                 <a href={`/r/${encodeURIComponent(o.code)}`} target="_blank" rel="noreferrer" className="min-w-0 truncate text-sm font-medium text-brand-strong underline underline-offset-2">/r/{o.code}</a>
-                <button type="button" onClick={copyGuestLink} aria-label="Copy guest restaurant link" className="inline-flex min-h-8 shrink-0 items-center gap-1 rounded-lg border border-line px-2 text-xs font-semibold hover:border-ink/40">{guestLinkCopied ? <Check className="size-3.5" aria-hidden="true" /> : <Copy className="size-3.5" aria-hidden="true" />}{guestLinkCopied ? "Copied" : "Copy"}</button>
+                <button type="button" onClick={copyGuestLink} aria-label="Copy guest link" className="inline-flex min-h-8 shrink-0 items-center gap-1 rounded-lg border border-line px-2 text-xs font-semibold hover:border-ink/40">{guestLinkCopied ? <Check className="size-3.5" aria-hidden="true" /> : <Copy className="size-3.5" aria-hidden="true" />}{guestLinkCopied ? "Copied" : "Copy"}</button>
               </div>
             </Row>
             <Row label="Time zone"><Fixed>{o.timezone}</Fixed></Row>
@@ -368,33 +392,33 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
             <Row label="Accept orders automatically" hint={auto ? "Orders go straight to the kitchen." : "Staff accept each order first."}>
               <div className="flex sm:justify-end"><Toggle on={auto} onChange={setAuto} label="Accept orders automatically" disabled={!canEdit} /></div>
             </Row>
-            <Row label="Guest online payments" hint={!o.guestOnlinePaymentAvailable ? "No restaurant payment gateway is connected yet. Counter payment stays available; online checkout cannot be enabled." : guestOnlinePayments ? "Guests can pay their bill online." : "Guests will request payment at the counter; online checkout is hidden."}>
+            <Row label="Guest online payments" hint={!o.guestOnlinePaymentAvailable ? "No business payment gateway is connected yet. Counter payment stays available; online checkout cannot be enabled." : guestOnlinePayments ? "Guests can pay their bill online." : "Guests will request payment at the counter; online checkout is hidden."}>
               <div className="flex sm:justify-end"><Toggle on={guestOnlinePayments} onChange={setGuestOnlinePayments} label="Allow guests to pay online" disabled={!canEdit || (!o.guestOnlinePaymentAvailable && !guestOnlinePayments)} /></div>
             </Row>
             <Row label="Table mode" hint="Changed by Tableeqr."><Fixed>{MODE[o.sessionMode] ?? o.sessionMode}</Fixed></Row>
             <Row label="Google review link" htmlFor="review" hint="Guests see this after paying."><Input id="review" className={fieldCls} type="url" placeholder="https://g.page/r/…" value={review} onChange={(e) => setReview(e.target.value)} disabled={!canEdit} /></Row>
           </Section>
 
-          <Section id="guest-link" icon={Store} title="Public restaurant link" desc="Choose the services shown after guests select their language.">
-            <Row label="Customer app install" hint={o.guestPwaCustomizationAvailable ? "Off by default. When enabled, guests can install your restaurant app from its public link. Turning this off keeps the website and booking link working." : guestPwaInstallEnabled ? "This option is not included in the current plan. Turn it off here; ask Tableeqr to enable branded guest app installation before turning it on again." : "Off. Branded guest app installation is not included in the current plan."}>
+          <Section id="guest-link" icon={Store} title="Guest link" desc="Choose the services guests can see after they select their language.">
+            <Row label="Customer app install" hint={o.guestPwaCustomizationAvailable ? "Off by default. When enabled, guests can install your branded guest app from its public link. Turning this off keeps the website and booking link working." : guestPwaInstallEnabled ? "This option is not included in the current plan. Turn it off here; ask Tableeqr to enable branded guest app installation before turning it on again." : "Off. Branded guest app installation is not included in the current plan."}>
               <div className="flex sm:justify-end"><Toggle on={guestPwaInstallEnabled} onChange={setGuestPwaInstallEnabled} label="Show customer app install option" disabled={!canEdit || (!o.guestPwaCustomizationAvailable && !guestPwaInstallEnabled)} /></div>
             </Row>
             {o.availableGuestServices.map(service => <Row key={service} label={GUEST_SERVICE_LABELS[service].title} hint={GUEST_SERVICE_LABELS[service].hint}>
               <div className="flex sm:justify-end"><Toggle on={publicServices.includes(service)} onChange={enabled => setPublicServices(current => enabled ? [...current, service] : current.filter(value => value !== service))} label={`Show ${GUEST_SERVICE_LABELS[service].title}`} disabled={!canEdit} /></div>
             </Row>)}
-            <div className="py-4 text-sm text-muted">This link shows party reservations and home delivery only. Dine in opens from table QR codes, and room service opens from room QR codes. Turning off party reservations pauses new public bookings.</div>
+            <div className="py-4 text-sm text-muted">{guestLinkSummary} Turning off party reservations pauses new public bookings.</div>
             <div className="space-y-3 py-4">
-              <div className="flex items-center justify-between gap-4"><div><p className="text-sm font-semibold">Guest announcement</p><p className="mt-0.5 text-xs text-muted">Publish a short message guests see on your restaurant link.</p></div><Toggle on={announcementActive} onChange={setAnnouncementActive} label="Publish guest announcement" disabled={!canEdit} /></div>
+              <div className="flex items-center justify-between gap-4"><div><p className="text-sm font-semibold">Guest announcement</p><p className="mt-0.5 text-xs text-muted">Publish a short message guests see on your guest link.</p></div><Toggle on={announcementActive} onChange={setAnnouncementActive} label="Publish guest announcement" disabled={!canEdit} /></div>
               <Input aria-label="Announcement title" maxLength={80} placeholder="Title, e.g. Weekend special" className={fieldCls} value={announcementTitle} onChange={event => setAnnouncementTitle(event.target.value)} disabled={!canEdit} />
               <textarea aria-label="Announcement message" maxLength={240} rows={3} placeholder="Write a short update for guests" className="w-full resize-y rounded-xl border border-line bg-surface px-3 py-2 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-brand" value={announcementBody} onChange={event => setAnnouncementBody(event.target.value)} disabled={!canEdit} />
               <p className="text-right text-xs text-muted">{announcementBody.length}/240</p>
             </div>
-            <Row label="Booking advance per reservation" hint="This fixed deposit is charged when a guest books and is credited to their final bill. Set ₹0 to collect only preorder or peak-slot advances."><div className="relative sm:ml-auto sm:max-w-xs"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted">₹</span><Input inputMode="decimal" type="number" min="0" max="10000000" step="0.01" className={`${fieldCls} w-full pl-8`} value={bookingAdvance} onChange={event => setBookingAdvance(event.target.value)} disabled={!canEdit} /></div></Row>
-            <Row label="UPI on the bill" hint="Guests pay this UPI ID from their bill with any UPI app and tap I have paid. Staff check the money arrived, then settle the bill as UPI. Leave empty to turn it off."><div className="grid gap-2 sm:grid-cols-2"><input className={`${fieldCls} w-full border border-line bg-surface px-3`} value={upiId} onChange={e => setUpiId(e.target.value)} placeholder="restaurant@okaxis" inputMode="email" autoComplete="off" disabled={!canEdit} aria-label="UPI ID" /><input className={`${fieldCls} w-full border border-line bg-surface px-3`} value={upiName} onChange={e => setUpiName(e.target.value)} placeholder="Name shown in the UPI app" maxLength={60} disabled={!canEdit} aria-label="UPI payee name" /></div></Row>
-            <Row label="Booking advance payments" hint={!o.bookingGatewayAvailable ? "Online gateway checkout is not connected. Use the restaurant QR option to collect advances and verify them in bookings." : "Choose how guests pay for reservation advances and preordered food."}><select className={`${fieldCls} w-full border border-line bg-surface px-3`} value={bookingPaymentMode} onChange={event => setBookingPaymentMode(event.target.value as typeof bookingPaymentMode)} disabled={!canEdit}><option value="gateway" disabled={!o.bookingGatewayAvailable}>Online gateway checkout {!o.bookingGatewayAvailable ? "(not connected)" : ""}</option><option value="manual_qr" disabled={!paymentQr}>Restaurant’s UPI QR · staff verifies receipt</option></select></Row>
-            <div className="py-4">
-              <p className="text-sm font-semibold">Restaurant payment QR</p><p className="mt-1 text-xs text-muted">Upload the merchant QR issued by your bank or payment app. QR uploads save immediately; save changes to switch the booking payment method.</p>
-              {paymentQr && <Image src={paymentQr} alt="Restaurant payment QR" width={220} height={220} unoptimized className="mt-3 max-h-56 rounded-xl border border-line bg-white object-contain p-2" />}
+            {showBookingSettings && <Row label="Booking advance per reservation" hint="This fixed deposit is charged when a guest books and is credited to their final bill. Set ₹0 to collect only preorder or peak-slot advances."><div className="relative sm:ml-auto sm:max-w-xs"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted">₹</span><Input inputMode="decimal" type="number" min="0" max="10000000" step="0.01" className={`${fieldCls} w-full pl-8`} value={bookingAdvance} onChange={event => setBookingAdvance(event.target.value)} disabled={!canEdit} /></div></Row>}
+            <Row label="UPI on the bill" hint="Guests pay this UPI ID from their bill with any UPI app and tap I have paid. Staff check the money arrived, then settle the bill as UPI. Leave empty to turn it off."><div className="grid gap-2 sm:grid-cols-2"><input className={`${fieldCls} w-full border border-line bg-surface px-3`} value={upiId} onChange={e => setUpiId(e.target.value)} placeholder="business@okaxis" inputMode="email" autoComplete="off" disabled={!canEdit} aria-label="UPI ID" /><input className={`${fieldCls} w-full border border-line bg-surface px-3`} value={upiName} onChange={e => setUpiName(e.target.value)} placeholder="Name shown in the UPI app" maxLength={60} disabled={!canEdit} aria-label="UPI payee name" /></div></Row>
+            {showBookingSettings && <Row label="Booking advance payments" hint={!o.bookingGatewayAvailable ? "Online gateway checkout is not connected. Use your saved payment QR to collect advances and verify them in bookings." : "Choose how guests pay for reservation advances and preordered food."}><select className={`${fieldCls} w-full border border-line bg-surface px-3`} value={bookingPaymentMode} onChange={event => setBookingPaymentMode(event.target.value as typeof bookingPaymentMode)} disabled={!canEdit}><option value="gateway" disabled={!o.bookingGatewayAvailable}>Online gateway checkout {!o.bookingGatewayAvailable ? "(not connected)" : ""}</option><option value="manual_qr" disabled={!paymentQr}>Saved UPI QR · staff verifies receipt</option></select></Row>}
+            {showBookingSettings && <div className="py-4">
+              <p className="text-sm font-semibold">Business payment QR</p><p className="mt-1 text-xs text-muted">Upload the payment QR issued by your bank or payment app. QR uploads save immediately; save changes to switch the booking payment method.</p>
+              {paymentQr && <Image src={paymentQr} alt="Business payment QR" width={220} height={220} unoptimized className="mt-3 max-h-56 rounded-xl border border-line bg-white object-contain p-2" />}
               <label className="mt-3 inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border border-line px-4 text-sm font-semibold"><Upload size={16} />{qrBusy ? "Saving QR…" : paymentQr ? "Change payment QR" : "Upload payment QR"}<input type="file" className="sr-only" accept="image/png,image/jpeg,image/webp" disabled={!canEdit || qrBusy} onChange={async event => {
                 const file = event.currentTarget.files?.[0]; event.currentTarget.value = "";
                 if (!file) return;
@@ -408,15 +432,15 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
                 } catch { setMsg({ ok: false, text: "Could not upload the payment QR. Try again." }); }
                 finally { setQrBusy(false); }
               }} /></label>
-            </div>
-            <a className="inline-flex min-h-11 items-center py-3 font-semibold text-brand-strong underline underline-offset-4" href={`/r/${encodeURIComponent(o.code)}`} target="_blank" rel="noreferrer">Preview restaurant link ↗</a>
+            </div>}
+            <a className="inline-flex min-h-11 items-center py-3 font-semibold text-brand-strong underline underline-offset-4" href={`/r/${encodeURIComponent(o.code)}`} target="_blank" rel="noreferrer">Preview guest link ↗</a>
           </Section>
 
-          <Section id="delivery" icon={Store} title="Delivery setup" desc="Service areas, delivery charges and payment preferences for this outlet.">
-            {o.deliveryAvailable ? <DeliverySettings value={deliveryPolicy} onChange={setDeliveryPolicy} disabled={!canEdit} hasGateway={o.paymentGateway.configured && o.paymentGateway.available} hasPaymentQr={!!paymentQr} /> : <p className="py-4 text-sm text-muted">Delivery is not included in this restaurant’s package. Tableeqr can enable it from the tenant’s feature settings.</p>}
-          </Section>
+          {showDelivery && <Section id="delivery" icon={Store} title="Delivery setup" desc="Service areas, delivery charges and payment preferences for this outlet.">
+            {o.deliveryAvailable ? <DeliverySettings value={deliveryPolicy} onChange={setDeliveryPolicy} disabled={!canEdit} hasGateway={o.paymentGateway.configured && o.paymentGateway.available} hasPaymentQr={!!paymentQr} /> : <p className="py-4 text-sm text-muted">Delivery is not included in this package. Tableeqr can enable it from the tenant’s feature settings.</p>}
+          </Section>}
 
-          <Section id="room-guest" icon={Wifi} title="Room guest page" desc="Choose what checked-in guests can request and share your Wi-Fi details.">
+          {showRoomGuest && <Section id="room-guest" icon={Wifi} title="Room guest page" desc="Choose what checked-in guests can request and share your Wi-Fi details.">
             <div className="py-4">
               <p className="text-sm font-semibold text-ink">Room service options</p>
               <p className="mt-0.5 text-xs text-muted">Only selected options appear on room QR pages. “Other” lets guests write a custom request.</p>
@@ -434,7 +458,7 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
             </div>
             <Row label="Wi-Fi network name" htmlFor="wifi-ssid" hint="Shown to checked-in guests on their room QR page."><Input id="wifi-ssid" className={fieldCls} maxLength={32} autoComplete="off" placeholder="e.g. Hotel Guest Wi-Fi" value={wifiSsid} onChange={(e) => setWifiSsid(e.target.value)} disabled={!canEdit} /></Row>
             <Row label="Wi-Fi password" htmlFor="wifi-password" hint="Visible to checked-in guests so they can connect."><Input id="wifi-password" className={fieldCls} type="password" maxLength={63} autoComplete="new-password" placeholder="Leave blank to remove" value={wifiPassword} onChange={(e) => setWifiPassword(e.target.value)} disabled={!canEdit} /></Row>
-          </Section>
+          </Section>}
 
           <Section id="hours" icon={Clock} title="Opening hours" desc={hoursOn ? "Set when you are open each day." : "Not set. Turn on to add your timings."} action={<Toggle on={hoursOn} onChange={setHoursOn} label="Set opening hours" disabled={!canEdit} />}>
             {hoursOn && DAYS.map(([k, label], i) => {
@@ -464,12 +488,13 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
           </Section>
 
           <Section id="plan" icon={CreditCard} title="Plan and setup" desc="Managed by Tableeqr.">
-            <dl className="grid grid-cols-3 divide-x divide-line py-4">
-              {[["Plan", o.plan || "—"], ["Tables", String(o.tables)], ["Team members", String(o.staff)]].map(([k, v]) => <div key={k} className="min-w-0 px-4 first:pl-0"><dt className="text-xs text-muted">{k}</dt><dd className="truncate font-display text-section font-bold">{v}</dd></div>)}
+            <dl className="grid grid-cols-[repeat(auto-fit,minmax(7rem,1fr))] divide-x divide-line py-4">
+              {planStats.map(([k, v]) => <div key={k} className="min-w-0 px-4 first:pl-0"><dt className="text-xs text-muted">{k}</dt><dd className="truncate font-display text-section font-bold">{v}</dd></div>)}
             </dl>
           </Section>
         </div>
       </div>
+      {logoToCrop && <LogoCropDialog file={logoToCrop} onCancel={() => setLogoToCrop(null)} onSave={acceptLogoCrop} />}
 
       {canEdit && (
         <div className="fixed inset-x-3 bottom-[calc(4rem+env(safe-area-inset-bottom)+0.75rem)] z-20 mx-auto flex max-w-[1100px] items-center justify-between gap-3 rounded-2xl border border-line bg-surface p-3 shadow-lg sm:bottom-3 lg:left-[calc(var(--sidebar-width,16rem)+0.75rem)] lg:right-3 lg:mx-0 lg:max-w-none">

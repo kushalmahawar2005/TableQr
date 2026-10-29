@@ -22,7 +22,7 @@ export default async function ReservationsPage() {
       </main>
     );
   }
-  if (!(await tenantFeatures(staff.tenantId)).reservations) return <FeatureLocked feature="reservations" />;
+  if (!(await tenantFeatures(staff.tenantId, staff.outletId)).reservations) return <FeatureLocked feature="reservations" />;
   const data = await getReservationCalendar(staff);
   return <ReservationCalendar initial={data} realtimeUrl={process.env.REALTIME_URL?.replace(/^http/, "ws") ?? null} />;
 }

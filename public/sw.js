@@ -1,6 +1,6 @@
 /* Staff PWA: cache the user-independent offline POS shell and immutable app code. */
-const STAFF_SHELL_CACHE = "tableeqr-staff-shell-v1";
-const STAFF_ASSET_CACHE = "tableeqr-staff-assets-v1";
+const STAFF_SHELL_CACHE = "tableeqr-staff-shell-v2";
+const STAFF_ASSET_CACHE = "tableeqr-staff-assets-v2";
 
 self.addEventListener("install", (event) => {
   event.waitUntil((async () => {
@@ -11,7 +11,11 @@ self.addEventListener("install", (event) => {
     const html = await response.text();
     const assets = [...html.matchAll(/(?:src|href)="([^\"]*\/_next\/static\/[^\"]+)"/g)]
       .map((match) => new URL(match[1], self.location.origin).href);
-    if (assets.length) await (await caches.open(STAFF_ASSET_CACHE)).addAll([...new Set(assets)]);
+    const assetCache = await caches.open(STAFF_ASSET_CACHE);
+    await Promise.all([...new Set(assets)].map(async asset => {
+      const response = await fetch(asset, { cache: "no-cache" });
+      if (response.ok && response.headers.get("cache-control")?.includes("immutable")) await assetCache.put(asset, response);
+    }));
     await self.skipWaiting();
   })());
 });
@@ -19,7 +23,9 @@ self.addEventListener("install", (event) => {
 self.addEventListener("activate", (event) => {
   event.waitUntil((async () => {
     const names = await caches.keys();
-    await Promise.all(names.filter((name) => (name.startsWith("tableeqr-staff-") || name.startsWith("tableqr-staff-")) && ![STAFF_SHELL_CACHE, STAFF_ASSET_CACHE].includes(name)).map((name) => caches.delete(name)));
+    // Only remove the retired legacy caches. Keep prior Tableeqr caches: an already-open
+    // tab can still be reading one while this service worker activates.
+    await Promise.all(names.filter((name) => name.startsWith("tableqr-staff-")).map((name) => caches.delete(name)));
     await self.clients.claim();
   })());
 });
@@ -31,12 +37,14 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin) return;
 
   if (url.pathname.startsWith("/_next/static/")) {
+    // Development chunks reuse URLs across edits and must never be served cache-first.
+    if (["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)) return;
     event.respondWith((async () => {
       const cache = await caches.open(STAFF_ASSET_CACHE);
       const hit = await cache.match(request);
       if (hit) return hit;
       const response = await fetch(request);
-      if (response.ok) await cache.put(request, response.clone());
+      if (response.ok && response.headers.get("cache-control")?.includes("immutable")) await cache.put(request, response.clone());
       return response;
     })());
     return;

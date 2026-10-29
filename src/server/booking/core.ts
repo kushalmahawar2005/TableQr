@@ -14,6 +14,7 @@ import { requireFeature } from "../plan";
 import { loadPolicy } from "../floor/policy";
 import { syncEvents, syncTableHolds } from "../floor/sync";
 import { publish } from "../realtime/publish";
+import { sendOutletPush } from "../staff/web-push";
 import { topics } from "../realtime/token";
 import { queueReservationConfirmation } from "./notifications";
 import { audit } from "../staff/audit";
@@ -58,7 +59,7 @@ async function outletScope(run: Runner, outletCode: string): Promise<OutletScope
 }
 
 async function requireOnlineBookings(scope: OutletScope) {
-  await requireFeature(scope.tenantId, "reservations");
+  await requireFeature(scope.tenantId, "reservations", scope.outletId);
   if (!configuredGuestServices(scope.guestServices).includes("reservations") || (await tenantAccess(scope.tenantId)).state === "blocked") throw new AppError("forbidden", "Online booking is not available here. Please contact the restaurant.");
 }
 
@@ -273,7 +274,7 @@ export async function bookingByToken(outletCode: string, token: string, now = ne
 /** Guest preorder menu, priced from the same tenant/outlet menu used by table ordering. */
 export async function bookingPreorderMenu(outletCode: string) {
   const scope = await outletScope(db, outletCode);
-  await requireFeature(scope.tenantId, "reservations");
+  await requireFeature(scope.tenantId, "reservations", scope.outletId);
   const loaded = await loadItemsForBrowsing(scope, new Date());
   const categoryIds = [...new Set(loaded.map(({ item }) => item.categoryId))];
   const categories = categoryIds.length ? await db.select({ id: s.menuCategories.id, nameEn: s.menuCategories.nameEn, nameHi: s.menuCategories.nameHi, sortOrder: s.menuCategories.sortOrder })
@@ -292,7 +293,7 @@ export async function bookingPreorderMenu(outletCode: string) {
 /** Save a bounded preorder and require its full amount as booking credit before confirmation. */
 export async function saveBookingPreorder(outletCode: string, token: string, lines: { itemId: string; qty: number; modifierIds?: string[] }[], now = new Date()) {
   const scope = await outletScope(db, outletCode);
-  await requireFeature(scope.tenantId, "reservations");
+  await requireFeature(scope.tenantId, "reservations", scope.outletId);
   if (!Array.isArray(lines) || lines.length > 30) throw new AppError("invalid_state", "Choose up to 30 preorder items.");
   if (new Set(lines.map((line) => String(line.itemId))).size !== lines.length) throw new AppError("invalid_state", "Each preorder dish can only be listed once.");
   return db.transaction(async (tx) => {
@@ -334,7 +335,7 @@ export async function confirmBooking(outletCode: string, token: string, input: {
     const [row] = await tx.select().from(s.reservations).where(and(eq(s.reservations.tenantId, scope.tenantId), eq(s.reservations.outletId, scope.outletId), eq(s.reservations.manageTokenHash, hash(token)))).for("update");
     if (!row) throw new AppError("not_found", "This booking link is not valid.");
     if (!row.manageTokenExpiresAt || row.manageTokenExpiresAt <= now) throw new AppError("not_found", "This booking link has expired.");
-    if (row.status === "confirmed") return row.id;
+    if (row.status === "confirmed") return { id: row.id, replayed: true };
     if (row.status !== "requested") throw new AppError("invalid_state", "This booking is no longer awaiting confirmation.");
     if (row.status === "requested" && (!row.holdExpiresAt || row.holdExpiresAt <= now)) throw new AppError("conflict", "Your booking hold expired. Please choose another time.", { reason: "hold_expired" });
     if (row.creditRequiredPaise > row.creditPaidPaise + row.advanceReceivedPaise) throw new AppError("payment_required", "The advance must be received before this booking can be confirmed.");
@@ -344,9 +345,13 @@ export async function confirmBooking(outletCode: string, token: string, input: {
     const guestId = verifiedGuest.id;
     await tx.update(s.reservations).set({ status: "confirmed", confirmedAt: now, holdExpiresAt: null, holdReleasedAt: null, updatedAt: now }).where(and(eq(s.reservations.tenantId, scope.tenantId), eq(s.reservations.id, row.id)));
     await tx.insert(s.reservationHistory).values({ tenantId: scope.tenantId, reservationId: row.id, kind: "confirmed", before: { status: row.status }, after: { status: "confirmed", guestId }, createdAt: now });
-    return row.id;
+    return { id: row.id, replayed: false };
   }, LOCK_THEN_READ);
-  await publish(scope, [{ topic: topics.floor, type: "booking.updated", data: { reservationId: result } }]);
+  await publish(scope, [{ topic: topics.floor, type: "booking.updated", data: { reservationId: result.id } }]);
+  if (!result.replayed) await sendOutletPush(scope, {
+    title: "New reservation", body: "A guest confirmed a reservation. Open reservations to review it.",
+    url: "/console/reservations", tag: `booking-${result.id}`,
+  }, { kind: "management" });
   const confirmed = (await bookingByToken(outletCode, token)).row;
   await queueReservationConfirmation(scope, confirmed, now);
   return { row: confirmed, scope };
@@ -468,7 +473,7 @@ export async function arriveBookingPublic(outletCode: string, token: string, now
   return { status: "arrived" as const };
 }
 
-export async function createGroupRequest(outletCode: string, input: { requestId: string; name: string; phone: string; partySize: number; desiredDate: string; desiredLocalDateTime: string; notes?: string | null }) {
+export async function createGroupRequest(outletCode: string, input: { requestId: string; name: string; phone: string; partySize: number; desiredDate: string; desiredLocalDateTime: string; notes?: string | null; guestId?: string }) {
   const scope = await outletScope(db, outletCode); const partySize = Number(input.partySize);
   await requireOnlineBookings(scope);
   if (partySize <= 12 || partySize > 100 || !input.name.trim() || !input.phone.trim()) throw new AppError("invalid_state", "Group requests are for parties above 12 guests.");
@@ -477,9 +482,10 @@ export async function createGroupRequest(outletCode: string, input: { requestId:
   const existing = await db.select({ id: s.groupRequests.id, publicReference: s.groupRequests.publicReference }).from(s.groupRequests).where(and(eq(s.groupRequests.tenantId, scope.tenantId), eq(s.groupRequests.requestId, input.requestId))).limit(1);
   if (existing[0]) return existing[0];
   const id = uuidv7(); const reference = publicRef();
-  await db.insert(s.groupRequests).values({ id, tenantId: scope.tenantId, outletId: scope.outletId, publicReference: reference, requestId: input.requestId, name: input.name.trim().slice(0, 80), phone: input.phone.trim().slice(0, 15), partySize, desiredDate: input.desiredDate, desiredStartAt, notes: input.notes?.trim().slice(0, 500) || null, status: "requested" });
+  await db.insert(s.groupRequests).values({ id, tenantId: scope.tenantId, outletId: scope.outletId, publicReference: reference, requestId: input.requestId, guestId: input.guestId ?? null, name: input.name.trim().slice(0, 80), phone: input.phone.trim().slice(0, 15), partySize, desiredDate: input.desiredDate, desiredStartAt, notes: input.notes?.trim().slice(0, 500) || null, status: "requested" });
   // An event enquiry is not a confirmed booking. The guest sees a reference immediately, and the
   // restaurant follows up manually; never queue the standard booking-confirmation message here.
+  await sendOutletPush(scope, { title: "New party request", body: `${input.name.trim()} requested a booking for ${partySize} guests.`, url: "/console/reservations", tag: `party-${id}` }, { kind: "management" });
   await publish(scope, [{ topic: topics.floor, type: "booking.group_request", data: { groupRequestId: id } }]);
   return { id, publicReference: reference };
 }

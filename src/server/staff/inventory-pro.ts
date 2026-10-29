@@ -42,6 +42,7 @@ const isDate = (d: unknown): d is string => typeof d === "string" && /^\d{4}-\d{
 
 export async function saveSupplier(staff: Staff, input: { id?: string | null; name: string; phone?: string; gstin?: string; note?: string }) {
   await guard(staff);
+  await requireFeature(staff.tenantId, "purchasing", staff.outletId);
   const name = clean(input.name, 80);
   if (!name || name.length < 2) throw bad("Enter the supplier's name.");
   const phone = clean(String(input.phone ?? "").replace(/[^\d+]/g, ""), 16);
@@ -66,6 +67,7 @@ export async function saveSupplier(staff: Staff, input: { id?: string | null; na
 /** Take a supplier off the list; their bills and payments stay */
 export async function removeSupplier(staff: Staff, id: string) {
   await guard(staff);
+  await requireFeature(staff.tenantId, "purchasing", staff.outletId);
   await db.update(s.suppliers).set({ isActive: false }).where(and(eq(s.suppliers.tenantId, staff.tenantId), eq(s.suppliers.outletId, staff.outletId), eq(s.suppliers.id, String(id))));
 }
 
@@ -87,6 +89,7 @@ async function supplierOf(tx: Tx, staff: Staff, id: string | null | undefined) {
  */
 export async function recordPurchase(staff: Staff, input: PurchaseInput, kind: "purchase" | "return" = "purchase", now = new Date()) {
   await guard(staff);
+  await requireFeature(staff.tenantId, "purchasing", staff.outletId);
   const lines = (input.lines ?? []).filter((l) => l && l.stockItemId && String(l.qty ?? "").trim() !== "");
   if (!lines.length) throw bad(kind === "purchase" ? "Add at least one item to the bill." : "Add at least one item being sent back.");
   if (lines.length > 100) throw bad("A bill can have at most 100 lines.");
@@ -142,6 +145,7 @@ export async function recordPurchase(staff: Staff, input: PurchaseInput, kind: "
 /** Money paid to a supplier, against a bill or towards what is owed */
 export async function paySupplier(staff: Staff, input: { supplierId: string; amount: string; method?: string; note?: string; purchaseId?: string | null; paidOn?: string }, now = new Date()) {
   await guard(staff);
+  await requireFeature(staff.tenantId, "purchasing", staff.outletId);
   const amountPaise = rupees(input.amount, "the amount");
   if (amountPaise <= 0) throw bad("Enter the amount paid.");
   const method = (METHODS as readonly string[]).includes(String(input.method)) ? (input.method as Method) : "cash";
@@ -169,6 +173,7 @@ export async function paySupplier(staff: Staff, input: { supplierId: string; amo
  */
 export async function recordCount(staff: Staff, input: { counts: { stockItemId: string; qty: string }[]; note?: string }, now = new Date()) {
   await guard(staff);
+  await requireFeature(staff.tenantId, "purchasing", staff.outletId);
   const counts = (input.counts ?? []).filter((c) => c && c.stockItemId && String(c.qty ?? "").trim() !== "");
   if (!counts.length) throw bad("Enter the count for at least one item.");
   const note = clean(input.note, 140) ?? "Stock count";
@@ -201,6 +206,7 @@ export async function recordCount(staff: Staff, input: { counts: { stockItemId: 
 /** What one unit of a prep item takes; replaces its whole recipe */
 export async function setPrepRecipe(staff: Staff, prepItemId: string, lines: { stockItemId: string; qty: string }[]) {
   await guard(staff);
+  await requireFeature(staff.tenantId, "recipeCosting", staff.outletId);
   const parts = new Map<string, number>();
   for (const l of lines ?? []) {
     if (!l?.stockItemId || String(l.qty ?? "").trim() === "") continue;
@@ -226,6 +232,7 @@ export async function setPrepRecipe(staff: Staff, prepItemId: string, lines: { s
 /** A batch of a prep item was cooked: it goes into stock and its ingredients come out */
 export async function makePrep(staff: Staff, input: { prepItemId: string; qty: string }, now = new Date()) {
   await guard(staff);
+  await requireFeature(staff.tenantId, "recipeCosting", staff.outletId);
   const qty = toMilli(input.qty);
   if (qty === null || qty <= 0) throw bad("Enter how much was made, as a number above zero.");
   const result = await db.transaction(async (tx) => {
@@ -258,6 +265,7 @@ export async function makePrep(staff: Staff, input: { prepItemId: string; qty: s
 /** Switch dishes going sold out by themselves when an ingredient runs out on or off */
 export async function setStockSoldOut(staff: Staff, on: boolean) {
   await guard(staff);
+  await requireFeature(staff.tenantId, "recipeCosting", staff.outletId);
   await db.update(s.outlets).set({ stockSoldOut: !!on }).where(and(eq(s.outlets.tenantId, staff.tenantId), eq(s.outlets.id, staff.outletId)));
   const changed = await db.transaction(async (tx) => {
     if (on) {
@@ -371,6 +379,7 @@ export type Purchasing = Awaited<ReturnType<typeof getPurchasing>>;
  */
 export async function getStockReport(staff: Staff, input: { from?: string; to?: string }, now = new Date()) {
   await guard(staff);
+  await requireFeature(staff.tenantId, "recipeCosting", staff.outletId);
   const cutoff = await outletDayCutoff(staff.tenantId, staff.outletId);
   const today = istToday(now, cutoff);
   let from = isDate(input.from) ? input.from : today;

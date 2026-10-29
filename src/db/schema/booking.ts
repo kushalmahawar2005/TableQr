@@ -133,6 +133,7 @@ export const groupRequests = mysqlTable(
     outletId: ref("outlet_id").notNull(),
     publicReference: varchar("public_reference", { length: 20 }).notNull(),
     requestId: varchar("request_id", { length: 64 }).notNull(),
+    guestId: ref("guest_id"),
     name: varchar("name", { length: 80 }).notNull(),
     phone: varchar("phone", { length: 15 }).notNull(),
     partySize: int("party_size").notNull(),
@@ -149,6 +150,7 @@ export const groupRequests = mysqlTable(
     index("group_requests_outlet_date_idx").on(t.tenantId, t.outletId, t.desiredDate, t.status),
     tenantKey("group_requests", t),
     sameTenant("fk_group_requests_outlet", t, t.outletId, outlets),
+    sameTenant("fk_group_requests_guest", t, t.guestId, guests),
   ],
 );
 

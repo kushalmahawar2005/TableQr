@@ -1,196 +1,23 @@
 "use client";
-
-import { ArrowLeft01Icon, ArrowRight01Icon, Calendar03Icon, CheckmarkCircle02Icon, DeliveryTruck01Icon, Location01Icon, QrCodeIcon, UserMultipleIcon } from "@hugeicons/core-free-icons";
-import { useGuestBase } from "@/lib/guest-base";
-import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import Link from "next/link";
-import { useState, type CSSProperties, type ReactNode } from "react";
+import { useState, type CSSProperties } from "react";
+import { CalendarDays, Truck, Users, ChevronRight, UserRound, MapPin } from "lucide-react";
+import { useGuestBase } from "@/lib/guest-base";
 import { brandStyle, deriveBrandTokens } from "@/domain/brand";
-import { LANG_COOKIE, type Lang } from "@/lib/i18n";
+import type { Lang } from "@/lib/i18n";
+import { LANG_COOKIE } from "@/lib/i18n";
 import type { getRestaurantHome } from "@/server/guest/restaurant-home";
 import { InstallApp } from "@/components/install-app";
 import { OutletLogo } from "./t/[table]/_components/outlet-logo";
-
-type HomeData = Awaited<ReturnType<typeof getRestaurantHome>>;
-type Step = "welcome" | "language" | "service";
-const STEPS: Step[] = ["welcome", "language", "service"];
-
-const LANGS = [
-  { hi: false, glyph: "Aa", title: "English", hint: "Menu in English" },
-  { hi: true, glyph: "अ", title: "हिन्दी", hint: "मेन्यू हिन्दी में" },
-] as const;
-
-/** Remembered for a year, so the booking and delivery pages open in the same language */
-function rememberLanguage(lang: Lang) {
-  document.cookie = `${LANG_COOKIE}=${lang}; Path=/; Max-Age=31536000; SameSite=Lax${location.protocol === "https:" ? "; Secure" : ""}`;
-}
-
-/** The restaurant's own page (no table): a welcome, the language, then booking or delivery. */
-export function RestaurantHome({ data, initialLang = "en", installable = null }: { data: HomeData; initialLang?: Lang; installable?: { name: string; logoUrl: string | null } | null }) {
-  const base = useGuestBase(data.outlet.code);
-  const [step, setStep] = useState<Step>("welcome");
-  const [hindi, setHindi] = useState(initialLang === "hi");
-  const { outlet, services } = data;
-  const t = hindi
-    ? {
-        welcome: "स्वागत है", intro: "पार्टी के लिए टेबल बुक करें या घर पर खाना मँगाएँ।", next: "आगे बढ़ें", back: "वापस",
-        choose: "आप क्या करना चाहेंगे?", chooseNote: "नीचे से एक विकल्प चुनें।", booking: "पार्टी के लिए टेबल बुक करें", bookingHint: "तारीख, समय और मेहमानों की संख्या चुनें।", waitlist: "वेटिंग लिस्ट में जुड़ें", waitlistHint: "अभी आ रहे हैं? लाइन में नाम लिखवाएँ, टेबल तैयार होने पर बताएँगे।",
-        delivery: "घर पर डिलीवरी", deliveryHint: "मेन्यू चुनें और घर पर डिलीवरी मँगाएँ।", none: "ऑनलाइन बुकिंग और डिलीवरी अभी उपलब्ध नहीं हैं। टेबल या रूम QR स्कैन करें।",
-        announcement: "घोषणा", step: (n: number) => `चरण ${n} / 3`, poweredBy: "Tableeqr द्वारा",
-      }
-    : {
-        welcome: "Welcome to", intro: "Reserve a table for your party or order food for delivery.", next: "Continue", back: "Back",
-        choose: "How would you like to continue?", chooseNote: "Pick one to get started.", booking: "Reserve for a party", bookingHint: "Choose a date, time and party size.", waitlist: "Join the waiting list", waitlistHint: "Coming now? Get in line and we will tell you when your table is ready.",
-        delivery: "Home delivery", deliveryHint: "Choose your food and enter your delivery address.", none: "Online reservations and delivery are not available. Scan your table or room QR instead.",
-        announcement: "Announcement", step: (n: number) => `Step ${n} of 3`, poweredBy: "Powered by Tableeqr",
-      };
-  const style = brandStyle(deriveBrandTokens(outlet.accentColor)) as CSSProperties;
-
-  const pickLanguage = (hi: boolean) => {
-    setHindi(hi);
-    rememberLanguage(hi ? "hi" : "en");
-    setStep("service");
-  };
-
-  return (
-    <main lang={hindi ? "hi" : "en"} style={style} className="flex min-h-dvh flex-col justify-center py-8 text-ink">
-      <section className="overflow-hidden rounded-[28px] border border-line/60 bg-surface shadow-[0_18px_50px_-20px_rgb(31_41_55/0.28)]">
-        <div className="px-6 pt-8 pb-7 text-center sm:px-8">
-          <div className="flex justify-center">
-            <OutletLogo name={outlet.name} logoUrl={outlet.logoUrl} size={80} />
-          </div>
-          <p className="mt-4 text-label font-semibold tracking-[.18em] text-muted uppercase">{t.welcome}</p>
-          <h1 className="mt-1 font-display text-[1.875rem] leading-tight font-bold tracking-tight break-words">{outlet.name}</h1>
-          {outlet.city && (
-            <p className="mt-1.5 inline-flex items-center gap-1 text-caption text-muted">
-              <HugeiconsIcon icon={Location01Icon} size={14} aria-hidden />
-              {outlet.city}
-            </p>
-          )}
-
-          {outlet.announcement && (
-            <aside aria-label={t.announcement} className="mt-5 rounded-2xl border border-brand-border/60 bg-brand-soft/70 p-4 text-left">
-              <p className="text-caption font-bold text-brand-strong">{outlet.announcement.title}</p>
-              <p className="mt-1 text-caption leading-relaxed whitespace-pre-wrap text-ink">{outlet.announcement.body}</p>
-            </aside>
-          )}
-
-          {/* Where the guest is in the three steps */}
-          <div className="mt-6 flex items-center justify-center gap-1.5" role="img" aria-label={t.step(STEPS.indexOf(step) + 1)}>
-            {STEPS.map((s) => (
-              <span key={s} className={`h-1.5 rounded-full transition-all duration-300 ${s === step ? "w-6 bg-brand" : STEPS.indexOf(s) < STEPS.indexOf(step) ? "w-1.5 bg-brand/50" : "w-1.5 bg-line"}`} />
-            ))}
-          </div>
-
-          {step === "welcome" && (
-            <div className="mt-5 animate-rise">
-              <p className="mx-auto max-w-[300px] text-body text-muted">{t.intro}</p>
-              <button
-                type="button"
-                onClick={() => setStep("language")}
-                className="mt-6 inline-flex min-h-13 w-full items-center justify-center gap-2 rounded-2xl bg-brand px-4 text-button font-bold text-brand-on shadow-[0_8px_20px_-6px_var(--brand-border)] transition-[transform,background-color] duration-100 hover:bg-brand-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand active:scale-[0.98]"
-              >
-                {t.next}
-                <HugeiconsIcon icon={ArrowRight01Icon} size={18} strokeWidth={2.4} aria-hidden />
-              </button>
-            </div>
-          )}
-
-          {step === "language" && (
-            <div className="mt-5 animate-rise text-left">
-              <StepHeader back={t.back} onBack={() => setStep("welcome")} title="Choose your language" note={<span lang="hi">अपनी भाषा चुनें</span>} />
-              <div className="mt-4 grid grid-cols-2 gap-3">
-                {LANGS.map((option) => {
-                  const on = hindi === option.hi;
-                  return (
-                    <button
-                      key={option.title}
-                      type="button"
-                      lang={option.hi ? "hi" : "en"}
-                      aria-pressed={on}
-                      onClick={() => pickLanguage(option.hi)}
-                      className={`relative flex flex-col items-start gap-3 rounded-2xl border-2 bg-surface p-4 text-left transition-[border-color,transform,box-shadow] duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand active:scale-[0.98] ${
-                        on ? "border-brand shadow-[0_8px_20px_-10px_var(--brand-border)]" : "border-line/70 hover:border-ink/25"
-                      }`}
-                    >
-                      <span className={`grid size-12 place-items-center rounded-xl font-display text-[1.375rem] font-bold ${on ? "bg-brand text-brand-on" : "bg-brand-soft text-brand-strong"}`}>{option.glyph}</span>
-                      <span>
-                        <span className="block text-section font-bold">{option.title}</span>
-                        <span className="mt-0.5 block text-caption text-muted">{option.hint}</span>
-                      </span>
-                      {on && <HugeiconsIcon icon={CheckmarkCircle02Icon} size={20} className="absolute top-3 right-3 text-brand" aria-hidden />}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {step === "service" && (
-            <div className="mt-5 animate-rise text-left">
-              <StepHeader back={t.back} onBack={() => setStep("language")} title={t.choose} note={t.chooseNote} />
-              <div className="mt-4 grid gap-3">
-                {services.reservations && (
-                  <ServiceCard href={`${base}/book?lang=${hindi ? "hi" : "en"}`} icon={Calendar03Icon} title={t.booking} hint={t.bookingHint} />
-                )}
-                {services.reservations && (
-                  <ServiceCard href={`${base}/waitlist?lang=${hindi ? "hi" : "en"}`} icon={UserMultipleIcon} title={t.waitlist} hint={t.waitlistHint} />
-                )}
-                {services.delivery && (
-                  <ServiceCard href={`${base}/delivery?lang=${hindi ? "hi" : "en"}`} icon={DeliveryTruck01Icon} title={t.delivery} hint={t.deliveryHint} />
-                )}
-              </div>
-              {!services.delivery && !services.reservations && (
-                <p className="mt-4 flex items-start gap-2 rounded-2xl border border-line bg-paper p-4 text-caption text-muted">
-                  <HugeiconsIcon icon={QrCodeIcon} size={18} className="mt-px shrink-0" aria-hidden />
-                  {t.none}
-                </p>
-              )}
-            </div>
-          )}
-        </div>
-      </section>
-      {installable && <div className="mt-4"><InstallApp guest name={installable.name} logoUrl={installable.logoUrl} title={hindi ? "हमारा ऐप इंस्टॉल करें" : "Install our app"} blurb={hindi ? "टेबल बुक करें और खाना मँगाएँ, सीधे होम स्क्रीन से।" : "Book a table and order delivery straight from your home screen."} /></div>}
-      <p className="mt-5 flex items-center justify-center gap-1.5 text-label text-muted">
-        <HugeiconsIcon icon={QrCodeIcon} size={14} aria-hidden />
-        {t.poweredBy}
-      </p>
-    </main>
-  );
-}
-
-function StepHeader({ back, onBack, title, note }: { back: string; onBack: () => void; title: string; note: ReactNode }) {
-  return (
-    <div>
-      {/* Drawn small, with a 44px tap area */}
-      <button
-        type="button"
-        onClick={onBack}
-        className="relative -ml-1 inline-flex items-center gap-0.5 rounded-full px-1 py-0.5 text-caption font-semibold text-muted before:absolute before:-inset-2.5 hover:text-ink focus-visible:outline-2 focus-visible:outline-brand"
-      >
-        <HugeiconsIcon icon={ArrowLeft01Icon} size={16} strokeWidth={2} aria-hidden />
-        {back}
-      </button>
-      <h2 className="mt-2.5 font-display text-section leading-tight font-bold">{title}</h2>
-      <p className="mt-0.5 text-caption text-muted">{note}</p>
-    </div>
-  );
-}
-
-function ServiceCard({ href, icon, title, hint }: { href: string; icon: IconSvgElement; title: string; hint: string }) {
-  return (
-    <Link
-      href={href}
-      className="group flex min-h-24 items-center gap-4 rounded-2xl border-2 border-line/70 bg-surface p-4 transition-[border-color,transform] duration-150 hover:border-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand active:scale-[0.99]"
-    >
-      <span className="grid size-12 shrink-0 place-items-center rounded-xl bg-brand-soft text-brand-strong">
-        <HugeiconsIcon icon={icon} size={22} aria-hidden />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block text-body font-bold">{title}</span>
-        <span className="mt-0.5 block text-caption text-muted">{hint}</span>
-      </span>
-      <HugeiconsIcon icon={ArrowRight01Icon} size={20} className="shrink-0 text-muted transition-transform group-hover:translate-x-0.5 group-hover:text-brand" aria-hidden />
-    </Link>
-  );
+export function RestaurantHome({data,initialLang='en',installable=null}:{data:Awaited<ReturnType<typeof getRestaurantHome>>;initialLang?:Lang;installable?:{name:string;logoUrl:string|null}|null}) {
+ const base=useGuestBase(data.outlet.code);const [lang,setLang]=useState(initialLang);const hi=lang==='hi';const {outlet,services}=data;const noServicesText=services.rooms&&services.dineIn?['Use your room or table QR to open available services.','उपलब्ध सेवाओं के लिए कमरे या टेबल का QR स्कैन करें।']:services.rooms?['Room services are available from the QR in your room.','कमरे में दिए गए QR से रूम सर्विस लें।']:services.dineIn?['Use your table QR to view the menu and place an order.','मेन्यू देखने और ऑर्डर करने के लिए टेबल QR स्कैन करें।']:outlet.businessType==='cloud_kitchen'?['Online ordering is paused right now. Please check back later.','ऑनलाइन ऑर्डर अभी बंद हैं। कृपया बाद में देखें।']:['Online services are not available right now. Please contact the business.','ऑनलाइन सेवाएँ अभी उपलब्ध नहीं हैं। कृपया व्यवसाय से संपर्क करें।'];
+ return <main lang={lang} style={brandStyle(deriveBrandTokens(outlet.accentColor)) as CSSProperties} className="py-5"><header className="flex items-center justify-between gap-3"><div className="flex min-w-0 items-center gap-3"><OutletLogo name={outlet.name} logoUrl={outlet.logoUrl} size={44}/><div className="min-w-0"><h1 className="truncate font-display text-xl font-bold">{outlet.name}</h1><p className="flex items-center gap-1 text-xs text-muted"><MapPin className="size-3"/>{outlet.city}</p></div></div><Link href={`${base}/profile`} aria-label="My profile" className="grid size-11 shrink-0 place-items-center rounded-full border border-line bg-surface"><UserRound className="size-5"/></Link></header>
+ <section className="mt-6 rounded-3xl bg-ink p-6 text-white"><p className="text-sm opacity-80">{hi?'स्वागत है':'Welcome to'}</p><h2 className="mt-2 font-display text-3xl font-bold">{outlet.name}</h2><p className="mt-3 text-sm opacity-80">{hi?'आपकी पसंद, सीधे आपके पसंदीदा ब्रांड से।':'Your favourites, directly from your favourite brand.'}</p><Link className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-full bg-white px-4 text-sm font-semibold text-ink" href={services.delivery?`${base}/delivery?new=1`:services.reservations?`${base}/book`:`${base}/profile`}>{services.delivery?(hi?'मेन्यू देखें':'Explore menu'):services.reservations?(hi?'बुक करें':'Make a booking'):(hi?'मेरी प्रोफाइल':'My profile')}<ChevronRight className="size-4"/></Link></section>
+ <div className="mt-6 flex items-center justify-between"><h2 className="text-lg font-bold">{hi?'आप क्या करना चाहेंगे?':'What would you like to do?'}</h2><select aria-label="Language" value={lang} className="min-h-10 rounded-full border border-line bg-surface px-3 text-sm" onChange={e=>{const next=e.target.value as Lang;setLang(next);document.cookie=`${LANG_COOKIE}=${next}; Path=/; Max-Age=31536000; SameSite=Lax${location.protocol==='https:'?'; Secure':''}`}}><option value="en">English</option><option value="hi">हिन्दी</option></select></div>
+ <div className="mt-3 grid gap-3">{[{show:services.delivery,href:`${base}/delivery?new=1`,icon:Truck,title:hi?'खाना मँगाएँ':'Order delivery',note:hi?'मेन्यू देखें और ऑर्डर करें।':'Browse the menu and get food delivered.'},{show:services.reservations,href:`${base}/book`,icon:CalendarDays,title:hi?'टेबल या पार्टी बुक करें':'Reservations & parties',note:hi?'तारीख और मेहमान चुनें।':'Choose your date, time and party size.'},{show:services.reservations&&services.dineIn,href:`${base}/waitlist`,icon:Users,title:hi?'वेटिंग लिस्ट':'Join the waitlist',note:hi?'आने से पहले अपनी जगह लें।':'Get your place before you arrive.'}].filter(x=>x.show).map(({href,icon:Icon,title,note})=><Link key={href} href={href} className="flex min-h-24 items-center gap-4 rounded-2xl border border-line bg-surface p-4"><span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-paper"><Icon className="size-6"/></span><span className="min-w-0 flex-1"><b className="block">{title}</b><span className="mt-1 block text-sm text-muted">{note}</span></span><ChevronRight className="size-5 shrink-0"/></Link>)}</div>
+ {!services.delivery&&!services.reservations&&<p className="mt-5 rounded-2xl border border-line bg-surface p-5 text-sm text-muted">{hi?noServicesText[1]:noServicesText[0]}</p>}
+ {outlet.announcement&&<aside className="mt-5 rounded-2xl bg-paper p-4"><h2 className="font-bold">{outlet.announcement.title}</h2><p className="mt-1 text-sm text-muted">{outlet.announcement.body}</p></aside>}
+ <Link href={`${base}/orders`} className="mt-5 flex min-h-14 items-center justify-between rounded-2xl border border-line bg-surface p-4 font-semibold">{hi?'मेरे ऑर्डर और बुकिंग':'Track orders & view bookings'}<ChevronRight className="size-4"/></Link>
+ {installable&&<InstallApp guest className="mt-5" name={installable.name} logoUrl={installable.logoUrl} title={hi?`${installable.name} ऐप इंस्टॉल करें`:`Install ${installable.name}`} blurb={hi?'अगली बार होम स्क्रीन से सीधे खोलें।':'Open your brand app straight from your home screen next time.'}/>}
+ </main>;
 }

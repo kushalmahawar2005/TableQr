@@ -15,7 +15,7 @@ const FILTERS: CustomerFilter[] = ["all", "regulars", "offers", "away"];
 export default async function CustomersPage(props: PageProps<"/console/customers">) {
   const staff = await currentStaff();
   if (!staff || !canSee(staff, "customers")) notFound();
-  if (!(await tenantFeatures(staff.tenantId)).whatsappBills) return <FeatureLocked feature="whatsappBills" />;
+  if (!(await tenantFeatures(staff.tenantId, staff.outletId)).whatsappBills) return <FeatureLocked feature="whatsappBills" />;
   const sp = await props.searchParams;
   const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
   const filter = FILTERS.find((f) => f === one(sp.filter)) ?? "all";

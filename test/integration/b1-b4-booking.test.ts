@@ -1,4 +1,7 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { getConsoleNotices } from "@/server/staff/notifications";
+import { sendOutletPush } from "@/server/staff/web-push";
+vi.mock("@/server/staff/web-push", () => ({ sendOutletPush: vi.fn().mockResolvedValue(undefined) }));
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { db as appDb } from "@/db";
 import { uuidv7 } from "@/db/id";
@@ -114,6 +117,14 @@ describe("B1-B4 booking domain", () => {
     expect(reservation).toBeUndefined();
     const [stored] = await env.db.select().from(s.groupRequests).where(eq(s.groupRequests.requestId, "group-req-1"));
     expect(stored.partySize).toBe(15);
+    expect(sendOutletPush).toHaveBeenCalledWith(expect.objectContaining({ tenantId: env.demo.tenantId }), expect.objectContaining({ title: "New party request", url: "/console/reservations" }), { kind: "management" });
+    const staff = await resolveStaff((await signInStaff({ outletCode: "SRJ01", phone: "9000000001", pin: "1111" })).token);
+    const notices = await getConsoleNotices(staff!, new Date(Date.now() - 60_000));
+    expect(notices).toContainEqual(expect.objectContaining({ id: `party:${stored.id}`, kind: "party", title: "New party request · Large Party" }));
+    const calls = vi.mocked(sendOutletPush).mock.calls.length;
+    await createGroupRequest("SRJ01", { requestId: "group-req-1", name: "Large Party", phone: "9876543212", partySize: 15, desiredDate: date, desiredLocalDateTime: `${date}T19:00` });
+    expect(vi.mocked(sendOutletPush).mock.calls.length).toBe(calls);
+
   });
 
   it("prevents simultaneous holds for the only twelve-top", async () => {

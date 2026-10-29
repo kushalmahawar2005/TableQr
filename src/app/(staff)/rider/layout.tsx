@@ -2,12 +2,12 @@ import type { Metadata, Viewport } from "next";
 import { InstallApp } from "@/components/install-app";
 import { NotificationPermissionOnboarding } from "@/components/notification-permission-onboarding";
 import { staffAppViewportFor } from "@/lib/staff-app";
-import { currentStaff } from "@/server/staff/request";
+import { currentRider } from "@/server/staff/rider-request";
 import { staffAppBrandForOutletCode } from "@/server/staff/pwa-branding";
 import { cache } from "react";
 
 const riderAppBrand = cache(async () => {
-  const staff = await currentStaff();
+  const staff = await currentRider();
   return staffAppBrandForOutletCode(staff?.outlet.code);
 });
 
@@ -26,7 +26,7 @@ export async function generateViewport(): Promise<Viewport> {
 }
 
 export default async function RiderLayout({ children }: LayoutProps<"/rider">) {
-  const staff = await currentStaff();
+  const staff = await currentRider();
   const brand = staff ? await staffAppBrandForOutletCode(staff.outlet.code) : null;
   return (
     // Room for the phone's status bar: the reported inset, or --app-top set by the screen inside the app
