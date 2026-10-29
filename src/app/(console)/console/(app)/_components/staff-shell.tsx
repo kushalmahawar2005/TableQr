@@ -219,20 +219,20 @@ export function StaffShell({
       className={`flex min-h-dvh flex-1 flex-col bg-paper pt-[max(env(safe-area-inset-top),var(--staff-app-top,0px))] text-ink sm:flex-row sm:pt-0 ${dark ? "theme-dark" : ""}`}
     >
       <header
-        className={`sticky top-[max(env(safe-area-inset-top),var(--staff-app-top,0px))] z-30 flex h-14 shrink-0 items-center justify-between border-b px-3 sm:hidden print:hidden ${active === "dashboard" ? "border-line bg-paper" : "border-line bg-surface"}`}
+        className={`sticky top-[max(env(safe-area-inset-top),var(--staff-app-top,0px))] z-30 flex h-12 shrink-0 items-center justify-between border-b px-2.5 sm:hidden print:hidden ${active === "dashboard" ? "border-line bg-paper" : "border-line bg-surface"}`}
       >
-        <span className="flex min-w-0 items-center gap-2">
+        <span className="flex min-w-0 items-center gap-1.5">
           <OutletBrandMark name={brandName ?? staff.outlet} logoUrl={logoUrl} />
           <span className="min-w-0">
-            <span className="block truncate font-display text-[13px] font-bold leading-tight text-ink">
+            <span className="block truncate font-display text-[12px] font-bold leading-tight text-ink">
               {brandName ?? staff.outlet}
             </span>
-            {staff.outlet !== brandName && <span className="block truncate text-[11px] font-medium leading-tight text-muted">
+            {staff.outlet !== brandName && <span className="block truncate text-[10px] font-medium leading-tight text-muted">
               {staff.outlet}
             </span>}
           </span>
         </span>
-        <span className="flex items-center gap-1.5">
+        <span className="flex shrink-0 items-center gap-0.5">
           {kitchen && (
             <KitchenButton
               lang={lang}
@@ -245,19 +245,19 @@ export function StaffShell({
 
           {wide === false && (
             <span data-tour="bell" className="flex">
-              <NotificationBell preview={preview} placement="header" />
+              <NotificationBell preview={preview} placement="header" compact />
             </span>
           )}
           <ThemeToggle
             dark={dark}
             onChange={setDark}
-            className="grid size-9 place-items-center rounded-xl text-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-2 focus-visible:outline-forest"
+            className="grid size-8 place-items-center rounded-lg text-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-2 focus-visible:outline-forest"
           />
           <form action={preview ? undefined : signOutAction}>
             <button
               type={preview ? "button" : "submit"}
               aria-label={lang === "hi" ? "साइन आउट" : "Sign out"}
-              className="grid size-9 place-items-center rounded-xl text-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-2 focus-visible:outline-forest"
+              className="grid size-8 place-items-center rounded-lg text-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-2 focus-visible:outline-forest"
             >
               <HugeiconsIcon icon={Logout01Icon} size={18} aria-hidden />
             </button>
@@ -842,7 +842,7 @@ function OutletSwitcher({
 
 function OutletBrandMark({ name, logoUrl }: { name: string; logoUrl: string | null }) {
   return (
-    <span className={`grid size-8 sm:size-10 shrink-0 place-items-center overflow-hidden rounded-full ${logoUrl ? "" : "border border-line bg-sage/70 shadow-xs"}`} aria-label={logoUrl ? `${name} logo` : `${name} initial`}>
+    <span className={`grid size-7 sm:size-10 shrink-0 place-items-center overflow-hidden rounded-full ${logoUrl ? "" : "border border-line bg-sage/70 shadow-xs"}`} aria-label={logoUrl ? `${name} logo` : `${name} initial`}>
       {logoUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={logoUrl} alt="" className="size-full object-contain" />
@@ -877,12 +877,12 @@ function KitchenButton({
       aria-label={label}
       title={label}
       className={`inline-flex shrink-0 items-center gap-2.5 rounded-xl ${color} font-semibold text-white transition-all active:scale-[0.98] focus-visible:outline-2 ${
-        compact ? "size-10 justify-center" : "h-11 px-4.5 text-xs sm:text-sm"
+        compact ? "size-8 rounded-lg justify-center" : "h-11 px-4.5 text-xs sm:text-sm"
       }`}
     >
       <HugeiconsIcon
         icon={ChefHatIcon}
-        size={18}
+        size={16}
         className="shrink-0"
         aria-hidden
       />

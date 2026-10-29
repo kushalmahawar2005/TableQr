@@ -25,7 +25,7 @@ const timeAgo = (at: number, now: number) => {
  * Console bell: checks for new orders, requests, payments, bookings and waitlist joins every few
  * seconds, rings, shows a toast, and (when allowed) a system notification while the tab is hidden.
  */
-export function NotificationBell({ preview = false, className = "", placement = "header", showLabel = false }: { preview?: boolean; className?: string; placement?: "header" | "sidebar"; showLabel?: boolean }) {
+export function NotificationBell({ preview = false, className = "", placement = "header", showLabel = false, compact = false }: { preview?: boolean; className?: string; placement?: "header" | "sidebar"; showLabel?: boolean; compact?: boolean }) {
   const [items, setItems] = useState<ConsoleNotice[]>([]);
   const [unread, setUnread] = useState(0);
   const [toasts, setToasts] = useState<ConsoleNotice[]>([]);
@@ -156,9 +156,9 @@ export function NotificationBell({ preview = false, className = "", placement = 
         onClick={() => { setOpen((o) => !o); setUnread(0); }}
         aria-label={unread ? `Notifications, ${unread} new` : "Notifications"}
         aria-expanded={open}
-        className={`relative flex min-h-10 items-center gap-3 rounded-input text-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-2 focus-visible:outline-ink ${showLabel ? "min-h-11 w-full px-3 text-body font-semibold" : "size-10 justify-center"}`}
+        className={`relative flex min-h-10 items-center gap-3 rounded-input text-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-2 focus-visible:outline-ink ${showLabel ? "min-h-11 w-full px-3 text-body font-semibold" : compact ? "size-8 min-h-8 justify-center rounded-lg" : "size-10 justify-center"}`}
       >
-        <HugeiconsIcon icon={Notification01Icon} size={20} className="shrink-0" aria-hidden />
+        <HugeiconsIcon icon={Notification01Icon} size={compact ? 16 : 20} className="shrink-0" aria-hidden />
         {showLabel && <span className="hidden lg:inline">Notifications</span>}
         {unread > 0 && (
           <span className="absolute top-1 left-6 grid min-w-4 place-items-center rounded-full bg-danger px-1 text-[10px] leading-4 font-bold text-white">{unread > 9 ? "9+" : unread}</span>
