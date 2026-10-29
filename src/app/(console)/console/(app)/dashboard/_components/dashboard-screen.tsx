@@ -137,7 +137,7 @@ export function DashboardScreen({
 
   return (
     <div className="dashboard-theme min-h-[calc(100dvh-4rem)] bg-dashboard-canvas sm:min-h-[calc(100dvh-4.5rem)]">
-      <main className="mx-auto w-full max-w-[1440px] space-y-5 px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
+      <main className="mx-auto w-full max-w-[1440px] space-y-3 px-3 py-3 sm:space-y-5 sm:px-6 sm:py-5 lg:px-8 lg:py-6">
         <DashboardHeader data={data} conn={conn} refreshing={refreshing} onRefresh={refresh} />
 
         {refreshError && (

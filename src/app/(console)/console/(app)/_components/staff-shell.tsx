@@ -30,6 +30,7 @@ import {
   Search,
   Settings,
   X,
+  MoreHorizontal,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -196,6 +197,11 @@ export function StaffShell({
   const role = staff.roles
     .map((r) => ROLE[lang][r as keyof (typeof ROLE)["en"]] ?? r)
     .join(", ");
+  const mainPhoneSections = ["dashboard", "orders", "billing", "menu"];
+  const preferredTabs = mainPhoneSections.flatMap(slug => sections.filter(section => section.slug === slug));
+  const orderedPhoneTabs = [...preferredTabs, ...sections.filter(section => !mainPhoneSections.includes(section.slug))];
+  const phoneTabs = sections.length > 5 ? orderedPhoneTabs.slice(0, 4) : sections;
+  const moreTabs = sections.length > 5 ? orderedPhoneTabs.slice(4) : [];
   const initials =
     staff.name
       .trim()
@@ -213,17 +219,17 @@ export function StaffShell({
       className={`flex min-h-dvh flex-1 flex-col bg-paper pt-[max(env(safe-area-inset-top),var(--staff-app-top,0px))] text-ink sm:flex-row sm:pt-0 ${dark ? "theme-dark" : ""}`}
     >
       <header
-        className={`sticky top-[max(env(safe-area-inset-top),var(--staff-app-top,0px))] z-30 flex h-16 shrink-0 items-center justify-between border-b px-4 sm:hidden print:hidden ${active === "dashboard" ? "border-line bg-paper" : "border-line bg-surface"}`}
+        className={`sticky top-[max(env(safe-area-inset-top),var(--staff-app-top,0px))] z-30 flex h-14 shrink-0 items-center justify-between border-b px-3 sm:hidden print:hidden ${active === "dashboard" ? "border-line bg-paper" : "border-line bg-surface"}`}
       >
-        <span className="flex min-w-0 items-center gap-2.5">
+        <span className="flex min-w-0 items-center gap-2">
           <OutletBrandMark name={brandName ?? staff.outlet} logoUrl={logoUrl} />
           <span className="min-w-0">
-            <span className="block truncate font-display text-sm font-bold leading-tight text-ink">
+            <span className="block truncate font-display text-[13px] font-bold leading-tight text-ink">
               {brandName ?? staff.outlet}
             </span>
-            <span className="block truncate text-[11px] font-medium leading-tight text-muted">
+            {staff.outlet !== brandName && <span className="block truncate text-[11px] font-medium leading-tight text-muted">
               {staff.outlet}
-            </span>
+            </span>}
           </span>
         </span>
         <span className="flex items-center gap-1.5">
@@ -433,9 +439,9 @@ export function StaffShell({
       </div>
       <nav
         aria-label={lang === "hi" ? "स्टाफ मेन्यू" : "Staff menu"}
-        className="no-scrollbar fixed inset-x-0 bottom-0 z-30 flex overflow-x-auto border-t border-line bg-surface pb-[env(safe-area-inset-bottom)] sm:hidden print:hidden"
+        className="fixed inset-x-0 bottom-0 z-30 flex border-t border-line bg-surface pb-[env(safe-area-inset-bottom)] sm:hidden print:hidden"
       >
-        {sections.map((s) => {
+        {phoneTabs.map((s) => {
           const current = s.slug === active;
           return (
             <Link
@@ -443,17 +449,24 @@ export function StaffShell({
               href={preview ? "#" : `/console/${s.slug}`}
               data-tour={`nav-${s.slug}`}
               aria-current={current ? "page" : undefined}
-              className={`flex min-h-16 min-w-[4.75rem] flex-1 flex-col items-center justify-center gap-1 px-1 text-[10px] font-semibold ${current ? "text-forest" : "text-muted"}`}
+              className={`flex min-h-14 min-w-0 flex-1 flex-col items-center justify-center gap-1 px-1 text-[10px] font-semibold ${current ? "text-forest" : "text-muted"}`}
             >
               <HugeiconsIcon
                 icon={ICONS[s.slug] ?? DashboardSquare01Icon}
-                size={22}
+                size={19}
                 aria-hidden
               />
               <span className="max-w-full truncate">{s.label}</span>
             </Link>
           );
         })}
+        {moreTabs.length > 0 && <details className="relative min-w-0 flex-1">
+          <summary aria-label={lang === "hi" ? "और सेक्शन" : "More sections"} className={`flex min-h-14 list-none flex-col items-center justify-center gap-1 text-[10px] font-semibold [&::-webkit-details-marker]:hidden ${moreTabs.some(s => s.slug === active) ? "text-forest" : "text-muted"}`}><MoreHorizontal className="size-5" aria-hidden="true" /><span>{lang === "hi" ? "और" : "More"}</span></summary>
+          <div className="absolute right-2 bottom-[calc(100%+8px)] w-56 max-w-[calc(100vw-24px)] rounded-2xl border border-line bg-surface p-2 shadow-xl">
+            {moreTabs.map(s => <Link key={s.slug} href={preview ? "#" : `/console/${s.slug}`} aria-current={s.slug === active ? "page" : undefined} onClick={event => event.currentTarget.closest("details")?.removeAttribute("open")} className={`flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-semibold ${s.slug === active ? "bg-brand-soft text-forest" : "text-ink hover:bg-paper"}`}><HugeiconsIcon icon={ICONS[s.slug] ?? DashboardSquare01Icon} size={18} aria-hidden /><span>{s.label}</span></Link>)}
+          </div>
+        </details>}
+
       </nav>
     </div>
   );
@@ -829,7 +842,7 @@ function OutletSwitcher({
 
 function OutletBrandMark({ name, logoUrl }: { name: string; logoUrl: string | null }) {
   return (
-    <span className={`grid size-10 shrink-0 place-items-center overflow-hidden rounded-xl ${logoUrl ? "" : "border border-line bg-sage/70 shadow-xs"}`} aria-label={logoUrl ? `${name} logo` : `${name} initial`}>
+    <span className={`grid size-8 sm:size-10 shrink-0 place-items-center overflow-hidden rounded-full ${logoUrl ? "" : "border border-line bg-sage/70 shadow-xs"}`} aria-label={logoUrl ? `${name} logo` : `${name} initial`}>
       {logoUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={logoUrl} alt="" className="size-full object-contain" />

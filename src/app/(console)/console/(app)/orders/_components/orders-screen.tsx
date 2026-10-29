@@ -98,7 +98,7 @@ export function OrdersScreen({ orders, outlet, tabs }: { orders: OrderRow[]; out
         ] as const).map(([Icon, label, v, note, tone]) => (
           <div key={label} className="rounded-card border border-line bg-surface p-4 shadow-[0_1px_2px_rgb(31_41_55/0.04)]">
             <div className="flex items-start justify-between gap-2"><dt className="text-caption font-semibold text-muted">{label}</dt><span className="grid size-9 shrink-0 place-items-center rounded-input" style={{ background: `color-mix(in srgb, ${tone} 14%, var(--surface))`, color: tone }}><Icon className="size-[18px]" aria-hidden="true" /></span></div>
-            <dd className="mt-1 font-display text-[26px] leading-8 font-bold tabular text-ink">{v}</dd>
+            <dd className="mt-1 font-display text-[22px] leading-7 sm:text-[26px] sm:leading-8 font-bold tabular text-ink">{v}</dd>
             <p className="mt-0.5 truncate text-caption text-muted">{note}</p>
           </div>
         ))}

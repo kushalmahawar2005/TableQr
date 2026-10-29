@@ -57,3 +57,10 @@ The UI action must connect end-to-end to the authorized server action/API and da
 - Landing content includes Cloud Kitchen and remote setup/hardware scope, with no public pricing amounts.
 - Local browser review covered Dashboard, Orders, Billing, Menu, Team, Settings and My Plan. Settings shows no rooms or table mode for the current Cloud Kitchen account.
 - Remaining production checks require actual Android/iOS devices, a merchant transaction/refund, and printer/domain access. These are deliberately not marked complete by local code tests.
+
+## Mobile density follow-up (29 October)
+
+- Reduced phone dashboard greeting to 18px, KPI cards to approximately 112px and page spacing; detailed comparison footers remain on desktop.
+- Shared staff headings now render at 18px on phones; Orders/Menu/Team metrics use smaller phone values.
+- Mobile header uses a smaller circular logo and omits duplicate outlet/brand text. Bottom navigation shows four primary sections and a More menu for the remaining permitted sections, without sideways scrolling.
+- Browser checked Dashboard and Settings at 319 CSS px; verified More → Settings navigation, automatic menu closing and no page overflow. Dashboard UI regression suite: 19 passing tests. Typecheck and lint pass; production build passes.

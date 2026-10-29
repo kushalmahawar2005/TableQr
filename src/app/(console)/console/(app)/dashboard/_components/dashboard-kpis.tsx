@@ -14,22 +14,22 @@ export function DashboardKpis({ data, trend, features }: { data: DashboardData; 
   const preparingCount = (data.operations.kitchenOrders || []).filter((o) => o.status === "preparing").length;
   const readyCount = (data.operations.kitchenOrders || []).filter((o) => o.status === "ready").length;
 
-  const card = `group relative flex min-h-[140px] flex-col justify-between rounded-2xl border border-line bg-surface p-3 shadow-[0_1px_2px_rgba(25,37,30,0.035)] transition-all duration-200 hover:-translate-y-0.5 hover:border-forest/30 hover:shadow-[0_8px_24px_rgba(25,37,30,0.07)] sm:min-h-[168px] sm:p-5 ${focusRing}`;
-  const iconBox = "grid size-9 shrink-0 place-items-center rounded-xl";
-  const footer = "mt-2 flex min-h-6 items-center justify-between gap-2 border-t border-[var(--dashboard-footer-line)] pt-2 sm:mt-3 sm:min-h-7 sm:pt-2.5";
+  const card = `group relative flex min-h-[112px] flex-col justify-between rounded-2xl border border-line bg-surface p-3 shadow-[0_1px_2px_rgba(25,37,30,0.035)] transition-all duration-200 hover:-translate-y-0.5 hover:border-forest/30 hover:shadow-[0_8px_24px_rgba(25,37,30,0.07)] sm:min-h-[168px] sm:p-5 ${focusRing}`;
+  const iconBox = "grid size-7 sm:size-9 shrink-0 place-items-center rounded-xl";
+  const footer = "mt-2 hidden sm:flex min-h-6 items-center justify-between gap-2 border-t border-[var(--dashboard-footer-line)] pt-2 sm:mt-3 sm:min-h-7 sm:pt-2.5";
   const deltaBadge = "inline-flex shrink-0 items-center rounded-full bg-[var(--dashboard-badge)] px-2.5 py-1 [&>span]:text-[11px] [&>span]:leading-tight [&>span]:whitespace-nowrap";
 
   return (
     <section aria-label="Key Performance Indicators">
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-2 sm:gap-4 xl:grid-cols-6">
         <Link href="/console/billing" className={`${card} col-span-2 bg-gradient-to-br from-surface via-surface to-[var(--dashboard-sales-tint)]`}>
           <div className="flex items-center justify-between gap-3">
-            <p className="text-sm font-semibold text-muted">Today&apos;s Sales</p>
+            <p className="text-xs sm:text-sm font-semibold text-muted">Today&apos;s Sales</p>
             <span className={`${iconBox} bg-sage text-forest`} aria-hidden="true"><Wallet className="size-[18px]" /></span>
           </div>
           <div className="mt-2 flex min-w-0 items-end justify-between gap-3">
             <div className="min-w-0">
-              <p className="font-display text-[30px] font-bold leading-none tracking-tight text-ink tabular sm:text-[34px]">{money(k.revenue.today)}</p>
+              <p className="font-display text-[24px] font-bold leading-none tracking-tight text-ink tabular sm:text-[34px]">{money(k.revenue.today)}</p>
               <p className="mt-1 text-xs font-medium text-muted sm:mt-2">Money from paid bills</p>
             </div>
             <RevenueSparkline trend={trend} />
@@ -46,8 +46,8 @@ export function DashboardKpis({ data, trend, features }: { data: DashboardData; 
             <span className={`${iconBox} bg-terracotta/10 text-terracotta`} aria-hidden="true"><FileText className="size-[18px]" /></span>
           </div>
           <div className="mt-2">
-            <p className="font-display text-[30px] font-bold leading-none tracking-tight text-ink tabular sm:text-[32px]">{k.orders.today}</p>
-            <p className="mt-1 min-h-7 text-xs font-medium leading-4 text-muted sm:mt-2 sm:min-h-8">
+            <p className="font-display text-[24px] font-bold leading-none tracking-tight text-ink tabular sm:text-[32px]">{k.orders.today}</p>
+            <p className="mt-1 min-h-5 text-[11px] font-medium leading-4 text-muted sm:mt-2 sm:min-h-8">
               {preparingCount > 0 || readyCount > 0 ? `${preparingCount} preparing · ${readyCount} ready` : k.orders.today > 0 ? "Active orders placed" : "No active orders"}
             </p>
           </div>
@@ -60,8 +60,8 @@ export function DashboardKpis({ data, trend, features }: { data: DashboardData; 
             <span className={`${iconBox} bg-terracotta/10 text-terracotta`} aria-hidden="true"><Receipt className="size-[18px]" /></span>
           </div>
           <div className="mt-2">
-            <p className="font-display text-[26px] font-bold leading-none tracking-tight text-ink tabular sm:text-[30px]">{money(k.outstandingPaise)}</p>
-            <p className="mt-1 min-h-7 text-xs font-medium leading-4 text-muted sm:mt-2 sm:min-h-8">Total amount due</p>
+            <p className="font-display text-[22px] font-bold leading-none tracking-tight text-ink tabular sm:text-[24px]">{money(k.outstandingPaise)}</p>
+            <p className="mt-1 min-h-5 text-[11px] font-medium leading-4 text-muted sm:mt-2 sm:min-h-8">Total amount due</p>
           </div>
           <div className={`${footer} justify-start`}><span className="text-[11px] font-medium text-muted">Across open bills</span></div>
         </Link>
@@ -72,8 +72,8 @@ export function DashboardKpis({ data, trend, features }: { data: DashboardData; 
             <span className={`${iconBox} bg-sage text-forest`} aria-hidden="true"><Truck className="size-[18px]" /></span>
           </div>
           <div className="mt-2">
-            <p className="font-display text-[30px] font-bold leading-none tracking-tight text-ink tabular sm:text-[32px]">{k.delivery.active}</p>
-            <p className="mt-1 min-h-7 text-xs font-medium leading-4 text-muted sm:mt-2 sm:min-h-8">{k.delivery.onTheWay} on the way · {money(k.delivery.cashToCollectPaise)} cash</p>
+            <p className="font-display text-[24px] font-bold leading-none tracking-tight text-ink tabular sm:text-[32px]">{k.delivery.active}</p>
+            <p className="mt-1 min-h-5 text-[11px] font-medium leading-4 text-muted sm:mt-2 sm:min-h-8">{k.delivery.onTheWay} on the way · {money(k.delivery.cashToCollectPaise)} cash</p>
           </div>
           <div className={`${footer} justify-start`}><span className="text-[11px] font-medium text-muted">{k.delivery.deliveredToday} delivered today</span></div>
         </Link>}
@@ -84,7 +84,7 @@ export function DashboardKpis({ data, trend, features }: { data: DashboardData; 
             <span className={`${iconBox} bg-terracotta/10 text-terracotta`} aria-hidden="true"><Receipt className="size-[18px]" /></span>
           </div>
           <div className="mt-2">
-            <p className="font-display text-[30px] font-bold leading-none tracking-tight text-ink tabular sm:text-[32px]">
+            <p className="font-display text-[24px] font-bold leading-none tracking-tight text-ink tabular sm:text-[32px]">
             {k.openTables.open} <span className="text-base font-semibold text-muted">/ {k.openTables.total}</span>
             </p>
             <div className="mt-2 flex items-center gap-2 sm:mt-3">
@@ -99,12 +99,12 @@ export function DashboardKpis({ data, trend, features }: { data: DashboardData; 
 
         <Link href="/console/billing" className={`${card} xl:col-span-1`}>
           <div className="flex items-center justify-between gap-2">
-            <p className="text-sm font-semibold text-muted">Average Bill</p>
+            <p className="text-xs sm:text-sm font-semibold text-muted">Average Bill</p>
             <span className={`${iconBox} bg-sage text-forest`} aria-hidden="true"><CreditCard className="size-[18px]" /></span>
           </div>
           <div className="mt-2">
-            <p className="font-display text-[30px] font-bold leading-none tracking-tight text-ink tabular sm:text-[32px]">{money(k.averageBill.today)}</p>
-            <p className="mt-1 min-h-7 text-xs font-medium leading-4 text-muted sm:mt-2 sm:min-h-8">Per paid bill</p>
+            <p className="font-display text-[24px] font-bold leading-none tracking-tight text-ink tabular sm:text-[32px]">{money(k.averageBill.today)}</p>
+            <p className="mt-1 min-h-5 text-[11px] font-medium leading-4 text-muted sm:mt-2 sm:min-h-8">Per paid bill</p>
           </div>
           <div className={footer}><span className="whitespace-nowrap text-[10px] font-medium text-muted">Yesterday</span><span className={deltaBadge}><Delta today={k.averageBill.today} yesterday={k.averageBill.yesterday} compact /></span></div>
         </Link>
@@ -159,7 +159,7 @@ function RevenueSparkline({ trend }: { trend: RevenueTrend }) {
   const last = points.at(-1)!;
 
   return (
-    <svg className="mb-0.5 h-10 w-[88px] shrink-0 overflow-visible sm:w-[104px]" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Revenue trend for the last 7 days: ${trend.map((day) => `${dayLabel(day.date, { weekday: "short" })} ${money(day.revenuePaise)}`).join(", ")}`}>
+    <svg className="mb-0.5 h-8 w-[72px] shrink-0 overflow-visible sm:w-[104px]" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Revenue trend for the last 7 days: ${trend.map((day) => `${dayLabel(day.date, { weekday: "short" })} ${money(day.revenuePaise)}`).join(", ")}`}>
       <path d={area} fill="currentColor" className="text-sage" opacity="0.9" />
       <path d={line} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-forest" />
       <circle cx={last[0]} cy={last[1]} r="3.5" fill="currentColor" className="text-forest" />

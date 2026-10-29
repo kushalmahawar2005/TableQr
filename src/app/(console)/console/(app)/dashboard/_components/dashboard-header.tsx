@@ -25,12 +25,12 @@ export function DashboardHeader({
 }) {
   const meta = CONN_META[conn];
   return (
-    <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+    <header className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
       <div className="min-w-0">
-        <h1 className="font-display text-2xl font-bold tracking-tight text-ink sm:text-[28px]">
+        <h1 className="font-display text-lg leading-6 font-bold tracking-tight text-ink sm:text-[28px]">
           {data.greeting}, {data.outletName}!
         </h1>
-        <p className="mt-1 text-sm font-medium text-muted">Here&apos;s what&apos;s happening at your business today.</p>
+        <p className="mt-1 hidden text-sm font-medium text-muted sm:block">Here&apos;s what&apos;s happening at your business today.</p>
       </div>
 
       <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:justify-start">
@@ -48,7 +48,7 @@ export function DashboardHeader({
           type="button"
           onClick={onRefresh}
           disabled={refreshing}
-          className={`inline-flex min-h-10 items-center gap-1.5 rounded-input border border-line bg-surface px-4 text-sm font-semibold text-ink transition-all hover:border-forest/40 hover:bg-paper disabled:opacity-60 cursor-pointer ${focusRing}`}
+          className={`inline-flex min-h-11 items-center gap-1.5 rounded-input border border-line bg-surface px-3 text-xs font-semibold sm:px-4 sm:text-sm text-ink transition-all hover:border-forest/40 hover:bg-paper disabled:opacity-60 cursor-pointer ${focusRing}`}
         >
           <RefreshCw className={`size-3.5 ${refreshing ? "animate-spin" : ""}`} aria-hidden="true" />
           <span>{refreshing ? "Refreshing..." : "Refresh"}</span>

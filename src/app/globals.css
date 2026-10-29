@@ -719,3 +719,18 @@ body {
   .kds-embedded .kds-recall-button svg,
   .kds-embedded .kds-stock-button svg { width: 1rem; height: 1rem; }
 }
+
+/* Shared phone typography for staff pages; KDS retains its own ticket scale. */
+@media (max-width: 639px) {
+  html.console-ui {
+    --text-title: 18px;
+    --text-title--line-height: 24px;
+    --text-section: 14px;
+    --text-section--line-height: 20px;
+    --text-body: 13px;
+    --text-body--line-height: 19px;
+  }
+  html.console-ui .text-title { font-size: 18px; line-height: 24px; }
+  html.console-ui .text-section { font-size: 14px; line-height: 20px; }
+  html.console-ui main > header > div > p.text-body { font-size: 12px; line-height: 18px; }
+}

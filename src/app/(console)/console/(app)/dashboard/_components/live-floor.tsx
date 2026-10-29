@@ -47,7 +47,7 @@ export function LiveFloor({ data }: { data: DashboardData }) {
   const tileClass = floorTileClass(n);
 
   return (
-    <section className="rounded-card border border-line bg-surface p-4 sm:p-5" aria-label="Live Floor">
+    <section className="rounded-card border border-line bg-surface p-3 sm:p-5" aria-label="Live Floor">
       <div className="grid gap-3 sm:flex sm:flex-wrap sm:items-center sm:justify-between">
         <div className="flex min-w-0 items-center justify-between gap-3">
           <h2 className="font-display text-section font-bold text-ink">Live Floor</h2>

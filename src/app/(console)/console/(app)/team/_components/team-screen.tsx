@@ -126,7 +126,7 @@ export function TeamScreen({ initial, invitations: initialInvitations = [], canE
         {([["People", initial.length, null], ["Can sign in", active, "var(--state-available)"], ["Switched off", initial.length - active, null]] as const).map(([k, v, dot]) => (
           <div key={k} className={`rounded-2xl border border-line bg-surface px-4 py-3 ${k === "Switched off" ? "col-span-2 sm:col-span-1" : ""}`}>
             <p className="flex items-center gap-1.5 text-caption font-medium text-muted">{dot && <span className="size-1.5 rounded-full" style={{ background: dot }} aria-hidden="true" />}{k}</p>
-            <p className="mt-1 font-display text-2xl font-bold tabular-nums text-ink">{v}</p>
+            <p className="mt-1 font-display text-xl sm:text-2xl font-bold tabular-nums text-ink">{v}</p>
           </div>
         ))}
       </div>

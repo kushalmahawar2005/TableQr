@@ -20,7 +20,7 @@ export const THEME = {
 } as const;
 
 export const focusRing = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-forest";
-export const cardClass = "rounded-card border border-line bg-surface p-4 sm:p-5";
+export const cardClass = "rounded-card border border-line bg-surface p-3 sm:p-5";
 export const viewAllClass = `inline-flex min-h-10 shrink-0 items-center gap-1 whitespace-nowrap rounded-input border border-line bg-surface px-3 text-xs font-semibold text-ink transition-colors hover:border-forest/40 hover:bg-paper ${focusRing}`;
 
 const rupees = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 });
