@@ -200,8 +200,8 @@ export function TeamScreen({ initial, invitations: initialInvitations = [], canE
 
       <Sheet open={adding} onOpenChange={(o) => !o && setAdding(false)}>
         <SheetContent className="w-full overflow-y-auto bg-background data-[side=right]:sm:max-w-md">
-          <SheetHeader><SheetTitle className="font-display text-title font-bold">{created ? "Invitation ready" : "Invite a person"}</SheetTitle><SheetDescription>{created ? "They must verify this phone before their staff access starts." : "Choose a role and send an invitation to their phone. They will add their name and create a PIN after OTP verification."}</SheetDescription></SheetHeader>
-          <div className="space-y-5 px-4 pb-8">
+          <SheetHeader className="gap-0.5 py-3"><SheetTitle className="font-display text-section font-bold">{created ? "Invitation ready" : "Invite a person"}</SheetTitle><SheetDescription className="max-w-[38ch] text-xs leading-relaxed">{created ? "They must verify this phone before their staff access starts." : "Choose a role and send an invitation. They will add their name and PIN after phone verification."}</SheetDescription></SheetHeader>
+          <div className="space-y-4 px-4 pb-6">
             {created ? (
               <>
                 <div className="rounded-2xl border border-line bg-surface p-4 text-sm">
@@ -222,13 +222,13 @@ export function TeamScreen({ initial, invitations: initialInvitations = [], canE
               </>
             ) : (
               <>
-                <div className="space-y-1.5"><Label htmlFor="t-phone">Mobile number</Label><Input id="t-phone" className={`${field} font-mono`} inputMode="numeric" maxLength={14} placeholder="10 digits" value={phone} onChange={(e) => setPhone(e.target.value.replace(/[^\d+ ]/g, ""))} /></div>
-                <div className="space-y-2"><Label>Role</Label>
-                  <div className="grid grid-cols-2 gap-2">{ROLES.map((r) => <button key={r.id} type="button" aria-pressed={role === r.id} onClick={() => setRole(r.id)} className={`min-h-11 rounded-xl border px-3 text-sm font-semibold ${role === r.id ? "border-ink bg-ink text-paper" : "border-line hover:border-ink/40"}`}>{r.label}</button>)}</div>
-                  {roleInfo && <p className="text-xs text-muted">{roleInfo.does}. Opens the {roleInfo.opens}.</p>}
+                <div className="space-y-1"><Label className="text-xs" htmlFor="t-phone">Mobile number</Label><Input id="t-phone" className="h-10 rounded-lg font-mono" inputMode="numeric" maxLength={14} placeholder="10 digits" value={phone} onChange={(e) => setPhone(e.target.value.replace(/[^\d+ ]/g, ""))} /></div>
+                <div className="space-y-1.5"><Label className="text-xs">Role</Label>
+                  <div className="grid grid-cols-2 gap-1.5">{ROLES.map((r) => <button key={r.id} type="button" aria-pressed={role === r.id} onClick={() => setRole(r.id)} className={`min-h-10 rounded-lg border px-2.5 text-sm font-semibold ${role === r.id ? "border-ink bg-ink text-paper" : "border-line hover:border-ink/40"}`}>{r.label}</button>)}</div>
+                  {roleInfo && <p className="text-xs leading-snug text-muted">{roleInfo.does}. Opens the {roleInfo.opens}.</p>}
                 </div>
                 {err && <p role="alert" className="text-sm font-semibold text-danger">{err}</p>}
-                <button type="button" disabled={pending || phone.replace(/\D/g, "").length < 10} onClick={add} className="inline-flex h-12 w-full items-center justify-center rounded-xl border border-brand bg-brand text-base font-semibold text-white hover:bg-brand-strong disabled:opacity-50">{pending ? "Creating…" : "Create invitation"}</button>
+                <button type="button" disabled={pending || phone.replace(/\D/g, "").length < 10} onClick={add} className="inline-flex h-11 w-full items-center justify-center rounded-lg border border-brand bg-brand text-sm font-semibold text-white hover:bg-brand-strong disabled:opacity-50">{pending ? "Creating…" : "Create invitation"}</button>
               </>
             )}
           </div>
