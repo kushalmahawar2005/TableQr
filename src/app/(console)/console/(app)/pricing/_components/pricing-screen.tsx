@@ -320,7 +320,7 @@ export function PricingScreen({ initial, preview }: { initial: PricingData; prev
 
 function Empty({ title, body, action }: { title: string; body: string; action?: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-dashed border-line bg-surface p-8 text-center">
+    <div className="rounded-2xl border border-dashed border-line bg-surface p-4 sm:p-8 text-center">
       <Tag aria-hidden="true" className="mx-auto size-6 text-muted" />
       <p className="mt-2 font-semibold">{title}</p>
       <p className="mt-1 text-body text-muted">{body}</p>

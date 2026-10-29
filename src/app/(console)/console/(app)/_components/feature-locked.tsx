@@ -13,7 +13,7 @@ export async function FeatureLocked({ feature, extra }: { feature: FeatureKey; e
   const canAsk = !!staff && staff.roles.some((r) => r === "owner" || r === "manager");
   const asked = canAsk && (await hasOpenRequest(staff.tenantId, feature));
   return (
-    <main className="grid min-h-[60vh] place-items-center p-8 text-center">
+    <main className="grid min-h-[60vh] place-items-center p-4 sm:p-8 text-center">
       <div className="max-w-md">
         <p className="text-caption font-semibold uppercase tracking-wider text-muted">Not in your plan</p>
         <h1 className="mt-2 font-display text-title font-bold text-ink">{label}</h1>

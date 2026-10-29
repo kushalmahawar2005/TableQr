@@ -16,7 +16,7 @@ export default async function InventoryPage() {
   if (!staff) redirect("/console/login");
   if (!canSee(staff, "inventory")) {
     return (
-      <main className="p-8">
+      <main className="p-4 sm:p-8">
         <h1 className="font-display text-title font-bold text-ink">Only the owner or a manager can manage stock.</h1>
       </main>
     );

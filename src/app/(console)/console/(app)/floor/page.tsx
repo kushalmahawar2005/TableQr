@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
+import { notFound } from "next/navigation";
 import { parseLang } from "@/lib/i18n";
 import { STAFF_LANG_COOKIE } from "@/lib/staff-language";
 import { canSee } from "@/lib/staff-permissions";
 import { getFloor } from "@/server/floor/read";
-import { tenantFeatures } from "@/server/plan";
+import { tenantFeatures, tenantSupportsCategorySection } from "@/server/plan";
 import { currentStaff } from "@/server/staff/request";
 import { FeatureLocked } from "../_components/feature-locked";
 import { s1Copy } from "./_copy";
@@ -20,12 +21,13 @@ export default async function FloorPage() {
   const c = s1Copy[lang];
   if (!staff || !canSee(staff, "floor")) {
     return (
-      <main className="p-8">
+      <main className="p-4 sm:p-8">
         <h1 className="font-display text-title font-bold text-ink">{c.denied}</h1>
         <p className="mt-2 text-body text-muted">{c.deniedBody}</p>
       </main>
     );
   }
+  if (!(await tenantSupportsCategorySection(staff.tenantId, "floor"))) notFound();
   if (!(await tenantFeatures(staff.tenantId, staff.outletId)).dineIn) return <FeatureLocked feature="dineIn" />;
   const data = await getFloor(staff);
   return <FloorScreen data={data} lang={lang} realtimeUrl={process.env.REALTIME_URL?.replace(/^http/, "ws") ?? null} />;

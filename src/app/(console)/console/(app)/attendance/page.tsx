@@ -15,7 +15,7 @@ export default async function AttendancePage(props: { searchParams: Promise<Reco
   const staff = await currentStaff();
   if (!staff) redirect("/console/login");
   if (!canSee(staff, "attendance")) {
-    return <main className="p-8"><h1 className="font-display text-title font-bold text-ink">You don&apos;t have access to attendance.</h1><p className="mt-2 text-body text-muted">Ask an owner if you need it.</p></main>;
+    return <main className="p-4 sm:p-8"><h1 className="font-display text-title font-bold text-ink">You don&apos;t have access to attendance.</h1><p className="mt-2 text-body text-muted">Ask an owner if you need it.</p></main>;
   }
   if (!(await tenantFeatures(staff.tenantId, staff.outletId)).attendance) return <FeatureLocked feature="attendance" />;
   const view = one("view") === "month" ? "month" : "day";
@@ -24,6 +24,6 @@ export default async function AttendancePage(props: { searchParams: Promise<Reco
     view === "day" ? getRegister(staff, { date: one("date"), outletId }).catch(() => null) : null,
     view === "month" ? getMonth(staff, { month: one("month"), outletId }).catch(() => null) : null,
   ]);
-  if (!day && !month) return <main className="p-8"><h1 className="font-display text-title font-bold text-ink">Attendance could not be loaded.</h1><p className="mt-2 text-body text-muted">Reload the page, or pick another date.</p></main>;
+  if (!day && !month) return <main className="p-4 sm:p-8"><h1 className="font-display text-title font-bold text-ink">Attendance could not be loaded.</h1><p className="mt-2 text-body text-muted">Reload the page, or pick another date.</p></main>;
   return <AttendanceScreen key={`${view}-${day?.date ?? month?.month}-${day?.outletId ?? month?.outletId}`} day={day} month={month} />;
 }

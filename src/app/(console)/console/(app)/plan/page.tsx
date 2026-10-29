@@ -14,7 +14,7 @@ export default async function PlanPage() {
   if (!staff) redirect("/console/login");
   if (!canSee(staff, "plan")) {
     return (
-      <main className="p-8">
+      <main className="p-4 sm:p-8">
         <h1 className="font-display text-title font-bold text-ink">Only the owner or a manager can see the plan.</h1>
       </main>
     );

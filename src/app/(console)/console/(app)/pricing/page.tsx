@@ -16,7 +16,7 @@ export default async function PricingPage() {
   if (!staff) redirect("/console/login");
   if (!canPrice(staff.roles, "pricing.view") || !canSee(staff, "pricing")) {
     return (
-      <main className="p-8">
+      <main className="p-4 sm:p-8">
         <h1 className="font-display text-title font-bold text-ink">You don&apos;t have access to pricing.</h1>
         <p className="mt-2 text-body text-muted">Ask an owner if you need it.</p>
       </main>

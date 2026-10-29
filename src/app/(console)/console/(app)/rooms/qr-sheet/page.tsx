@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import * as s from "@/db/schema";
@@ -6,6 +6,8 @@ import { canSee } from "@/lib/staff-permissions";
 import { publicBaseUrl } from "@/server/floor/qr-read";
 import { qrSvg } from "@/server/floor/qr-svg";
 import { currentStaff } from "@/server/staff/request";
+import { tenantFeatures, tenantSupportsCategorySection } from "@/server/plan";
+import { FeatureLocked } from "../../_components/feature-locked";
 import { QR_SIZES, qrPages, qrSheetCss, qrSize, type QrSize } from "../../floor/_components/qr-print";
 import { PrintBar } from "../../floor/editor/qr-sheet/print-bar";
 
@@ -13,7 +15,9 @@ import { PrintBar } from "../../floor/editor/qr-sheet/print-bar";
 export default async function RoomQrSheetPage(props: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const staff = await currentStaff();
   if (!staff) redirect("/console/login");
-  if (!canSee(staff, "rooms")) return <main className="p-8">Permission denied</main>;
+  if (!canSee(staff, "rooms")) return <main className="p-4 sm:p-8">Permission denied</main>;
+  if (!(await tenantSupportsCategorySection(staff.tenantId, "rooms"))) notFound();
+  if (!(await tenantFeatures(staff.tenantId, staff.outletId)).rooms) return <FeatureLocked feature="rooms" />;
   const q = await props.searchParams;
   const size = (QR_SIZES.find((x) => x.id === q.size)?.id ?? "a6") as QrSize;
   const { qrMm: mm, scale } = qrSize(size);

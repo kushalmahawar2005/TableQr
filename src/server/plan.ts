@@ -80,4 +80,22 @@ export const tableLimitMessage = (limit: number) =>
 export const staffLimitMessage = (limit: number) =>
   `Your plan includes ${limit} staff login${limit === 1 ? "" : "s"}. To add more, ask Tableeqr to upgrade your plan.`;
 
+/** Category support is separate from whether a supported feature is included in the plan. */
+export async function tenantSupportsCategorySection(
+  tenantId: string,
+  section: "floor" | "rooms" | "reservations",
+): Promise<boolean> {
+  const [row] = await db
+    .select({ businessType: s.tenants.businessType })
+    .from(s.tenants)
+    .where(eq(s.tenants.id, tenantId));
+  // Older tenants without a category keep their existing section access.
+  if (!row?.businessType) return true;
+  const profile = BUSINESS_PACKAGE_PROFILES[row.businessType];
+  if (!profile) return false;
+  if (section === "floor") return profile.floor;
+  if (section === "rooms") return profile.rooms;
+  return profile.reservations;
+}
+
 export const KITCHEN_NOT_IN_PLAN = "The kitchen screen is not switched on for this restaurant. Ask Tableeqr to turn it on.";
