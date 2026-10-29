@@ -45,10 +45,12 @@ const controls = [
   { icon: Smartphone, title: "Keep your team connected", text: "Waiter tasks, service requests and kitchen updates at hand." },
 ];
 const questions = [
+  { question: "Can a cloud kitchen offer pickup and delivery?", answer: "Yes. Enable pickup, delivery or both for each outlet. Guests see only the services you offer. Pickup orders do not require a delivery address, and you can choose whether payment at pickup is allowed." },
+  { question: "Will I see features my business does not use?", answer: "Your setup follows your business category, package and outlet settings. Floor and table tools belong to dine-in businesses; room tools belong to hotels. Our team helps configure the right services." },
   { question: "Do guests need to download an app?", answer: "No. Guests scan a table or room QR code and open the guest experience in their phone browser. The menu supports English and Hindi." },
   { question: "Can I use Tableeqr for a hotel as well as a restaurant?", answer: "Yes. Tableeqr includes room QR codes, food ordering, housekeeping and guest requests, reception, check-in, check-out and room service bills. It supports hotels with or without a restaurant." },
-  { question: "Can guests reserve a table and preorder food?", answer: "Yes. Guests can select their time and party size, share seating preferences and preorder dishes. Your team can also manage waitlists and party enquiries." },
-  { question: "How do I get Tableeqr set up for my business?", answer: "Message Craftory Innovation on WhatsApp. We will walk through your restaurant or hotel, show you the relevant workflows and help you choose the setup for your business." },
+  { question: "Can guests reserve a table and preorder food?", answer: "Yes, when reservations are enabled for your outlet. Guests can choose their time and party size, share seating preferences and preorder dishes. Your team can manage waitlists and party enquiries." },
+  { question: "How do I get Tableeqr set up for my business?", answer: "Message Craftory Innovation on WhatsApp. Our team configures your services, menu and staff access remotely and helps you get started. Use your own compatible phones, computers and printers; hardware is not supplied." },
 ];
 
 function Brand() {
@@ -79,9 +81,9 @@ export default function Home() {
     <main id="main-content">
       <section className={cx(s.container, s.hero)} aria-labelledby="hero-heading">
         <div className={s.heroCopy}>
-          <p className={s.eyebrow}><span /> FOR RESTAURANTS, CAFÉS & HOTELS</p>
+          <p className={s.eyebrow}><span /> RESTAURANTS · CAFÉS · HOTELS · CLOUD KITCHENS</p>
           <h1 id="hero-heading">Every table.<br />Every room.<br /><span>One Tableeqr.</span></h1>
-          <p className={s.heroDescription}>Great hospitality starts with a connected team. Bring orders, service, billing and your whole operation together.</p>
+          <p className={s.heroDescription}>Orders, kitchen, billing and guest service in one place. A setup that fits your restaurant, café, hotel or cloud kitchen.</p>
           <div className={s.heroActions}>
             <a href={CONTACT} target="_blank" rel="noopener noreferrer" className={cx(s.button, s.primary)}>Let’s talk about your business <ArrowUpRight size={18} aria-hidden="true" /></a>
             <Link href={DEMO} className={cx(s.button, s.secondary)}>Try the guest demo <ArrowRight size={18} aria-hidden="true" /></Link>
