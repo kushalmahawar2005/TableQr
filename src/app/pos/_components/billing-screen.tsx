@@ -241,7 +241,9 @@ export function BillingScreen({ initial, realtimeUrl, embedded = false, openSess
                     <div className="grid w-full min-w-0 grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap">
                       {!isPaidBill && (detail.status === "open" || (detail.status === "bill_requested" && paidSoFar === 0 && !pendingOnline)) && <button type="button" className={cn(quiet, "w-full justify-center px-2 sm:w-auto sm:px-4")} disabled={offline} onClick={() => setAdding(true)}><PackagePlus className="size-4 shrink-0" aria-hidden="true" />{L("Add items", "आइटम जोड़ें")}</button>}
                       <button type="button" className={cn(quiet, "w-full justify-center px-2 sm:w-auto sm:px-4")} onClick={() => print(isPaidBill ? "receipt" : "bill")}><Printer className="size-4 shrink-0" aria-hidden="true" />{isPaidBill ? L("Print receipt", "रसीद प्रिंट") : L("Print bill", "बिल प्रिंट")}</button>
-                      <PaperToggle label={L("Paper", "पेपर")} className="w-full justify-center gap-1 rounded-xl border border-line px-1 sm:w-auto sm:justify-start sm:gap-2 sm:border-0 sm:px-0" />
+                      <div className="col-span-2 min-w-0 sm:contents">
+                        <PaperToggle label={L("Paper", "पेपर")} className="w-full justify-between gap-2 rounded-xl border border-line px-2 sm:w-auto sm:justify-start sm:gap-2 sm:border-0 sm:px-0" />
+                      </div>
                       <WhatsAppBill
                         key={detail.sessionId}
                         hi={hi}

@@ -14,7 +14,7 @@ export function PaperToggle({ className = "", label = "Receipt paper" }: { class
   const mm = usePaper();
   return (
     <span className={`inline-flex items-center gap-2 text-sm ${className}`}>
-      <label className="inline-flex items-center gap-2">
+      <label className="inline-flex items-center gap-2 whitespace-nowrap">
         <span className="text-muted">{label}</span>
         <select value={mm} onChange={(e) => savePaper(Number(e.target.value) === 58 ? 58 : 80)} className="h-9 rounded-lg border border-line bg-background px-2 font-semibold">
           <option value={80}>80 mm</option>
