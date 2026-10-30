@@ -264,7 +264,7 @@ export function DeliveryScreen({ outletCode, data, initialStatus, initialService
         </ul>
       </section>)}
       {visibleCategories.length === 0 && <p className="mt-5 rounded-2xl border border-dashed border-line p-6 text-center text-caption text-muted">{menuItems.length > 0 ? (filtersOn ? t("No dishes match your filters.", "आपके फ़िल्टर से कोई डिश नहीं मिली।") : t("No dishes match your search.", "आपकी खोज से कोई डिश नहीं मिली।")) : serviceMode === "pickup" ? t("No pickup dishes are available right now.", "अभी पिकअप के लिए कोई डिश उपलब्ध नहीं है।") : t("No delivery dishes are available right now.", "अभी डिलीवरी के लिए कोई डिश उपलब्ध नहीं है।")}</p>}
-      {cart.length > 0 && <div className="fixed inset-x-0 bottom-0 z-30 mx-auto max-w-[480px] px-4 pb-[max(12px,env(safe-area-inset-bottom))] min-[360px]:px-5">
+      {cart.length > 0 && <div className="fixed inset-x-0 bottom-[var(--guest-nav-height,0px)] z-30 mx-auto max-w-[480px] px-4 pb-[max(12px,env(safe-area-inset-bottom))] min-[360px]:px-5">
         <button type="button" onClick={openCart} className="flex min-h-14 w-full items-center gap-3 rounded-2xl bg-brand px-4 py-2.5 text-left text-brand-on shadow-[0_12px_28px_-8px_var(--brand-border)] transition-transform active:scale-[0.99]">
           <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-white/20"><HugeiconsIcon icon={ShoppingBasket01Icon} size={19} aria-hidden /></span>
           <span className="min-w-0 flex-1"><span className="block text-label opacity-85">{t(`${totalQty} ${totalQty === 1 ? "item" : "items"}`, `${totalQty} आइटम`)}</span><span className="block text-body font-bold tabular">{money(cartPaise)} <span className="text-label font-medium opacity-80">{t("+ taxes", "+ टैक्स")}</span></span></span>

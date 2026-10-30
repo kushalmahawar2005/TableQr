@@ -8,6 +8,7 @@ import { uuidv7 } from "@/db/id";
 import { rebalanceWaiterVisit, sessionOwner } from "./waiter-coverage";
 import type { StaffSession } from "./auth";
 import { tenantFeatures } from "../plan";
+import { pushNotificationDestination } from "@/lib/staff-push-audience";
 
 export type PushSubscriptionInput = s.StaffPushSubscription;
 
@@ -67,7 +68,7 @@ export async function removeStaffPushSubscription(staff: StaffSession, rawEndpoi
 }
 
 export type StaffPushMessage = { title: string; body: string; url?: string; tag?: string };
-type PushAudience = { sessionId: string; kind: "service" | "ready" | "order" } | { riderUserId: string } | { kind: "delivery" | "management" };
+import type { PushAudience } from "@/lib/staff-push-audience";
 
 /** Send after the business transaction commits; push failures never undo an order or request. */
 export async function sendOutletPush(scope: { tenantId: string; outletId: string }, message: StaffPushMessage, audience?: PushAudience) {
@@ -75,18 +76,25 @@ export async function sendOutletPush(scope: { tenantId: string; outletId: string
   const privateKey = process.env.VAPID_PRIVATE_KEY?.trim();
   const subject = process.env.VAPID_SUBJECT?.trim();
   try {
-    if (audience && "sessionId" in audience) await rebalanceWaiterVisit(scope, audience.sessionId);
+    const features = await tenantFeatures(scope.tenantId, scope.outletId);
+    if (audience && "kind" in audience && (audience.kind === "service" || audience.kind === "ready") && !features.waiterApp) return;
+    if (features.waiterApp && audience && "sessionId" in audience) await rebalanceWaiterVisit(scope, audience.sessionId);
     if (!config.enabled || !privateKey || !subject) return;
     const owner = audience && "sessionId" in audience ? await sessionOwner(scope, audience.sessionId) : null;
     const roles = await db.select({ id: s.users.id, duty: s.users.dutyStatus, role: s.staffRoles.role }).from(s.users).innerJoin(s.staffRoles, and(eq(s.staffRoles.tenantId, s.users.tenantId), eq(s.staffRoles.userId, s.users.id))).where(and(eq(s.users.tenantId, scope.tenantId), eq(s.users.isActive, true), or(isNull(s.staffRoles.outletId), eq(s.staffRoles.outletId, scope.outletId))));
-    // A plan without the waiter app or the kitchen display sends those roles nothing: a restaurant
-    // that moved down a plan must not keep ringing phones whose app no longer opens
-    const features = await tenantFeatures(scope.tenantId, scope.outletId);
+    const [tenant] = await db.select({ access: s.tenants.roleAccess }).from(s.tenants).where(eq(s.tenants.id, scope.tenantId));
+    const users = new Map<string, { roles: StaffSession["roles"]; duty: string }>();
+    for (const row of roles) {
+      const user = users.get(row.id) ?? { roles: [], duty: row.duty };
+      user.roles.push(row.role);
+      users.set(row.id, user);
+    }
+    const destinations = new Map<string, string>();
+    for (const [id, user] of users) {
+      const url = pushNotificationDestination({ ...user, id, access: tenant?.access }, features, message.url, audience, owner);
+      if (url) destinations.set(id, url);
+    }
     const appFor = (role: string) => (role === "waiter" ? features.waiterApp : role === "kitchen" ? features.kitchenDisplay : true);
-    const riderTarget = audience && "riderUserId" in audience ? audience.riderUserId : null;
-    const eligible = new Set(roles.filter(r => riderTarget
-      ? r.role === "rider" && r.id === riderTarget
-      : r.role === "owner" || r.role === "manager" || (r.role === "waiter" && !(audience && "kind" in audience && (audience.kind === "delivery" || audience.kind === "management")) && features.waiterApp && r.duty === "on" && (!owner || r.id === owner)) || (r.role === "kitchen" && features.kitchenDisplay && (!audience || ("kind" in audience && (audience.kind === "order" || audience.kind === "delivery"))))).map(r => r.id));
     const devices = await db.select({ userId: s.staffPushSubscriptions.userId, id: s.staffPushSubscriptions.id, subscription: s.staffPushSubscriptions.subscription })
       .from(s.staffPushSubscriptions)
       .where(and(eq(s.staffPushSubscriptions.tenantId, scope.tenantId), eq(s.staffPushSubscriptions.outletId, scope.outletId)));
@@ -94,24 +102,23 @@ export async function sendOutletPush(scope: { tenantId: string; outletId: string
     const usable = new Set(roles.filter(r => appFor(r.role)).map(r => r.id));
     const orphaned = devices.filter(d => !usable.has(d.userId)).map(d => d.id);
     if (orphaned.length) await db.delete(s.staffPushSubscriptions).where(and(eq(s.staffPushSubscriptions.tenantId, scope.tenantId), inArray(s.staffPushSubscriptions.id, orphaned)));
-    const recipients = devices.filter(device => eligible.has(device.userId));
+    const recipients = devices.filter(device => destinations.has(device.userId));
     if (!recipients.length) return;
 
     const [outlet] = await db.select({ code: s.outlets.code }).from(s.outlets).where(and(eq(s.outlets.tenantId, scope.tenantId), eq(s.outlets.id, scope.outletId)));
     const icon = outlet ? `/staff-icon/192?outlet=${encodeURIComponent(outlet.code)}` : "/staff-icon/192";
     const badge = outlet ? `/staff-icon/180?outlet=${encodeURIComponent(outlet.code)}` : "/staff-icon/180";
 
-    const payload = JSON.stringify({
+    const payload = {
       title: message.title.slice(0, 120),
       body: message.body.slice(0, 240),
-      url: message.url?.startsWith("/") ? message.url : "/console",
       tag: (message.tag ?? "tableeqr-staff").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 32) || "tableeqr-staff",
       icon,
       badge,
-    });
+    };
     await Promise.allSettled(recipients.map(async (device) => {
       try {
-      await webpush.sendNotification(device.subscription as WebPushSubscription, payload, {
+      await webpush.sendNotification(device.subscription as WebPushSubscription, JSON.stringify({ ...payload, url: destinations.get(device.userId) }), {
         vapidDetails: { subject, publicKey: config.publicKey, privateKey },
         TTL: 120,
         urgency: "high",

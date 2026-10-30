@@ -4,12 +4,14 @@ import { db } from "@/db";
 import * as s from "@/db/schema";
 import { formatRupees } from "@/domain/menu-price";
 import type { StaffSession } from "./auth";
+import { tenantFeatures } from "../plan";
+import { canOpenNotification, orderNotificationDestination, serviceNotificationDestination } from "@/lib/staff-notification-access";
 
 // Console notifications: what happened at this outlet since the screen last asked. Read straight
 // from the tables that record it, so it works with or without the realtime hub, and a phone that
 // slept still catches up. Nothing is stored per person; the screen keeps its own "seen" time.
 
-type Staff = Pick<StaffSession, "tenantId" | "outletId" | "outlet">;
+type Staff = Pick<StaffSession, "tenantId" | "outletId" | "outlet" | "roles" | "access">;
 
 export type ConsoleNotice = {
   id: string;
@@ -139,5 +141,14 @@ export async function getConsoleNotices(staff: Staff, since: Date): Promise<Cons
       href: "/console/waitlist",
     })),
   ];
-  return notices.sort((a, b) => b.at - a.at).slice(0, LIMIT);
+  const features = await tenantFeatures(staff.tenantId, staff.outletId);
+  return notices.flatMap(notice => {
+    if (notice.id.startsWith("delivery-payment:") && !features.delivery) return [];
+    const href = notice.kind === "order"
+      ? orderNotificationDestination(staff, features)
+      : notice.href === "/console/floor"
+        ? serviceNotificationDestination(staff, features)
+        : canOpenNotification(staff, features, notice.href) ? notice.href : null;
+    return href ? [{ ...notice, href }] : [];
+  }).sort((a, b) => b.at - a.at).slice(0, LIMIT);
 }
