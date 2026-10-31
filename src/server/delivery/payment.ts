@@ -160,12 +160,18 @@ async function reconcileRowPayment(row: typeof s.deliveryCheckouts.$inferSelect,
   return fresh?.paymentStatus ?? row.paymentStatus;
 }
 
-export async function recordDeliveryRefundResult(provider: string, gatewayRef: string, status: "success" | "failed") {
-  // isolation-exempt: signed refund webhook reference identifies the tenant checkout.
-  const [row] = await db.select().from(s.deliveryCheckouts).where(and(eq(s.deliveryCheckouts.paymentProvider, provider), eq(s.deliveryCheckouts.refundGatewayRef, gatewayRef))).limit(1);
-  if (!row) return false;
-  if (row.refundStatus === "success" || row.refundStatus === "failed") return true;
-  await db.update(s.deliveryCheckouts).set({ refundStatus: status, paymentStatus: status === "success" ? "refunded" : "refund_failed" })
-    .where(and(eq(s.deliveryCheckouts.tenantId, row.tenantId), eq(s.deliveryCheckouts.id, row.id)));
-  return true;
+export async function recordDeliveryRefundResult(provider: string, event: { gatewayRefundId: string; status: "success" | "failed"; gatewayPaymentId?: string }) {
+  return db.transaction(async (tx) => {
+    // Lock and recheck so concurrent or reordered callbacks cannot reverse a final refund state.
+    // isolation-exempt: the signed refund reference identifies the checkout; its tenant is read before mutation.
+    const [row] = await tx.select().from(s.deliveryCheckouts)
+      .where(and(eq(s.deliveryCheckouts.paymentProvider, provider), eq(s.deliveryCheckouts.refundGatewayRef, event.gatewayRefundId)))
+      .for("update");
+    if (!row || row.refundStatus !== "pending") return false;
+    if (event.gatewayPaymentId && event.gatewayPaymentId !== row.gatewayPaymentId) return false;
+    await tx.update(s.deliveryCheckouts)
+      .set({ refundStatus: event.status, paymentStatus: event.status === "success" ? "refunded" : "refund_failed" })
+      .where(and(eq(s.deliveryCheckouts.tenantId, row.tenantId), eq(s.deliveryCheckouts.id, row.id), eq(s.deliveryCheckouts.refundStatus, "pending")));
+    return true;
+  }, LOCK_THEN_READ);
 }

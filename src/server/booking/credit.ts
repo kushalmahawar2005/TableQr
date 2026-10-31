@@ -2,6 +2,7 @@ import "server-only";
 import { and, eq, ne } from "drizzle-orm";
 import { db } from "@/db";
 import * as s from "@/db/schema";
+import { LOCK_THEN_READ } from "../db-types";
 import { AppError } from "../errors";
 import { currencyAccepted } from "../payments/gateway";
 import { gatewayForOutletPayment } from "../payments/outlet-gateway";
@@ -60,11 +61,19 @@ export async function refundReservationCredit(tenantId: string, reservationId: s
   return { status: result.status };
 }
 
-export async function recordReservationRefundResult(provider: string, refundGatewayRef: string, status: "success" | "failed") {
-  // isolation-exempt: the verified gateway refund reference names the credit row; tenant is read before mutation.
-  const [credit] = await db.select().from(s.reservationCredits).where(and(eq(s.reservationCredits.provider, provider), eq(s.reservationCredits.refundGatewayRef, refundGatewayRef)));
-  if (!credit) return false;
-  if (credit.refundStatus === "success" || credit.refundStatus === "failed") return true;
-  await db.update(s.reservationCredits).set({ refundStatus: status, status: status === "success" ? "refunded" : "paid", updatedAt: new Date() }).where(and(eq(s.reservationCredits.tenantId, credit.tenantId), eq(s.reservationCredits.id, credit.id)));
-  return true;
+export async function recordReservationRefundResult(provider: string, event: { gatewayRefundId: string; status: "success" | "failed"; gatewayPaymentId?: string; amountPaise?: number }) {
+  return db.transaction(async (tx) => {
+    // Lock and recheck so a concurrent or reordered callback cannot replace the first final result.
+    // isolation-exempt: the verified gateway refund reference identifies the credit; its tenant is read before mutation.
+    const [credit] = await tx.select().from(s.reservationCredits)
+      .where(and(eq(s.reservationCredits.provider, provider), eq(s.reservationCredits.refundGatewayRef, event.gatewayRefundId)))
+      .for("update");
+    if (!credit || credit.refundStatus !== "pending") return false;
+    if (event.gatewayPaymentId && event.gatewayPaymentId !== credit.gatewayPaymentId) return false;
+    if (event.amountPaise !== undefined && event.amountPaise !== credit.paidPaise) return false;
+    await tx.update(s.reservationCredits)
+      .set({ refundStatus: event.status, status: event.status === "success" ? "refunded" : "paid", updatedAt: new Date() })
+      .where(and(eq(s.reservationCredits.tenantId, credit.tenantId), eq(s.reservationCredits.id, credit.id), eq(s.reservationCredits.refundStatus, "pending")));
+    return true;
+  }, LOCK_THEN_READ);
 }

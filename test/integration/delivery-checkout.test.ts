@@ -5,7 +5,7 @@ import * as s from "@/db/schema";
 import { DEFAULT_DELIVERY_POLICY } from "@/domain/delivery";
 import { settleAtCounter } from "@/server/billing/payments";
 import { claimManualQrDeliveryPayment, confirmManualQrDeliveryPayment, createDeliveryCheckout, deliveryCheckout, deliveryStatus, placeDeliveryOrder } from "@/server/delivery/checkout";
-import { reconcileDeliveryPayment, startDeliveryPayment } from "@/server/delivery/payment";
+import { reconcileDeliveryPayment, recordDeliveryRefundResult, startDeliveryPayment } from "@/server/delivery/payment";
 import { sendDeliveryOtp, verifyDeliveryOtp } from "@/server/delivery/otp";
 import { mockGateway } from "@/server/payments/gateway";
 import { advanceDelivery, assignDeliveryCourier, deliveryQueue, pendingManualDeliveryPayments } from "@/server/delivery/staff";
@@ -102,6 +102,32 @@ describe("verified delivery checkout", () => {
     expect(bill.totalPaise).toBe(created.quote.totalPaise);
     expect(payment).toMatchObject({ status: "success", channel: "mock", gatewayRef, amountPaise: created.quote.totalPaise });
     expect((await deliveryStatus("SRJ01", created.token, gatewayDevice)).paid).toBe(true);
+  });
+
+  it("applies one locked delivery refund result and rejects mismatched or contradictory callbacks", async () => {
+    const refundDevice = "delivery-refund-state-device";
+    const created = await createDeliveryCheckout("SRJ01", refundDevice, { lines: [{ itemId: env.demo.itemIds["Dal Makhani"], qty: 1, modifierIds: [] }], address });
+    const { row } = await deliveryCheckout("SRJ01", created.token, refundDevice);
+    const gatewayRefundId = `refund-${row.id}`;
+    const gatewayPaymentId = `payment-${row.id}`;
+    await env.db.update(s.deliveryCheckouts).set({
+      paymentProvider: "mock", gatewayRef: `order-${row.id}`, gatewayPaymentId,
+      paymentStatus: "refund_pending", refundGatewayRef: gatewayRefundId, refundStatus: "pending",
+    }).where(eq(s.deliveryCheckouts.id, row.id));
+    const base = { gatewayRefundId, gatewayPaymentId };
+
+    expect(await recordDeliveryRefundResult("mock", { ...base, gatewayPaymentId: "wrong-payment", status: "success" })).toBe(false);
+    const results = await Promise.all([
+      recordDeliveryRefundResult("mock", { ...base, status: "success" }),
+      recordDeliveryRefundResult("mock", { ...base, status: "failed" }),
+    ]);
+    expect(results.filter(Boolean)).toHaveLength(1);
+    const expected = results[0] ? "success" : "failed";
+    const [final] = await env.db.select().from(s.deliveryCheckouts).where(eq(s.deliveryCheckouts.id, row.id));
+    expect(final).toMatchObject({ refundStatus: expected, paymentStatus: expected === "success" ? "refunded" : "refund_failed" });
+    expect(await recordDeliveryRefundResult("mock", { ...base, status: expected === "success" ? "failed" : "success" })).toBe(false);
+    const [unchanged] = await env.db.select().from(s.deliveryCheckouts).where(eq(s.deliveryCheckouts.id, row.id));
+    expect(unchanged).toMatchObject({ refundStatus: expected, paymentStatus: expected === "success" ? "refunded" : "refund_failed" });
   });
 
   it("never places a prepaid delivery on a payment the gateway reports in another currency, and gives the money back", async () => {

@@ -50,7 +50,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ provider: 
     }
     if (event.kind === "refund") {
       const known = await recordRefundResult(gateway.name, event);
-      return Response.json({ ok: true, known: known || await recordReservationRefundResult(gateway.name, event.gatewayRefundId, event.status) || await recordDeliveryRefundResult(gateway.name, event.gatewayRefundId, event.status) });
+      return Response.json({ ok: true, known: known || await recordReservationRefundResult(gateway.name, event) || await recordDeliveryRefundResult(gateway.name, event) });
     }
     return Response.json({ ok: true, ignored: true });
   } catch (err) {

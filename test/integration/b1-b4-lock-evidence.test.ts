@@ -93,8 +93,21 @@ describe("B1-B4 final credit and security evidence", () => {
   it("refunds paid credit once and keeps duplicate refund processing idempotent", async () => {
     const h = await hold("refund", 10, true); const checkout = await payCredit(h); await cancelBookingPublic("SRJ01", h.manageToken, "guest_cancelled", new Date(now.getTime() - 3 * 3600_000));
     const first = await refundReservationCredit(env.demo.tenantId, h.reservationId); const [pending] = await env.db.select().from(s.reservationCredits).where(eq(s.reservationCredits.id, checkout.creditId!)); expect(first.status).toBe("pending"); expect(pending.refundStatus).toBe("pending");
-    mockGateway.settleRefund(pending.refundGatewayRef!, "success"); await recordReservationRefundResult("mock", pending.refundGatewayRef!, "success"); await recordReservationRefundResult("mock", pending.refundGatewayRef!, "success");
-    const [done] = await env.db.select().from(s.reservationCredits).where(eq(s.reservationCredits.id, checkout.creditId!)); expect(done.refundStatus).toBe("success"); expect(done.status).toBe("refunded");
+    mockGateway.settleRefund(pending.refundGatewayRef!, "success");
+    const base = { gatewayRefundId: pending.refundGatewayRef!, gatewayPaymentId: pending.gatewayPaymentId!, amountPaise: pending.paidPaise };
+    expect(await recordReservationRefundResult("mock", { ...base, status: "success", gatewayPaymentId: "wrong-payment" })).toBe(false);
+    expect(await recordReservationRefundResult("mock", { ...base, status: "success", amountPaise: pending.paidPaise + 1 })).toBe(false);
+    const outcomes = await Promise.all([
+      recordReservationRefundResult("mock", { ...base, status: "success" }),
+      recordReservationRefundResult("mock", { ...base, status: "failed" }),
+    ]);
+    expect(outcomes.filter(Boolean)).toHaveLength(1);
+    const expected = outcomes[0] ? "success" : "failed";
+    const [done] = await env.db.select().from(s.reservationCredits).where(eq(s.reservationCredits.id, checkout.creditId!));
+    expect(done.refundStatus).toBe(expected);
+    expect(done.status).toBe(expected === "success" ? "refunded" : "paid");
+    expect(await recordReservationRefundResult("mock", { ...base, status: expected === "success" ? "failed" : "success" })).toBe(false);
+    expect((await env.db.select().from(s.reservationCredits).where(eq(s.reservationCredits.id, checkout.creditId!)))[0].refundStatus).toBe(expected);
   });
 
   it("applies paid credit once when bill sync runs repeatedly", async () => {
