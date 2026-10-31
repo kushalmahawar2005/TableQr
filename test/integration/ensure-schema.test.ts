@@ -75,8 +75,12 @@ describe("schema update at startup", () => {
     const legacyRefundId = "00000000-0000-7000-8000-000000000078";
     await env.db.execute(sql`INSERT INTO delivery_checkouts (id, tenant_id, outlet_id, token_hash, device_id, \`lines\`, payment_provider, gateway_ref, refund_gateway_ref, refund_status, total_paise, expires_at, created_at)
       VALUES (${legacyRefundId}, ${env.demo.tenantId}, ${env.demo.outletId}, ${"f".repeat(64)}, 'legacy-refund-test-device', JSON_ARRAY(), 'test', 'legacy-refund-payment', 'legacy-refund-id', 'pending', 12345, ${new Date(Date.now() + 60_000)}, NOW())`);
+    await env.db.execute(sql`ALTER TABLE recipe_lines DROP FOREIGN KEY fk_recipe_lines_outlet`);
+    await env.db.execute(sql`DROP INDEX room_requests_stay_idx ON room_requests`);
     await ensureSchema(appDb.$client);
     expect(Number((await rows<{ amount: number }>(sql`SELECT refund_amount_paise AS amount FROM delivery_checkouts WHERE id = ${legacyRefundId}`))[0]?.amount)).toBe(12345);
+    expect(Number((await rows<{ n: number }>(sql`SELECT COUNT(*) AS n FROM information_schema.REFERENTIAL_CONSTRAINTS WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'recipe_lines' AND CONSTRAINT_NAME = 'fk_recipe_lines_outlet'`))[0]?.n)).toBe(1);
+    expect(Number((await rows<{ n: number }>(sql`SELECT COUNT(*) AS n FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'room_requests' AND INDEX_NAME = 'room_requests_stay_idx'`))[0]?.n)).toBe(2);
     expect(Number((await rows<{ n: number }>(sql`SELECT COUNT(*) AS n FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN ('plan_requests', 'fee_payments', 'rooms', 'room_stays', 'room_requests')`))[0].n)).toBe(5);
     expect(String((await rows<{ t: string }>(sql`SELECT COLUMN_TYPE AS t FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'staff_roles' AND COLUMN_NAME = 'role'`))[0].t)).toContain("'reception'");
     const plans = await rows<{ code: string; kds: string }>(sql`SELECT code, JSON_EXTRACT(features, '$.kitchenDisplay') AS kds FROM plans ORDER BY sort_order`);

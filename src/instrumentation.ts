@@ -1,8 +1,7 @@
 import type { Instrumentation } from "next";
 
-// Runs once when a server instance starts, before it takes requests: bring the database up to what
-// this release needs (see src/server/ensure-schema.ts). A failure is logged, never fatal, so a
-// database hiccup at boot does not keep the site down.
+// Next waits for register() before accepting requests. Do not let a server run against a partial
+// schema: startup migrations are repeatable, so the process manager can safely restart and retry.
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
   try {
@@ -10,7 +9,15 @@ export async function register() {
     console.log(`[db] connection pool size ${poolSize}`);
     await ensureSchema(db.$client);
   } catch (err) {
-    console.error("[schema] could not update the database at startup", err);
+    const value = err && typeof err === "object" ? err as { name?: unknown; code?: unknown; errno?: unknown; sqlState?: unknown } : {};
+    const details = {
+      errorName: typeof value.name === "string" ? value.name.slice(0, 80) : "UnknownError",
+      ...(typeof value.code === "string" && /^[A-Z0-9_]{1,40}$/.test(value.code) ? { errorCode: value.code } : {}),
+      ...(typeof value.errno === "number" ? { errorNumber: value.errno } : {}),
+      ...(typeof value.sqlState === "string" && /^[A-Z0-9]{5}$/.test(value.sqlState) ? { sqlState: value.sqlState } : {}),
+    };
+    console.error("[schema] startup migration failed; server is not ready", details);
+    throw new Error("Database schema initialization failed; server cannot accept traffic");
   }
   // The admin sign-in from the hosting panel's environment
   try {

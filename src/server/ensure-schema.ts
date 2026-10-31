@@ -30,6 +30,14 @@ const hasIndex = async (db: Pool, table: string, index: string) => {
   return Number(rows[0]?.n ?? 0) > 0;
 };
 
+const hasForeignKey = async (db: Pool, table: string, constraint: string) => {
+  const [rows] = await db.query<RowDataPacket[]>(
+    "SELECT COUNT(*) AS n FROM information_schema.REFERENTIAL_CONSTRAINTS WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = ? AND CONSTRAINT_NAME = ?",
+    [table, constraint],
+  );
+  return Number(rows[0]?.n ?? 0) > 0;
+};
+
 /** Adds a column unless it is there; a second server adding it at the same moment is fine */
 async function addColumn(db: Pool, table: string, column: string, type: string) {
   if (await hasColumn(db, table, column)) return false;
@@ -58,6 +66,16 @@ async function addIndex(db: Pool, table: string, index: string, columns: string)
     await db.query(`CREATE INDEX \`${index}\` ON \`${table}\` (${columns})`);
   } catch (err) {
     if (await hasIndex(db, table, index)) return;
+    throw err;
+  }
+}
+
+async function addForeignKey(db: Pool, table: string, constraint: string, columns: string, referencedTable: string, referencedColumns: string) {
+  if (await hasForeignKey(db, table, constraint)) return;
+  try {
+    await db.query(`ALTER TABLE \`${table}\` ADD CONSTRAINT \`${constraint}\` FOREIGN KEY (${columns}) REFERENCES \`${referencedTable}\`(${referencedColumns})`);
+  } catch (err) {
+    if (await hasForeignKey(db, table, constraint)) return;
     throw err;
   }
 }
@@ -170,26 +188,24 @@ const STEPS: Step[] = [
     when: 1792239186472,
     hash: "5aab46329374e258e6c3d73c45bec2787753b1b30e85d87f7ef74f59f65c738d",
     apply: async (db) => {
-      // The three tables arrive together; their keys and indexes only on the start that made them
-      if (!(await hasTable(db, "stock_items"))) {
-        for (const q of [
+      // CREATE IF NOT EXISTS plus independently checked keys/indexes repairs a partially applied start.
+      for (const q of [
         "CREATE TABLE IF NOT EXISTS `recipe_lines` ( `id` char(36) NOT NULL, `tenant_id` char(36) NOT NULL, `outlet_id` char(36) NOT NULL, `item_id` char(36) NOT NULL, `stock_item_id` char(36) NOT NULL, `qty_milli` int NOT NULL, `created_at` datetime(3) NOT NULL, CONSTRAINT `recipe_lines_id` PRIMARY KEY(`id`), CONSTRAINT `recipe_lines_item_stock_uq` UNIQUE(`outlet_id`,`item_id`,`stock_item_id`) )",
         "CREATE TABLE IF NOT EXISTS `stock_items` ( `id` char(36) NOT NULL, `tenant_id` char(36) NOT NULL, `outlet_id` char(36) NOT NULL, `name` varchar(80) NOT NULL, `unit` enum('kg','g','l','ml','pcs') NOT NULL, `qty_milli` int NOT NULL DEFAULT 0, `low_milli` int, `cost_paise` int, `is_active` boolean NOT NULL DEFAULT true, `created_at` datetime(3) NOT NULL, `updated_at` datetime(3) NOT NULL, CONSTRAINT `stock_items_id` PRIMARY KEY(`id`), CONSTRAINT `stock_items_outlet_name_uq` UNIQUE(`outlet_id`,`name`), CONSTRAINT `stock_items_tenant_key` UNIQUE(`tenant_id`,`id`) )",
         "CREATE TABLE IF NOT EXISTS `stock_moves` ( `id` char(36) NOT NULL, `tenant_id` char(36) NOT NULL, `outlet_id` char(36) NOT NULL, `stock_item_id` char(36) NOT NULL, `kind` enum('purchase','sale','wastage','count') NOT NULL, `qty_milli` int NOT NULL, `cost_paise` int, `note` varchar(140), `bill_id` char(36), `by_user_id` char(36), `created_at` datetime(3) NOT NULL, CONSTRAINT `stock_moves_id` PRIMARY KEY(`id`) )",
       ]) await db.query(q);
-        for (const q of [
-        "ALTER TABLE `recipe_lines` ADD CONSTRAINT `fk_recipe_lines_outlet` FOREIGN KEY (`tenant_id`,`outlet_id`) REFERENCES `outlets`(`tenant_id`,`id`) ON DELETE no action ON UPDATE no action",
-        "ALTER TABLE `recipe_lines` ADD CONSTRAINT `fk_recipe_lines_item` FOREIGN KEY (`tenant_id`,`item_id`) REFERENCES `menu_items`(`tenant_id`,`id`) ON DELETE no action ON UPDATE no action",
-        "ALTER TABLE `recipe_lines` ADD CONSTRAINT `fk_recipe_lines_stock` FOREIGN KEY (`tenant_id`,`stock_item_id`) REFERENCES `stock_items`(`tenant_id`,`id`) ON DELETE no action ON UPDATE no action",
-        "ALTER TABLE `stock_items` ADD CONSTRAINT `fk_stock_items_outlet` FOREIGN KEY (`tenant_id`,`outlet_id`) REFERENCES `outlets`(`tenant_id`,`id`) ON DELETE no action ON UPDATE no action",
-        "ALTER TABLE `stock_moves` ADD CONSTRAINT `fk_stock_moves_outlet` FOREIGN KEY (`tenant_id`,`outlet_id`) REFERENCES `outlets`(`tenant_id`,`id`) ON DELETE no action ON UPDATE no action",
-        "ALTER TABLE `stock_moves` ADD CONSTRAINT `fk_stock_moves_item` FOREIGN KEY (`tenant_id`,`stock_item_id`) REFERENCES `stock_items`(`tenant_id`,`id`) ON DELETE no action ON UPDATE no action",
-        "ALTER TABLE `stock_moves` ADD CONSTRAINT `fk_stock_moves_bill` FOREIGN KEY (`tenant_id`,`bill_id`) REFERENCES `bills`(`tenant_id`,`id`) ON DELETE no action ON UPDATE no action",
-        "ALTER TABLE `stock_moves` ADD CONSTRAINT `fk_stock_moves_by` FOREIGN KEY (`tenant_id`,`by_user_id`) REFERENCES `users`(`tenant_id`,`id`) ON DELETE no action ON UPDATE no action",
-        "CREATE INDEX `stock_moves_item_created_idx` ON `stock_moves` (`stock_item_id`,`created_at`)",
-        "CREATE INDEX `stock_moves_outlet_created_idx` ON `stock_moves` (`outlet_id`,`created_at`)",
-      ]) await db.query(q);
-      }
+      for (const [table, name, columns, refTable, refColumns] of [
+        ["recipe_lines", "fk_recipe_lines_outlet", "`tenant_id`,`outlet_id`", "outlets", "`tenant_id`,`id`"],
+        ["recipe_lines", "fk_recipe_lines_item", "`tenant_id`,`item_id`", "menu_items", "`tenant_id`,`id`"],
+        ["recipe_lines", "fk_recipe_lines_stock", "`tenant_id`,`stock_item_id`", "stock_items", "`tenant_id`,`id`"],
+        ["stock_items", "fk_stock_items_outlet", "`tenant_id`,`outlet_id`", "outlets", "`tenant_id`,`id`"],
+        ["stock_moves", "fk_stock_moves_outlet", "`tenant_id`,`outlet_id`", "outlets", "`tenant_id`,`id`"],
+        ["stock_moves", "fk_stock_moves_item", "`tenant_id`,`stock_item_id`", "stock_items", "`tenant_id`,`id`"],
+        ["stock_moves", "fk_stock_moves_bill", "`tenant_id`,`bill_id`", "bills", "`tenant_id`,`id`"],
+        ["stock_moves", "fk_stock_moves_by", "`tenant_id`,`by_user_id`", "users", "`tenant_id`,`id`"],
+      ] as const) await addForeignKey(db, table, name, columns, refTable, refColumns);
+      await addIndex(db, "stock_moves", "stock_moves_item_created_idx", "`stock_item_id`,`created_at`");
+      await addIndex(db, "stock_moves", "stock_moves_outlet_created_idx", "`outlet_id`,`created_at`");
       await db.query("UPDATE `plans` SET `features` = JSON_SET(`features`, '$.inventory', IF(`code` IN ('pro', 'chain'), JSON_EXTRACT('true', '$'), JSON_EXTRACT('false', '$'))) WHERE JSON_EXTRACT(`features`, '$.inventory') IS NULL");
     },
   },
@@ -198,29 +214,27 @@ const STEPS: Step[] = [
     when: 1792255107041,
     hash: "86612d0705b9bca83f4d96da9e921ee1b43936ac35738f29590b7b0a630998fc",
     apply: async (db) => {
-      // Rooms, stays and room requests arrive together; their keys and indexes only on the start that made them
-      if (!(await hasTable(db, "rooms"))) {
-        for (const q of [
+      // Create tables and repair each constraint/index independently after an interrupted startup.
+      for (const q of [
         "CREATE TABLE IF NOT EXISTS `room_requests` ( `id` char(36) NOT NULL, `tenant_id` char(36) NOT NULL, `outlet_id` char(36) NOT NULL, `room_id` char(36) NOT NULL, `stay_id` char(36) NOT NULL, `kind` enum('housekeeping','towels','water','toiletries','laundry','maintenance','wake_up','other') NOT NULL, `note` varchar(140), `status` enum('open','done') NOT NULL DEFAULT 'open', `created_at` datetime(3) NOT NULL, `done_at` datetime(3), `done_by_user_id` char(36), CONSTRAINT `room_requests_id` PRIMARY KEY(`id`) )",
         "CREATE TABLE IF NOT EXISTS `room_stays` ( `id` char(36) NOT NULL, `tenant_id` char(36) NOT NULL, `outlet_id` char(36) NOT NULL, `room_id` char(36) NOT NULL, `guest_name` varchar(80) NOT NULL, `guest_phone` varchar(15), `guests` int NOT NULL DEFAULT 1, `food_pay` enum('at_checkout','per_order') NOT NULL DEFAULT 'at_checkout', `note` varchar(140), `status` enum('open','closed') NOT NULL DEFAULT 'open', `open_key` char(36), `check_in_at` datetime(3) NOT NULL, `expected_check_out_at` datetime(3), `check_out_at` datetime(3), `checked_in_by_user_id` char(36), `checked_out_by_user_id` char(36), `created_at` datetime(3) NOT NULL, CONSTRAINT `room_stays_id` PRIMARY KEY(`id`), CONSTRAINT `room_stays_open_uq` UNIQUE(`open_key`), CONSTRAINT `room_stays_tenant_key` UNIQUE(`tenant_id`,`id`) )",
         "CREATE TABLE IF NOT EXISTS `rooms` ( `id` char(36) NOT NULL, `tenant_id` char(36) NOT NULL, `outlet_id` char(36) NOT NULL, `number` varchar(7) NOT NULL, `room_type` varchar(40), `floor_label` varchar(40), `table_id` char(36) NOT NULL, `status` enum('vacant','occupied','cleaning','blocked') NOT NULL DEFAULT 'vacant', `is_active` boolean NOT NULL DEFAULT true, `created_at` datetime(3) NOT NULL, `updated_at` datetime(3) NOT NULL, CONSTRAINT `rooms_id` PRIMARY KEY(`id`), CONSTRAINT `rooms_outlet_number_uq` UNIQUE(`outlet_id`,`number`), CONSTRAINT `rooms_table_uq` UNIQUE(`table_id`), CONSTRAINT `rooms_tenant_key` UNIQUE(`tenant_id`,`id`) )",
       ]) await db.query(q);
-        for (const q of [
-        "ALTER TABLE `room_requests` ADD CONSTRAINT `fk_room_requests_outlet` FOREIGN KEY (`tenant_id`,`outlet_id`) REFERENCES `outlets`(`tenant_id`,`id`) ON DELETE no action ON UPDATE no action",
-        "ALTER TABLE `room_requests` ADD CONSTRAINT `fk_room_requests_room` FOREIGN KEY (`tenant_id`,`room_id`) REFERENCES `rooms`(`tenant_id`,`id`) ON DELETE no action ON UPDATE no action",
-        "ALTER TABLE `room_requests` ADD CONSTRAINT `fk_room_requests_stay` FOREIGN KEY (`tenant_id`,`stay_id`) REFERENCES `room_stays`(`tenant_id`,`id`) ON DELETE no action ON UPDATE no action",
-        "ALTER TABLE `room_requests` ADD CONSTRAINT `fk_room_requests_done_by` FOREIGN KEY (`tenant_id`,`done_by_user_id`) REFERENCES `users`(`tenant_id`,`id`) ON DELETE no action ON UPDATE no action",
-        "ALTER TABLE `room_stays` ADD CONSTRAINT `fk_room_stays_outlet` FOREIGN KEY (`tenant_id`,`outlet_id`) REFERENCES `outlets`(`tenant_id`,`id`) ON DELETE no action ON UPDATE no action",
-        "ALTER TABLE `room_stays` ADD CONSTRAINT `fk_room_stays_room` FOREIGN KEY (`tenant_id`,`room_id`) REFERENCES `rooms`(`tenant_id`,`id`) ON DELETE no action ON UPDATE no action",
-        "ALTER TABLE `room_stays` ADD CONSTRAINT `fk_room_stays_in_by` FOREIGN KEY (`tenant_id`,`checked_in_by_user_id`) REFERENCES `users`(`tenant_id`,`id`) ON DELETE no action ON UPDATE no action",
-        "ALTER TABLE `room_stays` ADD CONSTRAINT `fk_room_stays_out_by` FOREIGN KEY (`tenant_id`,`checked_out_by_user_id`) REFERENCES `users`(`tenant_id`,`id`) ON DELETE no action ON UPDATE no action",
-        "ALTER TABLE `rooms` ADD CONSTRAINT `fk_rooms_outlet` FOREIGN KEY (`tenant_id`,`outlet_id`) REFERENCES `outlets`(`tenant_id`,`id`) ON DELETE no action ON UPDATE no action",
-        "ALTER TABLE `rooms` ADD CONSTRAINT `fk_rooms_table` FOREIGN KEY (`tenant_id`,`table_id`) REFERENCES `dining_tables`(`tenant_id`,`id`) ON DELETE no action ON UPDATE no action",
-        "CREATE INDEX `room_requests_outlet_status_idx` ON `room_requests` (`outlet_id`,`status`)",
-        "CREATE INDEX `room_requests_stay_idx` ON `room_requests` (`stay_id`,`created_at`)",
-        "CREATE INDEX `room_stays_outlet_idx` ON `room_stays` (`outlet_id`,`check_in_at`)",
-      ]) await db.query(q);
-      }
+      for (const [table, name, columns, refTable, refColumns] of [
+        ["room_requests", "fk_room_requests_outlet", "`tenant_id`,`outlet_id`", "outlets", "`tenant_id`,`id`"],
+        ["room_requests", "fk_room_requests_room", "`tenant_id`,`room_id`", "rooms", "`tenant_id`,`id`"],
+        ["room_requests", "fk_room_requests_stay", "`tenant_id`,`stay_id`", "room_stays", "`tenant_id`,`id`"],
+        ["room_requests", "fk_room_requests_done_by", "`tenant_id`,`done_by_user_id`", "users", "`tenant_id`,`id`"],
+        ["room_stays", "fk_room_stays_outlet", "`tenant_id`,`outlet_id`", "outlets", "`tenant_id`,`id`"],
+        ["room_stays", "fk_room_stays_room", "`tenant_id`,`room_id`", "rooms", "`tenant_id`,`id`"],
+        ["room_stays", "fk_room_stays_in_by", "`tenant_id`,`checked_in_by_user_id`", "users", "`tenant_id`,`id`"],
+        ["room_stays", "fk_room_stays_out_by", "`tenant_id`,`checked_out_by_user_id`", "users", "`tenant_id`,`id`"],
+        ["rooms", "fk_rooms_outlet", "`tenant_id`,`outlet_id`", "outlets", "`tenant_id`,`id`"],
+        ["rooms", "fk_rooms_table", "`tenant_id`,`table_id`", "dining_tables", "`tenant_id`,`id`"],
+      ] as const) await addForeignKey(db, table, name, columns, refTable, refColumns);
+      await addIndex(db, "room_requests", "room_requests_outlet_status_idx", "`outlet_id`,`status`");
+      await addIndex(db, "room_requests", "room_requests_stay_idx", "`stay_id`,`created_at`");
+      await addIndex(db, "room_stays", "room_stays_outlet_idx", "`outlet_id`,`check_in_at`");
       // The Reception role
       const [role] = await db.query<RowDataPacket[]>("SELECT COLUMN_TYPE AS t FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'staff_roles' AND COLUMN_NAME = 'role'");
       if (!String(role[0]?.t ?? "").includes("'reception'")) await db.query("ALTER TABLE `staff_roles` MODIFY COLUMN `role` enum('owner','manager','cashier','host','waiter','kitchen','accountant','reception') NOT NULL");
