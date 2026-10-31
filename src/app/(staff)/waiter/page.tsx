@@ -22,5 +22,5 @@ export default async function WaiterPage({ searchParams }: { searchParams: Promi
   const { tab } = await searchParams;
   const initialTab = tab === "tables" || tab === "order" || tab === "me" ? tab : "tasks";
   const theme = (await cookies()).get("tq_theme")?.value === "dark" ? "dark" : "light";
-  return <><AccessBanner access={access} canAsk={canAsk} outlet={staff.outlet.name} /><WaiterScreen initial={await waiterBoard(staff)} initialTab={initialTab} realtimeUrl={process.env.REALTIME_URL?.replace(/^http/, "ws") ?? null} theme={theme} /></>;
+  return <><AccessBanner access={access} canAsk={canAsk} outlet={staff.outlet.name} /><WaiterScreen sessionId={staff.sessionId} initial={await waiterBoard(staff)} initialTab={initialTab} realtimeUrl={process.env.REALTIME_URL?.replace(/^http/, "ws") ?? null} theme={theme} /></>;
 }

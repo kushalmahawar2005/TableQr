@@ -9,6 +9,7 @@ import { chime } from "@/lib/bell-sound";
 import type { ConsoleNotice } from "@/server/staff/notifications";
 import { noticesAction } from "./notification-actions";
 import { enableStaffPushNotifications } from "@/lib/staff-push-client";
+import { showStaffNotification } from "@/lib/show-staff-notification";
 
 const POLL_MS = 8_000;
 const SOUND_KEY = "tq_console_sound";
@@ -25,7 +26,7 @@ const timeAgo = (at: number, now: number) => {
  * Console bell: checks for new orders, requests, payments, bookings and waitlist joins every few
  * seconds, rings, shows a toast, and (when allowed) a system notification while the tab is hidden.
  */
-export function NotificationBell({ preview = false, className = "", placement = "header", showLabel = false, compact = false }: { preview?: boolean; className?: string; placement?: "header" | "sidebar"; showLabel?: boolean; compact?: boolean }) {
+export function NotificationBell({ sessionId, preview = false, className = "", placement = "header", showLabel = false, compact = false }: { sessionId: string; preview?: boolean; className?: string; placement?: "header" | "sidebar"; showLabel?: boolean; compact?: boolean }) {
   const [items, setItems] = useState<ConsoleNotice[]>([]);
   const [unread, setUnread] = useState(0);
   const [toasts, setToasts] = useState<ConsoleNotice[]>([]);
@@ -84,7 +85,7 @@ export function NotificationBell({ preview = false, className = "", placement = 
       let res: Awaited<ReturnType<typeof noticesAction>>;
       const first = since.current === null;
       try {
-        res = await noticesAction(first ? Date.now() - HISTORY_MS : since.current);
+        res = await noticesAction(first ? Date.now() - HISTORY_MS : since.current, sessionId);
       } catch {
         return; // offline for a moment: the next check catches up
       }
@@ -110,10 +111,7 @@ export function NotificationBell({ preview = false, className = "", placement = 
       }
       if (document.hidden && typeof Notification !== "undefined" && Notification.permission === "granted") {
         for (const n of fresh.slice(0, 3)) {
-          void navigator.serviceWorker?.getRegistration("/").then((registration) => {
-            if (registration) return registration.showNotification(n.title, { body: n.body, tag: n.id, data: { url: n.href } });
-            new Notification(n.title, { body: n.body, tag: n.id });
-          }).catch(() => {});
+          void showStaffNotification({ sessionId, title: n.title, body: n.body, tag: n.id, url: n.href });
 
         }
       }
@@ -127,7 +125,7 @@ export function NotificationBell({ preview = false, className = "", placement = 
       clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [preview]);
+  }, [preview, sessionId]);
 
   const toggleSound = () => {
     const next = !sound;

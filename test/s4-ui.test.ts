@@ -4,6 +4,7 @@ import path from "node:path";
 const root = path.resolve(import.meta.dirname, "..");
 const source = (file: string) => readFileSync(path.join(root, file), "utf8");
 const screen = source("src/app/pos/_components/pos-screen.tsx");
+const pushAwareSignOut = source("src/components/push-aware-sign-out-button.tsx");
 const reads = source("src/server/staff/pos-read.ts");
 const actions = source("src/server/staff/pos-actions.ts");
 const payments = source("src/server/billing/payments.ts");
@@ -33,5 +34,5 @@ describe("S4 POS/cashier coverage", () => {
   it("keeps paid shares and frozen shares visible", () => { expect(reads).toMatch(/paidPaise/); expect(reads).toMatch(/frozenAt/); });
   it("preserves canonical payment audit/idempotency primitives", () => { expect(payments).toMatch(/waiter\.settled/); expect(payments).toMatch(/clientRequestId/); });
   it("keeps manager gate on accepted voids", () => { expect(source("src/server/staff/waiter-mutations.ts")).toMatch(/Manager PIN required/); expect(actions).toMatch(/managerApproval/); });
-  it("includes sign-out and outlet identity", () => { expect(screen).toMatch(/signOutAction/); expect(screen).toMatch(/identity\.outlet/); });
+  it("includes push-aware sign-out and outlet identity", () => { expect(screen).toMatch(/<PushAwareSignOutButton/); expect(pushAwareSignOut).toMatch(/signOutWithPushAction/); expect(screen).toMatch(/identity\.outlet/); });
 });

@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { RIDER_COOKIE, RIDER_OUTLET_COOKIE } from "@/server/staff/rider-request";
 import { AppError } from "@/server/errors";
 import { STAFF_SESSION_SECONDS, resolveStaff, signInStaff, signOutStaff } from "@/server/staff/auth";
+import { removeStaffPushSubscription } from "@/server/staff/web-push";
 
 export type RiderSignInState = { error: string | null; outlet: string; phone: string };
 
@@ -34,6 +35,23 @@ export async function signInRiderAction(_previous: RiderSignInState, form: FormD
 export async function signOutRiderAction() {
   const jar = await cookies();
   await signOutStaff(jar.get(RIDER_COOKIE)?.value);
+  jar.delete(RIDER_COOKIE);
+  redirect("/rider/login");
+}
+
+/** Remove this browser's push route before ending its rider session. */
+export async function signOutRiderWithPushAction(endpoint: string) {
+  const jar = await cookies();
+  const token = jar.get(RIDER_COOKIE)?.value;
+  const rider = await resolveStaff(token);
+  if (rider?.roles.includes("rider") && typeof endpoint === "string" && endpoint.length <= 2048 && endpoint) {
+    try {
+      await removeStaffPushSubscription(rider, endpoint);
+    } catch (error) {
+      console.warn("[web-push] could not remove rider subscription during sign-out", error instanceof Error ? error.message : "unknown error");
+    }
+  }
+  await signOutStaff(token);
   jar.delete(RIDER_COOKIE);
   redirect("/rider/login");
 }

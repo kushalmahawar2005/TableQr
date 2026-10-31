@@ -1,7 +1,7 @@
 import "server-only";
 import { createECDH, createHash } from "node:crypto";
 import webpush, { type PushSubscription as WebPushSubscription } from "web-push";
-import { and, eq, inArray, isNull, or } from "drizzle-orm";
+import { and, eq, gt, inArray, isNull, or } from "drizzle-orm";
 import { db } from "@/db";
 import * as s from "@/db/schema";
 import { uuidv7 } from "@/db/id";
@@ -52,8 +52,8 @@ export async function saveStaffPushSubscription(staff: StaffSession, input: Push
   const subscription = validateSubscription(input);
   const endpointHash = createHash("sha256").update(subscription.endpoint).digest("hex");
   await db.insert(s.staffPushSubscriptions).values({
-    id: uuidv7(), tenantId: staff.tenantId, outletId: staff.outletId, userId: staff.userId, endpointHash, subscription,
-  }).onDuplicateKeyUpdate({ set: { tenantId: staff.tenantId, outletId: staff.outletId, userId: staff.userId, subscription, updatedAt: new Date() } });
+    id: uuidv7(), tenantId: staff.tenantId, outletId: staff.outletId, userId: staff.userId, sessionId: staff.sessionId, endpointHash, subscription,
+  }).onDuplicateKeyUpdate({ set: { tenantId: staff.tenantId, outletId: staff.outletId, userId: staff.userId, sessionId: staff.sessionId, subscription, updatedAt: new Date() } });
 }
 
 export async function removeStaffPushSubscription(staff: StaffSession, rawEndpoint: string) {
@@ -95,14 +95,22 @@ export async function sendOutletPush(scope: { tenantId: string; outletId: string
       if (url) destinations.set(id, url);
     }
     const appFor = (role: string) => (role === "waiter" ? features.waiterApp : role === "kitchen" ? features.kitchenDisplay : true);
-    const devices = await db.select({ userId: s.staffPushSubscriptions.userId, id: s.staffPushSubscriptions.id, subscription: s.staffPushSubscriptions.subscription })
+    const devices = await db.select({ userId: s.staffPushSubscriptions.userId, id: s.staffPushSubscriptions.id, sessionId: s.staffPushSubscriptions.sessionId, subscription: s.staffPushSubscriptions.subscription })
       .from(s.staffPushSubscriptions)
+      .innerJoin(s.staffSessions, and(
+        eq(s.staffSessions.tenantId, s.staffPushSubscriptions.tenantId),
+        eq(s.staffSessions.id, s.staffPushSubscriptions.sessionId),
+        eq(s.staffSessions.userId, s.staffPushSubscriptions.userId),
+        eq(s.staffSessions.outletId, s.staffPushSubscriptions.outletId),
+        isNull(s.staffSessions.revokedAt),
+        gt(s.staffSessions.expiresAt, new Date()),
+      ))
       .where(and(eq(s.staffPushSubscriptions.tenantId, scope.tenantId), eq(s.staffPushSubscriptions.outletId, scope.outletId)));
     // Phones of people whose every role lost its app on this plan are forgotten for good
     const usable = new Set(roles.filter(r => appFor(r.role)).map(r => r.id));
     const orphaned = devices.filter(d => !usable.has(d.userId)).map(d => d.id);
     if (orphaned.length) await db.delete(s.staffPushSubscriptions).where(and(eq(s.staffPushSubscriptions.tenantId, scope.tenantId), inArray(s.staffPushSubscriptions.id, orphaned)));
-    const recipients = devices.filter(device => destinations.has(device.userId));
+    const recipients = devices.filter(device => !!device.sessionId && destinations.has(device.userId));
     if (!recipients.length) return;
 
     const [outlet] = await db.select({ code: s.outlets.code }).from(s.outlets).where(and(eq(s.outlets.tenantId, scope.tenantId), eq(s.outlets.id, scope.outletId)));
@@ -118,7 +126,7 @@ export async function sendOutletPush(scope: { tenantId: string; outletId: string
     };
     await Promise.allSettled(recipients.map(async (device) => {
       try {
-      await webpush.sendNotification(device.subscription as WebPushSubscription, JSON.stringify({ ...payload, url: destinations.get(device.userId) }), {
+      await webpush.sendNotification(device.subscription as WebPushSubscription, JSON.stringify({ ...payload, url: destinations.get(device.userId), sessionId: device.sessionId }), {
         vapidDetails: { subject, publicKey: config.publicKey, privateKey },
         TTL: 120,
         urgency: "high",

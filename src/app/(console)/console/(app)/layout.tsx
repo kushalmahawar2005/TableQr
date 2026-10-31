@@ -56,7 +56,7 @@ export default async function ConsoleLayout({ children }: LayoutProps<"/console"
     .map(({ slug, label }) => ({ slug, label }));
   const kitchen = features.kitchenDisplay && canSee(staff, "kitchen");
   return (
-    <StaffShell theme={theme} sidebar={sidebar} lang={lang} sections={sections} kitchen={kitchen} plan={planName ? { name: planName, canManage: canAsk } : undefined} logoUrl={logoUrl} brandName={(await consoleAppBrand())?.name ?? staff.outlet.name} outlets={outlets.map((o) => ({ id: o.id, name: o.name, current: o.id === staff.outletId }))} staff={{ name: staff.name, roles: staff.roles, outlet: staff.outlet.name, shiftEnds: staff.expiresAt }}>
+    <StaffShell theme={theme} sidebar={sidebar} lang={lang} sections={sections} kitchen={kitchen} plan={planName ? { name: planName, canManage: canAsk } : undefined} logoUrl={logoUrl} brandName={(await consoleAppBrand())?.name ?? staff.outlet.name} outlets={outlets.map((o) => ({ id: o.id, name: o.name, current: o.id === staff.outletId }))} staff={{ sessionId: staff.sessionId, name: staff.name, roles: staff.roles, outlet: staff.outlet.name, shiftEnds: staff.expiresAt }}>
       <StaffPrintProvider outletId={staff.outletId}>
         <AccessBanner access={access} canAsk={canAsk} outlet={staff.outlet.name} />
         {children}

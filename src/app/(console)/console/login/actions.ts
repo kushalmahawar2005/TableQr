@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { homeFor } from "@/lib/console-nav";
 import { AppError } from "@/server/errors";
 import { STAFF_COOKIE, STAFF_SESSION_SECONDS, resolveStaff, signInStaff, signOutStaff } from "@/server/staff/auth";
+import { removeStaffPushSubscription } from "@/server/staff/web-push";
 
 export type SignInState = { error: string | null; outlet: string; phone: string };
 
@@ -31,6 +32,23 @@ export async function signInAction(_prev: SignInState, form: FormData): Promise<
 export async function signOutAction() {
   const jar = await cookies();
   await signOutStaff(jar.get(STAFF_COOKIE)?.value);
+  jar.delete(STAFF_COOKIE);
+  redirect("/console/login");
+}
+
+/** Remove this browser's push route before ending its staff session. */
+export async function signOutWithPushAction(endpoint: string) {
+  const jar = await cookies();
+  const token = jar.get(STAFF_COOKIE)?.value;
+  const staff = await resolveStaff(token);
+  if (staff && typeof endpoint === "string" && endpoint.length <= 2048 && endpoint) {
+    try {
+      await removeStaffPushSubscription(staff, endpoint);
+    } catch (error) {
+      console.warn("[web-push] could not remove subscription during sign-out", error instanceof Error ? error.message : "unknown error");
+    }
+  }
+  await signOutStaff(token);
   jar.delete(STAFF_COOKIE);
   redirect("/console/login");
 }

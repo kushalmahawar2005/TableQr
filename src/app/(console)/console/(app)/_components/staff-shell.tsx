@@ -42,10 +42,10 @@ import {
   type ReactNode,
 } from "react";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { PushAwareSignOutButton } from "@/components/push-aware-sign-out-button";
 import { InstallApp } from "@/components/install-app";
 import { NotificationPermissionOnboarding } from "@/components/notification-permission-onboarding";
 import type { Lang } from "@/lib/i18n";
-import { signOutAction } from "../../login/actions";
 import { shrinkPhotoFile } from "@/lib/shrink-photo";
 import { myPhotoAction, saveMyPhotoAction } from "./profile-actions";
 import { NotificationBell } from "./notification-bell";
@@ -116,6 +116,7 @@ export function StaffShell({
   lang: Lang;
   sections: { slug: string; label: string }[];
   staff: {
+    sessionId?: string;
     name: string;
     roles: string[];
     outlet: string;
@@ -245,7 +246,7 @@ export function StaffShell({
 
           {wide === false && (
             <span data-tour="bell" className="flex">
-              <NotificationBell preview={preview} placement="header" compact />
+              <NotificationBell sessionId={staff.sessionId ?? ""} preview={preview} placement="header" compact />
             </span>
           )}
           <ThemeToggle
@@ -253,15 +254,16 @@ export function StaffShell({
             onChange={setDark}
             className="grid size-8 place-items-center rounded-lg text-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-2 focus-visible:outline-forest"
           />
-          <form action={preview ? undefined : signOutAction}>
-            <button
-              type={preview ? "button" : "submit"}
+          {preview ? <button
+              type="button"
               aria-label={lang === "hi" ? "साइन आउट" : "Sign out"}
               className="grid size-8 place-items-center rounded-lg text-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-2 focus-visible:outline-forest"
             >
               <HugeiconsIcon icon={Logout01Icon} size={18} aria-hidden />
-            </button>
-          </form>
+            </button> : <PushAwareSignOutButton
+              ariaLabel={lang === "hi" ? "साइन आउट" : "Sign out"}
+              className="grid size-8 place-items-center rounded-lg text-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-2 focus-visible:outline-forest"
+            ><HugeiconsIcon icon={Logout01Icon} size={18} aria-hidden /></PushAwareSignOutButton>}
         </span>
       </header>
       <aside
@@ -341,9 +343,8 @@ export function StaffShell({
             showLabel
             className={`flex min-h-11 w-full items-center gap-3 rounded-input px-3 text-body font-semibold text-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-2 focus-visible:outline-ink [&>span]:hidden ${folded ? "" : "lg:[&>span]:inline"}`}
           />
-          <form action={preview ? undefined : signOutAction}>
-            <button
-              type={preview ? "button" : "submit"}
+          {preview ? <button
+              type="button"
               aria-label={lang === "hi" ? "साइन आउट" : "Sign out"}
               title={staff.name}
               className="flex min-h-11 w-full items-center gap-3 rounded-input px-3 text-body font-semibold text-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-2 focus-visible:outline-ink"
@@ -357,8 +358,14 @@ export function StaffShell({
               <span className={wideLabel}>
                 {lang === "hi" ? "साइन आउट" : "Sign out"}
               </span>
-            </button>
-          </form>
+            </button> : <PushAwareSignOutButton
+              ariaLabel={lang === "hi" ? "साइन आउट" : "Sign out"}
+              title={staff.name}
+              className="flex min-h-11 w-full items-center gap-3 rounded-input px-3 text-body font-semibold text-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-2 focus-visible:outline-ink"
+            >
+              <HugeiconsIcon icon={Logout01Icon} size={20} className="shrink-0" aria-hidden />
+              <span className={wideLabel}>{lang === "hi" ? "साइन आउट" : "Sign out"}</span>
+            </PushAwareSignOutButton>}
         </div>
       </aside>
       <div className="flex min-w-0 flex-1 flex-col pb-[calc(4rem+env(safe-area-inset-bottom))] sm:pb-0">
@@ -419,7 +426,7 @@ export function StaffShell({
             )}
             {wide && (
               <span data-tour="bell" className="flex">
-                <NotificationBell preview={preview} placement="header" />
+                <NotificationBell sessionId={staff.sessionId ?? ""} preview={preview} placement="header" />
               </span>
             )}
 
@@ -767,15 +774,16 @@ function UserProfileDropdown({
             </Link>
           </div>
           <div className="border-t border-line pt-1">
-            <form action={preview ? undefined : signOutAction}>
-              <button
-                type={preview ? "button" : "submit"}
+            {preview ? <button
+                type="button"
                 className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-medium text-rose-600 hover:bg-rose-50 cursor-pointer"
               >
                 <LogOut className="size-3.5" aria-hidden="true" />
                 <span>{lang === "hi" ? "साइन आउट" : "Sign out"}</span>
-              </button>
-            </form>
+              </button> : <PushAwareSignOutButton className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-medium text-rose-600 hover:bg-rose-50 cursor-pointer">
+                <LogOut className="size-3.5" aria-hidden="true" />
+                <span>{lang === "hi" ? "साइन आउट" : "Sign out"}</span>
+              </PushAwareSignOutButton>}
           </div>
         </div>
       )}

@@ -3,7 +3,7 @@ import type { Access } from "@/server/access";
 import type { StaffSession } from "@/server/staff/auth";
 import { planViewFor } from "./plan-data";
 import { PlanPanel } from "./plan-panel";
-import { signOutAction } from "../../login/actions";
+import { PushAwareSignOutButton } from "@/components/push-aware-sign-out-button";
 import { ContactTableeqr } from "./contact-tableeqr";
 import { RenewButton } from "./request-upgrade";
 
@@ -30,7 +30,7 @@ export async function PausedScreen({ access, canAsk, staff }: { access: Extract<
         <div className="mt-6 flex flex-col items-center gap-3">
           {plan && <PlanPanel plan={plan} compact />}
           {canAsk ? <><RenewButton /><ContactTableeqr message={`Hi Tableeqr, this is ${outlet}. Please renew our plan.`} /></> : <p className="text-body font-semibold text-ink">Please tell the owner.</p>}
-          <form action={signOutAction}><button type="submit" className="min-h-11 text-body font-semibold text-muted underline underline-offset-4">Sign out</button></form>
+          <PushAwareSignOutButton className="min-h-11 text-body font-semibold text-muted underline underline-offset-4">Sign out</PushAwareSignOutButton>
         </div>
       </div>
     </main>

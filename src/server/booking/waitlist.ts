@@ -54,7 +54,7 @@ export async function joinPublicWaitlist(outletCode: string, input: { name: stri
   const plain = token(); const id = uuidv7();
   await db.insert(s.waitlistEntries).values({ id, tenantId: scope.tenantId, outletId: scope.outletId, name, phone: input.phone, partySize, seatingPreference: input.seatingPreference ?? null, joinedAt: now, quotedMinutes: estimate.minutes, estimateMinutes: estimate.minutes, estimateSource: estimate.source, status: "waiting", sortOrder: (last?.sortOrder ?? 0) + 1, manageTokenHash: hash(plain), manageTokenExpiresAt: new Date(now.getTime() + 24 * 3600_000), updatedAt: now });
   await publish(scope, [{ topic: topics.floor, type: "waitlist.updated", data: { entryId: id } }, { topic: topics.waitlist(hash(plain)), type: "waitlist.position_changed", data: { entryId: id } }]);
-  await sendOutletPush(scope, { title: "New waitlist entry", body: `${name} joined with ${partySize} guests.`, url: "/console/waitlist", tag: `waitlist-${id}` }, { kind: "management" });
+  await sendOutletPush(scope, { title: "New waitlist entry", body: `A party of ${partySize} joined the waitlist. Open Tableeqr to review.`, url: "/console/waitlist", tag: `waitlist-${id}` }, { kind: "management" });
   await queueBookingNotification({ tenantId: scope.tenantId, outletId: scope.outletId, waitlistEntryId: id, type: "waitlist_joined", recipient: input.phone, channel: "sms", idempotencyKey: `waitlist-joined:${id}` });
   return { entryId: id, token: plain };
 }

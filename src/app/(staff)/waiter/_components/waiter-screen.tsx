@@ -9,7 +9,8 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { ThemeToggle } from "@/components/theme-toggle";
 import { copy, money, requestNames, requestUrgency } from "../_copy";
 import * as actions from "../actions";
-import { signOutAction } from "@/app/(console)/console/login/actions";
+import { PushAwareSignOutButton } from "@/components/push-aware-sign-out-button";
+import { showStaffNotification } from "@/lib/show-staff-notification";
 import { MyProfile } from "./my-profile";
 import { readyPhrase, requestPhrase, saveVoicePreference, speak, voicePreference } from "@/lib/voice-alert";
 
@@ -37,10 +38,10 @@ const REQUEST_ICON: Record<string, typeof Droplets> = { water: Droplets, cutlery
 const LINE_STATUS: Record<string, [string, string]> = { placed: ["Sent", "भेजा"], accepted: ["Accepted", "स्वीकार"], preparing: ["Cooking", "बन रहा है"], ready: ["Ready", "तैयार"], served: ["Served", "परोसा"], voided: ["Removed", "हटाया"], cancelled: ["Cancelled", "रद्द"] };
 
 export function WaiterScreen({
-  initial, realtimeUrl = null, preview = false, initialTab = "tasks", initialDetail = null, initialMenu = [], initialSheet = null, initialOffline = false,
+  sessionId = "", initial, realtimeUrl = null, preview = false, initialTab = "tasks", initialDetail = null, initialMenu = [], initialSheet = null, initialOffline = false,
   initialLanguage = "en", initialStage = "person", initialDraft = [], initialMessage = "", initialItem = null, initialConnection = "polling", theme = "light",
 }: {
-  initial: WaiterBoard; realtimeUrl?: string | null; preview?: boolean; initialTab?: Tab; initialDetail?: WaiterDetail | null; initialMenu?: WaiterMenu; initialSheet?: SheetState | null;
+  sessionId?: string; initial: WaiterBoard; realtimeUrl?: string | null; preview?: boolean; initialTab?: Tab; initialDetail?: WaiterDetail | null; initialMenu?: WaiterMenu; initialSheet?: SheetState | null;
   initialOffline?: boolean; initialLanguage?: "en" | "hi"; initialStage?: "person" | "menu" | "cart"; initialDraft?: Draft[]; initialMessage?: string; initialItem?: MenuItem | null;
   initialConnection?: string; theme?: "light" | "dark";
 }) {
@@ -108,7 +109,7 @@ export function WaiterScreen({
         if (ctx && ctx.state !== "running") void ctx.resume().then(beep, () => {}); else beep();
       } catch { /* sound is a bonus */ }
       // renotify: a second task with the same tag must alert again, not silently replace the first
-      try { if (typeof Notification !== "undefined" && Notification.permission === "granted" && document.hidden && text) new Notification("Tableeqr", { body: text, tag: "tableeqr-task", requireInteraction: true, renotify: true } as NotificationOptions); } catch { /* ignore */ }
+      if (sessionId && document.hidden && text) void showStaffNotification({ sessionId, title: "Tableeqr", body: text, tag: "tableeqr-task", url: "/waiter" });
     };
   });
   // Keep the screen on while the waiter app is open, so alerts are not missed on a locked phone
@@ -550,7 +551,7 @@ export function WaiterScreen({
             </div>
             <ThemeToggle dark={dark} onChange={setDark} showLabel className={`${btn} w-full justify-start`} />
             <button className={`${btn} w-full justify-start`} onClick={() => setLanguage(hi ? "en" : "hi")}>{c.language}: {hi ? "हिंदी" : "English"}</button>
-            <form action={preview ? undefined : signOutAction}><button className={`${btn} w-full justify-start text-danger`} disabled={disabled || preview}>{c.signOut}</button></form>
+            {preview ? <button type="button" className={`${btn} w-full justify-start text-danger`} disabled={disabled || preview}>{c.signOut}</button> : <PushAwareSignOutButton disabled={disabled} className={`${btn} w-full justify-start text-danger`}>{c.signOut}</PushAwareSignOutButton>}
           </section>
         )}
       </div>

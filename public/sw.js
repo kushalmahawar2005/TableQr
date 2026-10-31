@@ -82,16 +82,33 @@ self.addEventListener("fetch", (event) => {
 self.addEventListener("push", (event) => {
   let data = {};
   try { data = event.data ? event.data.json() : {}; } catch { data = { body: event.data?.text() ?? "" }; }
-  const title = typeof data.title === "string" ? data.title : "Tableeqr update";
-  const options = {
-    body: typeof data.body === "string" ? data.body : "There is a new update for your restaurant.",
-    icon: typeof data.icon === "string" ? data.icon : "/staff-icon/192",
-    badge: typeof data.badge === "string" ? data.badge : "/staff-icon/180",
-    tag: typeof data.tag === "string" ? data.tag : "tableeqr-staff",
-    renotify: true,
-    data: { url: typeof data.url === "string" ? data.url : "/console" },
-  };
-  event.waitUntil(self.registration.showNotification(title, options));
+  event.waitUntil((async () => {
+    const url = typeof data.url === "string" ? data.url : "/console";
+    const staffNotification = /^\/(console|waiter|rider)(\/|$)/.test(url);
+    const sessionId = typeof data.sessionId === "string" ? data.sessionId : "";
+    if (staffNotification) {
+      // Old or queued staff alerts must not appear after sign-out or after another account signs in.
+      if (!sessionId) return;
+      try {
+        const check = new URL("/api/staff/push-session", self.location.origin);
+        check.searchParams.set("sessionId", sessionId);
+        const response = await fetch(check.href, { credentials: "include", cache: "no-store" });
+        if (!response.ok || (await response.json()).active !== true) return;
+      } catch {
+        return;
+      }
+    }
+    const title = typeof data.title === "string" ? data.title : "Tableeqr update";
+    const options = {
+      body: typeof data.body === "string" ? data.body : "There is a new update for your restaurant.",
+      icon: typeof data.icon === "string" ? data.icon : "/staff-icon/192",
+      badge: typeof data.badge === "string" ? data.badge : "/staff-icon/180",
+      tag: typeof data.tag === "string" ? data.tag : "tableeqr-staff",
+      renotify: true,
+      data: { url, sessionId: staffNotification ? sessionId : null },
+    };
+    await self.registration.showNotification(title, options);
+  })());
 });
 
 self.addEventListener("notificationclick", (event) => {
@@ -102,6 +119,19 @@ self.addEventListener("notificationclick", (event) => {
       const requested = new URL(event.notification.data?.url ?? "/console", self.location.origin);
       if (requested.origin === self.location.origin) target = requested;
     } catch { /* open the staff home when payload data is malformed */ }
+
+    const sessionId = event.notification.data?.sessionId;
+    if (/^\/(console|waiter|rider)(\/|$)/.test(target.pathname) && typeof sessionId !== "string") return;
+    if (typeof sessionId === "string") {
+      try {
+        const check = new URL("/api/staff/push-session", self.location.origin);
+        check.searchParams.set("sessionId", sessionId);
+        const response = await fetch(check.href, { credentials: "include", cache: "no-store" });
+        if (!response.ok || (await response.json()).active !== true) return;
+      } catch {
+        return;
+      }
+    }
 
     const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
     for (const client of windows) {
