@@ -179,7 +179,7 @@ export function BookingClient({ outletCode, zones, timezone, today, freeCancella
     {party <= 12 && <p className="mt-5 text-center text-label text-muted">{cancellationText(freeCancellationMinutes, hindi)}</p>}
 
     {/* Stays at the bottom with what has been picked so far */}
-    {party <= 12 && <div className="fixed inset-x-0 bottom-0 z-30 mx-auto max-w-[480px] border-t border-line/70 bg-surface/95 px-4 pt-3 pb-[max(12px,env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgb(31_41_55/0.08)] backdrop-blur-md min-[380px]:px-5">
+    {party <= 12 && <div className="fixed inset-x-0 bottom-[var(--guest-nav-height)] z-30 mx-auto max-w-[480px] border-t border-line/70 bg-surface/95 px-4 pt-3 pb-[max(12px,env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgb(31_41_55/0.08)] backdrop-blur-md min-[380px]:px-5">
       <div className="flex items-center gap-3">
         <div className="min-w-0 flex-1">
           <p className="text-label text-muted">{party} {party === 1 ? t("guest", "मेहमान") : t("guests", "मेहमान")}</p>
