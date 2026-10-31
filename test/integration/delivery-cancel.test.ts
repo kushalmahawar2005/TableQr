@@ -94,7 +94,7 @@ describe("cancelling a delivery order", () => {
       status: "cancelled", paid: false, paymentStatus: "refund_pending", refundStatus: "pending",
     });
 
-    const [refund] = await env.db.select().from(s.refunds);
+    const [refund] = await env.db.select().from(s.refunds).where(eq(s.refunds.paymentId, result.refunds[0].paymentId));
     expect((await processRefund(owner, refund.id)).status).toBe("success");
     expect(await deliveryStatus("SRJ01", created.token, device)).toMatchObject({
       status: "cancelled", paid: false, paymentStatus: "refunded", refundStatus: "success",
