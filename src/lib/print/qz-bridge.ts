@@ -52,5 +52,17 @@ export async function printHtmlThroughDesktopBridge(input: {
     colorType: "blackwhite",
     jobName: "Tableeqr receipt",
   });
-  await bridge.print(config, [{ type: "pixel", format: "html", flavor: "plain", data: input.html }]);
+  // QZ's HTML renderer otherwise falls back to the printer's default page size. On receipt
+  // printers that can shift the first line down and clip the tail even though the config uses a
+  // custom roll size. These per-document dimensions are in inches (QZ pixel HTML API).
+  await bridge.print(config, [{
+    type: "pixel",
+    format: "html",
+    flavor: "plain",
+    data: input.html,
+    options: {
+      pageWidth: input.paperMm / 25.4,
+      pageHeight: input.pageHeightMm / 25.4,
+    },
+  }]);
 }
