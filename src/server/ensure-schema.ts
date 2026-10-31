@@ -439,9 +439,10 @@ const STEPS: Step[] = [
     },
   },
   {
-    tag: "0078_bumpy_guardian", when: 1793481680540, hash: "bcff72d1ae059fac33c97d1873be852f100768a0e3fbd9a4fc58ddef91c8f4a1",
+    tag: "0078_bumpy_guardian", when: 1793481680540, hash: "d6728407349446a25ab49f33b1579dab5a8a0db8073f14a2b6d0b967c345fe5e",
     apply: async (db) => {
       await addColumn(db, "delivery_checkouts", "refund_amount_paise", "int");
+      await db.query("UPDATE `delivery_checkouts` SET `refund_amount_paise` = `total_paise` WHERE `refund_amount_paise` IS NULL AND `refund_status` = 'pending' AND `refund_gateway_ref` IS NOT NULL");
     },
   },
 ];
