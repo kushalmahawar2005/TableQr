@@ -95,7 +95,10 @@ export async function requestRefund(staff: StaffSession, input: RefundInput, now
   // The gateway call is single-flight inside executeRefund (it holds the refund row), so a
   // replay of a refund that is already sent, or settled, does nothing
   const status = await executeRefund(staff, id, now);
-  if (!created.replayed) await db.transaction((tx) => audit(tx, staff, { action: "refund.sent", entity: "refund", entityId: id, after: { status }, now }));
+  if (!created.replayed) await db.transaction((tx) => audit(tx, staff, {
+    action: created.payment.channel === "manual_qr" ? "refund.awaiting_manual_return" : "refund.sent",
+    entity: "refund", entityId: id, after: { status }, now,
+  }));
   await announce(staff, await sessionOfPayment(staff.tenantId, created.payment.billId), id);
   return { refundId: id, status, replayed: created.replayed };
 }
@@ -104,11 +107,33 @@ export async function requestRefund(staff: StaffSession, input: RefundInput, now
 export async function processRefund(staff: StaffSession, refundId: string, approval?: Approval, now = new Date()) {
   const approverUserId = await managerApproval(staff, approval, refundRoles);
   const [row] = await db
-    .select({ refund: s.refunds, billId: s.payments.billId })
+    .select({ refund: s.refunds, billId: s.payments.billId, channel: s.payments.channel })
     .from(s.refunds)
     .innerJoin(s.payments, and(eq(s.payments.tenantId, s.refunds.tenantId), eq(s.payments.id, s.refunds.paymentId)))
     .where(and(eq(s.refunds.tenantId, staff.tenantId), eq(s.payments.outletId, staff.outletId), eq(s.refunds.id, refundId)));
   if (!row) throw new AppError("not_found", "Refund not found.");
+  if (row.channel === "manual_qr") {
+    const status = await db.transaction(async (tx) => {
+      const [locked] = await tx
+        .select({ refund: s.refunds, channel: s.payments.channel })
+        .from(s.refunds)
+        .innerJoin(s.payments, and(eq(s.payments.tenantId, s.refunds.tenantId), eq(s.payments.id, s.refunds.paymentId)))
+        .where(and(eq(s.refunds.tenantId, staff.tenantId), eq(s.payments.outletId, staff.outletId), eq(s.refunds.id, refundId)))
+        .for("update");
+      if (!locked || locked.channel !== "manual_qr") throw new AppError("not_found", "Manual QR refund not found.");
+      if (locked.refund.status !== "pending" || locked.refund.gatewayRef) return locked.refund.status;
+      await tx.update(s.refunds).set({ status: "success", completedAt: now })
+        .where(and(eq(s.refunds.tenantId, staff.tenantId), eq(s.refunds.id, refundId), eq(s.refunds.status, "pending")));
+      await audit(tx, staff, {
+        action: "refund.manual_return_confirmed", entity: "refund", entityId: refundId,
+        before: { status: "pending" }, after: { status: "success", approverUserId },
+        reason: "Staff confirmed the restaurant QR transfer was returned to the guest", now,
+      });
+      return "success" as const;
+    }, LOCK_THEN_READ);
+    await announce(staff, await sessionOfPayment(staff.tenantId, row.billId), refundId);
+    return { refundId, status };
+  }
   const status = await executeRefund(staff, refundId, now);
   await db.transaction((tx) => audit(tx, staff, { action: "refund.sent", entity: "refund", entityId: refundId, after: { status, approverUserId }, now }));
   await announce(staff, await sessionOfPayment(staff.tenantId, row.billId), refundId);

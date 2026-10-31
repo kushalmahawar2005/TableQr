@@ -159,7 +159,10 @@ export async function cancelDeliveryOrder(staff: StaffSession, id: string, rawRe
       .where(and(eq(s.tableSessions.tenantId, scope.tenantId), eq(s.tableSessions.id, row.sessionId))).for("update");
     await tx.update(s.orderLines).set({ status: "cancelled" })
       .where(and(eq(s.orderLines.tenantId, scope.tenantId), eq(s.orderLines.sessionId, row.sessionId), notInArray(s.orderLines.status, ["cancelled", "voided"])));
-    await tx.update(s.deliveryCheckouts).set({ status: "cancelled" })
+    await tx.update(s.deliveryCheckouts).set({
+      status: "cancelled",
+      ...(row.paymentStatus === "paid" ? { paymentStatus: "refund_pending", refundStatus: "pending" } : {}),
+    })
       .where(and(eq(s.deliveryCheckouts.tenantId, scope.tenantId), eq(s.deliveryCheckouts.id, row.id)));
     if (session) {
       await tx.update(s.tableSessions).set({ status: "closed", openKey: null, closedAt: now })

@@ -24,11 +24,12 @@ export function RefundPanel({ payments, needsApproval, disabled, hi, onChanged }
   const [phone, setPhone] = useState("");
   const [pin, setPin] = useState("");
   const [confirming, setConfirming] = useState(false);
+  const [confirmManualRefund, setConfirmManualRefund] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<{ tone: "ok" | "bad"; text: string } | null>(null);
   const [requestId, setRequestId] = useState<string | null>(null);
 
-  const reset = () => { setOpen(null); setAmount(""); setReason(""); setPhone(""); setPin(""); setConfirming(false); setRequestId(null); };
+  const reset = () => { setOpen(null); setAmount(""); setReason(""); setPhone(""); setPin(""); setConfirming(false); setConfirmManualRefund(null); setRequestId(null); };
   const approval = needsApproval ? { phone, pin } : undefined;
   const call = async (fn: () => Promise<{ ok: true; data: { status: string } } | { ok: false; error: string }>, done: (status: string) => string) => {
     if (busy) return;
@@ -50,7 +51,7 @@ export function RefundPanel({ payments, needsApproval, disabled, hi, onChanged }
     if (!selected || !valid) return;
     const id = requestId ?? crypto.randomUUID();
     setRequestId(id);
-    void call(() => actions.refundAction({ paymentId: selected.id, amountPaise: paise, reason, requestId: id, approval }), (st) => st === "success" ? "Refund done." : st === "pending" ? "Refund sent. It stays pending until the gateway confirms it." : "The gateway refused the refund. Nothing was refunded.");
+    void call(() => actions.refundAction({ paymentId: selected.id, amountPaise: paise, reason, requestId: id, approval }), (st) => st === "success" ? "Refund done." : st === "pending" ? selected.channel === "manual_qr" ? "Refund is pending. Return the money from the restaurant UPI account, then record it here." : "Refund sent. It stays pending until the gateway confirms it." : "The gateway refused the refund. Nothing was refunded.");
   };
 
   return (
@@ -72,10 +73,22 @@ export function RefundPanel({ payments, needsApproval, disabled, hi, onChanged }
             <p key={r.id} className="mt-1 flex flex-wrap items-center justify-between gap-2 text-xs">
               <span className="tabular-nums">Refund {money(r.amountPaise)} · <span className={`font-semibold ${TONE[r.status]}`}>{STATUS[r.status]}</span></span>
               {r.status === "pending" && (
-                <button type="button" className={button} disabled={disabled || busy} onClick={() => void call(() => (r.sent ? actions.checkRefundAction(r.id) : actions.processRefundAction(r.id, approval)), (st) => (st === "success" ? "Refund done." : st === "failed" ? "The gateway refused the refund." : "Still pending at the gateway."))}>
-                  {r.sent ? "Check status" : "Send refund"}
-                </button>
+                p.channel === "manual_qr" && !r.sent ? (
+                  <button type="button" className={button} disabled={disabled || busy} onClick={() => setConfirmManualRefund(r.id)}>Record UPI refund</button>
+                ) : (
+                  <button type="button" className={button} disabled={disabled || busy} onClick={() => void call(() => (r.sent ? actions.checkRefundAction(r.id) : actions.processRefundAction(r.id, approval)), (st) => (st === "success" ? "Refund done." : st === "failed" ? "The gateway refused the refund." : "Still pending at the gateway."))}>
+                    {r.sent ? "Check status" : "Send refund"}
+                  </button>
+                )
               )}
+              {confirmManualRefund === r.id && <div className="mt-2 w-full rounded-xl border border-warning/30 bg-warning/5 p-3">
+                <p className="text-xs">Only confirm after you have returned {money(r.amountPaise)} to the guest from the restaurant UPI account.</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button type="button" className={danger} disabled={disabled || busy} onClick={() => void call(() => actions.processRefundAction(r.id, approval), (st) => st === "success" ? "UPI refund recorded as returned." : st === "failed" ? "Refund could not be recorded." : "Refund is still pending.")}>Yes, money returned</button>
+                  <button type="button" className={button} disabled={busy} onClick={() => setConfirmManualRefund(null)}>Cancel</button>
+                </div>
+                {needsApproval && <p className="mt-2 text-xs text-muted">Manager PIN approval is required for this action.</p>}
+              </div>}
             </p>
           ))}
           {p.refund.refundablePaise > 0 && open !== p.id && (
@@ -97,6 +110,7 @@ export function RefundPanel({ payments, needsApproval, disabled, hi, onChanged }
                 </div>
               )}
               {p.channel === "counter" && <p className="text-xs text-muted">Counter payment: hand the money back yourself. This records that it was returned.</p>}
+              {p.channel === "manual_qr" && <p className="text-xs text-muted">Return the money from the restaurant UPI account. It will stay pending until you record the return here.</p>}
               {!confirming ? (
                 <div className="flex gap-2"><button type="submit" className={button} disabled={!valid || busy}>Review refund</button><button type="button" className={button} onClick={reset}>Cancel</button></div>
               ) : (

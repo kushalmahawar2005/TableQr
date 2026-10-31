@@ -937,6 +937,9 @@ export async function executeRefund(ctx: StaffContext, refundId: string, now = n
       await settle({ status: "success", completedAt: now });
       return "success" as const;
     }
+    // Restaurant-QR payments are transfers to the restaurant's own UPI account, outside the
+    // gateway. Keep their refunds pending until a manager records that the money was returned.
+    if (payment.channel === "manual_qr") return "pending" as const;
     const gateway = await gatewayForOutletPayment(payment.tenantId, payment.outletId, payment.channel);
     if (!gateway || !payment.gatewayRef || !payment.gatewayPaymentId) throw new AppError("invalid_state", "This payment cannot be refunded online.");
     let res;

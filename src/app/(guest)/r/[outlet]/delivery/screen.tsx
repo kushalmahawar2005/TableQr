@@ -390,6 +390,16 @@ function StatusView({ status, hindi, pending, statusMessage, onPay, onRefresh, n
   const t = (en: string, hi: string) => (hindi ? hi : en);
   const placed = status.status !== "draft" && status.status !== "cancelled";
   const pickup = status.serviceMode === "pickup";
+  const paymentLabel = status.status === "cancelled"
+    ? status.refundStatus === "pending" ? t("Order cancelled · refund in progress", "ऑर्डर रद्द · रिफंड जारी है")
+      : status.refundStatus === "success" ? t("Order cancelled · refund returned", "ऑर्डर रद्द · रिफंड लौटाया गया")
+        : status.refundStatus === "failed" ? t("Refund failed · contact the restaurant", "रिफंड नहीं हुआ · रेस्टोरेंट से संपर्क करें")
+          : t("Order cancelled · no payment due", "ऑर्डर रद्द · पेमेंट बाकी नहीं")
+    : status.paid ? t("Paid", "पेमेंट हो गया")
+      : status.paymentMode === "gateway" ? t("Pay online to start", "शुरू करने के लिए ऑनलाइन पेमेंट करें")
+        : status.paymentMode === "manual_qr" ? t("Waiting for payment check", "पेमेंट जाँच बाकी")
+          : pickup ? t(`Pay ${money(status.totalPaise)} at pickup`, `पिकअप पर ${money(status.totalPaise)} दें`)
+            : t(`Pay ${money(status.totalPaise)} on delivery`, `डिलीवरी पर ${money(status.totalPaise)} दें`);
   const stage = pickup ? status.status === "collected" ? 3 : status.kitchenStatus === "ready" || status.kitchenStatus === "served" ? 2 : status.kitchenStatus === "accepted" || status.kitchenStatus === "preparing" ? 1 : 0 : status.status === "delivered" ? 4 : status.status === "dispatched" ? 3 : status.kitchenStatus === "ready" || status.kitchenStatus === "served" ? 2 : status.kitchenStatus === "accepted" || status.kitchenStatus === "preparing" ? 1 : 0;
   const steps = pickup ? [
     { icon: ShoppingBasket01Icon, title: t("Order placed", "ऑर्डर हो गया"), note: status.placedAt ? new Date(status.placedAt).toLocaleTimeString(hindi ? "hi-IN-u-nu-latn" : "en-IN", { hour: "numeric", minute: "2-digit" }) : "" },
@@ -474,7 +484,7 @@ function StatusView({ status, hindi, pending, statusMessage, onPay, onRefresh, n
       </div>
       {status.deliveryFeePaise > 0 && <p className="text-caption text-muted">{t(`Includes delivery ${money(status.deliveryFeePaise)}`, `डिलीवरी ${money(status.deliveryFeePaise)} शामिल`)}</p>}
       <p className={`mt-2 inline-flex rounded-full px-2.5 py-0.5 text-caption font-bold ${status.paid ? "bg-[var(--state-available-soft)] text-[var(--state-available-text)]" : "bg-[var(--state-bill-soft)] text-[var(--state-bill-text)]"}`}>
-        {status.paid ? t("Paid", "पेमेंट हो गया") : status.paymentMode === "gateway" ? t("Pay online to start", "शुरू करने के लिए ऑनलाइन पेमेंट करें") : status.paymentMode === "manual_qr" ? t("Waiting for payment check", "पेमेंट जाँच बाकी") : pickup ? t(`Pay ${money(status.totalPaise)} at pickup`, `पिकअप पर ${money(status.totalPaise)} दें`) : t(`Pay ${money(status.totalPaise)} on delivery`, `डिलीवरी पर ${money(status.totalPaise)} दें`)}
+        {paymentLabel}
       </p>
       {status.paymentFailureReason && <p role="status" className="mt-2 rounded-xl bg-brand-soft p-3 text-caption">{status.paymentFailureReason}</p>}
       {status.status === "draft" && status.paymentStatus === "pending" && status.paymentMode === "gateway" && <button type="button" disabled={pending} className={`${button} mt-3`} onClick={onPay}>{t("Continue secure payment", "सुरक्षित पेमेंट जारी रखें")}</button>}
