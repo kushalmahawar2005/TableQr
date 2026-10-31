@@ -4,14 +4,31 @@ import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { Home, Package, UserRound } from "lucide-react";
 import { useGuestBase } from "@/lib/guest-base";
+import { brandStyle, deriveBrandTokens } from "@/domain/brand";
+import type { getRestaurantHome } from "@/server/guest/restaurant-home";
+import { useGuestPreference, useSystemDark } from "@/lib/guest-preferences";
+import "./guest-app.css";
+export type GuestBrand = Awaited<ReturnType<typeof getRestaurantHome>>;
+type Appearance="light"|"dark"|"auto";
 const GuestAuthContext=createContext<(signedIn:boolean)=>void>(()=>{});
 export const useGuestAuthStatus=()=>useContext(GuestAuthContext);
-export function GuestShell({outlet,children,signedIn=false}:{outlet:string;children:ReactNode;signedIn?:boolean}) {
- const [authenticated,setAuthenticated]=useState(signedIn);
+const ExperienceContext=createContext<{brand:GuestBrand|null;appearance:Appearance;setAppearance:(v:Appearance)=>void;language:"en"|"hi";setLanguage:(v:"en"|"hi")=>void}>({brand:null,appearance:"auto",setAppearance:()=>{},language:"en",setLanguage:()=>{}});
+export const useGuestExperience=()=>useContext(ExperienceContext);
+export function GuestShell({outlet,children,signedIn=false,brand=null,initialLanguage="en"}:{initialLanguage?:"en"|"hi";outlet:string;children:ReactNode;signedIn?:boolean;brand?:GuestBrand|null}) {
+ const [authOverride,setAuthenticated]=useState<boolean|null>(null);
+ const authenticated=authOverride??signedIn;
+ const [storedAppearance,setTheme]=useGuestPreference(`guest-theme:${outlet}`,"auto"),[storedLanguage,setLang]=useGuestPreference(`guest-language:${outlet}`,initialLanguage);
+ const appearance:Appearance=storedAppearance==='dark'||storedAppearance==='light'?storedAppearance:'auto';
+ const language=storedLanguage==='hi'?'hi':'en';
+ const systemDark=useSystemDark();
  const base=useGuestBase(outlet),path=usePathname();
  const section=(path??'').replace(/^\/r\/[^/]+(?:\/app(?=\/|$))?/, '');
  const show=section===''||section==='/'||/^\/(delivery|book|profile|orders|waitlist)(\/|$)/.test(section);
+ const setAppearance=(v:Appearance)=>setTheme(v);
+ const setLanguage=(v:"en"|"hi")=>{setLang(v);document.cookie=`tq_lang=${v}; Path=/; Max-Age=31536000; SameSite=Lax`};
  if(!show)return children;
  const hideNav=section.startsWith("/profile")&&!authenticated;
- return <GuestAuthContext.Provider value={setAuthenticated}><div style={{ "--guest-nav-height": hideNav ? "0px" : "calc(4rem + 1px + env(safe-area-inset-bottom, 0px))", paddingBottom: "var(--guest-nav-height)" } as CSSProperties}>{children}{!hideNav&&<nav aria-label="Guest app navigation" className="fixed inset-x-0 bottom-0 z-40 mx-auto flex max-w-[480px] border-t border-line bg-surface px-3 pb-[env(safe-area-inset-bottom)] shadow-lg">{[{href:base,label:'Home',icon:Home,active:section===''||section==='/'},{href:`${base}/orders`,label:'Orders & bookings',icon:Package,active:section.startsWith('/orders')},{href:`${base}/profile`,label:'Profile',icon:UserRound,active:section.startsWith('/profile')}].map(({href,label,icon:Icon,active})=><Link key={label} href={href} aria-current={active?'page':undefined} className={`flex min-h-16 min-w-0 flex-1 flex-col items-center justify-center gap-1 text-xs font-semibold ${active?'text-ink':'text-muted'}`}><Icon className="size-5"/>{label}</Link>)}</nav>}</div></GuestAuthContext.Provider>;
+ const dark=appearance==='dark'||(appearance==='auto'&&systemDark);
+ const tokens=brandStyle(deriveBrandTokens(brand?.outlet.accentColor));
+ return <GuestAuthContext.Provider value={setAuthenticated}><ExperienceContext.Provider value={{brand,appearance,setAppearance,language,setLanguage}}><div className="guest-app" data-appearance={dark?'dark':'light'} lang={language} style={{...tokens,...(dark?{"--brand-soft":"color-mix(in srgb, var(--brand-main) 18%, #24252b)"}:{}),"--guest-nav-height":hideNav?"0px":"calc(4.5rem + env(safe-area-inset-bottom, 0px))",paddingBottom:"var(--guest-nav-height)"} as CSSProperties}>{children}{!hideNav&&<nav aria-label="Guest app navigation" className="guest-bottom-nav">{[{href:base,label:language==='hi'?'होम':'Home',icon:Home,active:section===''||section==='/'||section.startsWith('/delivery')},{href:`${base}/orders`,label:brand?.services.reservations?(language==='hi'?'ऑर्डर और बुकिंग':'Orders & bookings'):(language==='hi'?'ऑर्डर':'Orders'),icon:Package,active:section.startsWith('/orders')},{href:`${base}/profile`,label:language==='hi'?'प्रोफ़ाइल':'Profile',icon:UserRound,active:section.startsWith('/profile')}].map(({href,label,icon:Icon,active})=><Link key={href} href={href} aria-current={active?'page':undefined}><span><Icon size={22} strokeWidth={active?2.2:1.7}/></span>{label}</Link>)}</nav>}</div></ExperienceContext.Provider></GuestAuthContext.Provider>;
 }

@@ -5,6 +5,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import * as s from "@/db/schema";
 import { customerCookie, customerFor, customerHistory, logoutCustomer, sendCustomerOtp, verifyCustomerOtp } from "@/server/guest/customer-account";
+import { checkFirstName } from "@/domain/guest-name";
 import { AppError } from "@/server/errors";
 import type { DeliveryAddress } from "@/db/schema/delivery";
 const options={httpOnly:true,sameSite:"lax" as const,secure:process.env.NODE_ENV==="production",path:"/",maxAge:30*86400};
@@ -21,3 +22,9 @@ export async function saveCustomerAddressAction(outlet:string,address:DeliveryAd
  await db.transaction(async tx=>{await tx.select({id:s.guests.id}).from(s.guests).where(and(eq(s.guests.tenantId,who.tenantId),eq(s.guests.id,who.id))).for("update");const [old]=await tx.select().from(s.customerProfiles).where(and(eq(s.customerProfiles.tenantId,who.tenantId),eq(s.customerProfiles.guestId,who.id)));const addresses=[clean,...(old?.addresses??[])].slice(0,5);await tx.insert(s.customerProfiles).values({tenantId:who.tenantId,guestId:who.id,addresses}).onDuplicateKeyUpdate({set:{addresses}});});return true;
 });}
 export async function removeCustomerAddressAction(outlet:string,id:string){return run(async()=>{const who=await customerFor(outlet,(await cookies()).get(customerCookie(outlet))?.value);if(!who)throw new AppError("verification_required","Sign in first.");await db.transaction(async tx=>{const [row]=await tx.select().from(s.customerProfiles).where(and(eq(s.customerProfiles.tenantId,who.tenantId),eq(s.customerProfiles.guestId,who.id))).for("update");if(row)await tx.update(s.customerProfiles).set({addresses:row.addresses.filter(a=>a.id!==id)}).where(and(eq(s.customerProfiles.tenantId,who.tenantId),eq(s.customerProfiles.guestId,who.id)));});return true;});}
+
+export async function updateCustomerNameAction(outlet:string,input:string){return run(async()=>{
+ const who=await customerFor(outlet,(await cookies()).get(customerCookie(outlet))?.value);if(!who)throw new AppError("verification_required","Sign in first.");
+ const checked=checkFirstName(input);if(!checked.ok)throw new AppError("invalid_name","Enter your name using letters, up to 40 characters.");
+ await db.update(s.guests).set({name:checked.name}).where(and(eq(s.guests.tenantId,who.tenantId),eq(s.guests.id,who.id)));return true;
+});}

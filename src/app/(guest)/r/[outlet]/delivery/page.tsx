@@ -1,3 +1,4 @@
+import { priceLine } from "@/domain/pricing";
 import { customerCookie, customerReorderLines } from "@/server/guest/customer-account";
 import { restaurantApp, restaurantAppMetadata } from "@/server/guest/restaurant-app";
 import { guestBase } from "@/server/guest/guest-base";
@@ -44,5 +45,10 @@ export default async function DeliveryPage({ params, searchParams }: { params: P
     menuError = error.message;
   }
   if (menuError) return <main className="py-10"><Link href={`${await guestBase(outlet)}`} className="text-brand-strong">← Guest link</Link><h1 className="mt-6 text-2xl font-bold">{serviceMode === "pickup" ? "Pickup / takeaway" : "Delivery"}</h1><p className="mt-3 text-muted">{menuError}</p></main>;
-  return <DeliveryScreen key={`${query.reorder ?? "new-order"}-${serviceMode}`} initialCart={initialCart} outletCode={outlet} installable={installable} data={data} initialServiceMode={serviceMode} hindi={lang === "hi"} realtimeUrl={process.env.REALTIME_URL?.replace(/^http/, "ws") ?? null} />;
+  const safeCart = initialCart.filter(line => {
+    const item = data?.items.find(item => item.id === line.itemId);
+    return item?.available && priceLine(item.pricing, line.qty, line.modifierIds).ok;
+  });
+  const notice = query.reorder ? safeCart.length < initialCart.length ? "Some dishes or options are no longer available and were left out. Review your cart at current prices." : "Your favourites are added at current prices. Review your cart before ordering." : undefined;
+  return <DeliveryScreen initialNotice={notice} key={`${query.reorder ?? "new-order"}-${serviceMode}`} initialCart={safeCart} outletCode={outlet} installable={installable} data={data} initialServiceMode={serviceMode} hindi={lang === "hi"} realtimeUrl={process.env.REALTIME_URL?.replace(/^http/, "ws") ?? null} />;
 }

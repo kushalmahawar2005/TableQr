@@ -1,6 +1,6 @@
 import "server-only";
 import { createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
-import { and, count, desc, eq, gt, gte, ne, or } from "drizzle-orm";
+import { and, count, desc, eq, gt, gte, inArray, ne, or } from "drizzle-orm";
 import { db } from "@/db";
 import * as s from "@/db/schema";
 import { uuidv7 } from "@/db/id";
@@ -71,12 +71,14 @@ export async function customerFor(code:string,token:string|undefined,now=new Dat
 export async function customerHistory(code:string,token:string|undefined) {
  const who=await customerFor(code,token);if(!who)throw new AppError("verification_required","Sign in to view your orders.");
  const [deliveries,bookings,profiles,parties]=await Promise.all([
-  db.select({id:s.deliveryCheckouts.id,serviceMode:s.deliveryCheckouts.serviceMode,status:s.deliveryCheckouts.status,paymentStatus:s.deliveryCheckouts.paymentStatus,totalPaise:s.deliveryCheckouts.totalPaise,at:s.deliveryCheckouts.createdAt,lines:s.deliveryCheckouts.lines,address:s.deliveryCheckouts.address}).from(s.deliveryCheckouts).where(and(eq(s.deliveryCheckouts.tenantId,who.tenantId),eq(s.deliveryCheckouts.outletId,who.outletId),eq(s.deliveryCheckouts.guestId,who.id),or(ne(s.deliveryCheckouts.status,"draft"),ne(s.deliveryCheckouts.paymentStatus,"none")))).orderBy(desc(s.deliveryCheckouts.createdAt)).limit(50),
+  db.select({id:s.deliveryCheckouts.id,sessionId:s.deliveryCheckouts.sessionId,serviceMode:s.deliveryCheckouts.serviceMode,status:s.deliveryCheckouts.status,paymentStatus:s.deliveryCheckouts.paymentStatus,totalPaise:s.deliveryCheckouts.totalPaise,at:s.deliveryCheckouts.createdAt,lines:s.deliveryCheckouts.lines,address:s.deliveryCheckouts.address}).from(s.deliveryCheckouts).where(and(eq(s.deliveryCheckouts.tenantId,who.tenantId),eq(s.deliveryCheckouts.outletId,who.outletId),eq(s.deliveryCheckouts.guestId,who.id),or(ne(s.deliveryCheckouts.status,"draft"),ne(s.deliveryCheckouts.paymentStatus,"none")))).orderBy(desc(s.deliveryCheckouts.createdAt)).limit(50),
   db.select({id:s.reservations.id,status:s.reservations.status,startAt:s.reservations.startAt,partySize:s.reservations.partySize,reference:s.reservations.publicReference}).from(s.reservations).where(and(eq(s.reservations.tenantId,who.tenantId),eq(s.reservations.outletId,who.outletId),eq(s.reservations.guestId,who.id))).orderBy(desc(s.reservations.startAt)).limit(50),
   db.select({addresses:s.customerProfiles.addresses}).from(s.customerProfiles).where(and(eq(s.customerProfiles.tenantId,who.tenantId),eq(s.customerProfiles.guestId,who.id))),
   db.select({id:s.groupRequests.id,status:s.groupRequests.status,startAt:s.groupRequests.desiredStartAt,partySize:s.groupRequests.partySize,reference:s.groupRequests.publicReference}).from(s.groupRequests).where(and(eq(s.groupRequests.tenantId,who.tenantId),eq(s.groupRequests.outletId,who.outletId),eq(s.groupRequests.guestId,who.id))).orderBy(desc(s.groupRequests.createdAt)).limit(50),
  ]);
- return {guest:{name:who.name,phone:who.phone},deliveries:deliveries.map(d=>({...d,at:d.at.toISOString()})),bookings:[...bookings.map(b=>({...b,kind:"reservation" as const,startAt:b.startAt.toISOString()})),...parties.map(b=>({...b,kind:"party" as const,startAt:b.startAt.toISOString()}))].sort((a,b)=>b.startAt.localeCompare(a.startAt)),addresses:profiles[0]?.addresses??[]};
+ const sessions=deliveries.flatMap(d=>d.sessionId?[d.sessionId]:[]);
+ const items=sessions.length?await db.select({sessionId:s.orderLines.sessionId,name:s.orderLines.nameEn,qty:s.orderLines.qty,imageUrl:s.menuItems.imageUrl,status:s.orderLines.status}).from(s.orderLines).leftJoin(s.menuItems,and(eq(s.menuItems.tenantId,s.orderLines.tenantId),eq(s.menuItems.id,s.orderLines.itemId))).where(and(eq(s.orderLines.tenantId,who.tenantId),inArray(s.orderLines.sessionId,sessions))):[];
+ return {guest:{name:who.name,phone:who.phone},deliveries:deliveries.map(d=>({...d,at:d.at.toISOString(),items:items.filter(i=>i.sessionId===d.sessionId&&i.status!=="voided"&&i.status!=="cancelled").map(({name,qty,imageUrl})=>({name,qty,imageUrl}))})),bookings:[...bookings.map(b=>({...b,kind:"reservation" as const,startAt:b.startAt.toISOString()})),...parties.map(b=>({...b,kind:"party" as const,startAt:b.startAt.toISOString()}))].sort((a,b)=>b.startAt.localeCompare(a.startAt)),addresses:profiles[0]?.addresses??[]};
 }
 export async function logoutCustomer(code:string,token:string|undefined) {
  const who=await customerFor(code,token);if(!who||!token)return;

@@ -9,7 +9,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { signOutAction } from "@/app/(console)/console/login/actions";
+import { PushAwareSignOutButton } from "@/components/push-aware-sign-out-button";
 import { AddItemsDialog } from "./add-items-dialog";
 import { usePrint } from "@/components/print/print-provider";
 import { billHtml } from "./bill-print";
@@ -156,7 +156,7 @@ export function BillingScreen({ initial, realtimeUrl, embedded = false, openSess
           <div className="flex gap-2">
             <button type="button" className={brand} disabled={busy || offline} onClick={newTakeaway}><ShoppingBag className="size-4" aria-hidden="true" />{L("New takeaway", "नया पार्सल")}</button>
             <button type="button" className={quiet} onClick={() => setHi(!hi)}>{hi ? "EN" : "हिंदी"}</button>
-            {!embedded && <form action={signOutAction}><button className={quiet}>{L("Sign out", "बाहर निकलें")}</button></form>}
+            {!embedded && <PushAwareSignOutButton className={quiet}>{L("Sign out", "बाहर निकलें")}</PushAwareSignOutButton>}
           </div>
         </header>
 

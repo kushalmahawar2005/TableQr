@@ -22,6 +22,9 @@ export async function getRestaurantHome(outletCode: string) {
     customFeatures: s.tenants.customFeatures,
     name: s.brands.name,
     city: s.outlets.city,
+    address: s.outlets.address,
+    phone: s.tenants.contactPhone,
+    openingHours: s.outlets.openingHours,
     code: s.outlets.code,
     announcementActive: s.outlets.announcementActive,
     announcementTitle: s.outlets.announcementTitle,
@@ -49,7 +52,7 @@ export async function getRestaurantHome(outletCode: string) {
   const deliveryPaymentReady = deliveryPolicy.paymentMode === "cod" || (deliveryPolicy.paymentMode === "manual_qr" && !!row.paymentQrUrl) || (deliveryPolicy.paymentMode === "gateway" && !!outletGatewayFromConfig(row.paymentGatewayConfig));
   const pickupPaymentReady = deliveryPolicy.pickupCodEnabled || !!row.paymentQrUrl || !!outletGatewayFromConfig(row.paymentGatewayConfig);
   return {
-    outlet: { code: row.code, name: row.name, city: row.city, businessType: row.businessType, logoUrl: row.logoUrl, accentColor: row.accentColor, announcement: row.announcementActive && row.announcementTitle && row.announcementBody ? { title: row.announcementTitle, body: row.announcementBody } : null },
+    outlet: { code: row.code, name: row.name, city: row.city, address: row.address, phone: row.phone, openingHours: row.openingHours, businessType: row.businessType, logoUrl: row.logoUrl, accentColor: row.accentColor, announcement: row.announcementActive && row.announcementTitle && row.announcementBody ? { title: row.announcementTitle, body: row.announcementBody } : null },
     services: {
       delivery: profile.delivery && features.delivery && deliveryPolicy.acceptingOrders && deliveryPaymentReady,
       pickup: profile.pickup && features.delivery && deliveryPolicy.acceptingPickupOrders && pickupPaymentReady,

@@ -1,4 +1,7 @@
 "use client";
+import { CalendarDays, ChevronRight, MapPin, ShoppingBag, Truck } from "lucide-react";
+import { GuestSheet } from "../_components/guest-ui";
+import { useGuestExperience } from "../guest-shell";
 import { customerAccountAction, saveCustomerAddressAction } from "../profile/actions";
 import type { customerHistory } from "@/server/guest/customer-account";
 import { ArrowLeft01Icon, Call02Icon, Cancel01Icon, CheckmarkCircle02Icon, ChefHatIcon, DeliveryTruck01Icon, FilterHorizontalIcon, Location01Icon, MinusSignIcon, PackageIcon, PlusSignIcon, Search01Icon, ShoppingBasket01Icon, UserIcon } from "@hugeicons/core-free-icons";
@@ -44,9 +47,13 @@ const money = (paise: number) => `₹${(paise / 100).toLocaleString("en-IN", { m
 const control = "min-h-12 w-full rounded-2xl border border-line/70 bg-surface px-4 text-ink outline-none focus:border-brand focus:shadow-[0_0_0_3px_var(--brand-soft)]";
 const button = "min-h-13 w-full rounded-2xl bg-brand px-4 font-bold text-brand-on shadow-[0_8px_20px_-6px_var(--brand-border)] disabled:opacity-50 disabled:shadow-none";
 
-export function DeliveryScreen({ outletCode, data, initialStatus, initialServiceMode = "delivery", hindi: initialHindi = false, realtimeUrl = null, installable = null, initialCart = [] }: { initialCart?: DeliveryCartLine[]; outletCode: string; data?: Menu; initialStatus?: Status; initialServiceMode?: OrderServiceMode; hindi?: boolean; realtimeUrl?: string | null; installable?: { name: string; logoUrl: string | null } | null }) {
+export function DeliveryScreen({ outletCode, data, initialStatus, initialServiceMode = "delivery", realtimeUrl = null, installable = null, initialCart = [], initialNotice }: { initialNotice?: string; initialCart?: DeliveryCartLine[]; outletCode: string; data?: Menu; initialStatus?: Status; initialServiceMode?: OrderServiceMode; hindi?: boolean; realtimeUrl?: string | null; installable?: { name: string; logoUrl: string | null } | null }) {
   const base = useGuestBase(outletCode);
-  const [hindi, setHindi] = useState(initialHindi);
+  const experience = useGuestExperience();
+  const hindi = experience.language === "hi";
+  const setHindi = (value: boolean) => experience.setLanguage(value ? "hi" : "en");
+  const [activeMode, setActiveMode] = useState(initialServiceMode);
+  const [addressSheet, setAddressSheet] = useState(false);
   const t = (en: string, hi: string) => hindi ? hi : en;
   const [account,setAccount]=useState<Awaited<ReturnType<typeof customerHistory>>|null>(null);
 
@@ -59,7 +66,7 @@ export function DeliveryScreen({ outletCode, data, initialStatus, initialService
   const [otp, setOtp] = useState<{ challengeId: string; devCode?: string; resendIn: number } | null>(null);
   const [resendAt, setResendAt] = useState(0);
   const [quote, setQuote] = useState<Quote | null>(null), [status, setStatus] = useState<Status | undefined>(initialStatus);
-  const serviceMode = status?.serviceMode ?? initialServiceMode;
+  const serviceMode = status?.serviceMode ?? activeMode;
   const [pickupPaymentMode, setPickupPaymentMode] = useState<"cod" | "gateway" | "manual_qr">("cod");
   const [error, setError] = useState<string | null>(null), [pending, start] = useTransition();
   const [selected, setSelected] = useState<Menu["items"][number] | null>(null), [choices, setChoices] = useState<string[]>([]);
@@ -181,9 +188,9 @@ export function DeliveryScreen({ outletCode, data, initialStatus, initialService
   return <main lang={hindi ? "hi" : "en"} className="flex w-full min-w-0 flex-col pt-5 pb-[calc(7rem+env(safe-area-inset-bottom))] text-ink">
     <header className="flex items-center gap-2.5">
       {data ? <Link href={`${base}`} aria-label={t("Back to guest link", "मुख्य पेज पर वापस")} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl focus-visible:outline-2 focus-visible:outline-brand">
-        <OutletLogo name={data.outlet.name} logoUrl={data.outlet.logoUrl} size={44} />
+        <OutletLogo name={experience.brand?.outlet.name ?? data.outlet.name} logoUrl={experience.brand?.outlet.logoUrl ?? data.outlet.logoUrl} size={44} />
         <span className="min-w-0">
-          <span className="block truncate font-display text-section leading-tight font-bold">{data.outlet.name}</span>
+          <span className="block truncate font-display text-section leading-tight font-bold">{experience.brand?.outlet.name ?? data.outlet.name}</span>
           <span className="block text-caption text-muted">{serviceMode === "pickup" ? t("Pickup / takeaway", "पिकअप / टेकअवे") : t("Home delivery", "घर पर डिलीवरी")} · {data.outlet.policy.estimatedMinutes} {t("min", "मिनट")}</span>
         </span>
       </Link> : <Link href={`${base}`} className="flex-1 text-caption font-semibold text-muted">← {t("Guest link", "मुख्य पेज")}</Link>}
@@ -195,10 +202,15 @@ export function DeliveryScreen({ outletCode, data, initialStatus, initialService
         {totalQty > 0 && <span aria-hidden className="absolute -top-1 -right-1 grid h-5 min-w-5 place-items-center rounded-full bg-brand px-1 text-label font-bold tabular text-brand-on ring-2 ring-paper">{totalQty}</span>}
       </button>}
     </header>
+    {initialNotice && <p role="status" className="mt-4 rounded-2xl bg-brand-soft p-4 text-xs text-brand-strong">{initialNotice}</p>}
     {error && <p role="alert" className="mt-4 rounded-2xl border border-danger/20 bg-[var(--state-seated-soft)] p-4 text-caption font-semibold text-danger">{error}</p>}
     {status ? <><StatusView outletCode={outletCode} status={status} hindi={hindi} pending={pending} statusMessage={statusMessage} onPay={() => run(payDelivery)} onRefresh={() => run(loadStatus)} newOrderHref={`${base}/delivery?new=1&lang=${hindi ? "hi" : "en"}`} />{installable && <InstallApp guest className="mt-4" name={installable.name} logoUrl={installable.logoUrl} title={t("Install our app", "हमारा ऐप इंस्टॉल करें")} blurb={t(`Track this order and order again from ${installable.name} in one tap.`, `इस ऑर्डर को ट्रैक करें और ${installable.name} से एक टैप में दोबारा ऑर्डर करें।`)} />}</> : <>
     {step === "menu" && data && <>
-      {installable && <InstallApp guest compact className="mt-4" name={installable.name} logoUrl={installable.logoUrl} title={t("Install our app", "हमारा ऐप इंस्टॉल करें")} blurb={t(serviceMode === "pickup" ? "Order faster next time and follow your pickup status." : "Order faster next time and track your delivery live.", serviceMode === "pickup" ? "अगली बार जल्दी ऑर्डर करें और पिकअप की स्थिति देखें।" : "अगली बार जल्दी ऑर्डर करें और डिलीवरी लाइव ट्रैक करें।")} />}
+      <div className="mt-5 flex gap-2 rounded-2xl bg-surface p-1.5 border border-line" aria-label="Order type">
+        {([{key:"delivery",label:t("Delivery","डिलीवरी"),icon:Truck},{key:"pickup",label:t("Pickup","पिकअप"),icon:ShoppingBag}] as const).filter(mode=>experience.brand?.services[mode.key] ?? mode.key===serviceMode).map(({key,label,icon:Icon})=><button key={key} type="button" aria-pressed={serviceMode===key} onClick={()=>setActiveMode(key)} className={`flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl text-sm font-bold ${serviceMode===key?"bg-brand text-brand-on shadow-sm":"text-muted"}`}><Icon size={17}/>{label}</button>)}
+      </div>
+      {experience.brand?.services.reservations&&<Link href={`${base}/book`} className="mt-4 flex items-center gap-3 rounded-2xl border border-line bg-surface px-4 py-3"><CalendarDays size={20} className="text-brand"/><span className="flex-1 text-sm"><b className="block">{t("A table for your next get-together?","अगली मुलाकात के लिए टेबल?")}</b><span className="text-xs text-muted">{t("Reserve a table or plan a party","टेबल या पार्टी बुक करें")}</span></span><ChevronRight size={18}/></Link>}
+
       <div className="mt-5">
         <h1 className="font-display text-[1.625rem] leading-tight font-bold tracking-tight">{t("What are you craving?", "आज क्या खाने का मन है?")}</h1>
         <p className="mt-1 text-body text-muted">{serviceMode === "pickup" ? t("Order ahead and collect it at the counter. Choose an available payment method at checkout.", "पहले ऑर्डर करें और काउंटर से लें। चेकआउट पर उपलब्ध पेमेंट तरीका चुनें।") : t(`Freshly prepared, delivered in about ${data.outlet.policy.estimatedMinutes} minutes. ${data.outlet.policy.paymentMode === "gateway" ? "Pay securely before preparation." : data.outlet.policy.paymentMode === "manual_qr" ? "Pay using the business QR." : "Pay when your order arrives."}`, `ताज़ा तैयार, लगभग ${data.outlet.policy.estimatedMinutes} मिनट में डिलीवरी। ${data.outlet.policy.paymentMode === "gateway" ? "तैयारी से पहले सुरक्षित पेमेंट करें।" : data.outlet.policy.paymentMode === "manual_qr" ? "बिज़नेस QR से पेमेंट करें।" : "ऑर्डर मिलने पर भुगतान करें।"}`)}</p>
@@ -272,14 +284,18 @@ export function DeliveryScreen({ outletCode, data, initialStatus, initialService
         </button>
       </div>}
     </>}
-    {selected && <section role="dialog" aria-modal="true" aria-label={selected.name} className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 sm:items-center"><div className="max-h-[85dvh] w-full max-w-md space-y-4 overflow-y-auto rounded-2xl bg-surface p-5"><div className="flex justify-between gap-3"><h2 className="font-bold">{selected.name}</h2><button type="button" onClick={() => setSelected(null)} className="min-h-11 px-3" aria-label="Close">✕</button></div>{selected.pricing.groups.map(group => <fieldset key={group.id} className="space-y-2"><legend className="font-semibold">{group.nameEn} · {group.minSelect > 0 ? t("Required", "ज़रूरी") : t("Optional", "वैकल्पिक")}</legend>{group.modifiers.map(option => <label key={option.id} className="flex min-h-11 items-center gap-3 text-sm"><input type="checkbox" checked={choices.includes(option.id)} onChange={event => setChoices(current => event.target.checked ? group.maxSelect === 1 ? [...current.filter(id => !group.modifiers.some(modifier => modifier.id === id)), option.id] : [...current, option.id] : current.filter(id => id !== option.id))} />{option.nameEn} {option.priceDeltaPaise ? `+ ${money(option.priceDeltaPaise)}` : ""}</label>)}</fieldset>)}<button type="button" className={button} onClick={() => add(selected, choices)}>{t("Add to cart", "कार्ट में जोड़ें")}</button></div></section>}
-    {step === "address" && serviceMode === "delivery" && <section className="mt-4 rounded-2xl border border-line bg-surface p-4">{account?<><p className="text-sm font-semibold">Signed in as {account.guest.name} · {account.guest.phone}</p>{account.addresses.length>0&&<label className="mt-2 block text-sm">Saved address<select className={control} defaultValue="" onChange={e=>{const a=account.addresses.find(a=>a.id===e.target.value);if(a)setAddress(a)}}><option value="">Choose a saved address</option>{account.addresses.map(a=><option key={a.id} value={a.id}>{a.label} · {a.locality}</option>)}</select></label>}</>:<Link href={`${base}/profile`} className="text-sm font-semibold underline">Sign in for saved addresses and order history</Link>}</section>}
+    {selected && <GuestSheet title={selected.name} onClose={()=>setSelected(null)}><div className="space-y-4">{selected.pricing.groups.map(group => <fieldset key={group.id} className="space-y-2"><legend className="font-semibold">{group.nameEn} · {group.minSelect > 0 ? t("Required", "ज़रूरी") : t("Optional", "वैकल्पिक")}</legend>{group.modifiers.map(option => <label key={option.id} className="flex min-h-11 items-center gap-3 text-sm"><input type="checkbox" checked={choices.includes(option.id)} onChange={event => setChoices(current => event.target.checked ? group.maxSelect === 1 ? [...current.filter(id => !group.modifiers.some(modifier => modifier.id === id)), option.id] : [...current, option.id] : current.filter(id => id !== option.id))} />{option.nameEn} {option.priceDeltaPaise ? `+ ${money(option.priceDeltaPaise)}` : ""}</label>)}</fieldset>)}<button type="button" className={button} onClick={() => add(selected, choices)}>{t("Add to cart", "कार्ट में जोड़ें")}</button></div></GuestSheet>}
+    {step === "address" && serviceMode === "delivery" && <section className="mt-5 flex items-center gap-3 rounded-2xl border border-line bg-surface p-4"><MapPin size={21} className="shrink-0 text-brand"/><div className="min-w-0 flex-1"><p className="text-sm font-bold">{t("Delivering to","डिलीवरी का पता")}</p><p className="truncate text-xs text-muted">{address.line ? `${address.line}, ${address.locality}` : t("Choose or add a delivery address","डिलीवरी का पता चुनें")}</p></div><button type="button" className="min-h-11 px-2 text-sm font-bold text-brand" onClick={()=>setAddressSheet(true)}>{t("Change","बदलें")}</button></section>}
+    {addressSheet&&<GuestSheet title={t("Select delivery location","डिलीवरी का पता चुनें")} onClose={()=>setAddressSheet(false)}><button type="button" className="mb-4 flex min-h-12 w-full items-center gap-2 rounded-xl bg-brand-soft p-3 text-sm font-bold text-brand-strong" onClick={()=>{setAddress({line:"",locality:"",pincode:"",instructions:""});setPin(null);setAddressSheet(false);document.getElementById("delivery-address")?.scrollIntoView({behavior:"smooth",block:"start"})}}>+ {t("Add a new address","नया पता जोड़ें")}</button>{account?<><p className="mb-3 text-xs font-bold uppercase tracking-wide text-muted">{t("Your saved addresses","आपके सेव किए पते")}</p><div className="space-y-3">{account.addresses.map(a=><button type="button" key={a.id} onClick={()=>{setAddress(a);setAddressSheet(false)}} className={`flex w-full items-start gap-3 rounded-2xl border p-4 text-left ${address.line===a.line&&address.pincode===a.pincode?"border-brand bg-brand-soft":"border-line bg-paper"}`}><MapPin size={20} className="shrink-0"/><span><b className="block text-sm">{a.label}</b><span className="mt-1 block text-xs text-muted">{a.line}, {a.locality} · {a.pincode}</span></span></button>)}{!account.addresses.length&&<p className="text-sm text-muted">{t("No saved addresses yet. Add your first address below.","अभी कोई सेव किया पता नहीं है।")}</p>}</div></>:<Link href={`${base}/profile`} className="text-sm font-semibold underline">{t("Sign in to use saved addresses","सेव किए पते के लिए साइन इन करें")}</Link>}</GuestSheet>}
+
     {step !== "menu" && <div className="mt-5 space-y-4"><button type="button" disabled={pending} onClick={() => { setStep("menu"); setQuote(null); }} className="relative -ml-1 inline-flex items-center gap-0.5 rounded-full px-1 py-0.5 text-caption font-semibold text-muted before:absolute before:-inset-2.5 hover:text-ink focus-visible:outline-2 focus-visible:outline-brand"><HugeiconsIcon icon={ArrowLeft01Icon} size={16} strokeWidth={2} aria-hidden />{t("Back to menu", "मेन्यू पर वापस")}</button><h1 className="font-display text-[1.625rem] leading-tight font-bold tracking-tight">{t(step === "otp" ? "Verify your phone" : step === "review" ? "Review and place order" : serviceMode === "pickup" ? "Pickup details" : "Delivery details", step === "otp" ? "फ़ोन सत्यापित करें" : step === "review" ? "ऑर्डर की पुष्टि करें" : serviceMode === "pickup" ? "पिकअप की जानकारी" : "डिलीवरी की जानकारी")}</h1>
       {step === "address" && <form className="space-y-4" onSubmit={event => { event.preventDefault(); run(async () => { const response = await startDeliveryAction(outletCode, cart, address, phone, serviceMode, serviceMode === "pickup" ? pickupPaymentMode : undefined); if (!response.ok) { setError(response.message); return; } writeProfile(remember ? { name, phone, address } : null,outletCode); setQuote(response.data.quote); if(response.data.otp){setOtp(response.data.otp);setResendAt(Date.now()+response.data.otp.resendIn*1000);setStep("otp");}else{if(serviceMode === "delivery" && remember&&account&&!account.addresses.some(a=>a.line===address.line&&a.pincode===address.pincode))await saveCustomerAddressAction(outletCode,address,"Home");setStep("review");} }); }}>
         <FormCard icon={ShoppingBasket01Icon} title={t("Your order", "आपका ऑर्डर")} aside={<span className="text-body font-bold tabular">{money(cartPaise)}</span>}>
           <ul className="mt-2 divide-y divide-line/70">
-            {cart.map((line, index) => <li key={index} className="flex items-center gap-3 py-2.5">
-              <p className="min-w-0 flex-1 text-body font-semibold">{(hindi && data?.items.find(item => item.id === line.itemId)?.nameHi) || data?.items.find(item => item.id === line.itemId)?.name}</p>
+            {cart.map((line, index) => <li key={index} className="flex items-center gap-3 py-3">
+              <Thumb photo={data?.items.find(item=>item.id===line.itemId)?.imageUrl ?? null} size="size-14"/>
+
+              <div className="min-w-0 flex-1"><p className="text-sm font-semibold">{(hindi && data?.items.find(item => item.id === line.itemId)?.nameHi) || data?.items.find(item => item.id === line.itemId)?.name}</p><p className="mt-1 text-xs text-muted">{data?.items.find(item=>item.id===line.itemId)?.pricing.groups.flatMap(group=>group.modifiers).filter(option=>line.modifierIds.includes(option.id)).map(option=>(hindi&&option.nameHi)||option.nameEn).join(" · ")}</p></div>
               <div className="flex h-9 items-center gap-1 rounded-xl border border-line/70 bg-paper">
                 <button type="button" aria-label={t("Remove one", "एक हटाएँ")} className="grid h-full w-9 place-items-center text-ink" onClick={() => setCart(current => current.map((value, i) => i === index ? { ...value, qty: value.qty - 1 } : value).filter(value => value.qty > 0))}><HugeiconsIcon icon={MinusSignIcon} size={15} strokeWidth={2.4} aria-hidden /></button>
                 <span className="min-w-5 text-center text-body font-bold tabular">{line.qty}</span>
@@ -300,7 +316,7 @@ export function DeliveryScreen({ outletCode, data, initialStatus, initialService
           </div>
         </FormCard>
 
-        {serviceMode === "delivery" && <FormCard icon={Location01Icon} title={t("Delivery address", "डिलीवरी पता")}>
+        {serviceMode === "delivery" && <div id="delivery-address" className="scroll-mt-6"><FormCard icon={Location01Icon} title={t("Delivery address", "डिलीवरी पता")}>
           <div className="mt-3 grid gap-3">
             <label className="block text-caption font-semibold text-muted">{t("Pincode", "पिनकोड")}
               <input required inputMode="numeric" maxLength={6} autoComplete="postal-code" placeholder="302017" className={`${control} mt-1.5 bg-paper tracking-[.2em] tabular`} value={address.pincode} onChange={event => changePincode(event.target.value)} />
@@ -328,7 +344,7 @@ export function DeliveryScreen({ outletCode, data, initialStatus, initialService
             <label className="block text-caption font-semibold text-muted">{t("House / flat, building and street", "घर / फ्लैट, बिल्डिंग और सड़क")}<input required maxLength={200} autoComplete="street-address" className={`${control} mt-1.5 bg-paper`} value={address.line} onChange={event => setAddress(current => ({ ...current, line: event.target.value }))} /></label>
             <label className="block text-caption font-semibold text-muted">{t("Delivery instructions (optional)", "डिलीवरी निर्देश (वैकल्पिक)")}<input maxLength={200} autoComplete="off" placeholder={t("e.g. Ring the bell, near the temple", "जैसे घंटी बजाएँ, मंदिर के पास")} className={`${control} mt-1.5 bg-paper`} value={address.instructions} onChange={event => setAddress(current => ({ ...current, instructions: event.target.value }))} /></label>
           </div>
-        </FormCard>}
+        </FormCard></div>}
 
         <label className="flex min-h-11 cursor-pointer items-center gap-3 px-1 text-caption text-ink"><input type="checkbox" checked={remember} onChange={event => setRemember(event.target.checked)} className="size-5 accent-[var(--brand-main)]" />{t("Save my details on this phone for next time", "अगली बार के लिए मेरी जानकारी इस फ़ोन में सेव करें")}</label>
         {serviceMode === "pickup" && data && <fieldset className="space-y-2 rounded-xl border border-line p-3">
@@ -337,7 +353,7 @@ export function DeliveryScreen({ outletCode, data, initialStatus, initialService
           {data.outlet.gatewayAvailable && <label className="flex min-h-11 items-center gap-3 text-sm"><input type="radio" name="pickup-payment" checked={pickupPaymentMode === "gateway"} onChange={() => setPickupPaymentMode("gateway")} />{t("Pay online", "ऑनलाइन पेमेंट करें")}</label>}
           {data.outlet.paymentQrUrl && <label className="flex min-h-11 items-center gap-3 text-sm"><input type="radio" name="pickup-payment" checked={pickupPaymentMode === "manual_qr"} onChange={() => setPickupPaymentMode("manual_qr")} />{t("Pay with UPI QR", "UPI QR से पेमेंट करें")}</label>}
         </fieldset>}
-        <button disabled={pending || !cart.length || (serviceMode === "delivery" && outsideArea) || belowMinimum} className={button}>{pending ? t("Checking…", "जाँच रहे हैं…") : serviceMode === "delivery" && outsideArea ? t("We don't deliver here yet", "यहाँ अभी डिलीवरी नहीं") : t("Continue · verify phone", "आगे बढ़ें · फ़ोन सत्यापित करें")}</button>
+        <div className="guest-checkout-footer"><p className="mb-2 flex items-center justify-between text-xs text-muted"><span>{t("Food subtotal · final total at review", "खाने का मूल्य · कुल अगले चरण में")}</span><b className="text-sm text-ink">{money(cartPaise)}</b></p><button disabled={pending || !cart.length || (serviceMode === "delivery" && outsideArea) || belowMinimum} className={button}>{pending ? t("Checking…", "जाँच रहे हैं…") : serviceMode === "delivery" && outsideArea ? t("We don't deliver here yet", "यहाँ अभी डिलीवरी नहीं") : t(account ? "Continue to review →" : "Continue · verify phone", "आगे बढ़ें · फ़ोन सत्यापित करें")}</button></div>
       </form>}
       {step === "otp" && otp && <form className="space-y-4" onSubmit={event => { event.preventDefault(); run(async () => { const response = await verifyDeliveryAction(outletCode, otp.challengeId, otpCode, name); if (!response.ok) { setError(response.message); return; } setStep("review"); }); }}><p className="text-sm text-muted">{t(`Enter the four-digit code sent to ${phone}.`, `${phone} पर भेजा गया चार अंकों का कोड दर्ज करें।`)}</p>{otp.devCode && <p className="rounded-xl bg-brand-soft p-3 text-sm">{t("Demo code", "डेमो कोड")}: <strong>{otp.devCode}</strong></p>}<input aria-label="Verification code" required autoComplete="one-time-code" inputMode="numeric" pattern="[0-9]{4}" maxLength={4} className={control} value={otpCode} onChange={event => setOtpCode(event.target.value.replace(/\D/g, ""))} /><button disabled={pending} className={button}>{t("Verify phone", "फ़ोन सत्यापित करें")}</button><button type="button" disabled={pending} className={control} onClick={() => run(async () => { if (Date.now() < resendAt) { setError(t("Wait 30 seconds before resending.", "दोबारा भेजने से पहले 30 सेकंड रुकें।")); return; } const response = await resendDeliveryAction(outletCode, phone); if (!response.ok) { setError(response.message); return; } setOtp(response.data); setOtpCode(""); setResendAt(Date.now() + response.data.resendIn * 1000); })}>{t("Resend code", "कोड दोबारा भेजें")}</button></form>}
       {step === "review" && quote && data && <section className="space-y-4 rounded-2xl border border-line bg-surface p-4">
@@ -356,7 +372,7 @@ export function DeliveryScreen({ outletCode, data, initialStatus, initialService
           <p className="text-xs text-muted">{t("The order reaches the kitchen after staff verifies the payment.", "स्टाफ पेमेंट की पुष्टि के बाद ऑर्डर किचन में जाएगा।")}</p>
         </div>}
         <p className="text-sm font-semibold">{serviceMode === "pickup" ? pickupPaymentMode === "cod" ? t("Pay at the counter when you collect your order.", "ऑर्डर लेते समय काउंटर पर पेमेंट करें।") : pickupPaymentMode === "gateway" ? t("Pay securely online before the kitchen prepares your order.", "किचन में ऑर्डर बनने से पहले सुरक्षित ऑनलाइन पेमेंट करें।") : t("Submit your UPI reference after paying; staff will verify it.", "पेमेंट के बाद UPI रेफरेंस भेजें; स्टाफ उसकी पुष्टि करेगा।") : data.outlet.policy.paymentMode === "gateway" ? t("Pay securely before preparation; the order starts after payment confirmation.", "ऑर्डर बनने से पहले सुरक्षित पेमेंट करें; पुष्टि के बाद तैयारी शुरू होगी।") : data.outlet.policy.paymentMode === "manual_qr" ? t("Submit only after your UPI payment is complete.", "UPI पेमेंट पूरा होने के बाद ही रेफरेंस भेजें।") : t("Pay when your order arrives.", "ऑर्डर मिलने पर पेमेंट करें।")}</p>
-        <button type="button" disabled={pending || ((serviceMode === "pickup" ? pickupPaymentMode : data.outlet.policy.paymentMode) === "manual_qr" && (manualReference.trim().length < 6 || !data.outlet.paymentQrUrl))} className={button} onClick={() => run(async () => {
+        <div className="guest-checkout-footer"><p className="mb-2 flex items-center justify-between text-xs text-muted"><span>{t("Total payable", "कुल पेमेंट")}</span><b className="text-lg text-ink">{money(quote.totalPaise)}</b></p><button type="button" disabled={pending || ((serviceMode === "pickup" ? pickupPaymentMode : data.outlet.policy.paymentMode) === "manual_qr" && (manualReference.trim().length < 6 || !data.outlet.paymentQrUrl))} className={button} onClick={() => run(async () => {
           const selectedPayment = serviceMode === "pickup" ? pickupPaymentMode : data.outlet.policy.paymentMode;
           if (selectedPayment === "gateway") { await payDelivery(); return; }
           if (selectedPayment === "manual_qr") {
@@ -367,7 +383,7 @@ export function DeliveryScreen({ outletCode, data, initialStatus, initialService
           const response = await placeDeliveryAction(outletCode, quote.totalPaise);
           if (!response.ok) { setError(response.message); const refreshed = await quoteDeliveryAction(outletCode, cart, serviceMode === "delivery" ? address.pincode : "", serviceMode); if (refreshed.ok) setQuote(refreshed.data); return; }
           await loadStatus();
-        })}>{pending ? t("Placing your order…", "ऑर्डर कर रहे हैं…") : serviceMode === "pickup" ? pickupPaymentMode === "gateway" ? t("Pay online · place pickup order", "ऑनलाइन पेमेंट करें · पिकअप ऑर्डर दें") : pickupPaymentMode === "manual_qr" ? t("I’ve paid · send for verification", "पेमेंट हो गया · पुष्टि के लिए भेजें") : t("Place pickup order", "पिकअप ऑर्डर करें") : data.outlet.policy.paymentMode === "gateway" ? t("Pay securely · place order", "सुरक्षित पेमेंट करें · ऑर्डर दें") : data.outlet.policy.paymentMode === "manual_qr" ? t("I’ve paid · send for verification", "पेमेंट हो गया · पुष्टि के लिए भेजें") : t("Place delivery order", "डिलीवरी ऑर्डर करें")}</button>
+        })}>{pending ? t("Placing your order…", "ऑर्डर कर रहे हैं…") : serviceMode === "pickup" ? pickupPaymentMode === "gateway" ? t("Pay online · place pickup order", "ऑनलाइन पेमेंट करें · पिकअप ऑर्डर दें") : pickupPaymentMode === "manual_qr" ? t("I’ve paid · send for verification", "पेमेंट हो गया · पुष्टि के लिए भेजें") : t("Place pickup order", "पिकअप ऑर्डर करें") : data.outlet.policy.paymentMode === "gateway" ? t("Pay securely · place order", "सुरक्षित पेमेंट करें · ऑर्डर दें") : data.outlet.policy.paymentMode === "manual_qr" ? t("I’ve paid · send for verification", "पेमेंट हो गया · पुष्टि के लिए भेजें") : t("Place delivery order", "डिलीवरी ऑर्डर करें")}</button></div>
       </section>}
     </div>}
     </>}
@@ -386,7 +402,7 @@ function FormCard({ icon, title, aside, children }: { icon: typeof UserIcon; tit
 }
 
 /** After ordering: where the food is, who is bringing it, and what is left to pay */
-function StatusView({ status, hindi, pending, statusMessage, onPay, onRefresh, newOrderHref, outletCode }: { status: Status; hindi: boolean; outletCode: string; pending: boolean; statusMessage: string; onPay: () => void; onRefresh: () => void; newOrderHref: string }) {
+export function StatusView({ status, hindi, pending, statusMessage, onPay, onRefresh, newOrderHref, outletCode }: { status: Status; hindi: boolean; outletCode: string; pending: boolean; statusMessage: string; onPay?: () => void; onRefresh: () => void; newOrderHref: string }) {
   const t = (en: string, hi: string) => (hindi ? hi : en);
   const placed = status.status !== "draft" && status.status !== "cancelled";
   const pickup = status.serviceMode === "pickup";
@@ -416,17 +432,19 @@ function StatusView({ status, hindi, pending, statusMessage, onPay, onRefresh, n
   const card = "rounded-[22px] border border-line/60 bg-surface p-4 shadow-[0_2px_12px_rgb(31_41_55/0.05)]";
 
   return <div className="mt-5 grid gap-4">
-    <div>
+    <div className="guest-track-hero">
+      <span className="mb-3 inline-flex rounded-2xl bg-surface p-3 text-brand"><HugeiconsIcon icon={status.status === "cancelled" ? Cancel01Icon : steps[stage].icon} size={30} aria-hidden/></span>
       <h1 className="font-display text-[1.625rem] leading-tight font-bold tracking-tight">{status.status === "draft" ? pickup ? t("Pickup payment", "पिकअप पेमेंट") : t("Delivery payment", "डिलीवरी पेमेंट") : status.status === "cancelled" ? t("Order cancelled", "ऑर्डर रद्द") : steps[stage].title}</h1>
       <p className="mt-1 text-body text-muted">{statusMessage}</p>
     </div>
 
-    {placed && status.status !== "delivered" && <PushOffer hindi={hindi} outletCode={outletCode} />}
+    {placed && status.status !== "delivered" && status.status !== "collected" && <PushOffer hindi={hindi} outletCode={outletCode} />}
 
     {placed && <section className={card} aria-label={t("Order progress", "ऑर्डर की स्थिति")}>
       <ol className="grid gap-0">
         {steps.map((step, i) => {
-          const done = i < stage || stage === 4, current = i === stage && stage !== 4;
+          const completed = status.status === "delivered" || status.status === "collected";
+          const done = i < stage || completed, current = i === stage && !completed;
           return <li key={i} className="relative flex gap-3 pb-5 last:pb-0">
             {i < steps.length - 1 && <span aria-hidden className={`absolute top-10 left-[19px] h-[calc(100%-32px)] w-0.5 ${i < stage ? "bg-success" : "bg-line"}`} />}
             <span className={`relative grid size-10 shrink-0 place-items-center rounded-full ${done ? "bg-success text-white" : current ? "bg-brand text-brand-on ring-4 ring-brand/15" : "border border-line bg-paper text-muted"}`}>
@@ -446,10 +464,13 @@ function StatusView({ status, hindi, pending, statusMessage, onPay, onRefresh, n
         { id: "rider", kind: "rider", lat: status.riderLocation.lat, lng: status.riderLocation.lng, photoUrl: status.courierPhotoUrl, label: status.courierName ?? "Rider" },
         ...(status.address.lat !== undefined && status.address.lng !== undefined ? [{ id: "home", kind: "home" as const, lat: status.address.lat, lng: status.address.lng, label: t("Your door", "आपका घर") }] : []),
       ]} />
+      <p className="mt-2 text-xs text-muted">{t("Location last updated", "लोकेशन अपडेट")} · {new Date(status.riderLocation.at).toLocaleTimeString([], {hour:"numeric",minute:"2-digit"})}</p>
       {status.address.lat !== undefined && status.address.lng !== undefined
         ? <p className="mt-2 text-body font-bold">{t(`About ${etaMinutes(distanceKm(status.riderLocation, { lat: status.address.lat, lng: status.address.lng }))} min away`, `लगभग ${etaMinutes(distanceKm(status.riderLocation, { lat: status.address.lat, lng: status.address.lng }))} मिनट दूर`)} <span className="text-caption font-medium text-muted">· {distanceKm(status.riderLocation, { lat: status.address.lat, lng: status.address.lng }).toFixed(1)} km</span></p>
         : <p className="mt-2 text-caption text-muted">{t("Your rider is on the way. The map updates by itself.", "राइडर रास्ते में है। नक्शा अपने आप अपडेट होता है।")}</p>}
     </section>}
+
+    {!pickup && status.status === "dispatched" && !status.riderLocation && <section className={card}><p className="text-sm font-bold">{t("Your rider is on the way", "राइडर रास्ते में है")}</p><p className="mt-1 text-xs text-muted">{t("Waiting for a fresh location update. You can call your rider below.", "नई लोकेशन का इंतज़ार है। नीचे राइडर को कॉल कर सकते हैं।")}</p></section>}
 
     {!pickup && status.deliveryPin && <section className={`${card} flex items-center justify-between gap-4 border-brand/40 bg-brand-soft/40`}>
       <div className="min-w-0"><p className="text-caption font-bold text-brand-strong">{t("Delivery PIN", "डिलीवरी PIN")}</p><p className="text-caption text-muted">{t("Tell this to the rider when your food arrives. Do not share it before.", "खाना पहुँचने पर राइडर को यह बताएँ। पहले किसी को न बताएँ।")}</p></div>
@@ -476,7 +497,7 @@ function StatusView({ status, hindi, pending, statusMessage, onPay, onRefresh, n
 
     <section className={card}>
       {status.items.length > 0 && <ul className="mb-3 divide-y divide-line/70 border-b border-line/70 pb-1">
-        {status.items.map((item, i) => <li key={i} className="flex items-center gap-3 py-2"><span className="min-w-8 rounded-md bg-ink/5 px-1.5 text-center text-caption font-bold tabular">{item.qty}×</span><span className="text-body">{(hindi && item.nameHi) || item.name}</span></li>)}
+        {status.items.map((item, i) => <li key={i} className="flex items-center gap-3 py-3"><Thumb photo={item.imageUrl} size="size-12"/><span className="min-w-0 flex-1"><b className="block text-sm">{item.qty} × {(hindi && item.nameHi) || item.name}</b>{item.modifiers?.length ? <span className="mt-1 block text-xs text-muted">{item.modifiers.map(m=>(hindi&&m.nameHi)||m.nameEn).join(" · ")}</span> : null}</span><span className="shrink-0 text-sm font-bold">{money(item.unitPricePaise*item.qty)}</span></li>)}
       </ul>}
       <div className="flex items-center justify-between gap-3">
         <span className="text-body font-bold">{t("Total", "कुल")}</span>
@@ -487,13 +508,15 @@ function StatusView({ status, hindi, pending, statusMessage, onPay, onRefresh, n
         {paymentLabel}
       </p>
       {status.paymentFailureReason && <p role="status" className="mt-2 rounded-xl bg-brand-soft p-3 text-caption">{status.paymentFailureReason}</p>}
-      {status.status === "draft" && status.paymentStatus === "pending" && status.paymentMode === "gateway" && <button type="button" disabled={pending} className={`${button} mt-3`} onClick={onPay}>{t("Continue secure payment", "सुरक्षित पेमेंट जारी रखें")}</button>}
+      {status.status === "draft" && status.paymentStatus === "pending" && status.paymentMode === "gateway" && onPay && <button type="button" disabled={pending} className={`${button} mt-3`} onClick={onPay}>{t("Continue secure payment", "सुरक्षित पेमेंट जारी रखें")}</button>}
     </section>
 
     {!pickup && <section className={`${card} flex items-start gap-3`}>
       <HugeiconsIcon icon={Location01Icon} size={20} className="mt-0.5 shrink-0 text-brand" aria-hidden />
       <div className="min-w-0"><p className="text-caption text-muted">{t("Delivering to", "यहाँ डिलीवरी")} {status.name ? `· ${status.name}` : ""}</p><p className="text-body">{status.address.line}, {status.address.locality} · {status.address.pincode}</p></div>
     </section>}
+
+    {status.billPdfUrl && <a href={status.billPdfUrl} className="flex min-h-12 items-center justify-center rounded-2xl border border-line bg-surface text-sm font-bold text-brand-strong">{t("Download bill", "बिल डाउनलोड करें")}</a>}
 
     {/* After delivery the next order is the main thing to do; while it is on its way it stays a quieter option */}
     <Link href={newOrderHref.replace("?new=1", `?mode=${pickup ? "pickup" : "delivery"}&new=1`)} className={`flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl text-body font-bold ${status.status === "delivered" || status.status === "collected" || status.status === "cancelled" ? "bg-brand text-brand-on shadow-[0_8px_20px_-6px_var(--brand-border)]" : "border border-brand/40 bg-surface text-brand-strong"}`}><HugeiconsIcon icon={PlusSignIcon} size={18} strokeWidth={2} aria-hidden />{t("Start another order", "नया ऑर्डर करें")}</Link>
