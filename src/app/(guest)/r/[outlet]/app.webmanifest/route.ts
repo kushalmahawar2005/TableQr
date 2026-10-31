@@ -1,4 +1,4 @@
-import { staffAppIconUrl } from "@/lib/staff-app";
+import { restaurantAppIcons } from "@/lib/restaurant-app-icons";
 import { restaurantApp } from "@/server/guest/restaurant-app";
 
 // The restaurant's own app manifest: public branding only, and only on plans with delivery or reservations
@@ -21,10 +21,6 @@ export async function GET(_req: Request, ctx: RouteContext<"/r/[outlet]/app.webm
     orientation: "portrait",
     background_color: "#f6f4ef",
     theme_color: /^#[\da-f]{6}$/i.test(app.accentColor ?? "") ? app.accentColor : "#c9482b",
-    icons: [
-      ...(app.logoUrl ? [{ src: app.logoUrl, sizes: "any", purpose: "any" }] : []),
-      { src: staffAppIconUrl(192, app.code), sizes: "192x192", type: "image/png", purpose: "any" },
-      { src: staffAppIconUrl(512, app.code), sizes: "512x512", type: "image/png", purpose: "maskable" },
-    ],
+    icons: restaurantAppIcons(app.code, app.logoUrl),
   }, { headers: { "Content-Type": "application/manifest+json", "Cache-Control": "public, max-age=300, stale-while-revalidate=600" } });
 }
