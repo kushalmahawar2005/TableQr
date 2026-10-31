@@ -1,0 +1,1 @@
+ALTER TABLE `delivery_checkouts` ADD `refund_amount_paise` int;

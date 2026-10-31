@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNotNull } from "drizzle-orm";
 import { db } from "@/db";
 import * as s from "@/db/schema";
 import { LOCK_THEN_READ } from "../db-types";
@@ -81,17 +81,17 @@ export async function confirmDeliveryGatewayPayment(provider: string, verdict: D
   if (!canFulfil) {
     const amountPaise = Number.isSafeInteger(verdict.amountPaise) && verdict.amountPaise > 0 ? verdict.amountPaise : row.totalPaise;
     if (!verdict.gatewayPaymentId) {
-      await db.update(s.deliveryCheckouts).set({ paymentStatus: "refund_failed", paymentFailureReason: "Payment was captured but its receipt could not be verified. Contact the restaurant." })
+      await db.update(s.deliveryCheckouts).set({ refundAmountPaise: amountPaise, paymentStatus: "refund_failed", paymentFailureReason: "Payment was captured but its receipt could not be verified. Contact the restaurant." })
         .where(and(eq(s.deliveryCheckouts.tenantId, row.tenantId), eq(s.deliveryCheckouts.id, row.id)));
       return true;
     }
     try {
       const refund = await gateway.refund({ gatewayRef: row.gatewayRef!, gatewayPaymentId: verdict.gatewayPaymentId, amountPaise, refundId: row.id });
-      await db.update(s.deliveryCheckouts).set({ gatewayPaymentId: verdict.gatewayPaymentId, paymentStatus: refund.status === "success" ? "refunded" : refund.status === "pending" ? "refund_pending" : "refund_failed", paymentFailureReason: "Delivery details or prices changed after payment. The amount is being returned.", refundGatewayRef: refund.gatewayRefundId, refundStatus: refund.status === "success" ? "success" : refund.status === "pending" ? "pending" : "failed" })
+      await db.update(s.deliveryCheckouts).set({ gatewayPaymentId: verdict.gatewayPaymentId, refundAmountPaise: amountPaise, paymentStatus: refund.status === "success" ? "refunded" : refund.status === "pending" ? "refund_pending" : "refund_failed", paymentFailureReason: "Delivery details or prices changed after payment. The amount is being returned.", refundGatewayRef: refund.gatewayRefundId, refundStatus: refund.status === "success" ? "success" : refund.status === "pending" ? "pending" : "failed" })
         .where(and(eq(s.deliveryCheckouts.tenantId, row.tenantId), eq(s.deliveryCheckouts.id, row.id)));
     } catch (error) {
       console.error("[delivery-payment] automatic refund failed", error);
-      await db.update(s.deliveryCheckouts).set({ gatewayPaymentId: verdict.gatewayPaymentId, paymentStatus: "refund_failed", paymentFailureReason: "Payment was received but the order could not be fulfilled. Contact the restaurant for a refund." })
+      await db.update(s.deliveryCheckouts).set({ gatewayPaymentId: verdict.gatewayPaymentId, refundAmountPaise: amountPaise, paymentStatus: "refund_failed", paymentFailureReason: "Payment was received but the order could not be fulfilled. Contact the restaurant for a refund." })
         .where(and(eq(s.deliveryCheckouts.tenantId, row.tenantId), eq(s.deliveryCheckouts.id, row.id)));
     }
     return true;
@@ -114,11 +114,11 @@ export async function confirmDeliveryGatewayPayment(provider: string, verdict: D
       // rather than leave a captured payment with no kitchen order.
       try {
         const refund = await gateway.refund({ gatewayRef: row.gatewayRef!, gatewayPaymentId: verdict.gatewayPaymentId!, amountPaise: verdict.amountPaise, refundId: row.id });
-        await db.update(s.deliveryCheckouts).set({ paymentStatus: refund.status === "success" ? "refunded" : refund.status === "pending" ? "refund_pending" : "refund_failed", paymentFailureReason: "The order could not be placed after payment. Contact the restaurant if the refund is not visible.", refundGatewayRef: refund.gatewayRefundId, refundStatus: refund.status === "success" ? "success" : refund.status === "pending" ? "pending" : "failed" })
+        await db.update(s.deliveryCheckouts).set({ refundAmountPaise: verdict.amountPaise, paymentStatus: refund.status === "success" ? "refunded" : refund.status === "pending" ? "refund_pending" : "refund_failed", paymentFailureReason: "The order could not be placed after payment. Contact the restaurant if the refund is not visible.", refundGatewayRef: refund.gatewayRefundId, refundStatus: refund.status === "success" ? "success" : refund.status === "pending" ? "pending" : "failed" })
           .where(and(eq(s.deliveryCheckouts.tenantId, row.tenantId), eq(s.deliveryCheckouts.id, row.id)));
       } catch (refundError) {
         console.error("[delivery-payment] placement refund failed", refundError);
-        await db.update(s.deliveryCheckouts).set({ paymentStatus: "refund_failed", paymentFailureReason: "Payment was received but the order could not be placed. Contact the restaurant for a refund." })
+        await db.update(s.deliveryCheckouts).set({ refundAmountPaise: verdict.amountPaise, paymentStatus: "refund_failed", paymentFailureReason: "Payment was received but the order could not be placed. Contact the restaurant for a refund." })
           .where(and(eq(s.deliveryCheckouts.tenantId, row.tenantId), eq(s.deliveryCheckouts.id, row.id)));
       }
       console.error("[delivery-payment] paid order placement failed", error);
@@ -160,7 +160,7 @@ async function reconcileRowPayment(row: typeof s.deliveryCheckouts.$inferSelect,
   return fresh?.paymentStatus ?? row.paymentStatus;
 }
 
-export async function recordDeliveryRefundResult(provider: string, event: { gatewayRefundId: string; status: "success" | "failed"; gatewayPaymentId?: string }) {
+export async function recordDeliveryRefundResult(provider: string, event: { gatewayRefundId: string; status: "success" | "failed"; gatewayPaymentId?: string; amountPaise: number }) {
   return db.transaction(async (tx) => {
     // Lock and recheck so concurrent or reordered callbacks cannot reverse a final refund state.
     // isolation-exempt: the signed refund reference identifies the checkout; its tenant is read before mutation.
@@ -169,9 +169,58 @@ export async function recordDeliveryRefundResult(provider: string, event: { gate
       .for("update");
     if (!row || row.refundStatus !== "pending") return false;
     if (event.gatewayPaymentId && event.gatewayPaymentId !== row.gatewayPaymentId) return false;
+    if (event.amountPaise !== row.refundAmountPaise) return false;
     await tx.update(s.deliveryCheckouts)
       .set({ refundStatus: event.status, paymentStatus: event.status === "success" ? "refunded" : "refund_failed" })
       .where(and(eq(s.deliveryCheckouts.tenantId, row.tenantId), eq(s.deliveryCheckouts.id, row.id), eq(s.deliveryCheckouts.refundStatus, "pending")));
     return true;
   }, LOCK_THEN_READ);
+}
+
+/** Scheduled recovery for automatic delivery refunds whose signed webhook never arrived. */
+export async function reconcilePendingDeliveryRefunds(scope: { tenantId: string; outletId: string }) {
+  const rows = await db.select().from(s.deliveryCheckouts)
+    .where(and(
+      eq(s.deliveryCheckouts.tenantId, scope.tenantId),
+      eq(s.deliveryCheckouts.outletId, scope.outletId),
+      eq(s.deliveryCheckouts.paymentStatus, "refund_pending"),
+      eq(s.deliveryCheckouts.refundStatus, "pending"),
+      isNotNull(s.deliveryCheckouts.gatewayRef),
+      isNotNull(s.deliveryCheckouts.refundGatewayRef),
+      isNotNull(s.deliveryCheckouts.refundAmountPaise),
+    ))
+    .orderBy(s.deliveryCheckouts.createdAt)
+    .limit(100);
+
+  let settled = 0;
+  for (const row of rows) {
+    if (!row.paymentProvider || !row.gatewayRef || !row.refundGatewayRef || row.refundAmountPaise === null) continue;
+    try {
+      const gateway = await gatewayForOutletPayment(row.tenantId, row.outletId, row.paymentProvider);
+      if (!gateway) continue;
+      const result = await gateway.fetchRefund({ gatewayRef: row.gatewayRef, gatewayRefundId: row.refundGatewayRef });
+      if (result.status === "pending") continue;
+      if (result.status === "success" && result.amountPaise !== row.refundAmountPaise) {
+        console.error("[delivery-refund] gateway amount does not match the recorded refund", {
+          checkoutId: row.id,
+          expectedPaise: row.refundAmountPaise,
+          receivedPaise: result.amountPaise ?? null,
+        });
+        continue;
+      }
+      const applied = await recordDeliveryRefundResult(row.paymentProvider, {
+        gatewayRefundId: row.refundGatewayRef,
+        gatewayPaymentId: row.gatewayPaymentId ?? undefined,
+        amountPaise: row.refundAmountPaise,
+        status: result.status,
+      });
+      if (applied) settled++;
+    } catch (error) {
+      console.error("[delivery-refund] reconciliation failed", {
+        checkoutId: row.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+  return settled;
 }

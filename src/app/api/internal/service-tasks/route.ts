@@ -6,6 +6,7 @@ import * as s from "@/db/schema";
 import { reconcilePendingPayments } from "@/server/billing/payments";
 import { prunePrintJobs } from "@/server/print/jobs";
 import { reconcilePendingRefunds } from "@/server/billing/refunds";
+import { reconcilePendingDeliveryRefunds } from "@/server/delivery/payment";
 import { escalateServiceRequests } from "@/server/guest/service-requests";
 import { expireReadyWaitlists, processBookingNotifications } from "@/server/booking/notifications";
 
@@ -22,6 +23,7 @@ export async function POST(request: Request) {
   const tenants = await db.select({ tenantId: s.tenants.id }).from(s.tenants);
   let escalated = 0;
   let failedOutlets = 0;
+  let deliveryRefundsSettled = 0;
   const now = new Date();
   const bookingJobs = await processBookingNotifications(now);
   const waitlistExpired = await expireReadyWaitlists(now);
@@ -38,6 +40,7 @@ export async function POST(request: Request) {
         await reconcilePendingPayments({ tenantId, outletId }, now);
         // Online refunds whose webhook never arrived are settled by asking the gateway
         await reconcilePendingRefunds({ tenantId, outletId }, now);
+        deliveryRefundsSettled += await reconcilePendingDeliveryRefunds({ tenantId, outletId });
         // Held/Reserved follow the clock; expired online holds and timed blocks are released (S1)
         await reconcileFloor({ tenantId, outletId }, now);
       } catch (error) {
@@ -47,5 +50,5 @@ export async function POST(request: Request) {
       }
     }
   }
-  return Response.json({ escalated, failedOutlets, bookingNotifications: bookingJobs, waitlistExpired }, { status: failedOutlets ? 503 : 200 });
+  return Response.json({ escalated, failedOutlets, deliveryRefundsSettled, bookingNotifications: bookingJobs, waitlistExpired }, { status: failedOutlets ? 503 : 200 });
 }

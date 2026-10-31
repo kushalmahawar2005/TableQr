@@ -5,7 +5,7 @@ import * as s from "@/db/schema";
 import { DEFAULT_DELIVERY_POLICY } from "@/domain/delivery";
 import { settleAtCounter } from "@/server/billing/payments";
 import { claimManualQrDeliveryPayment, confirmManualQrDeliveryPayment, createDeliveryCheckout, deliveryCheckout, deliveryStatus, placeDeliveryOrder } from "@/server/delivery/checkout";
-import { reconcileDeliveryPayment, recordDeliveryRefundResult, startDeliveryPayment } from "@/server/delivery/payment";
+import { reconcileDeliveryPayment, reconcilePendingDeliveryRefunds, recordDeliveryRefundResult, startDeliveryPayment } from "@/server/delivery/payment";
 import { sendDeliveryOtp, verifyDeliveryOtp } from "@/server/delivery/otp";
 import { mockGateway } from "@/server/payments/gateway";
 import { advanceDelivery, assignDeliveryCourier, deliveryQueue, pendingManualDeliveryPayments } from "@/server/delivery/staff";
@@ -112,11 +112,12 @@ describe("verified delivery checkout", () => {
     const gatewayPaymentId = `payment-${row.id}`;
     await env.db.update(s.deliveryCheckouts).set({
       paymentProvider: "mock", gatewayRef: `order-${row.id}`, gatewayPaymentId,
-      paymentStatus: "refund_pending", refundGatewayRef: gatewayRefundId, refundStatus: "pending",
+      paymentStatus: "refund_pending", refundGatewayRef: gatewayRefundId, refundStatus: "pending", refundAmountPaise: row.totalPaise,
     }).where(eq(s.deliveryCheckouts.id, row.id));
-    const base = { gatewayRefundId, gatewayPaymentId };
+    const base = { gatewayRefundId, gatewayPaymentId, amountPaise: row.totalPaise };
 
     expect(await recordDeliveryRefundResult("mock", { ...base, gatewayPaymentId: "wrong-payment", status: "success" })).toBe(false);
+    expect(await recordDeliveryRefundResult("mock", { ...base, amountPaise: row.totalPaise - 1, status: "success" })).toBe(false);
     const results = await Promise.all([
       recordDeliveryRefundResult("mock", { ...base, status: "success" }),
       recordDeliveryRefundResult("mock", { ...base, status: "failed" }),
@@ -128,6 +129,24 @@ describe("verified delivery checkout", () => {
     expect(await recordDeliveryRefundResult("mock", { ...base, status: expected === "success" ? "failed" : "success" })).toBe(false);
     const [unchanged] = await env.db.select().from(s.deliveryCheckouts).where(eq(s.deliveryCheckouts.id, row.id));
     expect(unchanged).toMatchObject({ refundStatus: expected, paymentStatus: expected === "success" ? "refunded" : "refund_failed" });
+  });
+
+  it("reconciles an automatic delivery refund when its webhook was missed", async () => {
+    const refundDevice = "delivery-refund-reconcile-device";
+    const created = await createDeliveryCheckout("SRJ01", refundDevice, { lines: [{ itemId: env.demo.itemIds["Dal Makhani"], qty: 1, modifierIds: [] }], address });
+    const { row } = await deliveryCheckout("SRJ01", created.token, refundDevice);
+    const gatewayRef = `order-${row.id}`;
+    const gatewayPaymentId = `payment-${row.id}`;
+    const refund = await mockGateway.refund({ gatewayRef, gatewayPaymentId, amountPaise: row.totalPaise, refundId: row.id });
+    await env.db.update(s.deliveryCheckouts).set({
+      paymentProvider: "mock", gatewayRef, gatewayPaymentId, paymentStatus: "refund_pending",
+      refundGatewayRef: refund.gatewayRefundId, refundAmountPaise: row.totalPaise, refundStatus: "pending",
+    }).where(and(eq(s.deliveryCheckouts.tenantId, row.tenantId), eq(s.deliveryCheckouts.id, row.id)));
+    mockGateway.settleRefund(refund.gatewayRefundId, "success");
+
+    expect(await reconcilePendingDeliveryRefunds({ tenantId: row.tenantId, outletId: row.outletId })).toBe(1);
+    const [reconciled] = await env.db.select().from(s.deliveryCheckouts).where(and(eq(s.deliveryCheckouts.tenantId, row.tenantId), eq(s.deliveryCheckouts.id, row.id)));
+    expect(reconciled).toMatchObject({ refundAmountPaise: row.totalPaise, refundStatus: "success", paymentStatus: "refunded" });
   });
 
   it("never places a prepaid delivery on a payment the gateway reports in another currency, and gives the money back", async () => {

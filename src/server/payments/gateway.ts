@@ -42,7 +42,7 @@ export interface PaymentGateway {
   fetchStatus(gatewayRef: string): Promise<{ status: GatewayStatus; amountPaise: number; currency?: string; gatewayPaymentId?: string; reason?: string }>;
   refund(input: { gatewayRef: string; gatewayPaymentId: string; amountPaise: number; refundId: string }): Promise<{ gatewayRefundId: string; status: "pending" | "success" | "failed" }>;
   /** Where a refund stands at the gateway; used to settle a refund whose webhook was missed */
-  fetchRefund(input: { gatewayRef: string; gatewayRefundId: string }): Promise<{ status: "pending" | "success" | "failed" }>;
+  fetchRefund(input: { gatewayRef: string; gatewayRefundId: string }): Promise<{ status: "pending" | "success" | "failed"; amountPaise?: number }>;
   /** Checks the webhook signature over the exact raw body */
   verifyWebhook(rawBody: string, signature: string | null, timestamp?: string | null): boolean;
   parseWebhook(rawBody: string): WebhookEvent;
@@ -239,11 +239,11 @@ export class CashfreeGateway implements PaymentGateway {
   }
 
   async fetchRefund(input: { gatewayRef: string; gatewayRefundId: string }) {
-    const refund = await this.call<{ refund_status: string }>(
+    const refund = await this.call<{ refund_status: string; refund_amount?: number }>(
       `/orders/${encodeURIComponent(input.gatewayRef)}/refunds/${encodeURIComponent(input.gatewayRefundId)}`,
       { method: "GET" },
     );
-    return { status: cashfreeRefundStatus(refund.refund_status) };
+    return { status: cashfreeRefundStatus(refund.refund_status), ...(Number.isFinite(refund.refund_amount) ? { amountPaise: paiseFromRupees(refund.refund_amount!) } : {}) };
   }
 
   verifyWebhook(rawBody: string, signature: string | null, timestamp?: string | null) {
@@ -301,7 +301,7 @@ export class CashfreeGateway implements PaymentGateway {
 class MockGateway implements PaymentGateway {
   readonly name = "mock";
   private orders = new Map<string, { status: GatewayStatus; amountPaise: number; paymentRef?: string }>();
-  private refunds = new Map<string, "pending" | "success" | "failed">();
+  private refunds = new Map<string, { status: "pending" | "success" | "failed"; amountPaise: number }>();
   /** Set in tests to make the next refund calls fail */
   refundsFail = false;
   readonly webhookSecret = "mock-webhook-secret";
@@ -333,19 +333,20 @@ class MockGateway implements PaymentGateway {
     return { status: o.status, amountPaise: o.status === "success" ? o.amountPaise : 0, gatewayPaymentId: o.paymentRef };
   }
 
-  async refund() {
+  async refund(input: { gatewayRef: string; gatewayPaymentId: string; amountPaise: number; refundId: string }) {
     if (this.refundsFail) throw new Error("Mock refund failed");
     const id = `mockrf_${uuidv7()}`;
-    this.refunds.set(id, "pending");
+    this.refunds.set(id, { status: "pending", amountPaise: input.amountPaise });
     return { gatewayRefundId: id, status: "pending" as const };
   }
 
   async fetchRefund(input: { gatewayRefundId: string }) {
-    return { status: this.refunds.get(input.gatewayRefundId) ?? ("pending" as const) };
+    const refund = this.refunds.get(input.gatewayRefundId);
+    return refund ? { status: refund.status, amountPaise: refund.amountPaise } : { status: "pending" as const };
   }
 
-  settleRefund(ref: string, status: "success" | "failed") { if (this.refunds.has(ref)) this.refunds.set(ref, status); }
-  refundStatus(ref: string) { return this.refunds.get(ref) ?? null; }
+  settleRefund(ref: string, status: "success" | "failed") { const refund = this.refunds.get(ref); if (refund) this.refunds.set(ref, { ...refund, status }); }
+  refundStatus(ref: string) { return this.refunds.get(ref)?.status ?? null; }
 
   verifyWebhook(rawBody: string, signature: string | null) {
     return !!signature && safeEqual(createHmac("sha256", this.webhookSecret).update(rawBody).digest("hex"), signature);

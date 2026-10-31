@@ -27,7 +27,7 @@ export const deliveryCheckouts = mysqlTable("delivery_checkouts", {
   /** The customer's 1-5 stars for the rider, once delivered; feeds the rider's average */
   riderRating: int("rider_rating"), riderRatingNote: varchar("rider_rating_note", { length: 200 }), riderRatedAt: at("rider_rated_at"),
   paymentStatus: mysqlEnum("payment_status", ["none", "pending", "paid", "failed", "refund_pending", "refunded", "refund_failed"]).notNull().default("none"),
-  paymentFailureReason: varchar("payment_failure_reason", { length: 200 }), refundGatewayRef: varchar("refund_gateway_ref", { length: 100 }),
+  paymentFailureReason: varchar("payment_failure_reason", { length: 200 }), refundGatewayRef: varchar("refund_gateway_ref", { length: 100 }), refundAmountPaise: int("refund_amount_paise"),
   refundStatus: mysqlEnum("refund_status", ["none", "pending", "success", "failed"]).notNull().default("none"),
   deliveryFeePaise: int("delivery_fee_paise").notNull().default(0), totalPaise: int("total_paise").notNull().default(0),
   expiresAt: at("expires_at").notNull(), createdAt: createdAt(), placedAt: at("placed_at"),

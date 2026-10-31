@@ -104,12 +104,12 @@ describe("Cashfree platform gateway", () => {
   });
 
   it("creates and reads refunds against the original order", async () => {
-    stubFetch({ refund_id: "refund_1", refund_status: "PENDING" }, { refund_status: "SUCCESS" });
+    stubFetch({ refund_id: "refund_1", refund_status: "PENDING" }, { refund_status: "SUCCESS", refund_amount: 541 });
     expect(await gw().refund({ gatewayRef: "fee_1", gatewayPaymentId: "123", amountPaise: 54100, refundId: "rf_1" })).toEqual({
       gatewayRefundId: "refund_1",
       status: "pending",
     });
-    expect(await gw().fetchRefund({ gatewayRef: "fee_1", gatewayRefundId: "refund_1" })).toEqual({ status: "success" });
+    expect(await gw().fetchRefund({ gatewayRef: "fee_1", gatewayRefundId: "refund_1" })).toEqual({ status: "success", amountPaise: 54100 });
   });
 
   it("parses refund webhooks and ignores still-pending ones", () => {

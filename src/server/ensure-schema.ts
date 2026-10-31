@@ -431,6 +431,19 @@ const STEPS: Step[] = [
       await addColumn(db, "delivery_checkouts", "collected_at", "datetime(3)");
     },
   },
+  {
+    tag: "0077_staff_push_session_scope", when: 1793475812521, hash: "8feb32b80ff5d5cd48a45e466fdc515b560b73a5ad91b27cc37a979120c41d4d",
+    apply: async (db) => {
+      await addColumn(db, "staff_push_subscriptions", "session_id", "char(36)");
+      await addIndex(db, "staff_push_subscriptions", "staff_push_session_idx", "`tenant_id`,`session_id`");
+    },
+  },
+  {
+    tag: "0078_bumpy_guardian", when: 1793481680540, hash: "bcff72d1ae059fac33c97d1873be852f100768a0e3fbd9a4fc58ddef91c8f4a1",
+    apply: async (db) => {
+      await addColumn(db, "delivery_checkouts", "refund_amount_paise", "int");
+    },
+  },
 ];
 
 /** drizzle/0015, the last migration before these steps */
