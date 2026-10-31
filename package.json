@@ -44,6 +44,7 @@
     "nodemailer": "^10.2.1",
     "pdf-lib": "^1.17.1",
     "qrcode": "^1.5.4",
+    "qz-tray": "^2.3.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "recharts": "^3.8.0",

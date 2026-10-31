@@ -150,10 +150,11 @@ export class PrintManager {
 
   private async run(req: PrintRequest, requestId: string, key: string, attempts: number, reprintOf: string | null): Promise<PrintRun> {
     this.set({ busy: true });
+    const setup = this.deps.getSetup ? this.deps.getSetup() : this.setupData;
     const printer = this.resolvePrinter(req.kind, req.printerId);
     let transport = this.transportFor(printer?.transport ?? "browser");
     let usedFallback = false;
-    if (req.forceBrowser || !transport.implemented || !transport.availability().ok) {
+    if (req.forceBrowser || !transport.implemented || !transport.availability({ printer, outletId: setup?.outletId ?? null }).ok) {
       usedFallback = !!printer && printer.transport !== "browser";
       transport = this.transportFor("browser");
     }
@@ -170,7 +171,7 @@ export class PrintManager {
     try {
       const html = req.build(paperMm);
       this.lastHtml = html;
-      result = await transport.send({ id: requestId, kind: req.kind, paperMm, html, printerName: printer?.name ?? null, config: printer?.config ?? null, background: !!req.background });
+      result = await transport.send({ id: requestId, kind: req.kind, paperMm, html, printerId: printer?.id ?? null, outletId: setup?.outletId ?? null, printerName: printer?.name ?? null, config: printer?.config ?? null, background: !!req.background });
     } catch (err) {
       result = { status: "failed", code: "build_failed", message: err instanceof Error ? err.message : "The slip could not be prepared.", retryable: false };
     }

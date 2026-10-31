@@ -42,6 +42,38 @@ export function fitThermalPage(doc: Document) {
   doc.head.appendChild(style);
 }
 
+/**
+ * Measures a slip in the browser and returns its HTML with an exact @page height. Used by local
+ * print bridges that send HTML to the OS print stack instead of opening Chrome's print dialog.
+ */
+export async function fitThermalHtml(html: string) {
+  const frame = document.createElement("iframe");
+  frame.setAttribute("aria-hidden", "true");
+  frame.style.cssText = "position:fixed;left:-10000px;top:0;width:400px;height:1000px;border:0";
+  document.body.appendChild(frame);
+  try {
+    const doc = frame.contentDocument;
+    if (!doc) throw new Error("Could not prepare the receipt for printing.");
+    doc.open();
+    doc.write(html);
+    doc.close();
+    await new Promise<void>((resolve) => {
+      if (doc.readyState === "complete") resolve();
+      else frame.addEventListener("load", () => resolve(), { once: true });
+    });
+    await doc.fonts?.ready;
+    await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+    fitThermalPage(doc);
+    const rules = Array.from(doc.querySelectorAll("style"), (el) => el.textContent ?? "").join("\n");
+    const matches = Array.from(rules.matchAll(/@page\{size:(\d+)mm ([\d.]+)mm;margin:0\}/g));
+    const height = Number(matches.at(-1)?.[2]);
+    if (!height) throw new Error("Could not measure the receipt page.");
+    return { html: `<!doctype html>${doc.documentElement.outerHTML}`, heightMm: height };
+  } finally {
+    frame.remove();
+  }
+}
+
 function printInPopup(html: string) {
   const win = window.open("", "tableeqr-print", "popup,width=460,height=720");
   if (!win) return false;

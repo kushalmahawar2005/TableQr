@@ -1,11 +1,12 @@
-import { printHtml } from "./runtime";
+import { fitThermalHtml, printHtml } from "./runtime";
+import { desktopBridgeIsReady, loadDesktopPrinterName } from "./device-prefs";
 import type { PaperMm } from "./thermal";
 
 // How a slip reaches a printer. A transport is a small module with one job: take a finished slip
 // and say honestly what became of it. The screens, the settings and the server only know this
 // interface, so a new way of printing (Bluetooth, a network printer, a desktop helper) is a new
-// transport and nothing else changes. Only "browser" is built; the rest are named here so a
-// printer can never be saved with a transport that does nothing.
+// transport and nothing else changes. Only the browser and desktop helper are built; the rest are
+// named here so a printer can never be saved with a transport that does nothing.
 
 export type TransportId = "browser" | "bluetooth_ble" | "bluetooth_spp" | "network" | "cloud" | "desktop_bridge";
 export const TRANSPORT_IDS: readonly TransportId[] = ["browser", "bluetooth_ble", "bluetooth_spp", "network", "cloud", "desktop_bridge"];
@@ -22,7 +23,7 @@ export type TransportCapabilities = {
   shared: boolean;
 };
 
-export type SendJob = { id: string; kind: string; paperMm: PaperMm; html: string; printerName: string | null; config: Record<string, string | number | boolean> | null; background: boolean };
+export type SendJob = { id: string; kind: string; paperMm: PaperMm; html: string; printerId: string | null; outletId: string | null; printerName: string | null; config: Record<string, string | number | boolean> | null; background: boolean };
 export type SendResult =
   | { status: "sent" | "confirmed"; via?: string }
   | { status: "failed"; code: string; message: string; retryable: boolean };
@@ -35,7 +36,7 @@ export type PrintTransport = {
   /** False for a transport that is only named, not built */
   implemented: boolean;
   /** Whether this device can use it right now */
-  availability(): { ok: true } | { ok: false; reason: string };
+  availability(context?: { printer: { id: string } | null; outletId: string | null }): { ok: true } | { ok: false; reason: string };
   validateConfig(config: unknown): { ok: true; config: Record<string, string | number | boolean> | null } | { ok: false; message: string };
   send(job: SendJob): Promise<SendResult>;
 };
@@ -81,9 +82,45 @@ const PLANNED: Record<Exclude<TransportId, "browser">, { label: string; descript
     capabilities: { confirmation: "printer", silent: true, runsOn: "server", shared: true },
   },
   desktop_bridge: {
-    label: "Desktop helper",
-    description: "A small program on the counter computer that prints without a window. Not built yet.",
-    capabilities: { confirmation: "none", silent: true, runsOn: "this_device", shared: false },
+    label: "Direct print (QZ Tray)",
+    description: "Prints through QZ Tray on this Windows computer, using the receipt's measured page size. Install QZ Tray and allow Tableeqr to connect.",
+    capabilities: { confirmation: "none", silent: false, runsOn: "this_device", shared: false },
+  },
+};
+
+const desktopBridgeTransport: PrintTransport = {
+  id: "desktop_bridge",
+  ...PLANNED.desktop_bridge,
+  implemented: true,
+  availability: (context) => {
+    if (typeof window === "undefined") return { ok: false, reason: "Direct printing needs a browser on the printer computer." };
+    if (!desktopBridgeIsReady()) return { ok: false, reason: "Connect QZ Tray from Printer settings first." };
+    if (context?.printer && context.outletId && !loadDesktopPrinterName(context.outletId, context.printer.id)) {
+      return { ok: false, reason: "Map this outlet printer to a Windows printer on this device." };
+    }
+    return { ok: true };
+  },
+  validateConfig: () => ({ ok: true, config: null }),
+  async send(job) {
+    const systemPrinterName = job.outletId && job.printerId ? loadDesktopPrinterName(job.outletId, job.printerId) : null;
+    if (!systemPrinterName) return { status: "failed", code: "printer_name_missing", message: "Map this outlet printer to a Windows printer in Settings on this computer.", retryable: false };
+    try {
+      const [{ html, heightMm }, bridge] = await Promise.all([
+        fitThermalHtml(job.html),
+        import("./qz-bridge"),
+      ]);
+      await bridge.printHtmlThroughDesktopBridge({ html, pageHeightMm: heightMm, paperMm: job.paperMm, printerName: systemPrinterName });
+      return { status: "sent", via: "desktop_bridge" };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not reach QZ Tray on this computer.";
+      const notRunning = /websocket|connect|qz tray|localhost|timed out/i.test(message);
+      return {
+        status: "failed",
+        code: notRunning ? "desktop_bridge_unavailable" : "desktop_print_failed",
+        message: notRunning ? "Start QZ Tray on this computer, then try printing again." : message,
+        retryable: true,
+      };
+    }
   },
 };
 
@@ -100,7 +137,8 @@ function plannedTransport(id: Exclude<TransportId, "browser">): PrintTransport {
 }
 
 const registry = new Map<TransportId, PrintTransport>([["browser", browserTransport]]);
-for (const id of TRANSPORT_IDS) if (id !== "browser") registry.set(id, plannedTransport(id as Exclude<TransportId, "browser">));
+for (const id of TRANSPORT_IDS) if (id !== "browser" && id !== "desktop_bridge") registry.set(id, plannedTransport(id as Exclude<TransportId, "browser">));
+registry.set("desktop_bridge", desktopBridgeTransport);
 
 export const getTransport = (id: string): PrintTransport => (isTransportId(id) ? registry.get(id)! : browserTransport);
 export const allTransports = (): PrintTransport[] => TRANSPORT_IDS.map((id) => registry.get(id)!);

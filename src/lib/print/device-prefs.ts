@@ -29,6 +29,48 @@ export function saveDevicePrefs(outletId: string, prefs: DevicePrefs) {
 
 export const subscribeDevicePrefs = (fn: () => void) => { listeners.add(fn); return () => { listeners.delete(fn); }; };
 
+const DESKTOP_MAP_KEY = (outletId: string) => `tq.print.desktop.v1.${outletId}`;
+const DESKTOP_READY_KEY = "tq.print.desktop.ready.v1";
+const desktopListeners = new Set<() => void>();
+
+export function loadDesktopPrinterMap(outletId: string): Record<string, string> {
+  try {
+    const raw = JSON.parse(localStorage.getItem(DESKTOP_MAP_KEY(outletId)) ?? "{}") as Record<string, unknown>;
+    return Object.fromEntries(Object.entries(raw).filter(([, name]) => typeof name === "string" && name.trim()).map(([id, name]) => [id, (name as string).trim()]));
+  } catch { return {}; }
+}
+
+/** The Windows printer name is local to this device; the outlet's printer record never stores it. */
+export function loadDesktopPrinterName(outletId: string, printerId: string): string | null {
+  try {
+    const raw = JSON.parse(localStorage.getItem(DESKTOP_MAP_KEY(outletId)) ?? "{}") as Record<string, unknown>;
+    const name = raw[printerId];
+    return typeof name === "string" && name.trim() ? name.trim() : null;
+  } catch { return null; }
+}
+
+export function saveDesktopPrinterName(outletId: string, printerId: string, name: string | null) {
+  try {
+    const key = DESKTOP_MAP_KEY(outletId);
+    const raw = JSON.parse(localStorage.getItem(key) ?? "{}") as Record<string, unknown>;
+    if (name?.trim()) raw[printerId] = name.trim();
+    else delete raw[printerId];
+    if (Object.keys(raw).length) localStorage.setItem(key, JSON.stringify(raw));
+    else localStorage.removeItem(key);
+  } catch { /* storage unavailable: this device uses browser print */ }
+  desktopListeners.forEach((fn) => fn());
+}
+
+export const subscribeDesktopPrinterMap = (fn: () => void) => { desktopListeners.add(fn); return () => { desktopListeners.delete(fn); }; };
+
+export function desktopBridgeIsReady() {
+  try { return localStorage.getItem(DESKTOP_READY_KEY) === "1"; } catch { return false; }
+}
+
+export function saveDesktopBridgeReady() {
+  try { localStorage.setItem(DESKTOP_READY_KEY, "1"); } catch { /* private window */ }
+}
+
 const UNSENT_KEY = (outletId: string) => `tq.print.unsent.v1.${outletId}`;
 /** Reports of prints that could not reach the server yet, per outlet */
 export const unsentStorage = (outletId: string) => ({

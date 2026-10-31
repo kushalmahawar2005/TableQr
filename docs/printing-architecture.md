@@ -9,7 +9,7 @@ themselves are in [printing.md](printing.md); Bluetooth research is in
 | Piece | Where | What it does |
 |---|---|---|
 | Print manager | `src/lib/print/manager.ts` | One call, `print()`. Picks the printer, builds the slip for its roll, hands it to a transport, guards against double taps, reports the result. No React, no browser calls: tested on its own. |
-| Transports | `src/lib/print/transports.ts` | The way a slip reaches a printer. A transport takes a finished slip and says what became of it. Only `browser` is built. |
+| Transports | `src/lib/print/transports.ts` | The way a slip reaches a printer. A transport takes a finished slip and says what became of it. `browser` and `desktop_bridge` are built. |
 | Job model | `src/lib/print/jobs.ts` | Kinds of slip, statuses, which status may follow which, how a status reads on screen. |
 | Device choice | `src/lib/print/device-prefs.ts` | Which printer this one device uses. Stays on the device, per outlet. |
 | Provider and toast | `src/components/print/` | Loads the outlet's printers once, owns the manager, shows what the last print did and what to do next. |
@@ -22,6 +22,7 @@ themselves are in [printing.md](printing.md); Bluetooth research is in
   connection) and which one is the **receipt printer** and which the **kitchen printer**.
 - **Device** (Settings, any device, saved on that device only): its own receipt and kitchen printer, which
   override the outlet's. For example a kitchen tablet that always prints to the kitchen printer.
+- A direct USB bridge's Windows printer name is also saved on that device, per outlet. It never goes in the shared printer record, so another tenant or terminal cannot inherit the local Windows name.
 - A kitchen ticket goes to the kitchen printer. Bills, receipts, order slips and the day close go to the receipt printer.
 - With no printer set up, everything still prints through the browser's print window on the device's saved roll width.
 
@@ -72,7 +73,7 @@ credential, may report kitchen tickets and nothing else. Checked on the server f
    printer or a worker pick it up, and move it to `sent` or `confirmed` from there. `print_jobs` already holds what that needs.
 4. Add tests next to `test/print-manager.test.ts`. Do not claim `confirmed` without a printer that reports it.
 
-The planned transports (`bluetooth_ble`, `bluetooth_spp`, `network`, `cloud`, `desktop_bridge`) are named in the registry,
+The planned transports (`bluetooth_ble`, `bluetooth_spp`, `network`, `cloud`) are named in the registry,
 shown as "Not available yet" in Settings, and refused by the server when saving a printer.
 
 ## Records

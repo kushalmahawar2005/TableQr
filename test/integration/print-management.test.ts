@@ -56,7 +56,7 @@ describe("setting printers up", () => {
     expect(await code(savePrinter(manager, { name: "x".repeat(61), paperMm: 80, transport: "browser" }))).toBe("invalid_state");
     expect(await code(savePrinter(manager, { name: "Counter printer", paperMm: 80, transport: "browser" }))).toBe("conflict");
     expect(await code(savePrinter(manager, { name: "Odd roll", paperMm: 70, transport: "browser" }))).toBe("invalid_state");
-    for (const transport of ["bluetooth_ble", "bluetooth_spp", "network", "cloud", "desktop_bridge", "made_up"]) {
+    for (const transport of ["bluetooth_ble", "bluetooth_spp", "network", "cloud", "made_up"]) {
       expect(await code(savePrinter(manager, { name: `Via ${transport}`, paperMm: 80, transport }))).toBe("invalid_state");
     }
     expect((await printSetup(manager)).printers).toHaveLength(2);

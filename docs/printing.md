@@ -17,6 +17,25 @@ Each has its own layout. They share `src/lib/print/thermal.ts` (paper sizes, pri
 type sizes, the `@page` rule) and `src/lib/print/runtime.ts` (paper setting, fitting the page
 height, opening the print window).
 
+## Direct printing from a Windows counter computer
+
+For a USB thermal printer, install and run [QZ Tray](https://qz.io/download/) on the same Windows
+computer that Tableeqr is open on. In Settings > Printers, select **Direct print (QZ Tray)**, use **Find
+printers**, choose the Windows printer name, and save it. The outlet stores the printer and roll
+width; the Windows printer-name mapping stays on that device, separately for each outlet. Other
+terminals with no local mapping fall back to browser print. The bridge measures the slip in the
+browser and asks QZ Tray to print with that receipt's width and height. This skips Chrome's print
+dialog and its headers and footers; the Windows driver must accept custom receipt page sizes.
+
+QZ Tray may ask the user to allow Tableeqr to connect. Tableeqr does not contain a signing private
+key; QZ Tray requires signed messages to suppress its security prompts. The app records a direct
+print as **Sent** because a Windows print queue cannot confirm that paper came out. Keep Browser
+print available as a fallback on devices without QZ Tray.
+
+QZ Tray's HTML printing goes through the installed Windows printer driver. If it still forces a
+fixed page length, update the POS-80 driver or set a continuous/custom roll size in Windows printer
+preferences.
+
 ## Paper
 
 A device remembers its roll (80 mm or 58 mm) in the browser. A roll prints less than its full

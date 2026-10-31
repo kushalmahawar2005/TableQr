@@ -5,7 +5,8 @@ import { useMemo, useState, useSyncExternalStore, useTransition } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { usePrint } from "@/components/print/print-provider";
-import { loadDevicePrefs, saveDevicePrefs, subscribeDevicePrefs } from "@/lib/print/device-prefs";
+import { loadDesktopPrinterMap, loadDesktopPrinterName, loadDevicePrefs, saveDesktopPrinterName, saveDevicePrefs, subscribeDesktopPrinterMap, subscribeDevicePrefs } from "@/lib/print/device-prefs";
+import { findDesktopPrinters } from "@/lib/print/qz-bridge";
 import type { DevicePrefs } from "@/lib/print/manager";
 import { describeJob, MAX_PRINTERS_PER_OUTLET, PRINTER_NAME_MAX, type JobStatus } from "@/lib/print/jobs";
 import { testSlipHtml } from "@/lib/print/test-slip";
@@ -29,8 +30,8 @@ const field = "h-11 w-full rounded-xl border border-line bg-surface px-3 text-sm
 const primary = "h-11 rounded-xl bg-brand px-5 text-sm font-semibold text-white disabled:opacity-50";
 const quiet = "h-9 rounded-lg border border-line px-3 text-xs font-semibold text-ink hover:bg-ink/5 disabled:opacity-50";
 
-type Draft = { id?: string; name: string; paperMm: 58 | 80; transport: string };
-const BLANK: Draft = { name: "", paperMm: 80, transport: "browser" };
+type Draft = { id?: string; name: string; paperMm: 58 | 80; transport: string; systemPrinterName: string };
+const BLANK: Draft = { name: "", paperMm: 80, transport: "browser", systemPrinterName: "" };
 
 export function PrinterSettings({ initial, outletId, outletName, recent: initialRecent }: { initial: PrintSetup; outletId: string; outletName: string; recent: JobRow[] }) {
   const { manager, reload } = usePrint();
@@ -38,10 +39,14 @@ export function PrinterSettings({ initial, outletId, outletName, recent: initial
   const [draft, setDraft] = useState<Draft | null>(null);
   const [message, setMessage] = useState<{ text: string; error?: boolean } | null>(null);
   const [recent, setRecent] = useState(initialRecent);
+  const [localPrinters, setLocalPrinters] = useState<string[]>([]);
+  const [findingLocalPrinters, setFindingLocalPrinters] = useState(false);
   const [busy, start] = useTransition();
 
   const prefsRaw = useSyncExternalStore(subscribeDevicePrefs, () => JSON.stringify(loadDevicePrefs(outletId)), () => "{}");
   const prefs = useMemo<DevicePrefs>(() => ({ receiptPrinterId: null, kitchenPrinterId: null, ...(JSON.parse(prefsRaw) as Partial<DevicePrefs>) }), [prefsRaw]);
+  const localPrinterMapRaw = useSyncExternalStore(subscribeDesktopPrinterMap, () => JSON.stringify(loadDesktopPrinterMap(outletId)), () => "{}");
+  const localPrinterMap = useMemo<Record<string, string>>(() => JSON.parse(localPrinterMapRaw) as Record<string, string>, [localPrinterMapRaw]);
   const [outletReceipt, setOutletReceipt] = useState(initial.receiptPrinterId ?? "");
   const [outletKitchen, setOutletKitchen] = useState(initial.kitchenPrinterId ?? "");
 
@@ -56,12 +61,34 @@ export function PrinterSettings({ initial, outletId, outletName, recent: initial
   };
 
   const save = () => draft && start(async () => {
-    if (apply(await savePrinterAction({ id: draft.id, name: draft.name, paperMm: draft.paperMm, transport: draft.transport }), draft.id ? "Printer updated." : "Printer added.")) setDraft(null);
+    const result = await savePrinterAction({ id: draft.id, name: draft.name, paperMm: draft.paperMm, transport: draft.transport, config: null });
+    if (result.ok) {
+      const saved = result.setup.printers.find((p) => p.id === draft.id) ?? result.setup.printers.find((p) => p.name === draft.name.trim());
+      if (saved) saveDesktopPrinterName(outletId, saved.id, draft.transport === "desktop_bridge" ? draft.systemPrinterName : null);
+    }
+    if (apply(result, draft.id ? "Printer updated." : "Printer added.")) setDraft(null);
   });
   const remove = (p: PrinterInfo) => start(async () => { apply(await removePrinterAction(p.id), `${p.name} removed.`); });
   const saveDefaults = () => start(async () => { apply(await assignPrintersAction({ receiptPrinterId: outletReceipt || null, kitchenPrinterId: outletKitchen || null }), "Outlet printers saved."); });
   const testPrint = (p: PrinterInfo) => void manager.print({ kind: "test", printerId: p.id, subject: { type: "printer", id: p.id }, build: (paper) => testSlipHtml(paper, { printerName: p.name, outletName }) });
   const refresh = () => start(async () => { const r = await recentPrintsAction(); if (r.ok) setRecent(r.jobs); else setMessage({ text: r.message, error: true }); });
+  const findLocalPrinters = async () => {
+    setFindingLocalPrinters(true);
+    setMessage(null);
+    try {
+      const names = await findDesktopPrinters();
+      setLocalPrinters(names);
+      if (!names.length) setMessage({ text: "QZ Tray connected, but Windows did not report any printers.", error: true });
+      else {
+        setDraft((current) => current?.transport === "desktop_bridge" && !current.systemPrinterName && names.length === 1
+          ? { ...current, systemPrinterName: names[0] }
+          : current);
+        setMessage({ text: `Found ${names.length} Windows printer${names.length === 1 ? "" : "s"}.` });
+      }
+    } catch (error) {
+      setMessage({ text: error instanceof Error ? error.message : "Could not connect to QZ Tray. Check that it is installed and running.", error: true });
+    } finally { setFindingLocalPrinters(false); }
+  };
   const nameOf = (id: string | null) => setup.printers.find((p) => p.id === id)?.name ?? null;
 
   const choose = (current: string, set: (v: string) => void, label: string, blank: string) => (
@@ -94,6 +121,7 @@ export function PrinterSettings({ initial, outletId, outletName, recent: initial
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold text-ink">{p.name}</p>
               <p className="text-xs text-muted">{p.paperMm} mm roll · {allTransports().find((t) => t.id === p.transport)?.label ?? p.transport}</p>
+              {p.transport === "desktop_bridge" && <p className="text-xs text-muted">This device: {localPrinterMap[p.id] ?? "not mapped; uses browser print"}</p>}
               <p className="mt-1 flex flex-wrap gap-1.5">
                 {setup.receiptPrinterId === p.id && <span className="rounded-full bg-sage px-2 py-0.5 text-[11px] font-semibold text-forest">Receipt printer</span>}
                 {setup.kitchenPrinterId === p.id && <span className="rounded-full bg-sage px-2 py-0.5 text-[11px] font-semibold text-forest">Kitchen printer</span>}
@@ -103,7 +131,7 @@ export function PrinterSettings({ initial, outletId, outletName, recent: initial
             </div>
             <div className="flex flex-wrap gap-2">
               <button type="button" className={quiet} onClick={() => testPrint(p)}>Test print</button>
-              <button type="button" className={quiet} onClick={() => { setDraft({ id: p.id, name: p.name, paperMm: p.paperMm, transport: p.transport }); setMessage(null); }}>Edit</button>
+              <button type="button" className={quiet} onClick={() => { setDraft({ id: p.id, name: p.name, paperMm: p.paperMm, transport: p.transport, systemPrinterName: loadDesktopPrinterName(outletId, p.id) ?? "" }); setMessage(null); }}>Edit</button>
               <button type="button" className={quiet} disabled={busy} onClick={() => remove(p)}>Remove</button>
             </div>
           </li>)}
@@ -126,6 +154,15 @@ export function PrinterSettings({ initial, outletId, outletName, recent: initial
               <span className="mt-0.5 block text-xs text-muted">{t.description}</span>
               {t.implemented && <span className="mt-0.5 block text-xs text-muted">{confirmable(t.id) ? "The printer can confirm that it printed." : "Tableeqr can show that a slip was sent, not that paper came out."}</span>}</span>
           </label>)}</div></fieldset>
+        {draft.transport === "desktop_bridge" && <div className="mt-4 space-y-2">
+          <Label htmlFor="windows-printer-name">Windows printer</Label>
+          <div className="flex flex-wrap gap-2">
+            <input id="windows-printer-name" list="windows-printer-options" value={draft.systemPrinterName} maxLength={120} placeholder="For example, POS-80" onChange={(e) => setDraft({ ...draft, systemPrinterName: e.target.value })} className={`${field} min-w-0 flex-1`} />
+            <datalist id="windows-printer-options">{localPrinters.map((name) => <option key={name} value={name} />)}</datalist>
+            <button type="button" className={quiet} disabled={findingLocalPrinters} onClick={() => void findLocalPrinters()}>{findingLocalPrinters ? "Connecting…" : "Find printers"}</button>
+          </div>
+          <p className="text-xs leading-relaxed text-muted">Install and run <a href="https://qz.io/download/" target="_blank" rel="noopener noreferrer" className="font-semibold text-ink underline">QZ Tray</a> on this Windows computer, then use Find printers. Its printer name is saved on this device only, per outlet. QZ Tray may ask you to allow Tableeqr to connect; fully suppressing its security prompts needs a signing certificate.</p>
+        </div>}
         <div className="mt-4 flex gap-2"><button type="button" className={primary} disabled={busy || !draft.name.trim()} onClick={save}>{busy ? <LoaderCircle className="mx-auto size-4 animate-spin" aria-label="Saving" /> : draft.id ? "Save changes" : "Add printer"}</button>
           <button type="button" className="h-11 rounded-xl border border-line px-5 text-sm font-semibold text-ink" onClick={() => setDraft(null)}>Cancel</button></div>
       </div>}
