@@ -1,7 +1,8 @@
-import { and, eq, isNotNull } from "drizzle-orm";
+import { and, eq, gte, isNotNull } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db as appDb } from "@/db";
 import * as s from "@/db/schema";
+import { uuidv7 } from "@/db/id";
 import { AppError } from "@/server/errors";
 import { requestBill, settleAtCounter } from "@/server/billing/payments";
 import { getGuestContext } from "@/server/guest/context";
@@ -13,6 +14,7 @@ import { getTableLanding } from "@/server/guest/table";
 import { getAfterVisit } from "@/server/guest/after-visit";
 import { onPublish, type RealtimeEvent } from "@/server/realtime/publish";
 import { resolveStaff, signInStaff, signOutStaff, type StaffSession } from "@/server/staff/auth";
+import { hashPin } from "@/server/staff/pin";
 import { getOnlineAvailability, setOnlineBookingsPaused, setSlotCapacity } from "@/server/floor/pacing";
 import { getFloor, getTableDetail } from "@/server/floor/read";
 import { checkInReservation, confirmReservation, createReservation, markNoShow, reassignReservation, seatReservation } from "@/server/floor/reservations";
@@ -89,6 +91,27 @@ describe("staff auth", () => {
     for (let i = 0; i < 4; i++) await signInStaff({ outletCode: "SRJ01", phone: "9000000005", pin: "0000" }).catch(() => null);
     await signInStaff({ outletCode: "SRJ01", phone: "9000000005", pin: "0000" }).catch(() => null);
     await failsWith(signInStaff({ outletCode: "SRJ01", phone: "9000000005", pin: "5555" }), "sign_in_failed", "locked");
+  });
+
+  it("counts concurrent wrong PINs serially and stops accepting attempts at the limit", async () => {
+    const phone = "9000000099";
+    const userId = uuidv7();
+    await env.db.insert(s.users).values({ id: userId, tenantId: env.demo.tenantId, name: "Parallel Login Test", phone, pinHash: await hashPin("9999") });
+    await env.db.insert(s.staffRoles).values({ id: uuidv7(), tenantId: env.demo.tenantId, userId, outletId: env.demo.outletId, role: "waiter" });
+
+    const results = await Promise.all(Array.from({ length: 20 }, () =>
+      signInStaff({ outletCode: "SRJ01", phone, pin: "0000" }).then(() => "accepted", () => "rejected"),
+    ));
+    const since = new Date(Date.now() - 15 * MIN);
+    const attempts = await env.db.select().from(s.staffLoginAttempts).where(and(
+      eq(s.staffLoginAttempts.tenantId, env.demo.tenantId),
+      eq(s.staffLoginAttempts.outletId, env.demo.outletId),
+      eq(s.staffLoginAttempts.phone, phone),
+      eq(s.staffLoginAttempts.ok, false),
+      gte(s.staffLoginAttempts.createdAt, since),
+    ));
+    expect(results.every(result => result === "rejected")).toBe(true);
+    expect(attempts).toHaveLength(5);
   });
 
   it("drops the session when the user is deactivated, the role goes, or they sign out", async () => {

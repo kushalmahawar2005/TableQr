@@ -200,9 +200,16 @@ export async function seedDemo(db: Db, opts: { adminId?: string; openAllDay?: bo
   }
   const tableIds: Record<string, string> = {};
   const tableQr: Record<string, string> = {};
+  const usedQrCodes = new Set(["door", "book", "k7Qm"]);
+  const nextTableQr = () => {
+    let code = shortCode();
+    while (usedQrCodes.has(code)) code = shortCode();
+    usedQrCodes.add(code);
+    return code;
+  };
   for (const t of FLOOR) tableIds[t.code] = uuidv7();
   for (const t of FLOOR) {
-    tableQr[t.code] = t.code === "T12" ? "k7Qm" : shortCode();
+    tableQr[t.code] = t.code === "T12" ? "k7Qm" : nextTableQr();
     await db.insert(s.diningTables).values({
       id: tableIds[t.code],
       tenantId,

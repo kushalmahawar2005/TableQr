@@ -2,6 +2,7 @@ import "server-only";
 import { staffAppLoginRoles } from "@/lib/console-nav";
 import { createHash, randomBytes } from "node:crypto";
 import { and, count, eq, gt, gte, inArray, isNull, or, sql } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/mysql2";
 import { db } from "@/db";
 import { uuidv7 } from "@/db/id";
 import * as s from "@/db/schema";
@@ -49,30 +50,53 @@ export async function verifyStaffPin(input: { outletCode: string; phone: string;
   if (!outlet || phone.length < 10) throw failed();
   const scope = { tenantId: outlet.tenantId, outletId: outlet.id };
 
-  const since = new Date(now.getTime() - PIN_LIMIT.windowMinutes * 60_000);
-  const [{ n }] = await db
-    .select({ n: count() })
-    .from(s.staffLoginAttempts)
-    .where(and(eq(s.staffLoginAttempts.tenantId, scope.tenantId), eq(s.staffLoginAttempts.outletId, scope.outletId), eq(s.staffLoginAttempts.phone, phone), eq(s.staffLoginAttempts.ok, false), gte(s.staffLoginAttempts.createdAt, since)));
-  if (n >= PIN_LIMIT.attempts) throw failed("Too many wrong PINs. Try again in 15 minutes or ask a manager.", { reason: "locked" });
+  // Serialize checks and writes for this phone/outlet across every app worker. Keep all queries on
+  // the same connection as GET_LOCK: named locks belong to a connection, and waiting logins must
+  // not consume the pool connections needed by the login that currently owns the lock.
+  const lockName = `tq_login_${createHash("sha256").update(`${scope.tenantId}:${scope.outletId}:${phone}`).digest("hex").slice(0, 55)}`;
+  const connection = await db.$client.getConnection();
+  let locked = false;
+  try {
+    const [lockRows] = await connection.query("SELECT GET_LOCK(?, 5) AS acquired", [lockName]);
+    locked = Number((lockRows as { acquired: number | null }[])[0]?.acquired ?? 0) === 1;
+    if (!locked) throw failed("Too many login attempts right now. Try again shortly.", { reason: "locked" });
 
-  // Tenant creation and older staff records may store +91, spaces or punctuation. Compare the
-  // digits-only DB value with both the normalized local number and its Indian country-code form.
-  const storedPhoneDigits = sql`REGEXP_REPLACE(${s.users.phone}, '[^0-9]', '')`;
-  const phoneCandidates = phone.length === 10 ? [phone, `91${phone}`] : [phone];
-  const matchingUsers = await db.select().from(s.users).where(and(eq(s.users.tenantId, scope.tenantId), inArray(storedPhoneDigits, phoneCandidates))).limit(2);
-  // Refuse ambiguous duplicate phone records instead of signing in to an arbitrary account.
-  const user = matchingUsers.length === 1 ? matchingUsers[0] : undefined;
-  const pinOk = await verifyPin(String(input.pin ?? ""), user?.pinHash ?? null);
-  const roles = user ? await rolesAt(user.id, scope) : [];
-  const ok = !!user && pinOk && user.isActive && roles.length > 0;
-  await db.insert(s.staffLoginAttempts).values({ id: uuidv7(), tenantId: scope.tenantId, outletId: scope.outletId, phone, ok, createdAt: now });
-  if (!ok) {
-    // A right PIN for someone without access here says so; anything else stays generic
-    if (user && pinOk && user.isActive) throw failed("You don't have access to this outlet. Ask a manager.", { reason: "no_role" });
-    throw failed();
+    const loginDb = drizzle({ client: connection, schema: s, mode: "default" });
+    const since = new Date(now.getTime() - PIN_LIMIT.windowMinutes * 60_000);
+    const [{ n }] = await loginDb
+      .select({ n: count() })
+      .from(s.staffLoginAttempts)
+      .where(and(eq(s.staffLoginAttempts.tenantId, scope.tenantId), eq(s.staffLoginAttempts.outletId, scope.outletId), eq(s.staffLoginAttempts.phone, phone), eq(s.staffLoginAttempts.ok, false), gte(s.staffLoginAttempts.createdAt, since)));
+    if (n >= PIN_LIMIT.attempts) throw failed("Too many wrong PINs. Try again in 15 minutes or ask a manager.", { reason: "locked" });
+
+    // Tenant creation and older staff records may store +91, spaces or punctuation. Compare the
+    // digits-only DB value with both the normalized local number and its Indian country-code form.
+    const storedPhoneDigits = sql`REGEXP_REPLACE(${s.users.phone}, '[^0-9]', '')`;
+    const phoneCandidates = phone.length === 10 ? [phone, `91${phone}`] : [phone];
+    const matchingUsers = await loginDb.select().from(s.users).where(and(eq(s.users.tenantId, scope.tenantId), inArray(storedPhoneDigits, phoneCandidates))).limit(2);
+    // Refuse ambiguous duplicate phone records instead of signing in to an arbitrary account.
+    const user = matchingUsers.length === 1 ? matchingUsers[0] : undefined;
+    const pinOk = await verifyPin(String(input.pin ?? ""), user?.pinHash ?? null);
+    const roleRows = user ? await loginDb
+      .select({ role: s.staffRoles.role })
+      .from(s.staffRoles)
+      .where(and(eq(s.staffRoles.tenantId, scope.tenantId), eq(s.staffRoles.userId, user.id), or(isNull(s.staffRoles.outletId), eq(s.staffRoles.outletId, scope.outletId)))) : [];
+    const roles = [...new Set(roleRows.map((row) => row.role))];
+    const ok = !!user && pinOk && user.isActive && roles.length > 0;
+    await loginDb.insert(s.staffLoginAttempts).values({ id: uuidv7(), tenantId: scope.tenantId, outletId: scope.outletId, phone, ok, createdAt: now });
+    if (!ok) {
+      // A right PIN for someone without access here says so; anything else stays generic
+      if (user && pinOk && user.isActive) throw failed("You don't have access to this outlet. Ask a manager.", { reason: "no_role" });
+      throw failed();
+    }
+    return { user: user!, roles, scope, outletCode: outlet.code };
+  } finally {
+    try {
+      if (locked) await connection.query("SELECT RELEASE_LOCK(?)", [lockName]);
+    } finally {
+      connection.release();
+    }
   }
-  return { user: user!, roles, scope, outletCode: outlet.code };
 }
 
 /** Signs in at an outlet; returns the cookie token (shown to nobody but the browser) */
