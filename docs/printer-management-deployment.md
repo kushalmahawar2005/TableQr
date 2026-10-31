@@ -15,7 +15,7 @@ Live commit before this work: `4679e18`. This work adds `fcbd42d` (slip layouts)
    fast-forward), then `git push origin master`. Push nothing else.
 2. Hostinger builds from master: `npm run build:production` runs `db:migrate` first, which creates the three tables in about
    a second, then builds. If the migration fails the build stops and the running site is untouched.
-3. Watch the build to `completed`, then the startup log (`[db] connection pool size 20`), then `/api/health` (HTTP 200,
+3. Watch the build to `completed`, then the startup log (`[db] connection pool size 10` by default; capped at 12 per app process), then `/api/health` (HTTP 200,
    `database: connected`).
 
 ## Check by hand (a manager signed in on a phone or computer)
