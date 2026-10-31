@@ -15,11 +15,11 @@ export function dbConfig() {
   };
 }
 
-/** Most connections the app will ever open: the host allows 75 per user, and tools and deploys need some */
-export const MAX_POOL_SIZE = 40;
+/** Per-process cap leaves room under Hostinger's 75-connection user limit for other workers and tools. */
+export const MAX_POOL_SIZE = 12;
 export const DEFAULT_POOL_SIZE = 10;
 
-/** `DB_POOL_SIZE` as a whole number from 1 to 40; anything else (empty, text, zero) is the default of 10 */
+/** `DB_POOL_SIZE` as a whole number from 1 to 12; anything else (empty, text, zero) is the default of 10 */
 export function poolSizeFrom(value: string | undefined): number {
   const n = Math.floor(Number(value));
   if (!Number.isFinite(n) || n < 1) return DEFAULT_POOL_SIZE;

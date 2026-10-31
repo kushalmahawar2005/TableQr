@@ -11,8 +11,8 @@ const pool =
   globalForDb.pool ??
   mysql.createPool({
     ...dbConfig(),
-    // Shared hosting caps MySQL connections per user (75 on Hostinger), so 10 by default and never
-    // more than 40; set DB_POOL_SIZE to change it (see poolSizeFrom)
+    // Hosting counts connections across Node workers, so cap each worker at 12 and default to 10;
+    // set DB_POOL_SIZE lower if this deployment has more workers (see poolSizeFrom)
     connectionLimit: poolSizeFrom(process.env.DB_POOL_SIZE),
     charset: "utf8mb4", // Hindi menu names
     timezone: "Z", // store and read every timestamp as UTC
