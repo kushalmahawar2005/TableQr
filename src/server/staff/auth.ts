@@ -15,7 +15,9 @@ import { ACCESS_STOPPED, tenantAccess } from "../access";
 // database on every request, never from the cookie or the client.
 
 export const STAFF_COOKIE = "tq_staff";
-export const STAFF_SESSION_HOURS = 12;
+/** Keep restaurant staff signed in for a month; explicit sign-out still revokes the session. */
+export const STAFF_SESSION_DAYS = 30;
+export const STAFF_SESSION_SECONDS = STAFF_SESSION_DAYS * 24 * 60 * 60;
 /** Wrong PINs per phone and outlet before a 15-minute lock-out */
 export const PIN_LIMIT = { attempts: 5, windowMinutes: 15 } as const;
 
@@ -82,7 +84,7 @@ export async function signInStaff(input: { outletCode: string; phone: string; pi
     throw failed("This account isn't assigned to that role. Choose your assigned role or ask the owner.", { reason: "role_mismatch" });
   }
   const token = randomBytes(32).toString("base64url");
-  const expiresAt = new Date(now.getTime() + STAFF_SESSION_HOURS * 3600_000);
+  const expiresAt = new Date(now.getTime() + STAFF_SESSION_SECONDS * 1000);
   await db.insert(s.staffSessions).values({ id: uuidv7(), tenantId: scope.tenantId, userId: user.id, outletId: scope.outletId, tokenHash: hashToken(token), createdAt: now, expiresAt, lastSeenAt: now });
   await db.insert(s.auditLog).values({ tenantId: scope.tenantId, outletId: scope.outletId, actorUserId: user.id, actorLabel: `staff:${user.name}`, action: "staff.sign_in", entity: "user", entityId: user.id, createdAt: now });
   return { token, expiresAt };
@@ -144,7 +146,7 @@ export async function switchOutlet(token: string | null | undefined, outletId: s
   if (!target) throw new AppError("forbidden", "You don't have access to that outlet.");
   const scope = { tenantId: staff.tenantId, outletId: target.id };
   const fresh = randomBytes(32).toString("base64url");
-  const expiresAt = new Date(now.getTime() + STAFF_SESSION_HOURS * 3600_000);
+  const expiresAt = new Date(now.getTime() + STAFF_SESSION_SECONDS * 1000);
   await db.transaction(async (tx) => {
     await tx.insert(s.staffSessions).values({ id: uuidv7(), tenantId: scope.tenantId, userId: staff.userId, outletId: scope.outletId, tokenHash: hashToken(fresh), createdAt: now, expiresAt, lastSeenAt: now });
     await tx.update(s.staffSessions).set({ revokedAt: now }).where(and(eq(s.staffSessions.tenantId, staff.tenantId), eq(s.staffSessions.id, staff.sessionId)));

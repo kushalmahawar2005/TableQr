@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { homeFor } from "@/lib/console-nav";
 import { AppError } from "@/server/errors";
-import { STAFF_COOKIE, STAFF_SESSION_HOURS, resolveStaff, signInStaff, signOutStaff } from "@/server/staff/auth";
+import { STAFF_COOKIE, STAFF_SESSION_SECONDS, resolveStaff, signInStaff, signOutStaff } from "@/server/staff/auth";
 
 export type SignInState = { error: string | null; outlet: string; phone: string };
 
@@ -19,7 +19,7 @@ export async function signInAction(_prev: SignInState, form: FormData): Promise<
     if (!staff) throw new Error("Unable to resolve staff account.");
     destination = homeFor(staff);
     const jar = await cookies();
-    jar.set(STAFF_COOKIE, token, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: STAFF_SESSION_HOURS * 3600 });
+    jar.set(STAFF_COOKIE, token, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: STAFF_SESSION_SECONDS });
     // Not secret: saves typing the outlet code on this tablet next time
     jar.set(OUTLET_COOKIE, outlet, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 365 * 86400 });
   } catch (err) {

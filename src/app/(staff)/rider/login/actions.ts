@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { RIDER_COOKIE, RIDER_OUTLET_COOKIE } from "@/server/staff/rider-request";
 import { AppError } from "@/server/errors";
-import { STAFF_SESSION_HOURS, resolveStaff, signInStaff, signOutStaff } from "@/server/staff/auth";
+import { STAFF_SESSION_SECONDS, resolveStaff, signInStaff, signOutStaff } from "@/server/staff/auth";
 
 export type RiderSignInState = { error: string | null; outlet: string; phone: string };
 
@@ -23,7 +23,7 @@ export async function signInRiderAction(_previous: RiderSignInState, form: FormD
       return { error: "This account isn't assigned to the Rider role. Ask the restaurant owner.", outlet, phone };
     }
     await signOutStaff(jar.get(RIDER_COOKIE)?.value);
-    jar.set(RIDER_COOKIE, token, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: STAFF_SESSION_HOURS * 3600 });
+    jar.set(RIDER_COOKIE, token, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: STAFF_SESSION_SECONDS });
     jar.set(OUTLET_COOKIE, outlet, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 365 * 86400 });
   } catch (error) {
     return { error: error instanceof AppError ? error.message : "Sign-in didn't go through. Try again.", outlet, phone };
