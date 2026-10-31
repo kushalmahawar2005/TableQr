@@ -1,8 +1,9 @@
 import "server-only";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { uuidv7 } from "@/db/id";
 import * as s from "@/db/schema";
+import { clearMenuCache } from "../guest/menu";
 import { LOCK_THEN_READ } from "../db-types";
 import { AppError } from "../errors";
 import { lockSession, loadBillInputs, syncBill } from "../billing/bill";
@@ -81,24 +82,37 @@ export async function changeWaiterLine(staff:StaffSession,input:{sessionId:strin
     if(!candidate) throw new AppError("not_found","Item not found at this table.");
     await lockOrder(tx,staff.tenantId,staff.outletId,candidate.orderId);
     const [line]=await tx.select().from(s.orderLines).where(and(eq(s.orderLines.tenantId,staff.tenantId),eq(s.orderLines.id,input.lineId))).for("update");
-    if(!moving && line.status === "voided") return {orderId:line.orderId};
+    if(!moving && line.status === "voided") return {orderId:line.orderId, itemId:null as string|null, portionsRestored:false};
     if(["cancelled","voided"].includes(line.status)) throw new AppError("invalid_state","This item is no longer active.");
     const inputs=await loadBillInputs(tx,scope);
     const owners=new Set([line.participantId,...(line.sharedWith??[]),input.destinationId]);
     const affected=inputs.shares.filter(sh=>inputs.bill?.splitMode !== "my_items" || owners.has(sh.participantId));
     if(affected.some(sh=>sh.frozenAt || sh.paidPaise>0) || inputs.people.some(p=>owners.has(p.id)&&p.paidOutAt)) throw new AppError("invalid_state",moving ? "A paid or frozen share cannot be moved." : "Manager action required");
     if(inputs.payments.some(p=>["initiated","pending"].includes(p.status)&&p.allocations.some(a=>affected.some(sh=>sh.id===a.shareId)))) throw new AppError("invalid_state","An online payment is still pending or being checked.");
+    let itemId:string|null=null;
+    let portionsRestored=false;
     if(moving) {
       if(!inputs.people.some(p=>p.id===input.destinationId&&!p.removedAt&&!p.paidOutAt)) throw new AppError("invalid_state","Choose an active diner at this table.");
       await tx.update(s.orderLines).set({participantId:input.destinationId!,sharedWith:null}).where(and(eq(s.orderLines.tenantId,staff.tenantId),eq(s.orderLines.id,line.id)));
     } else {
       if(line.status !== "placed"&&!approverUserId) throw new AppError("forbidden","Manager PIN required for an accepted item.");
       await tx.update(s.orderLines).set({status:"voided",voidedAt:now,voidedByUserId:staff.userId,voidReason:input.reason!.trim().slice(0,200)}).where(and(eq(s.orderLines.tenantId,staff.tenantId),eq(s.orderLines.id,line.id)));
+      // Ordering reserves finite portions. Release that reservation exactly once when a line is
+      // voided; the line lock and the early return above make repeated void requests harmless.
+      const [restored] = !line.itemId ? [{ affectedRows: 0 }] : await tx.update(s.outletItemOverrides)
+        .set({portionsLeft:sql`${s.outletItemOverrides.portionsLeft} + ${line.qty}`})
+        .where(and(eq(s.outletItemOverrides.tenantId,staff.tenantId),eq(s.outletItemOverrides.outletId,staff.outletId),eq(s.outletItemOverrides.itemId,line.itemId),sql`${s.outletItemOverrides.portionsLeft} IS NOT NULL`));
+      itemId=line.itemId;
+      portionsRestored=restored.affectedRows>0;
       await syncTickets(tx,staff.tenantId,line.orderId,now);await syncOrderStatus(tx,staff.tenantId,line.orderId,now);
     }
     await syncBill(tx,scope,now);
     await audit(tx,staff,{action:moving?"waiter.item_moved":"waiter.item_voided",entity:"order_line",entityId:line.id,before:{participantId:line.participantId,sharedWith:line.sharedWith,status:line.status},after:{participantId:input.destinationId??line.participantId,approverUserId},reason:input.reason,now});
-    return {orderId:line.orderId};
+    return {orderId:line.orderId,itemId,portionsRestored};
   },LOCK_THEN_READ);
   announceBill(scope,undefined,[{topic:topics.session(input.sessionId),type:"order.status"},...(!moving?[{topic:topics.kitchen,type:"ticket.updated",data:{orderId:result.orderId}}]:[])]);
+  if(result.portionsRestored&&result.itemId) {
+    clearMenuCache(staff.tenantId);
+    await publish(staff,[{topic:topics.menu,type:"item.availability",data:{itemId:result.itemId}}]);
+  }
 }

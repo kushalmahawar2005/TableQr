@@ -20,6 +20,12 @@ const MANAGER = { outletCode: "SRJ01", phone: "9000000002", pin: "2222" };
 
 beforeAll(async () => {
   env = await resetTestDb();
+  await env.db.insert(s.outletItemOverrides).values({
+    tenantId: env.demo.tenantId,
+    outletId: env.demo.outletId,
+    itemId: env.demo.itemIds["Paneer Tikka"],
+    portionsLeft: 5,
+  }).onDuplicateKeyUpdate({ set: { portionsLeft: 5 } });
   const { participantId } = await startOrJoinTable({ outletCode: "SRJ01", shortCode: "k7Qm", deviceId: "cancel-guest", displayName: "Aarav" });
   const guest = await attachVerifiedTestGuest(appDb, await getGuestContext("SRJ01", "k7Qm", participantId, "cancel-guest"), "Aarav");
   await addCartLine(guest, { itemId: env.demo.itemIds["Paneer Tikka"], qty: 2 });
@@ -40,6 +46,12 @@ describe("cancel from the kitchen", () => {
     for (const t of tickets) await kdsAccept(expo, t.id);
     const lines = await env.db.select().from(s.orderLines).where(eq(s.orderLines.orderId, orderId));
     const paneer = lines.find((l) => l.nameEn === "Paneer Tikka")!;
+    const portionCount = async () => {
+      const [row] = await env.db.select({ left: s.outletItemOverrides.portionsLeft }).from(s.outletItemOverrides)
+        .where(eq(s.outletItemOverrides.itemId, env.demo.itemIds["Paneer Tikka"]));
+      return row.left;
+    };
+    expect(await portionCount()).toBe(3);
 
     // A waiter's PIN is not enough, and a reason is required
     const refused = await kdsCancelLine(expo, { lineId: paneer.id, reason: "Guest left", phone: "9000000005", pin: "5555" }).then(() => null, (e: unknown) => e);
@@ -51,6 +63,9 @@ describe("cancel from the kitchen", () => {
     const [after] = await env.db.select().from(s.orderLines).where(eq(s.orderLines.id, paneer.id));
     expect(after.status).toBe("voided");
     expect(after.voidReason).toBe("Kitchen: Guest left");
+    expect(await portionCount()).toBe(5);
+    await kdsCancelLine(expo, { lineId: paneer.id, reason: "Guest left", phone: MANAGER.phone, pin: MANAGER.pin });
+    expect(await portionCount()).toBe(5);
     const [bill] = await env.db.select().from(s.bills).where(eq(s.bills.sessionId, paneer.sessionId));
     const cola = lines.find((l) => l.nameEn === "Cola")!;
     expect(bill.subtotalPaise).toBe(cola.unitPricePaise * cola.qty);
