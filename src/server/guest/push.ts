@@ -30,7 +30,7 @@ const TEXT: Record<DeliveryNotice, (outlet: string, rider: string | null) => { t
   dispatched: (o, r) => ({ title: `${o}: on the way 🛵`, body: r ? `${r} is bringing your food. Tap to track.` : "Your food is on the way. Tap to track." }),
   delivered: (o) => ({ title: `${o}: delivered`, body: "Enjoy your meal! Thank you for ordering." }),
   collected: (o) => ({ title: `${o}: pickup complete`, body: "Your order has been collected. Enjoy your meal!" }),
-  cancelled: (o) => ({ title: `${o}: order cancelled`, body: "Your delivery was cancelled. Anything you paid is refunded." }),
+  cancelled: (o) => ({ title: `${o}: order cancelled`, body: "Your delivery was cancelled. Open your order page for payment updates." }),
 };
 
 const PICKUP_TEXT: Record<DeliveryNotice, (outlet: string) => { title: string; body: string }> = {
@@ -38,7 +38,7 @@ const PICKUP_TEXT: Record<DeliveryNotice, (outlet: string) => { title: string; b
   dispatched: (o) => ({ title: `${o}: pickup order update`, body: "Your pickup order is being prepared. We will let you know when it is ready." }),
   delivered: (o) => ({ title: `${o}: pickup complete`, body: "Your pickup order has been collected. Enjoy your meal!" }),
   collected: (o) => ({ title: `${o}: pickup complete`, body: "Your pickup order has been collected. Enjoy your meal!" }),
-  cancelled: (o) => ({ title: `${o}: pickup order cancelled`, body: "Your pickup order was cancelled. Anything you paid is refunded." }),
+  cancelled: (o) => ({ title: `${o}: pickup order cancelled`, body: "Your pickup order was cancelled. Open your order page for payment updates." }),
 };
 
 /** Tells the customer's phone(s) what happened to their delivery. Never throws. */
