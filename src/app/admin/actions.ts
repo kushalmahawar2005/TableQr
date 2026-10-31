@@ -543,6 +543,7 @@ export async function resetOwnerPinAction(tenantId: string, pin: string): Promis
 
 export async function getTenantDetailAction(tenantId: string): Promise<{ detail: TenantDetail | null; error: string | null }> {
   try {
+    await requirePlatformAdmin();
     return { detail: await getTenantDetail(tenantId), error: null };
   } catch (error) {
     return { detail: null, error: friendlyError(error, "Tenant details could not be loaded.") };
@@ -598,6 +599,7 @@ export async function savePlanAction(input: PlanInput, mode: "create" | "edit"):
 
 export async function getAnalyticsAction(range: AnalyticsRange): Promise<{ data: AnalyticsData | null; error: string | null }> {
   try {
+    await requirePlatformAdmin();
     return { data: await getAnalyticsData(range), error: null };
   } catch (error) {
     return { data: null, error: friendlyError(error, "Analytics could not be loaded.") };
@@ -606,6 +608,7 @@ export async function getAnalyticsAction(range: AnalyticsRange): Promise<{ data:
 
 export async function getAuditAction(): Promise<{ data: AuditData | null; error: string | null }> {
   try {
+    await requirePlatformAdmin();
     return { data: await getAuditData(), error: null };
   } catch (error) {
     return { data: null, error: friendlyError(error, "Audit log could not be loaded.") };
@@ -614,6 +617,7 @@ export async function getAuditAction(): Promise<{ data: AuditData | null; error:
 
 export async function getSettingsAction(): Promise<{ data: SettingsData | null; error: string | null }> {
   try {
+    await requirePlatformAdmin();
     return { data: await getSettingsData(), error: null };
   } catch (error) {
     return { data: null, error: friendlyError(error, "Settings could not be loaded.") };
@@ -632,6 +636,7 @@ export async function checkRealtimeAction(): Promise<{ data: RealtimeCheck | nul
 
 export async function getCommercialAction(tenantId: string) {
   try {
+    await requirePlatformAdmin();
     const { commercialFor } = await import("@/server/admin/commercial");
     return { data: await commercialFor(tenantId), error: null };
   } catch (error) { return { data: null, error: friendlyError(error, "Could not load subscription settings.") }; }
