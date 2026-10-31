@@ -33,5 +33,5 @@ export default async function RestaurantPage(props: { params: Promise<{ outlet: 
     try { menu = await deliveryMenu(outlet, mode); } catch (error) { if (!(error instanceof AppError)) throw error; }
     if(menu) return <DeliveryScreen key={mode} outletCode={outlet} data={{ ...menu, outlet: { ...menu.outlet, name: data.outlet.name } }} initialServiceMode={mode} installable={app ? { name: app.name, logoUrl: app.logoUrl } : null} hindi={parseLang(jar.get(LANG_COOKIE)?.value) === "hi"} />;
   }
-  return <RestaurantHome data={data} initialLang={parseLang(jar.get(LANG_COOKIE)?.value)} installable={app ? { name: app.name, logoUrl: app.logoUrl } : null} />;
+  return <RestaurantHome data={data} installable={app ? { name: app.name, logoUrl: app.logoUrl } : null} />;
 }
