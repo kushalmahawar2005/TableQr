@@ -1,3 +1,5 @@
+import type { Instrumentation } from "next";
+
 // Runs once when a server instance starts, before it takes requests: bring the database up to what
 // this release needs (see src/server/ensure-schema.ts). A failure is logged, never fatal, so a
 // database hiccup at boot does not keep the site down.
@@ -30,3 +32,31 @@ export async function register() {
     }
   })();
 }
+
+/**
+ * Keep enough detail to match a production error to its route and database error code without
+ * logging request URLs, headers, SQL, or bound values (which may contain tenant data or tokens).
+ */
+export const onRequestError: Instrumentation.onRequestError = (error, request, context) => {
+  const details: Record<string, string | number> = {
+    method: request.method,
+    route: context.routePath,
+    routeType: context.routeType,
+    renderSource: context.renderSource ?? "unknown",
+  };
+  const seen = new Set<object>();
+  let current: unknown = error;
+
+  for (let depth = 0; depth < 4 && current && typeof current === "object" && !seen.has(current); depth++) {
+    seen.add(current);
+    const value = current as Record<string, unknown>;
+    if (depth === 0 && typeof value.digest === "string") details.digest = value.digest.slice(0, 100);
+    if (!details.errorName && typeof value.name === "string") details.errorName = value.name.slice(0, 80);
+    if (!details.errorCode && typeof value.code === "string" && /^[A-Z0-9_]{1,40}$/.test(value.code)) details.errorCode = value.code;
+    if (!details.errorNumber && typeof value.errno === "number") details.errorNumber = value.errno;
+    if (!details.sqlState && typeof value.sqlState === "string" && /^[A-Z0-9]{5}$/.test(value.sqlState)) details.sqlState = value.sqlState;
+    current = value.cause;
+  }
+
+  console.error("[request-error]", JSON.stringify(details));
+};
