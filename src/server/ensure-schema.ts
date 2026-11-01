@@ -472,6 +472,12 @@ const STEPS: Step[] = [
       await addColumn(db, "table_sessions", "staff_confirmed_at", "datetime(3)");
     },
   },
+  {
+    tag: "0080_fast_caretaker", when: 1793516989298, hash: "477db5fda2ff1c75fcc2350609a1fa68ea9b8a8b91f1e1814c5f6ba4097ac1fd",
+    apply: async (db) => {
+      await addColumn(db, "outlets", "confirm_first_table_order", "boolean DEFAULT true NOT NULL");
+    },
+  },
 ];
 
 /** drizzle/0015, the last migration before these steps */

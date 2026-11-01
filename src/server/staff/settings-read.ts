@@ -23,7 +23,7 @@ export type OutletSettings = {
   guestOnlinePaymentAvailable: boolean; bookingGatewayAvailable: boolean;
   paymentGateway: Awaited<ReturnType<typeof outletPaymentGatewayStatus>>;
   name: string; code: string; city: string; address: string; gstin: string | null; fssai: string | null; timezone: string; logoUrl: string | null;
-  sessionMode: string; autoAcceptOrders: boolean; guestOnlinePayments: boolean; serviceChargeBp: number; tipPresetsBp: number[] | null; reviewUrl: string | null;
+  sessionMode: string; autoAcceptOrders: boolean; confirmFirstTableOrder: boolean; guestOnlinePayments: boolean; serviceChargeBp: number; tipPresetsBp: number[] | null; reviewUrl: string | null;
   guestPwaInstallEnabled: boolean; guestPwaCustomizationAvailable: boolean;
   openingHours: Record<string, [string, string][]> | null;
   roomServices: RoomRequestKind[]; wifiSsid: string; wifiPassword: string;
@@ -63,7 +63,7 @@ export async function getOutletSettings(staff: Staff): Promise<OutletSettings> {
     deliveryPolicy: outlet.deliveryPolicy ? readDeliveryPolicy(outlet.deliveryPolicy) : { ...readDeliveryPolicy(null), paymentMode: paymentGateway.configured && paymentGateway.available ? "gateway" : "cod" }, deliveryAvailable: features.delivery && BUSINESS_PACKAGE_PROFILES[businessType].delivery, pickupAvailable: features.delivery && BUSINESS_PACKAGE_PROFILES[businessType].pickup,
     guestOnlinePaymentAvailable: paymentGateway.available, bookingGatewayAvailable: paymentGateway.available, paymentGateway,
     name: outlet.name, code: outlet.code, city: outlet.city, address: outlet.address, gstin: outlet.gstin, fssai: outlet.fssai, timezone: outlet.timezone, logoUrl: brand?.logoUrl ?? null,
-    sessionMode: outlet.sessionMode, autoAcceptOrders: outlet.autoAcceptOrders, guestOnlinePayments: outlet.guestOnlinePayments, guestPwaInstallEnabled: outlet.guestPwaInstallEnabled, guestPwaCustomizationAvailable: features.guestPwaCustomization && (features.delivery || features.reservations), serviceChargeBp: outlet.serviceChargeBp, tipPresetsBp: outlet.tipPresetsBp,
+    sessionMode: outlet.sessionMode, autoAcceptOrders: outlet.autoAcceptOrders, confirmFirstTableOrder: outlet.confirmFirstTableOrder, guestOnlinePayments: outlet.guestOnlinePayments, guestPwaInstallEnabled: outlet.guestPwaInstallEnabled, guestPwaCustomizationAvailable: features.guestPwaCustomization && (features.delivery || features.reservations), serviceChargeBp: outlet.serviceChargeBp, tipPresetsBp: outlet.tipPresetsBp,
     reviewUrl: outlet.reviewUrl, openingHours: outlet.openingHours, tables: Number(tables.n), staff: Number(team.n), plan: plan?.name ?? "",
     roomServices: configuredRoomRequestKinds(outlet.roomServices), wifiSsid: outlet.wifiSsid ?? "", wifiPassword: outlet.wifiPassword ?? "",
     // Stored guest toggles can outlive a category/package change. Only return services this

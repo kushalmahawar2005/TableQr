@@ -132,6 +132,7 @@ beforeAll(async () => {
     const itemId = await saveMenuItem(owner, { categoryId: categoryId!, nameEn: x.item, pricePaise: 20000, isVeg: true, prepMinutes: 10, station: "Kitchen" });
     const member = await seedWaiter(db, made.tenantId, made.outletId, x.member, x.memberPhone, "4444");
 
+    await db.update(s.outlets).set({ confirmFirstTableOrder: false }).where(eq(s.outlets.id, made.outletId));
     // A guest scans this restaurant's table, orders and the bill is paid at the counter
     const deviceId = `iso-guest-${x.key}`;
     const { participantId } = await startOrJoinTable({ outletCode: x.code, shortCode: made.tableQr, deviceId, displayName: `${x.key} Guest` });

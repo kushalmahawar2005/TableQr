@@ -52,7 +52,7 @@ const en = {
 
   failed: "Couldn't place your order. Your cart is safe. Try again.",
   capTitle: "This is a large first order.",
-  ctaAwaitingStaff: "Waiter is confirming your table…",
+  ctaAwaitingStaff: "Order placed · waiter is confirming",
   askStaff: "Please ask a staff member to take your order.",
   capBody: "Please ask your waiter to confirm it.",
   itemsChanged: "Some items just became unavailable. Remove them to order.",
@@ -125,7 +125,7 @@ const hi: G5Copy = {
 
   failed: "ऑर्डर नहीं जा सका। आपका कार्ट सुरक्षित है। फिर से कोशिश करें।",
   capTitle: "यह बड़ा पहला ऑर्डर है।",
-  ctaAwaitingStaff: "वेटर आपकी टेबल कन्फ़र्म कर रहा है…",
+  ctaAwaitingStaff: "ऑर्डर हो गया · वेटर कन्फ़र्म कर रहा है",
   askStaff: "कृपया स्टाफ़ से ऑर्डर लेने को कहें।",
   capBody: "कृपया अपने वेटर से इसे कन्फ़र्म करवाएँ।",
   itemsChanged: "कुछ आइटम अभी उपलब्ध नहीं रहे। ऑर्डर के लिए उन्हें हटाएँ।",

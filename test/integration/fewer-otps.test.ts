@@ -173,6 +173,31 @@ describe("a returning guest at a table", () => {
   });
 });
 
+describe("the first order of every guest-opened table", () => {
+  it("waits for staff after a fresh code, and then the rest of the table orders freely", async () => {
+    await env.db.update(s.outlets).set({ confirmFirstTableOrder: true }).where(eq(s.outlets.id, env.demo.outletId));
+    const device = "checked-first-timer", shortCode = env.demo.tableQr.T8;
+    const sent = await sendCode({ outletCode: "SRJ01", shortCode, deviceId: device, country: "IN", phone: "9876501008" });
+    if (!sent.ok) throw new Error(sent.error);
+    await verifyCode({ outletCode: "SRJ01", shortCode, deviceId: device, challengeId: sent.challengeId, code: (sent as typeof sent & { devCode: string }).devCode, name: "Aarav", consent: false });
+    const seat = await startOrJoinTable({ outletCode: "SRJ01", shortCode, deviceId: device });
+    const ctx = await getGuestContext("SRJ01", shortCode, seat.participantId, device);
+    await addConfiguredLine(ctx, { itemId: env.demo.itemIds.Cola, qty: 1, modifierIds: [] });
+    await expect(placeOrder(ctx, {})).rejects.toMatchObject({ code: "needs_table_confirmation" });
+    await requestTableConfirmation(ctx, { requestId: "checked-1" });
+
+    const [request] = await env.db.select().from(s.serviceRequests).where(and(eq(s.serviceRequests.sessionId, seat.sessionId), eq(s.serviceRequests.kind, "confirm_order")));
+    await completeServiceRequest({ tenantId: env.demo.tenantId, outletId: env.demo.outletId, userId: env.demo.staffIds.owner }, request.id);
+    expect(await env.db.select({ id: s.orders.id }).from(s.orders).where(eq(s.orders.sessionId, seat.sessionId))).toHaveLength(1);
+
+    await startOrJoinTable({ outletCode: "SRJ01", shortCode, deviceId: device });
+    await addConfiguredLine(ctx, { itemId: env.demo.itemIds.Cola, qty: 1, modifierIds: [] });
+    await placeOrder(ctx, {});
+    expect(await env.db.select({ id: s.orders.id }).from(s.orders).where(eq(s.orders.sessionId, seat.sessionId))).toHaveLength(2);
+    await env.db.update(s.outlets).set({ confirmFirstTableOrder: false }).where(eq(s.outlets.id, env.demo.outletId));
+  });
+});
+
 describe("cash limits", () => {
   it("limits a new customer's first cash order and refuses a blocked number", async () => {
     const device = "cash-limit-device";

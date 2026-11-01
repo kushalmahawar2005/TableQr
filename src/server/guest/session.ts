@@ -77,9 +77,11 @@ async function seat(input: SeatInput): Promise<Seated | { refused: JoinCodeRefus
     const recent = !stay ? await findRecentVerification(tx, tenantId, input.deviceId, now) : null;
     const verified = recent ?? (stay ? null : input.customer ?? null);
     // A sign-in lasts months and can order from anywhere, so it does not prove this phone is here.
-    const needsStaffCheck = !!input.customer && !recent && !stay && (!open || !await tableIsTrusted(tx, tenantId, open.session.id, open.session, now));
-    if (open && (needsStaffCheck || (recent && open.session.needsStaffCheck))) {
-      await tx.update(s.tableSessions).set({ needsStaffCheck }).where(and(eq(s.tableSessions.tenantId, tenantId), eq(s.tableSessions.id, open.session.id)));
+    const signInOnly = !!input.customer && !recent && !stay && (!open || !await tableIsTrusted(tx, tenantId, open.session.id, open.session, now));
+    // A code proves the phone, not the table, so the first order of a guest-opened table waits for staff.
+    const checkEveryTable = t.outlet.confirmFirstTableOrder && !stay && t.outlet.sessionMode !== "host_confirmed";
+    if (open && (signInOnly || (recent && open.session.needsStaffCheck && !checkEveryTable))) {
+      await tx.update(s.tableSessions).set({ needsStaffCheck: signInOnly }).where(and(eq(s.tableSessions.tenantId, tenantId), eq(s.tableSessions.id, open.session.id)));
     }
 
     const existing = open?.people.find((p) => p.deviceId === input.deviceId);
@@ -139,7 +141,7 @@ async function seat(input: SeatInput): Promise<Seated | { refused: JoinCodeRefus
         tableId: t.table.id,
         waiterUserId: await shiftWaiterId(tx, { tenantId, outletId: t.outlet.id }, t.table.id, now),
         mode: t.outlet.sessionMode,
-        needsStaffCheck,
+        needsStaffCheck: signInOnly || checkEveryTable,
         openKey: t.table.id,
         openedAt: now,
         lastActivityAt: now,

@@ -21,6 +21,8 @@ export async function resetTestDb() {
   const { adminId } = await seedPlatform(db);
   const demo = await seedDemo(db, { adminId, openAllDay: true });
   const other = await seedOtherTenant(db);
+  // Order tests start from a confirmed table; the table check has its own tests.
+  await db.update(schema.outlets).set({ confirmFirstTableOrder: false });
   return { conn, db, demo, other };
 }
 

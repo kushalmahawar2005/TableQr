@@ -21,7 +21,7 @@ const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
 export type SettingsPatch = {
   deliveryPolicy?: DeliveryPolicy;
   city: string; address: string; gstin: string; fssai: string;
-  serviceChargeBp: number; tipPresetsBp: number[] | null; autoAcceptOrders: boolean; guestOnlinePayments?: boolean; guestPwaInstallEnabled?: boolean; reviewUrl: string;
+  serviceChargeBp: number; tipPresetsBp: number[] | null; autoAcceptOrders: boolean; confirmFirstTableOrder?: boolean; guestOnlinePayments?: boolean; guestPwaInstallEnabled?: boolean; reviewUrl: string;
   openingHours: Record<string, [string, string][]> | null;
   roomServices: RoomRequestKind[]; wifiSsid: string; wifiPassword: string;
   guestServices?: GuestService[];
@@ -107,7 +107,7 @@ export async function updateOutletSettings(staff: Staff, input: SettingsPatch, n
     const announcementWillBeActive = input.announcementActive ?? before.announcementActive;
     const guestPwaInstallEnabled = input.guestPwaInstallEnabled ?? before.guestPwaInstallEnabled;
     if (announcementWillBeActive && (!savedAnnouncementTitle || !savedAnnouncementBody)) throw bad("Add a title and message before publishing the announcement.");
-    const next = { city, address, gstin: gstin || null, fssai: fssai || null, serviceChargeBp: sc, tipPresetsBp: tips, autoAcceptOrders: !!input.autoAcceptOrders, guestOnlinePayments: input.guestOnlinePayments ?? before.guestOnlinePayments, reviewUrl: reviewUrl || null, openingHours: hours, roomServices, wifiSsid: wifiSsid || null, wifiPassword: wifiPassword || null, announcementActive: announcementWillBeActive, announcementTitle: savedAnnouncementTitle, announcementBody: savedAnnouncementBody };
+    const next = { city, address, gstin: gstin || null, fssai: fssai || null, serviceChargeBp: sc, tipPresetsBp: tips, autoAcceptOrders: !!input.autoAcceptOrders, confirmFirstTableOrder: input.confirmFirstTableOrder !== false, guestOnlinePayments: input.guestOnlinePayments ?? before.guestOnlinePayments, reviewUrl: reviewUrl || null, openingHours: hours, roomServices, wifiSsid: wifiSsid || null, wifiPassword: wifiPassword || null, announcementActive: announcementWillBeActive, announcementTitle: savedAnnouncementTitle, announcementBody: savedAnnouncementBody };
     const nextGuestServices = input.guestServices === undefined ? before.guestServices : input.guestServices.filter(service => allowedFeatures[service]);
     const bookingPaymentMode = input.bookingPaymentMode ?? before.bookingPaymentMode;
     const onlinePayments = input.guestOnlinePayments ?? before.guestOnlinePayments;

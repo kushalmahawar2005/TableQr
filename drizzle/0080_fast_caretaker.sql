@@ -1,0 +1,1 @@
+ALTER TABLE `outlets` ADD `confirm_first_table_order` boolean DEFAULT true NOT NULL;

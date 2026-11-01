@@ -98,6 +98,7 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
   const [tips, setTips] = useState<number[]>(o.tipPresetsBp?.length ? o.tipPresetsBp.map((b) => b / 100) : [5, 10]);
   const [deliveryPolicy, setDeliveryPolicy] = useState(o.deliveryPolicy);
   const [auto, setAuto] = useState(o.autoAcceptOrders);
+  const [confirmFirst, setConfirmFirst] = useState(o.confirmFirstTableOrder);
   const [guestOnlinePayments, setGuestOnlinePayments] = useState(o.guestOnlinePayments);
   const [guestPwaInstallEnabled, setGuestPwaInstallEnabled] = useState(o.guestPwaInstallEnabled);
   const showGuestAppInstall = o.guestPwaCustomizationAvailable || guestPwaInstallEnabled;
@@ -128,7 +129,7 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
   const [logoMessage, setLogoMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
   // What is on screen against what was last saved, so the save bar can say if anything changed
-  const snapshot = JSON.stringify({ city, address, gstin, fssai, sc, tips, auto, guestOnlinePayments, guestPwaInstallEnabled, publicServices, announcementActive, announcementTitle, announcementBody, bookingPaymentMode, bookingAdvance, deliveryPolicy, review, roomServices, wifiSsid, wifiPassword, hours: hoursOn ? hours : null });
+  const snapshot = JSON.stringify({ city, address, gstin, fssai, sc, tips, auto, confirmFirst, guestOnlinePayments, guestPwaInstallEnabled, publicServices, announcementActive, announcementTitle, announcementBody, bookingPaymentMode, bookingAdvance, deliveryPolicy, review, roomServices, wifiSsid, wifiPassword, hours: hoursOn ? hours : null });
   const [savedSnapshot, setSavedSnapshot] = useState(snapshot);
   const dirty = snapshot !== savedSnapshot;
 
@@ -256,7 +257,7 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
         city, address, gstin, fssai,
         serviceChargeBp: Math.round(scNum * 100),
         tipPresetsBp: tips.map((t) => Math.round(t * 100)),
-        autoAcceptOrders: auto, guestOnlinePayments, guestPwaInstallEnabled, reviewUrl: review, roomServices, wifiSsid, wifiPassword,
+        autoAcceptOrders: auto, confirmFirstTableOrder: confirmFirst, guestOnlinePayments, guestPwaInstallEnabled, reviewUrl: review, roomServices, wifiSsid, wifiPassword,
         guestServices: publicServices,
         announcementActive, announcementTitle, announcementBody,
         bookingPaymentMode,
@@ -372,6 +373,9 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
           <Section id="orders" icon={ClipboardList} title="Orders" desc="How new orders reach the kitchen.">
             <Row label="Accept orders automatically" hint={auto ? "Orders go straight to the kitchen." : "Staff accept each order first."}>
               <div className="flex sm:justify-end"><Toggle on={auto} onChange={setAuto} label="Accept orders automatically" disabled={!canEdit} /></div>
+            </Row>
+            <Row label="Check the table before the first order" hint={confirmFirst ? "The waiter or dashboard confirms the guest is at the table, then the order reaches the kitchen." : "Only returning guests who skipped the code are checked."}>
+              <div className="flex sm:justify-end"><Toggle on={confirmFirst} onChange={setConfirmFirst} label="Check the table before the first order" disabled={!canEdit} /></div>
             </Row>
             <Row label="Guest online payments" hint={!o.guestOnlinePaymentAvailable ? "No business payment gateway is connected yet. Counter payment stays available; online checkout cannot be enabled." : guestOnlinePayments ? "Guests can pay their bill online." : "Guests will request payment at the counter; online checkout is hidden."}>
               <div className="flex sm:justify-end"><Toggle on={guestOnlinePayments} onChange={setGuestOnlinePayments} label="Allow guests to pay online" disabled={!canEdit || (!o.guestOnlinePaymentAvailable && !guestOnlinePayments)} /></div>

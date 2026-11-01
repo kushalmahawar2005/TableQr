@@ -177,6 +177,8 @@ export const outlets = mysqlTable(
     openingHours: json("opening_hours").$type<Record<string, [string, string][]>>(),
     sessionMode: mysqlEnum("session_mode", sessionModes).notNull().default("open"),
     autoAcceptOrders: boolean("auto_accept_orders").notNull().default(false),
+    /** Staff check a guest-opened table before its first order reaches the kitchen */
+    confirmFirstTableOrder: boolean("confirm_first_table_order").notNull().default(true),
     /** Inventory: a dish goes sold out by itself when an ingredient in its recipe runs out */
     stockSoldOut: boolean("stock_sold_out").notNull().default(false),
     /** Owner can disable guest gateway checkout and collect every bill at the counter instead. */

@@ -39,6 +39,7 @@ async function resolveQr(run: Runner, outletCode: string, shortCode: string) {
         accentColor: s.outlets.accentColor,
         sessionMode: s.outlets.sessionMode,
         autoAcceptOrders: s.outlets.autoAcceptOrders,
+        confirmFirstTableOrder: s.outlets.confirmFirstTableOrder,
         newSessionCapPaise: s.outlets.newSessionCapPaise,
         soldOutDisplay: s.outlets.soldOutDisplay,
       },

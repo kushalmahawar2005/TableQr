@@ -16,9 +16,8 @@ import { sendOutletPush } from "../staff/web-push";
 import type { GuestContext } from "./context";
 import { placeOrder } from "./order";
 
-// A code proves the phone, not that its owner is at the table. A saved link and a long sign-in could
-// order from home, so a table is trusted only once someone proved they are here: a code just
-// verified on a phone at the table, staff seating the party, or staff confirming the request.
+// A code proves the phone, not that its owner is at the table, and a saved link can order from home.
+// Staff check a guest-opened table once; the cart waits here and reaches the kitchen on their accept.
 
 type TrustedSession = { source: string; mode: string; openedByUserId: string | null; staffConfirmedAt: Date | null };
 
