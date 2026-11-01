@@ -59,7 +59,7 @@ export function WaiterScreen({
   const [seatFor, setSeatFor] = useState<{ id: string; label: string } | null>(null), [seatSize, setSeatSize] = useState(2);
   const [item, setItem] = useState<MenuItem | null>(initialItem), [mods, setMods] = useState<string[]>([]), [qty, setQty] = useState(1), [note, setNote] = useState(""), [sheet, setSheet] = useState<SheetState | null>(initialSheet);
   const [destination, setDestination] = useState(""), [reason, setReason] = useState(""), [phone, setPhone] = useState(""), [pin, setPin] = useState("");
-  const [method, setMethod] = useState<"cash" | "card">("cash"), [received, setReceived] = useState(""), [reference, setReference] = useState(""), [share, setShare] = useState("");
+  const [method, setMethod] = useState<"cash" | "upi">("cash"), [received, setReceived] = useState(""), [reference, setReference] = useState(""), [share, setShare] = useState("");
   const [search, setSearch] = useState(""), [dark, setDark] = useState(theme === "dark");
   // Shift status, set by the manager on the dashboard: only a waiter on duty is rung for new tasks
   const dutyRef = useRef(initial.identity.duty);
@@ -648,7 +648,7 @@ export function WaiterScreen({
                       {detail.people.map((p) => <button key={p.id} type="button" aria-pressed={share === p.id} onClick={() => { setShare(p.id); settleKey.current = null; }} className={`min-h-11 rounded-xl border px-4 text-sm font-semibold ${share === p.id ? "border-ink bg-ink text-paper" : "border-line bg-surface"}`}>{p.name}</button>)}
                     </div>
                     <div className="rounded-2xl bg-brand-soft p-4 text-center"><p className="text-sm text-muted">{L("Amount to collect", "वसूलने की राशि")}</p><p className="font-display text-4xl font-bold tabular-nums">{money(balance)}</p></div>
-                    <div className="grid grid-cols-2 gap-2">{(["cash", "card"] as const).map((m) => <button key={m} className={method === m ? primary : btn} onClick={() => { setMethod(m); settleKey.current = null; }}>{c[m]}</button>)}</div>
+                    <div className="grid grid-cols-2 gap-2">{(["cash", "upi"] as const).map((m) => <button key={m} className={method === m ? primary : btn} onClick={() => { setMethod(m); settleKey.current = null; }}>{c[m]}</button>)}</div>
                     {method === "cash" ? (
                       <div className="space-y-2">
                         <label className="text-sm font-bold" htmlFor="cash-in">{c.received}</label>

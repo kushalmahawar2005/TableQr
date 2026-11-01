@@ -11,6 +11,7 @@ import { priceLine, quoteKey, type PriceQuote } from "@/domain/pricing";
 import { connectRealtime } from "@/lib/realtime-client";
 import { usePrint } from "@/components/print/print-provider";
 import { offlinePosKotHtml } from "@/lib/pos-offline-kot";
+import { PosPayPanel } from "./pos-pay-panel";
 import type { AnyDraftLine } from "@/server/guest/order";
 import type { PosBillDetail } from "@/server/staff/pos-read";
 import type { PosTerminal } from "@/server/staff/pos-terminal";
@@ -21,7 +22,7 @@ import { approveOfflineOrderAction, billAction, newTakeawayAction, openTableActi
 
 // POS terminal, the way a counter bills: the table view first, then dishes by category with the
 // order on the right. New lines stay on this screen until they are sent to the kitchen (KOT);
-// the bill is then paid on the Billing screen, which already handles cash, card, UPI and splits.
+// the bill is paid right here in the order panel; splits and changes stay on the Billing screen.
 
 type Dish = PosTerminal["menu"][number];
 type Table = PosTerminal["tables"][number];
@@ -66,9 +67,9 @@ const queuedQuoteChanges = (order: OfflinePosOrder, menu: Dish[]) => order.lines
 const rs = (paise: number) => `₹${(paise / 100).toLocaleString("en-IN", { minimumFractionDigits: paise % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
 const focus = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand";
 const field = `h-11 w-full rounded-xl border border-line bg-surface px-3 text-body text-ink placeholder:text-muted ${focus}`;
-const primary = `inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-ink px-4 text-button font-semibold text-paper disabled:opacity-50 ${focus}`;
+const primary = `inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-forest px-4 text-button font-semibold text-white disabled:opacity-50 ${focus}`;
 const quiet = `inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-line bg-surface px-4 text-button font-semibold text-ink hover:bg-accent disabled:opacity-50 ${focus}`;
-const chip = (on: boolean) => `inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3 text-caption font-semibold ${on ? "border-brand-border bg-brand-soft text-ink" : "border-line text-muted hover:text-ink"} ${focus}`;
+const chip = (on: boolean) => `inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3 text-caption font-semibold ${on ? "border-forest bg-forest text-white" : "border-line bg-surface text-muted hover:text-ink"} ${focus}`;
 const DEAD = ["cancelled", "voided"];
 /** How long a table has been open: "45 min", "2 h 10 min", "3 days" */
 const since = (from: number, now: number, L: (en: string, h: string) => string) => {
@@ -114,6 +115,9 @@ export function PosTerminalScreen({ initial, outletId, staffUserId, canReviewOff
   const [cashReceived, setCashReceived] = useState("");
   const [draftReady, setDraftReady] = useState(false);
   const [storageWarning, setStorageWarning] = useState<string | null>(null);
+  const [storageNearlyFull, setStorageNearlyFull] = useState(false);
+  const [orderOpen, setOrderOpen] = useState(false);
+  const [paying, setPaying] = useState<PosBillDetail | null>(null);
   const [lastSyncedAt, setLastSyncedAt] = useState(initialSavedAt);
   const [message, setMessage] = useState<{ tone: "ok" | "bad"; text: string } | null>(null);
   const [now, setNow] = useState(() => Date.now());
@@ -178,6 +182,7 @@ export function PosTerminalScreen({ initial, outletId, staffUserId, canReviewOff
     void checkOfflinePosStorage().then((storage) => {
       if (!live) return;
       const nearlyFull = storage.quota && storage.usage !== null && storage.usage / storage.quota >= 0.9;
+      setStorageNearlyFull(!!nearlyFull);
       if (nearlyFull) setStorageWarning(L(`This device is nearly out of storage (${Math.max(0, Math.floor((storage.quota! - storage.usage!) / (1024 * 1024)))} MB left). Download a recovery copy and free space.`, `इस डिवाइस की स्टोरेज लगभग भर गई है (${Math.max(0, Math.floor((storage.quota! - storage.usage!) / (1024 * 1024)))} MB बची है)। रिकवरी कॉपी डाउनलोड करके जगह खाली करें।`));
       else if (!storage.supported || !storage.persistent) setStorageWarning(L("The browser may clear saved offline data. Keep a recovery copy on another device.", "ब्राउज़र सेव ऑफ़लाइन डेटा हटा सकता है। रिकवरी कॉपी किसी दूसरी जगह सुरक्षित रखें।"));
       else setStorageWarning(null);
@@ -452,6 +457,11 @@ export function PosTerminalScreen({ initial, outletId, staffUserId, canReviewOff
     void refresh();
   };
 
+  const closePay = () => {
+    setPaying(null); setCurrent(null); setDetail(null); setMessage(null);
+    void refresh();
+  };
+
   // ---- the cart
   const linePrice = (l: Line) => {
     if (l.kind === "open") return l.pricePaise * l.qty;
@@ -599,7 +609,9 @@ export function PosTerminalScreen({ initial, outletId, staffUserId, canReviewOff
           const b = await billAction(sessionId);
           if (!b.ok) return fail(b.error);
         }
-        router.push(`/console/billing?session=${encodeURIComponent(sessionId)}`);
+        const ready = await orderAction(sessionId);
+        if (ready.ok && ready.data.bill) { setPaying(ready.data); setOrderOpen(true); }
+        else router.push(`/console/billing?session=${encodeURIComponent(sessionId)}`);
         return;
       }
       setMessage({ tone: "ok", text: L(`KOT sent for ${current.takeaway ? "the takeaway" : current.code}.`, `${current.takeaway ? "पार्सल" : current.code} का KOT भेज दिया।`) });
@@ -628,6 +640,7 @@ export function PosTerminalScreen({ initial, outletId, staffUserId, canReviewOff
   const zones = data.zones;
   const tables = data.tables.filter((t) => zone === "all" || t.zoneId === zone);
   const running = data.tables.filter((t) => t.visit).length;
+  if (!current && orderOpen) setOrderOpen(false);
   const savedTime = new Intl.DateTimeFormat(hi ? "hi-IN" : "en-IN", { dateStyle: "medium", timeStyle: "short" }).format(lastSyncedAt);
 
   if (!draftReady) return <main className="grid min-h-[60dvh] place-items-center px-5 text-body text-muted">{L("Restoring this device’s POS…", "इस डिवाइस का POS वापस खोला जा रहा है…")}</main>;
@@ -636,9 +649,9 @@ export function PosTerminalScreen({ initial, outletId, staffUserId, canReviewOff
   return (
     <div className="mx-auto w-full max-w-[1600px] px-4 py-4 sm:px-6">
       {offline && <p role="status" className="mb-3 flex items-center gap-2 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-caption font-semibold text-warning"><WifiOff className="size-4" aria-hidden="true" /><span>{L(`Offline. New KOTs and eligible cash records stay on this device until sync; kitchen delivery and UPI/card confirmation need internet. Menu and tables last synced ${savedTime}.`, `ऑफ़लाइन। नए KOT और योग्य नकद रिकॉर्ड सिंक होने तक इस डिवाइस पर रहेंगे; किचन डिलीवरी और UPI/कार्ड पुष्टि के लिए इंटरनेट चाहिए। मेन्यू और टेबल आख़िरी बार ${savedTime} पर अपडेट हुए थे।`)}</span></p>}
-      {storageWarning && <p role="status" className="mb-3 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-caption font-semibold text-warning">{storageWarning}</p>}
+      {storageWarning && storageNearlyFull && <p role="status" className="mb-3 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-caption font-semibold text-warning">{storageWarning}</p>}
       <input ref={recoveryFile} type="file" accept="application/json,.json" className="hidden" onChange={importSavedOrders} aria-label={L("Choose a POS recovery copy", "POS रिकवरी कॉपी चुनें")} />
-      {queuedCount > 0 ? <div role="status" className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-caption font-semibold text-warning"><span>{L(`${queuedCount} KOT ${queuedCount === 1 ? "is" : "are"} saved here and waiting to sync.`, `${queuedCount} KOT यहाँ सेव ${queuedCount === 1 ? "है" : "हैं"} और सिंक होने की प्रतीक्षा में ${queuedCount === 1 ? "है" : "हैं"}।`)}</span><div className="flex flex-wrap gap-2"><button type="button" onClick={() => recoveryFile.current?.click()} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-warning/50 bg-surface px-3 text-ink"><FileUp className="size-4" aria-hidden="true" />{L("Restore copy", "कॉपी वापस लाएँ")}</button><button type="button" onClick={() => void exportSavedOrders()} className="min-h-9 rounded-lg border border-warning/50 bg-surface px-3 text-ink">{L("Download recovery copy", "रिकवरी कॉपी डाउनलोड करें")}</button></div></div> : <div className="mb-3 flex justify-end"><button type="button" onClick={() => recoveryFile.current?.click()} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-line bg-surface px-3 text-caption font-semibold text-ink"><FileUp className="size-4" aria-hidden="true" />{L("Restore POS recovery copy", "POS रिकवरी कॉपी वापस लाएँ")}</button></div>}
+      {queuedCount > 0 ? <div role="status" className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-caption font-semibold text-warning"><span>{L(`${queuedCount} KOT ${queuedCount === 1 ? "is" : "are"} saved here and waiting to sync.`, `${queuedCount} KOT यहाँ सेव ${queuedCount === 1 ? "है" : "हैं"} और सिंक होने की प्रतीक्षा में ${queuedCount === 1 ? "है" : "हैं"}।`)}</span><div className="flex flex-wrap gap-2"><button type="button" onClick={() => recoveryFile.current?.click()} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-warning/50 bg-surface px-3 text-ink"><FileUp className="size-4" aria-hidden="true" />{L("Restore copy", "कॉपी वापस लाएँ")}</button><button type="button" onClick={() => void exportSavedOrders()} className="min-h-9 rounded-lg border border-warning/50 bg-surface px-3 text-ink">{L("Download recovery copy", "रिकवरी कॉपी डाउनलोड करें")}</button></div></div> : null}
       {queuedOrders.map((order) => {
         const changes = queuedQuoteChanges(order, data.menu);
         const needsReview = changes.length > 0 || (!order.quote && order.lines.some((line) => "itemId" in line)) || /price|unavailable|available/i.test(order.error ?? "");
@@ -680,57 +693,62 @@ export function PosTerminalScreen({ initial, outletId, staffUserId, canReviewOff
         <TablesView
           L={L} now={now} zones={zones} zone={zone} setZone={setZone} tables={tables} running={running} total={data.tables.length}
           takeaways={data.takeaways} onTable={(t) => void pickTable(t)} onTakeaway={(t) => void pickTakeaway(t)}
+          note={storageNearlyFull ? null : storageWarning} onRestore={queuedCount > 0 ? null : () => recoveryFile.current?.click()}
         />
       ) : (
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
+        <div className="grid gap-4 lg:h-[calc(100dvh-6.5rem)] lg:min-h-[32rem] lg:grid-cols-[minmax(0,1fr)_23rem] 2xl:grid-cols-[minmax(0,1fr)_26rem]">
           {/* Menu */}
-          <section className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <button type="button" onClick={back} className={quiet}><ArrowLeft className="size-4" aria-hidden="true" />{L("Tables", "टेबल")}</button>
-              <div className="relative min-w-52 flex-1">
+          <section inert={!!paying} className={`min-h-0 min-w-0 flex-col ${orderOpen ? "hidden lg:flex" : "flex"} ${paying ? "opacity-50" : ""}`}>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={back} aria-label={L("Back to tables", "टेबल पर वापस")} className={`${quiet} shrink-0 max-sm:w-11 max-sm:px-0`}><ArrowLeft className="size-4" aria-hidden="true" /><span className="max-sm:hidden">{L("Tables", "टेबल")}</span></button>
+              <div className="relative min-w-0 flex-1">
                 <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" aria-hidden="true" />
                 <input
                   ref={searchBox} value={query} onChange={(e) => setQuery(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter" && shown[0]) { e.preventDefault(); add(shown[0]); setQuery(""); } }}
-                  placeholder={L("Search dish, Enter to add", "डिश खोजें, Enter से जोड़ें")} aria-label={L("Search the menu", "मेन्यू खोजें")} className={`${field} pl-9`}
+                  placeholder={L("Search dish", "डिश खोजें")} aria-label={L("Search the menu, press Enter to add", "मेन्यू खोजें, Enter से जोड़ें")} className={`${field} pl-9`}
                 />
               </div>
-              <button type="button" onClick={() => setTyping(true)} className={quiet}><PenLine className="size-4" aria-hidden="true" />{L("Open item", "ओपन आइटम")}</button>
+              <button type="button" onClick={() => setTyping(true)} aria-label={L("Add an item not on the menu", "मेन्यू से बाहर का आइटम जोड़ें")} className={`${quiet} shrink-0 max-sm:w-11 max-sm:px-0`}><PenLine className="size-4" aria-hidden="true" /><span className="max-sm:hidden">{L("Open item", "ओपन आइटम")}</span></button>
             </div>
 
-            <div className="mt-3 grid gap-3 md:grid-cols-[180px_minmax(0,1fr)]">
-              <nav aria-label={L("Categories", "कैटेगरी")} className="no-scrollbar flex gap-2 overflow-x-auto md:max-h-[calc(100dvh-220px)] md:flex-col md:overflow-y-auto">
-                {[{ id: "all", name: L("All", "सभी"), nameHi: null }, ...data.categories].map((c) => (
-                  <button key={c.id} type="button" aria-pressed={category === c.id && !query} onClick={() => { setCategory(c.id); setQuery(""); }}
-                    className={`shrink-0 rounded-xl border px-3 py-2.5 text-left text-body font-semibold ${category === c.id && !query ? "border-forest bg-forest text-white" : "border-line bg-surface text-ink hover:bg-accent"} ${focus}`}>
-                    {hi ? c.nameHi || c.name : c.name}
-                  </button>
-                ))}
-              </nav>
-              <div className="min-w-0">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <p className="text-caption text-muted">{shown.length} {L(shown.length === 1 ? "dish" : "dishes", "डिश")}</p>
-                  <button type="button" aria-pressed={photos} onClick={togglePhotos} className={chip(photos)}>{photos ? L("Photos on", "फ़ोटो चालू") : L("Photos off", "फ़ोटो बंद")}</button>
-                </div>
-                <div className={`grid content-start gap-2.5 md:max-h-[calc(100dvh-250px)] md:overflow-y-auto md:pr-1 ${photos ? "[grid-template-columns:repeat(auto-fill,minmax(150px,1fr))]" : "[grid-template-columns:repeat(auto-fill,minmax(140px,1fr))]"}`}>
-                  {shown.length === 0 && <p className="col-span-full rounded-2xl border border-line bg-surface p-6 text-center text-body text-muted">{L("Nothing matches. Use Open item for a dish that is not on the menu.", "कुछ नहीं मिला। मेन्यू से बाहर की डिश के लिए ओपन आइटम लें।")}</p>}
-                  {shown.map((m) => (
-                    <DishTile key={m.id} dish={m} hi={hi} L={L} photos={photos} inCart={cart.reduce((n, l) => n + (l.kind === "menu" && l.dish.id === m.id ? l.qty : 0), 0)} onAdd={() => add(m)} />
-                  ))}
-                </div>
-              </div>
+            <nav aria-label={L("Categories", "कैटेगरी")} className="no-scrollbar mt-3 flex shrink-0 gap-2 overflow-x-auto">
+              {[{ id: "all", name: L("All", "सभी"), nameHi: null }, ...data.categories].map((c) => (
+                <button key={c.id} type="button" aria-pressed={category === c.id && !query} onClick={() => { setCategory(c.id); setQuery(""); }} className={`${chip(category === c.id && !query)} shrink-0 whitespace-nowrap`}>
+                  {hi ? c.nameHi || c.name : c.name}
+                </button>
+              ))}
+            </nav>
+
+            <div className="mt-3 flex shrink-0 items-center justify-between gap-2">
+              <p className="text-caption text-muted">{shown.length} {L(shown.length === 1 ? "dish" : "dishes", "डिश")}</p>
+              <button type="button" aria-pressed={photos} onClick={togglePhotos} className="min-h-9 rounded-lg px-2 text-caption font-semibold text-muted hover:text-ink">{photos ? L("Hide photos", "फ़ोटो छुपाएँ") : L("Show photos", "फ़ोटो दिखाएँ")}</button>
             </div>
+            <div className={`no-scrollbar grid min-h-0 flex-1 content-start gap-2.5 lg:overflow-y-auto ${photos ? "[grid-template-columns:repeat(auto-fill,minmax(min(100%,9.5rem),1fr))]" : "[grid-template-columns:repeat(auto-fill,minmax(min(100%,8.75rem),1fr))]"}`}>
+              {shown.length === 0 && <p className="col-span-full rounded-2xl border border-line bg-surface p-6 text-center text-body text-muted">{L("Nothing matches. Use Open item for a dish that is not on the menu.", "कुछ नहीं मिला। मेन्यू से बाहर की डिश के लिए ओपन आइटम लें।")}</p>}
+              {shown.map((m) => (
+                <DishTile key={m.id} dish={m} hi={hi} L={L} photos={photos} inCart={cart.reduce((n, l) => n + (l.kind === "menu" && l.dish.id === m.id ? l.qty : 0), 0)} onAdd={() => add(m)} />
+              ))}
+            </div>
+
+            {/* Phones show one pane at a time; this keeps the order one tap away */}
+            <button type="button" onClick={() => setOrderOpen(true)} className={`sticky bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-10 mt-3 flex min-h-12 w-full items-center justify-between gap-3 rounded-xl bg-forest px-4 text-button font-semibold text-white sm:bottom-3 lg:hidden ${focus}`}>
+              <span>{cartCount > 0 ? L(`View order · ${cartCount} new`, `ऑर्डर देखें · ${cartCount} नए`) : L("View order", "ऑर्डर देखें")}</span>
+              <span className="tabular-nums">{rs(sentTotal + cartTotal)}</span>
+            </button>
           </section>
 
           {/* Order */}
-          <aside className="flex flex-col rounded-2xl border border-line bg-surface lg:sticky lg:top-4 lg:max-h-[calc(100dvh-120px)]">
-            <header className="border-b border-line p-4">
+          <aside className={`min-h-0 flex-col rounded-2xl border border-line bg-surface ${orderOpen ? "flex" : "hidden lg:flex"}`}>
+            {paying ? <PosPayPanel key={paying.sessionId} detail={paying} hi={hi} offline={offline} onClose={closePay} /> : <>
+            <header className="shrink-0 border-b border-line p-4">
+              <button type="button" onClick={() => setOrderOpen(false)} className="mb-2 inline-flex min-h-9 items-center gap-1.5 text-caption font-semibold text-muted hover:text-ink lg:hidden"><ArrowLeft className="size-4" aria-hidden="true" />{L("Add more dishes", "और डिश जोड़ें")}</button>
               <div className="flex items-center justify-between gap-2">
                 <h2 className="font-display text-section font-bold text-ink">{current.takeaway ? <span className="inline-flex items-center gap-1.5"><ShoppingBag className="size-4" aria-hidden="true" />{L("Takeaway", "पार्सल")}{current.sessionId ? ` ${current.code.replace(/^TA-/, "")}` : ""}</span> : `${L("Table", "टेबल")} ${current.code}`}</h2>
                 {detail && <span className={`rounded-full px-2.5 py-1 text-caption font-semibold ${billAsked ? "bg-warning/15 text-warning" : "bg-brand-soft text-ink"}`}>{billAsked ? L("Bill asked", "बिल माँगा") : L("Running", "चल रहा")}</span>}
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
-                <input value={guest} onChange={(e) => setGuest(e.target.value)} disabled={!!current.sessionId && !current.takeaway} placeholder={L("Customer name (optional)", "ग्राहक का नाम (वैकल्पिक)")} aria-label={L("Customer name", "ग्राहक का नाम")} className={`${field} h-10 min-w-0 flex-1`} />
+                <input value={guest} onChange={(e) => setGuest(e.target.value)} disabled={!!current.sessionId && !current.takeaway} placeholder={L("Name (optional)", "नाम (वैकल्पिक)")} aria-label={L("Customer name", "ग्राहक का नाम")} className={`${field} h-10 min-w-0 flex-1`} />
                 {!current.takeaway && !current.sessionId && (
                   <div className="flex items-center gap-1 rounded-xl border border-line px-1" aria-label={L("Guests", "मेहमान")}>
                     <Users className="mx-1 size-4 text-muted" aria-hidden="true" />
@@ -742,7 +760,7 @@ export function PosTerminalScreen({ initial, outletId, staffUserId, canReviewOff
               </div>
             </header>
 
-            <div className="min-h-40 flex-1 overflow-y-auto p-4">
+            <div className="no-scrollbar min-h-40 flex-1 overflow-y-auto p-4">
               {sent.length > 0 && (
                 <div className="mb-4">
                   <p className="text-caption font-semibold uppercase tracking-wide text-muted">{L("Already sent", "पहले भेजे")}</p>
@@ -758,20 +776,20 @@ export function PosTerminalScreen({ initial, outletId, staffUserId, canReviewOff
               )}
               {sent.length === 0 && sentCount > 0 && <p className="mb-4 rounded-xl bg-paper px-3 py-2 text-caption text-muted">{L(`${sentCount} previously sent items · ${rs(sentTotal)}. Item details will load when connected.`, `${sentCount} पहले भेजे आइटम · ${rs(sentTotal)}। इंटरनेट आने पर आइटम विवरण आएगा।`)}</p>}
               {cart.length === 0 ? (
-                <p className="py-6 text-center text-body text-muted">{sent.length ? L("Tap dishes to add more.", "और जोड़ने के लिए डिश टैप करें।") : L("Tap dishes on the left to start the order.", "ऑर्डर शुरू करने के लिए डिश टैप करें।")}</p>
+                <p className="py-6 text-center text-body text-muted">{sent.length ? L("Tap dishes to add more.", "और जोड़ने के लिए डिश टैप करें।") : L("Tap a dish to start the order.", "ऑर्डर शुरू करने के लिए डिश टैप करें।")}</p>
               ) : (
                 <>
                   <p className="text-caption font-semibold uppercase tracking-wide text-muted">{L("New items", "नए आइटम")}</p>
                   <ul className="mt-1.5 space-y-2">
                     {cart.map((l) => (
-                      <CartRow key={l.key} line={l} hi={hi} L={L} price={linePrice(l)} onChange={(p) => change(l.key, p)} />
+                      <CartRow key={l.key} line={l} hi={hi} L={L} takeaway={current.takeaway} price={linePrice(l)} onChange={(p) => change(l.key, p)} />
                     ))}
                   </ul>
                 </>
               )}
             </div>
 
-            <footer className="border-t border-line p-4">
+            <footer className="sticky bottom-[calc(3.5rem+env(safe-area-inset-bottom))] shrink-0 rounded-b-2xl border-t border-line bg-surface p-4 sm:bottom-0">
               <dl className="space-y-1 text-body">
                 {sentCount > 0 && cart.length > 0 && <div className="flex justify-between text-muted"><dt>{L("Sent", "भेजे गए")}</dt><dd className="tabular-nums">{rs(sentTotal)}</dd></div>}
                 {cart.length > 0 && <div className="flex justify-between text-muted"><dt>{L("New", "नए")} · {cartCount}</dt><dd className="tabular-nums">{rs(cartTotal)}</dd></div>}
@@ -783,15 +801,16 @@ export function PosTerminalScreen({ initial, outletId, staffUserId, canReviewOff
               </div>}
               {offline && current?.sessionId && detail?.bill && billAsked && !offlineCashForCurrent && !canRecordOfflineCash && <p className="mt-3 rounded-lg bg-paper px-3 py-2 text-caption text-muted">{currentHasQueuedKot ? L("Sync this table’s saved KOT before taking its offline cash.", "इस टेबल का ऑफ़लाइन नकद लेने से पहले सेव KOT सिंक करें।") : hasPendingPayment ? L("A payment is still pending. Reconnect and confirm it before taking cash.", "एक पेमेंट की पुष्टि बाकी है। नकद लेने से पहले इंटरनेट जोड़कर उसे जाँचें।") : cart.length ? L("Send or clear the new items before recording cash for this bill.", "इस बिल का नकद दर्ज करने से पहले नए आइटम भेजें या हटाएँ।") : L("Offline cash is available only for a saved, requested bill with a clear balance.", "ऑफ़लाइन नकद सिर्फ़ पहले से सेव, माँगे गए बिल और साफ़ बाकी रकम पर उपलब्ध है।")}</p>}
               <div className="mt-3 grid grid-cols-2 gap-2">
-                <button type="button" className={quiet} disabled={busy || (offline && cart.length === 0) || cart.length === 0} onClick={() => void send(false)}>
+                <button type="button" className={current.takeaway ? quiet : primary} disabled={busy || (offline && cart.length === 0) || cart.length === 0} onClick={() => void send(false)}>
                   {busy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Send className="size-4" aria-hidden="true" />}{offline ? L("Save KOT here", "KOT यहाँ सेव करें") : L("Send KOT", "KOT भेजें")}
                 </button>
-                <button type="button" className={primary} disabled={busy || offline || (cart.length === 0 && sentCount === 0)} onClick={() => void send(true)}>
-                  <ReceiptText className="size-4" aria-hidden="true" />{cart.length ? L("KOT & bill", "KOT और बिल") : L("Bill", "बिल")}
+                <button type="button" className={current.takeaway ? primary : quiet} disabled={busy || offline || (cart.length === 0 && sentCount === 0)} onClick={() => void send(true)}>
+                  <ReceiptText className="size-4" aria-hidden="true" />{cart.length ? L("KOT & pay", "KOT और भुगतान") : L("Pay", "भुगतान")}
                 </button>
               </div>
               {cart.length > 0 && <button type="button" onClick={() => { setCart([]); clearRequest(); }} className="mt-2 inline-flex min-h-9 w-full items-center justify-center gap-1.5 rounded-lg text-caption font-semibold text-muted hover:text-danger"><Trash2 className="size-3.5" aria-hidden="true" />{L("Clear new items", "नए आइटम हटाएँ")}</button>}
             </footer>
+            </>}
           </aside>
         </div>
       )}
@@ -861,7 +880,7 @@ function DishTile({ dish: m, hi, L, photos, inCart, onAdd }: { dish: Dish; hi: b
   );
   return (
     <button type="button" disabled={!m.pricing.isAvailable} onClick={onAdd}
-      className={`group relative flex flex-col overflow-hidden rounded-2xl border bg-surface text-left transition hover:-translate-y-0.5 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0 disabled:hover:shadow-none ${inCart ? "border-brand ring-2 ring-brand/25" : "border-line hover:border-ink/40"} ${focus}`}>
+      className={`group relative flex flex-col overflow-hidden rounded-2xl border bg-surface text-left transition-colors hover:border-ink disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:border-line ${inCart ? "border-forest ring-1 ring-forest" : "border-line hover:border-ink/40"} ${focus}`}>
       {photos && (
         <span className={`relative block w-full overflow-hidden bg-accent ${src ? "aspect-[4/3]" : "aspect-[16/7]"}`}>
           {src ? (
@@ -884,14 +903,14 @@ function DishTile({ dish: m, hi, L, photos, inCart, onAdd }: { dish: Dish; hi: b
           {!photos && !m.pricing.isAvailable ? <span className="font-semibold text-danger">{L("Sold out", "खत्म")}</span> : options ? <span className="text-muted">{L("options", "विकल्प")}</span> : null}
         </span>
       </span>
-      {inCart > 0 && <span className="absolute right-2 top-2 grid min-w-6 place-items-center rounded-full bg-brand px-1.5 py-0.5 text-caption font-bold text-brand-on shadow">{inCart}</span>}
+      {inCart > 0 && <span className="absolute right-2 top-2 grid min-w-6 place-items-center rounded-full bg-forest px-1.5 py-0.5 text-caption font-bold text-white">{inCart}</span>}
     </button>
   );
 }
 
-function TablesView({ L, now, zones, zone, setZone, tables, running, total, takeaways, onTable, onTakeaway }: {
+function TablesView({ L, now, zones, zone, setZone, tables, running, total, takeaways, onTable, onTakeaway, note, onRestore }: {
   L: Lx; now: number; zones: PosTerminal["zones"]; zone: string; setZone: (z: string) => void; tables: Table[]; running: number; total: number;
-  takeaways: PosTerminal["takeaways"]; onTable: (t: Table) => void; onTakeaway: (t: PosTerminal["takeaways"][number] | null) => void;
+  takeaways: PosTerminal["takeaways"]; onTable: (t: Table) => void; onTakeaway: (t: PosTerminal["takeaways"][number] | null) => void; note: string | null; onRestore: (() => void) | null;
 }) {
   return (
     <div className="space-y-6">
@@ -958,11 +977,18 @@ function TablesView({ L, now, zones, zone, setZone, tables, running, total, take
           </div>
         )}
       </section>
+
+      {(note || onRestore) && (
+        <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-line pt-3 text-caption text-muted">
+          <p>{note}</p>
+          {onRestore && <button type="button" onClick={onRestore} className="inline-flex min-h-9 items-center gap-1.5 font-semibold text-ink hover:underline"><FileUp className="size-4" aria-hidden="true" />{L("Restore POS recovery copy", "POS रिकवरी कॉपी वापस लाएँ")}</button>}
+        </footer>
+      )}
     </div>
   );
 }
 
-function CartRow({ line: l, hi, L, price, onChange }: { line: Line; hi: boolean; L: Lx; price: number; onChange: (p: Partial<{ qty: number; note: string; parcel: boolean }>) => void }) {
+function CartRow({ line: l, hi, L, takeaway, price, onChange }: { line: Line; hi: boolean; L: Lx; takeaway: boolean; price: number; onChange: (p: Partial<{ qty: number; note: string; parcel: boolean }>) => void }) {
   const [noting, setNoting] = useState(!!l.note);
   const name = l.kind === "open" ? l.name : hi ? l.dish.nameHi || l.dish.name : l.dish.name;
   const options = l.kind === "menu" ? l.dish.pricing.groups.flatMap((g) => g.modifiers.filter((m) => l.mods.includes(m.id)).map((m) => (hi ? m.nameHi || m.nameEn : m.nameEn))) : [];
@@ -981,7 +1007,7 @@ function CartRow({ line: l, hi, L, price, onChange }: { line: Line; hi: boolean;
         </div>
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-2">
-        <button type="button" aria-pressed={l.parcel} onClick={() => onChange({ parcel: !l.parcel })} className={chip(l.parcel)}><Package className="size-3.5" aria-hidden="true" />{L("Parcel", "पार्सल")}</button>
+        {!takeaway && <button type="button" aria-pressed={l.parcel} onClick={() => onChange({ parcel: !l.parcel })} className={chip(l.parcel)}><Package className="size-3.5" aria-hidden="true" />{L("Parcel", "पार्सल")}</button>}
         {!noting && <button type="button" onClick={() => setNoting(true)} className={chip(false)}><PenLine className="size-3.5" aria-hidden="true" />{L("Note", "नोट")}</button>}
       </div>
       {noting && <input value={l.note} onChange={(e) => onChange({ note: e.target.value.slice(0, 140) })} placeholder={L("e.g. less spicy, no onion", "जैसे कम तीखा, बिना प्याज़")} aria-label={L("Note for the kitchen", "किचन के लिए नोट")} className={`${field} mt-2 h-9 text-caption`} />}

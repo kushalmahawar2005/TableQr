@@ -34,7 +34,7 @@ export async function orderAction(input:Parameters<typeof staffPlaceOrder>[1]){r
 export async function billAction(sessionId:string){return run(async s=>{await requireOwnVisit(s,sessionId);return waiterRequestBill(s,sessionId);});}
 export async function reopenAction(sessionId:string,approval?:Approval){return run(async s=>{await requireOwnVisit(s,sessionId);return waiterReopenBill(s,sessionId,approval);});}
 export async function lineAction(input:Parameters<typeof changeWaiterLine>[1]){return run(async s=>{await requireOwnVisit(s,input.sessionId);return changeWaiterLine(s,input);});}
-export async function settleAction(input:{sessionId:string;forParticipantIds?:string[];method:"cash"|"card";receivedPaise?:number;clientRequestId:string;externalReference?:string}){return run(async s=>{await requireOwnVisit(s,input.sessionId);if(typeof input.clientRequestId !== "string" || !input.clientRequestId)throw new AppError("invalid_state","A settlement request id is required.");return settleAtCounter(s,input);});}
+export async function settleAction(input:{sessionId:string;forParticipantIds?:string[];method:"cash"|"upi";receivedPaise?:number;clientRequestId:string;externalReference?:string}){return run(async s=>{await requireOwnVisit(s,input.sessionId);if(typeof input.clientRequestId !== "string" || !input.clientRequestId)throw new AppError("invalid_state","A settlement request id is required.");return settleAtCounter(s,input);});}
 export async function cleanAction(id:string){return run(s=>markReady(s,id));}
 
 export async function claimTableAction(sessionId: string) { return run(s => claimWaiterVisit(s, String(sessionId))); }

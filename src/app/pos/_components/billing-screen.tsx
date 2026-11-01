@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle, ArrowRight, Banknote, Bike, BellRing, Check, CreditCard, PackagePlus, Printer, ReceiptText, RotateCcw, Search, ShoppingBag, Trash2, Users, Wallet, WifiOff } from "lucide-react";
+import { AlertTriangle, ArrowRight, Banknote, Bike, BellRing, Check, PackagePlus, Printer, ReceiptText, RotateCcw, Search, ShoppingBag, Smartphone, Trash2, Users, Wallet, WifiOff } from "lucide-react";
 import type { PosBillDetail, PosQueue } from "@/server/staff/pos-read";
 import * as actions from "@/server/staff/pos-actions";
 import { connectRealtime } from "@/lib/realtime-client";
@@ -41,7 +41,7 @@ export function BillingScreen({ initial, realtimeUrl, embedded = false, openSess
   const [hi, setHi] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const [sheet, setSheet] = useState<Sheet>(null);
-  const [method, setMethod] = useState<"cash" | "card">("cash");
+  const [method, setMethod] = useState<"cash" | "upi">("cash");
   const [received, setReceived] = useState("");
   const [share, setShare] = useState("");
   const [reference, setReference] = useState("");
@@ -427,7 +427,7 @@ export function BillingScreen({ initial, realtimeUrl, embedded = false, openSess
                   <div className="mt-4 space-y-4">
                     <div className="rounded-card bg-sage p-4 text-center"><p className="text-body text-muted">{L("Amount to collect", "वसूलने की राशि")}{share ? ` · ${personName(share)}` : ""}</p><p className="font-display text-[36px] leading-10 font-bold tabular">{rs(dueNow)}</p></div>
                     <div className="grid grid-cols-2 gap-2">
-                      {([["cash", Banknote, L("Cash", "नकद")], ["card", CreditCard, L("Card", "कार्ड")]] as const).map(([k, Icon, label]) => (
+                      {([["cash", Banknote, L("Cash", "नकद")], ["upi", Smartphone, "UPI"]] as const).map(([k, Icon, label]) => (
                         <button key={k} type="button" aria-pressed={method === k} onClick={() => setMethod(k)} className={`flex min-h-14 items-center justify-center gap-2 rounded-input border text-body font-semibold ${method === k ? "border-forest bg-sage" : "border-line text-muted hover:text-ink"}`}><Icon className="size-5" aria-hidden="true" />{label}</button>
                       ))}
                     </div>
@@ -438,7 +438,7 @@ export function BillingScreen({ initial, realtimeUrl, embedded = false, openSess
                         <div className={`mt-3 flex items-center justify-between rounded-input px-3 py-2.5 ${receivedPaise >= dueNow && receivedPaise > 0 ? "bg-[var(--state-available-soft)] text-[var(--state-available-text)]" : "bg-ink/5 text-muted"}`}><span className="text-body font-semibold">{receivedPaise > 0 && receivedPaise < dueNow ? L("Short by", "कम है") : L("Change to give", "वापस देना है")}</span><b className="font-display text-section tabular">{receivedPaise > 0 && receivedPaise < dueNow ? rs(dueNow - receivedPaise) : rs(change)}</b></div>
                       </div>
                     ) : (
-                      <label className="block text-body font-semibold">{L("Slip or reference number", "स्लिप या रेफ़रेंस नंबर")} <span className="font-normal text-muted">({L("optional", "वैकल्पिक")})</span><input className={field} value={reference} onChange={(e) => setReference(e.target.value)} placeholder="e.g. last 4 digits" /></label>
+                      <label className="block text-body font-semibold">{L("UPI reference", "UPI रेफ़रेंस")} <span className="font-normal text-muted">({L("optional", "वैकल्पिक")})</span><input className={field} value={reference} onChange={(e) => setReference(e.target.value)} placeholder="e.g. last 4 digits" /></label>
                     )}
                     {message?.tone === "bad" && <p role="alert" className="text-body font-semibold text-danger">{message.text}</p>}
                     <button type="button" className={`${brand} w-full text-button`} disabled={busy || offline || dueNow <= 0 || (method === "cash" && receivedPaise < dueNow)} onClick={pay}>{busy ? L("Saving…", "सहेज रहे हैं…") : `${L("Confirm", "पुष्टि करें")} · ${rs(dueNow)}`}</button>
@@ -486,7 +486,7 @@ export function BillingScreen({ initial, realtimeUrl, embedded = false, openSess
 }
 
 /** Give, change or remove the bill's discount: a percent or rupees, always with a reason */
-function DiscountBox({ hi, current, disabled, needsApproval, subtotalPaise, onApply, onClear }: {
+export function DiscountBox({ hi, current, disabled, needsApproval, subtotalPaise, onApply, onClear }: {
   hi: boolean;
   current: { kind: string; value: number; amountPaise: number; reason: string } | null;
   disabled: boolean;
@@ -557,7 +557,7 @@ function DiscountBox({ hi, current, disabled, needsApproval, subtotalPaise, onAp
  * Send this bill to the guest's WhatsApp. With WhatsApp Business connected, Send delivers the bill
  * PDF straight to their number; without it, WhatsApp opens with the bill filled in.
  */
-function WhatsAppBill({ hi, text, defaultPhone = "", onSend, sendPdf, actionClassName = "" }: { hi: boolean; text: string; defaultPhone?: string; onSend?: (phone: string) => void; sendPdf?: (phone: string) => Promise<string | null>; actionClassName?: string }) {
+export function WhatsAppBill({ hi, text, defaultPhone = "", onSend, sendPdf, actionClassName = "" }: { hi: boolean; text: string; defaultPhone?: string; onSend?: (phone: string) => void; sendPdf?: (phone: string) => Promise<string | null>; actionClassName?: string }) {
   const L = (en: string, hin: string) => (hi ? hin : en);
   const [open, setOpen] = useState(false);
   const [phone, setPhone] = useState(defaultPhone);

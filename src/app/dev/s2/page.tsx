@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { notFound } from "next/navigation";
+import { StaffShell } from "@/app/(console)/console/(app)/_components/staff-shell";
+import { consoleSections } from "@/lib/console-nav";
 import { KdsScreen } from "@/app/(staff)/kds/_components/kds-screen";
 import { KdsSetup } from "@/app/(staff)/kds/_components/kds-setup";
 import { s2Cases } from "./_fixtures";
@@ -33,5 +35,7 @@ export default async function S2Preview(props: { searchParams: Promise<Record<st
     );
   }
   if (solo.setup) return <KdsSetup initialLang={solo.setup.lang ?? "en"} preview={solo.setup} />;
-  return <KdsScreen key={solo.id} initial={solo.board!} device={solo.device!} realtimeUrl={null} preview={solo.preview ?? {}} />;
+  const screen = <KdsScreen key={solo.id} embedded={q.embedded !== undefined} initial={solo.board!} device={solo.device!} realtimeUrl={null} preview={solo.preview ?? {}} />;
+  if (q.embedded === undefined) return screen;
+  return <StaffShell lang="en" sections={consoleSections.map((s) => ({ slug: s.slug, label: s.label }))} staff={{ name: "Owner", roles: ["owner"], outlet: "Spice Route", shiftEnds: null }} activeSlug="kitchen" preview>{screen}</StaffShell>;
 }

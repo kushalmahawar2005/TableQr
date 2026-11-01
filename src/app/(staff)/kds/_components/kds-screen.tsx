@@ -236,7 +236,7 @@ function KdsBoardScreen(props: { initial: KdsBoard; device: KdsDeviceView; realt
   const stations = device.expeditor ? [null, ...board.stations] : [device.station];
 
   return (
-    <div id="kds-root" lang={lang} className={`flex min-h-0 flex-col bg-kds-bg font-sans text-kds-text [&:fullscreen]:h-dvh ${props.embedded ? "kds-embedded h-[calc(100dvh-7.5rem)] sm:h-[calc(100dvh-3.5rem)]" : "h-dvh"}`}>
+    <div id="kds-root" lang={lang} className={`flex min-h-0 flex-col bg-kds-bg font-sans text-kds-text [&:fullscreen]:h-dvh ${props.embedded ? "kds-embedded h-[calc(100dvh-7rem)] sm:h-[calc(100dvh-4.5rem)]" : "h-dvh"}`}>
       <Header
         c={c}
         embedded={props.embedded}
