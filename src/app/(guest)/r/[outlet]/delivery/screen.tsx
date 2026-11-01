@@ -1,10 +1,11 @@
 "use client";
-import { CalendarDays, ChevronRight, MapPin, ShoppingBag, Truck } from "lucide-react";
-import { GuestSheet } from "../_components/guest-ui";
+import { ArrowLeft, CalendarDays, Check, ChevronDown, ChevronRight, Copy, Headphones, MapPin, ShoppingBag, Truck } from "lucide-react";
+import { GuestSheet, LanguageSwitch } from "../_components/guest-ui";
+import { BagArt, ClocheArt, ReceiptArt, RouteArt } from "../_components/order-art";
 import { useGuestExperience } from "../guest-shell";
 import { customerAccountAction, saveCustomerAddressAction } from "../profile/actions";
 import type { customerHistory } from "@/server/guest/customer-account";
-import { ArrowLeft01Icon, Call02Icon, Cancel01Icon, CheckmarkCircle02Icon, ChefHatIcon, DeliveryTruck01Icon, FilterHorizontalIcon, Location01Icon, MinusSignIcon, PackageIcon, PlusSignIcon, Search01Icon, ShoppingBasket01Icon, UserIcon } from "@hugeicons/core-free-icons";
+import { ArrowLeft01Icon, Cancel01Icon, FilterHorizontalIcon, Location01Icon, MinusSignIcon, PlusSignIcon, Search01Icon, ShoppingBasket01Icon, UserIcon } from "@hugeicons/core-free-icons";
 import { useGuestBase } from "@/lib/guest-base";
 import { HugeiconsIcon } from "@hugeicons/react";
 import Link from "next/link";
@@ -45,7 +46,7 @@ function writeProfile(profile: Profile | null, outlet:string) {
 }
 const money = (paise: number) => `₹${(paise / 100).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 const control = "min-h-12 w-full rounded-2xl border border-line/70 bg-surface px-4 text-ink outline-none focus:border-brand focus:shadow-[0_0_0_3px_var(--brand-soft)]";
-const button = "min-h-13 w-full rounded-2xl bg-brand px-4 font-bold text-brand-on shadow-[0_8px_20px_-6px_var(--brand-border)] disabled:opacity-50 disabled:shadow-none";
+const button = "min-h-13 w-full rounded-2xl bg-brand px-4 font-bold text-brand-on disabled:opacity-50";
 
 export function DeliveryScreen({ outletCode, data, initialStatus, initialServiceMode = "delivery", realtimeUrl = null, installable = null, initialCart = [], initialNotice }: { initialNotice?: string; initialCart?: DeliveryCartLine[]; outletCode: string; data?: Menu; initialStatus?: Status; initialServiceMode?: OrderServiceMode; hindi?: boolean; realtimeUrl?: string | null; installable?: { name: string; logoUrl: string | null } | null }) {
   const base = useGuestBase(outletCode);
@@ -185,8 +186,9 @@ export function DeliveryScreen({ outletCode, data, initialStatus, initialService
     });
   }
   const statusMessage = !status ? "" : status.status === "draft" && status.paymentStatus === "pending" && status.paymentMode === "manual_qr" ? t("Payment reference submitted · waiting for payment verification", "पेमेंट रेफरेंस भेज दिया · पुष्टि का इंतज़ार") : status.status === "draft" && status.paymentStatus === "pending" ? t("Checking your payment securely…", "आपका पेमेंट सुरक्षित रूप से जाँचा जा रहा है…") : status.status === "draft" && status.paymentStatus.startsWith("refund") ? t("Payment received · refund in progress", "पेमेंट मिला · रिफंड चल रहा है") : status.status === "draft" && status.paymentStatus === "failed" ? t("Payment was not completed. No order was placed.", "पेमेंट पूरा नहीं हुआ। ऑर्डर नहीं हुआ।") : status.status === "placed" && serviceMode === "pickup" ? t(status.kitchenStatus === "ready" || status.kitchenStatus === "served" ? "Ready for pickup · collect at the counter" : "Your pickup order is being prepared", status.kitchenStatus === "ready" || status.kitchenStatus === "served" ? "पिकअप के लिए तैयार · काउंटर से लें" : "आपका पिकअप ऑर्डर तैयार हो रहा है") : status.status === "placed" ? t(status.kitchenStatus === "ready" || status.kitchenStatus === "served" ? "Packed · awaiting dispatch" : "Your order is being prepared", status.kitchenStatus === "ready" || status.kitchenStatus === "served" ? "पैक हो गया · भेजने की तैयारी" : "आपका ऑर्डर तैयार हो रहा है") : status.status === "dispatched" ? t("Your order is on the way", "आपका ऑर्डर रास्ते में है") : status.status === "collected" ? t("Pickup complete · thank you", "पिकअप पूरा हुआ · धन्यवाद") : status.status === "delivered" ? t("Delivered", "डिलीवर हो गया") : status.status === "cancelled" ? t("Cancelled", "रद्द किया गया") : t("Complete payment to continue", "जारी रखने के लिए पेमेंट पूरा करें");
+  const orderModes = ([{key:"delivery",label:t("Delivery","डिलीवरी"),icon:Truck},{key:"pickup",label:t("Pickup","पिकअप"),icon:ShoppingBag}] as const).filter(mode=>experience.brand?.services[mode.key] ?? mode.key===serviceMode);
   return <main lang={hindi ? "hi" : "en"} className="flex w-full min-w-0 flex-col pt-5 pb-[calc(7rem+env(safe-area-inset-bottom))] text-ink">
-    <header className="flex items-center gap-2.5">
+    {!status && <header className="flex items-center gap-2.5">
       {data ? <Link href={`${base}`} aria-label={t("Back to guest link", "मुख्य पेज पर वापस")} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl focus-visible:outline-2 focus-visible:outline-brand">
         <OutletLogo name={experience.brand?.outlet.name ?? data.outlet.name} logoUrl={experience.brand?.outlet.logoUrl ?? data.outlet.logoUrl} size={44} />
         <span className="min-w-0">
@@ -194,21 +196,19 @@ export function DeliveryScreen({ outletCode, data, initialStatus, initialService
           <span className="block text-caption text-muted">{serviceMode === "pickup" ? t("Pickup / takeaway", "पिकअप / टेकअवे") : t("Home delivery", "घर पर डिलीवरी")} · {data.outlet.policy.estimatedMinutes} {t("min", "मिनट")}</span>
         </span>
       </Link> : <Link href={`${base}`} className="flex-1 text-caption font-semibold text-muted">← {t("Guest link", "मुख्य पेज")}</Link>}
-      <div role="group" aria-label={t("Language", "भाषा")} className="flex shrink-0 rounded-full border border-line/70 bg-surface p-0.5 text-caption font-semibold shadow-[0_1px_3px_rgb(31_41_55/0.05)]">
-        {([[false, "EN"], [true, "HI"]] as const).map(([hi, label]) => <button key={label} type="button" aria-pressed={hindi === hi} onClick={() => setHindi(hi)} className={`min-h-9 min-w-10 rounded-full px-2.5 transition-colors ${hindi === hi ? "bg-ink text-white" : "text-muted hover:text-ink"}`}>{label}</button>)}
-      </div>
+      <LanguageSwitch />
       {!status && <button type="button" disabled={!cart.length} onClick={openCart} aria-label={t(`Your cart, ${totalQty} items`, `आपका कार्ट, ${totalQty} आइटम`)} className="relative grid size-11 shrink-0 place-items-center rounded-full border border-line/70 bg-surface text-ink shadow-[0_2px_8px_rgb(31_41_55/0.06)] hover:border-ink/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-default">
         <HugeiconsIcon icon={ShoppingBasket01Icon} size={21} aria-hidden />
         {totalQty > 0 && <span aria-hidden className="absolute -top-1 -right-1 grid h-5 min-w-5 place-items-center rounded-full bg-brand px-1 text-label font-bold tabular text-brand-on ring-2 ring-paper">{totalQty}</span>}
       </button>}
-    </header>
+    </header>}
     {initialNotice && <p role="status" className="mt-4 rounded-2xl bg-brand-soft p-4 text-xs text-brand-strong">{initialNotice}</p>}
     {error && <p role="alert" className="mt-4 rounded-2xl border border-danger/20 bg-[var(--state-seated-soft)] p-4 text-caption font-semibold text-danger">{error}</p>}
     {status ? <><StatusView outletCode={outletCode} status={status} hindi={hindi} pending={pending} statusMessage={statusMessage} onPay={() => run(payDelivery)} onRefresh={() => run(loadStatus)} newOrderHref={`${base}/delivery?new=1&lang=${hindi ? "hi" : "en"}`} />{installable && <InstallApp guest className="mt-4" name={installable.name} logoUrl={installable.logoUrl} title={t("Install our app", "हमारा ऐप इंस्टॉल करें")} blurb={t(`Track this order and order again from ${installable.name} in one tap.`, `इस ऑर्डर को ट्रैक करें और ${installable.name} से एक टैप में दोबारा ऑर्डर करें।`)} />}</> : <>
     {step === "menu" && data && <>
-      <div className="mt-5 flex gap-2 rounded-2xl bg-surface p-1.5 border border-line" aria-label="Order type">
-        {([{key:"delivery",label:t("Delivery","डिलीवरी"),icon:Truck},{key:"pickup",label:t("Pickup","पिकअप"),icon:ShoppingBag}] as const).filter(mode=>experience.brand?.services[mode.key] ?? mode.key===serviceMode).map(({key,label,icon:Icon})=><button key={key} type="button" aria-pressed={serviceMode===key} onClick={()=>setActiveMode(key)} className={`flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl text-sm font-bold ${serviceMode===key?"bg-brand text-brand-on shadow-sm":"text-muted"}`}><Icon size={17}/>{label}</button>)}
-      </div>
+      {orderModes.length > 1 && <div className="mt-5 grid grid-cols-2 gap-1 rounded-xl bg-ink/5 p-1" aria-label="Order type">
+        {orderModes.map(({key,label,icon:Icon})=><button key={key} type="button" aria-pressed={serviceMode===key} onClick={()=>setActiveMode(key)} className={`flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-lg text-sm font-bold ${serviceMode===key?"bg-surface text-brand":"text-muted"}`}><Icon size={17}/>{label}</button>)}
+      </div>}
       {experience.brand?.services.reservations&&<Link href={`${base}/book`} className="mt-4 flex items-center gap-3 rounded-2xl border border-line bg-surface px-4 py-3"><CalendarDays size={20} className="text-brand"/><span className="flex-1 text-sm"><b className="block">{t("A table for your next get-together?","अगली मुलाकात के लिए टेबल?")}</b><span className="text-xs text-muted">{t("Reserve a table or plan a party","टेबल या पार्टी बुक करें")}</span></span><ChevronRight size={18}/></Link>}
 
       <div className="mt-5">
@@ -264,8 +264,8 @@ export function DeliveryScreen({ outletCode, data, initialStatus, initialService
               </div>
               <div className="absolute right-3 bottom-3">
                 {!available ? <span className="inline-block rounded-full border border-line bg-surface px-3 py-1.5 text-caption font-semibold text-ink/70">{t("Sold out", "खत्म")}</span>
-                  : !qty ? <button type="button" onClick={addOne} aria-label={t(`Add ${itemName}`, `${itemName} जोड़ें`)} className="relative flex h-10 min-w-[96px] items-center justify-center gap-1.5 rounded-xl bg-brand px-4 text-body font-bold text-brand-on shadow-[0_4px_12px_-2px_var(--brand-border)] transition-[transform,background-color] duration-100 before:absolute before:-inset-1 hover:bg-brand-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand active:scale-[0.96]"><HugeiconsIcon icon={PlusSignIcon} size={17} strokeWidth={2.6} aria-hidden />{t("Add", "जोड़ें")}</button>
-                  : <div role="group" aria-label={t(`${qty} × ${itemName}`, `${qty} × ${itemName}`)} className="flex h-10 min-w-[96px] items-center justify-between gap-1 rounded-xl bg-brand text-brand-on shadow-[0_4px_12px_-2px_var(--brand-border)]">
+                  : !qty ? <button type="button" onClick={addOne} aria-label={t(`Add ${itemName}`, `${itemName} जोड़ें`)} className="relative flex h-10 min-w-[96px] items-center justify-center gap-1.5 rounded-xl bg-brand px-4 text-body font-bold text-brand-on transition-[transform,background-color] duration-100 before:absolute before:-inset-1 hover:bg-brand-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand active:scale-[0.96]"><HugeiconsIcon icon={PlusSignIcon} size={17} strokeWidth={2.6} aria-hidden />{t("Add", "जोड़ें")}</button>
+                  : <div role="group" aria-label={t(`${qty} × ${itemName}`, `${qty} × ${itemName}`)} className="flex h-10 min-w-[96px] items-center justify-between gap-1 rounded-xl bg-brand text-brand-on">
                     <button type="button" aria-label={t(`Remove ${itemName}`, `${itemName} हटाएँ`)} onClick={() => removeOne(item.id)} className="grid h-full w-9 place-items-center active:scale-90"><HugeiconsIcon icon={MinusSignIcon} size={16} strokeWidth={2.4} aria-hidden /></button>
                     <span aria-live="polite" className="min-w-6 text-center text-body font-bold tabular">{qty}</span>
                     <button type="button" aria-label={t(`Add ${itemName}`, `${itemName} जोड़ें`)} onClick={addOne} className="grid h-full w-9 place-items-center active:scale-90"><HugeiconsIcon icon={PlusSignIcon} size={16} strokeWidth={2.4} aria-hidden /></button>
@@ -277,7 +277,7 @@ export function DeliveryScreen({ outletCode, data, initialStatus, initialService
       </section>)}
       {visibleCategories.length === 0 && <p className="mt-5 rounded-2xl border border-dashed border-line p-6 text-center text-caption text-muted">{menuItems.length > 0 ? (filtersOn ? t("No dishes match your filters.", "आपके फ़िल्टर से कोई डिश नहीं मिली।") : t("No dishes match your search.", "आपकी खोज से कोई डिश नहीं मिली।")) : serviceMode === "pickup" ? t("No pickup dishes are available right now.", "अभी पिकअप के लिए कोई डिश उपलब्ध नहीं है।") : t("No delivery dishes are available right now.", "अभी डिलीवरी के लिए कोई डिश उपलब्ध नहीं है।")}</p>}
       {cart.length > 0 && <div className="fixed inset-x-0 bottom-[var(--guest-nav-height,0px)] z-30 mx-auto max-w-[480px] px-4 pb-[max(12px,env(safe-area-inset-bottom))] min-[360px]:px-5">
-        <button type="button" onClick={openCart} className="flex min-h-14 w-full items-center gap-3 rounded-2xl bg-brand px-4 py-2.5 text-left text-brand-on shadow-[0_12px_28px_-8px_var(--brand-border)] transition-transform active:scale-[0.99]">
+        <button type="button" onClick={openCart} className="flex min-h-14 w-full items-center gap-3 rounded-2xl bg-brand px-4 py-2.5 text-left text-brand-on transition-transform active:scale-[0.99]">
           <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-white/20"><HugeiconsIcon icon={ShoppingBasket01Icon} size={19} aria-hidden /></span>
           <span className="min-w-0 flex-1"><span className="block text-label opacity-85">{t(`${totalQty} ${totalQty === 1 ? "item" : "items"}`, `${totalQty} आइटम`)}</span><span className="block text-body font-bold tabular">{money(cartPaise)} <span className="text-label font-medium opacity-80">{t("+ taxes", "+ टैक्स")}</span></span></span>
           <span className="text-body font-bold">{t("View cart", "कार्ट देखें")} →</span>
@@ -402,130 +402,181 @@ function FormCard({ icon, title, aside, children }: { icon: typeof UserIcon; tit
 }
 
 /** After ordering: where the food is, who is bringing it, and what is left to pay */
-export function StatusView({ status, hindi, pending, statusMessage, onPay, onRefresh, newOrderHref, outletCode }: { status: Status; hindi: boolean; outletCode: string; pending: boolean; statusMessage: string; onPay?: () => void; onRefresh: () => void; newOrderHref: string }) {
-  const t = (en: string, hi: string) => (hindi ? hi : en);
-  const placed = status.status !== "draft" && status.status !== "cancelled";
-  const pickup = status.serviceMode === "pickup";
-  const paymentLabel = status.status === "cancelled"
-    ? status.refundStatus === "pending" ? t("Order cancelled · refund in progress", "ऑर्डर रद्द · रिफंड जारी है")
-      : status.refundStatus === "success" ? t("Order cancelled · refund returned", "ऑर्डर रद्द · रिफंड लौटाया गया")
-        : status.refundStatus === "failed" ? t("Refund failed · contact the restaurant", "रिफंड नहीं हुआ · रेस्टोरेंट से संपर्क करें")
-          : t("Order cancelled · no payment due", "ऑर्डर रद्द · पेमेंट बाकी नहीं")
-    : status.paid ? t("Paid", "पेमेंट हो गया")
-      : status.paymentMode === "gateway" ? t("Pay online to start", "शुरू करने के लिए ऑनलाइन पेमेंट करें")
-        : status.paymentMode === "manual_qr" ? t("Waiting for payment check", "पेमेंट जाँच बाकी")
-          : pickup ? t(`Pay ${money(status.totalPaise)} at pickup`, `पिकअप पर ${money(status.totalPaise)} दें`)
-            : t(`Pay ${money(status.totalPaise)} on delivery`, `डिलीवरी पर ${money(status.totalPaise)} दें`);
-  const stage = pickup ? status.status === "collected" ? 3 : status.kitchenStatus === "ready" || status.kitchenStatus === "served" ? 2 : status.kitchenStatus === "accepted" || status.kitchenStatus === "preparing" ? 1 : 0 : status.status === "delivered" ? 4 : status.status === "dispatched" ? 3 : status.kitchenStatus === "ready" || status.kitchenStatus === "served" ? 2 : status.kitchenStatus === "accepted" || status.kitchenStatus === "preparing" ? 1 : 0;
-  const steps = pickup ? [
-    { icon: ShoppingBasket01Icon, title: t("Order placed", "ऑर्डर हो गया"), note: status.placedAt ? new Date(status.placedAt).toLocaleTimeString(hindi ? "hi-IN-u-nu-latn" : "en-IN", { hour: "numeric", minute: "2-digit" }) : "" },
-    { icon: ChefHatIcon, title: t("Preparing your food", "खाना बन रहा है"), note: t("The kitchen is cooking it fresh", "किचन ताज़ा बना रहा है") },
-    { icon: PackageIcon, title: t("Ready for pickup", "पिकअप के लिए तैयार"), note: t("Collect your order at the counter", "काउंटर से अपना ऑर्डर लें") },
-    { icon: CheckmarkCircle02Icon, title: t("Collected", "ले लिया गया"), note: t("Enjoy your meal!", "खाने का आनंद लें!") },
-  ] : [
-    { icon: ShoppingBasket01Icon, title: t("Order placed", "ऑर्डर हो गया"), note: status.placedAt ? new Date(status.placedAt).toLocaleTimeString(hindi ? "hi-IN-u-nu-latn" : "en-IN", { hour: "numeric", minute: "2-digit" }) : "" },
-    { icon: ChefHatIcon, title: t("Preparing your food", "खाना बन रहा है"), note: t("The kitchen is cooking it fresh", "किचन ताज़ा बना रहा है") },
-    { icon: PackageIcon, title: t("Packed", "पैक हो गया"), note: t("Waiting for the rider", "राइडर का इंतज़ार") },
-    { icon: DeliveryTruck01Icon, title: t("On the way", "रास्ते में"), note: status.courierName ? t(`${status.courierName} is bringing it`, `${status.courierName} ला रहे हैं`) : t("Coming to your door", "आपके घर आ रहा है") },
-    { icon: CheckmarkCircle02Icon, title: t("Delivered", "डिलीवर हो गया"), note: t("Enjoy your meal!", "खाने का आनंद लें!") },
-  ];
-  const card = "rounded-[22px] border border-line/60 bg-surface p-4 shadow-[0_2px_12px_rgb(31_41_55/0.05)]";
+/** A long order id, short enough to read: 01a1930f...f44a */
+export const shortOrderId = (id: string) => (id.length > 14 ? `${id.slice(0, 8)}...${id.slice(-4)}` : id);
 
-  return <div className="mt-5 grid gap-4">
-    <div className="guest-track-hero">
-      <span className="mb-3 inline-flex rounded-2xl bg-surface p-3 text-brand"><HugeiconsIcon icon={status.status === "cancelled" ? Cancel01Icon : steps[stage].icon} size={30} aria-hidden/></span>
-      <h1 className="font-display text-[1.625rem] leading-tight font-bold tracking-tight">{status.status === "draft" ? pickup ? t("Pickup payment", "पिकअप पेमेंट") : t("Delivery payment", "डिलीवरी पेमेंट") : status.status === "cancelled" ? t("Order cancelled", "ऑर्डर रद्द") : steps[stage].title}</h1>
-      <p className="mt-1 text-body text-muted">{statusMessage}</p>
+/** What the guest should read first, from the order's real status and the outlet's promised time */
+function orderHeadline(status: Status, stage: number, t: (en: string, hi: string) => string, cashCollected: boolean) {
+  const pickup = status.serviceMode === "pickup";
+  const away = status.riderLocation && status.address.lat !== undefined && status.address.lng !== undefined ? etaMinutes(distanceKm(status.riderLocation, { lat: status.address.lat, lng: status.address.lng })) : null;
+  const eta = status.minutesLeft !== null && status.minutesLeft > 0 ? t(`About ${status.minutesLeft} mins`, `लगभग ${status.minutesLeft} मिनट`) : null;
+  const help = t("Need help with this order?", "इस ऑर्डर में मदद चाहिए?");
+  if (status.status === "draft") return { art: <ReceiptArt />, kicker: t("Payment pending", "पेमेंट बाकी"), title: pickup ? t("Pickup payment", "पिकअप पेमेंट") : t("Delivery payment", "डिलीवरी पेमेंट"), next: t("We send your order to the kitchen once the payment is confirmed.", "पेमेंट की पुष्टि होते ही ऑर्डर किचन में जाएगा।"), nextTitle: t("What happens next", "आगे क्या होगा"), help };
+  if (status.status === "cancelled") {
+    const refund = status.refundStatus === "pending" ? t("Refund in progress", "रिफंड जारी है") : status.refundStatus === "success" ? t("Refund returned", "रिफंड लौटाया गया") : status.refundStatus === "failed" ? t("Refund failed", "रिफंड नहीं हुआ") : null;
+    return { art: <ReceiptArt cancelled />, kicker: t("Order cancelled", "ऑर्डर रद्द"), title: refund ?? t("No payment due", "कोई पेमेंट बाकी नहीं"), lead: refund ? t("This order was cancelled.", "यह ऑर्डर रद्द हो गया।") : t("This order was cancelled. You have not been charged.", "यह ऑर्डर रद्द हो गया। आपसे कोई पैसा नहीं लिया गया।"), nextTitle: refund ? refund : t("You will not be charged", "आपसे पैसा नहीं लिया जाएगा"), next: t("Contact help if you need to know more.", "ज़्यादा जानकारी के लिए मदद लें।"), help };
+  }
+  if (status.status === "delivered" || status.status === "collected") return { art: <ClocheArt mark="check" />, kicker: pickup ? t("Order collected", "ऑर्डर ले लिया गया") : t("Delivery complete", "डिलीवरी पूरी हुई"), title: t("Enjoy your meal", "खाने का आनंद लें"), lead: `${pickup ? t("You have collected your order.", "आपने ऑर्डर ले लिया।") : t("Your order has been delivered.", "आपका ऑर्डर पहुँच गया।")}${cashCollected ? ` ${t(`${money(status.totalPaise)} collected in cash.`, `${money(status.totalPaise)} नकद लिया गया।`)}` : ""}`, nextTitle: t("Thank you for ordering", "ऑर्डर करने के लिए धन्यवाद"), next: t("Your receipt is ready below. You can reorder when you like.", "आपकी रसीद नीचे है। जब चाहें फिर से ऑर्डर करें।"), help };
+  if (status.status === "dispatched") return { art: null, kicker: t("On the way to you", "आपके पास आ रहा है"), title: away !== null ? t(`Arriving in about ${away} mins`, `लगभग ${away} मिनट में`) : t("Your rider is coming", "राइडर आ रहे हैं"), lead: t("Keep your phone nearby for your rider.", "राइडर के लिए फ़ोन पास रखें।"), nextTitle: t("What happens next", "आगे क्या होगा"), next: status.paid ? t("Meet your rider at the delivery address.", "डिलीवरी पते पर राइडर से मिलें।") : t(`Meet your rider at the delivery address. Keep ${money(status.totalPaise)} ready for cash payment.`, `डिलीवरी पते पर राइडर से मिलें। ${money(status.totalPaise)} नकद तैयार रखें।`), help };
+  if (status.minutesLeft !== null && status.minutesLeft <= 0) return { art: <ClocheArt mark="clock" />, kicker: t("Taking a little longer", "थोड़ा ज़्यादा समय लग रहा है"), title: t("ETA unavailable", "समय पता नहीं"), lead: t("Sorry for the wait. Preparation is taking longer.", "इंतज़ार के लिए माफ़ करें। तैयारी में ज़्यादा समय लग रहा है।"), nextTitle: t("What happens next", "आगे क्या होगा"), next: t("We cannot confirm a revised time. Refresh or contact the restaurant for an update.", "नया समय पक्का नहीं है। रिफ्रेश करें या रेस्टोरेंट से पूछें।"), help: t("Let us help with the wait", "इंतज़ार में मदद लें") };
+  if (stage >= 2) return { art: <BagArt />, kicker: pickup ? t("Ready for pickup", "पिकअप के लिए तैयार") : t("Packed · Awaiting pickup", "पैक हो गया · राइडर का इंतज़ार"), title: pickup ? t("Come and collect", "आकर ले जाएँ") : eta ?? t("Packed", "पैक हो गया"), lead: pickup ? t("Your order is ready at the counter.", "आपका ऑर्डर काउंटर पर तैयार है।") : t("Packed and waiting for a rider to collect.", "पैक है, राइडर का इंतज़ार है।"), nextTitle: t("What happens next", "आगे क्या होगा"), next: pickup ? t(`Show your name at the counter.${status.paid ? "" : ` Keep ${money(status.totalPaise)} ready.`}`, `काउंटर पर अपना नाम बताएँ।${status.paid ? "" : ` ${money(status.totalPaise)} तैयार रखें।`}`) : t("A rider will collect your meal. It has not left the restaurant yet.", "राइडर आपका खाना लेंगे। अभी रेस्टोरेंट से निकला नहीं है।"), help };
+  if (stage === 1) return { art: <ClocheArt mark="steam" />, kicker: t("In the kitchen", "किचन में"), title: eta ? t(`Ready in ${status.minutesLeft} mins`, `${status.minutesLeft} मिनट में तैयार`) : t("Preparing", "बन रहा है"), lead: t("Your meal is being prepared with care.", "आपका खाना ध्यान से बन रहा है।"), nextTitle: t("What happens next", "आगे क्या होगा"), next: pickup ? t("We will show here when it is ready to collect.", "तैयार होते ही यहाँ दिखेगा।") : t("Once packed, your meal will be ready for rider pickup.", "पैक होते ही खाना राइडर के लिए तैयार होगा।"), help };
+  const accepted = status.kitchenStatus === "accepted";
+  return { art: <ReceiptArt />, kicker: accepted ? t("Restaurant accepted", "रेस्टोरेंट ने ऑर्डर लिया") : t("Order received", "ऑर्डर मिल गया"), title: eta ?? t("Order placed", "ऑर्डर हो गया"), lead: accepted ? t("The restaurant has accepted your order.", "रेस्टोरेंट ने आपका ऑर्डर ले लिया है।") : t("The restaurant will accept your order shortly.", "रेस्टोरेंट जल्द ही ऑर्डर लेगा।"), nextTitle: t("What happens next", "आगे क्या होगा"), next: `${t("The kitchen starts preparing next.", "अब किचन तैयारी शुरू करेगा।")}${status.paid ? "" : ` ${pickup ? t("Payment is still due at pickup.", "पेमेंट पिकअप पर देना है।") : t("Payment is still due on delivery.", "पेमेंट डिलीवरी पर देना है।")}`}`, help };
+}
+
+export function StatusView({ status, hindi, pending, statusMessage, onPay, onRefresh, newOrderHref, outletCode, onBack, reorderHref }: { status: Status; hindi: boolean; outletCode: string; pending: boolean; statusMessage: string; onPay?: () => void; onRefresh: () => void; newOrderHref: string; onBack?: () => void; /** Finished orders only: the same order again */ reorderHref?: string }) {
+  const t = (en: string, hi: string) => (hindi ? hi : en);
+  const { brand } = useGuestExperience();
+  const base = useGuestBase(outletCode);
+  const [open, setOpen] = useState(true);
+  const [copied, setCopied] = useState(false);
+  const pickup = status.serviceMode === "pickup";
+  const placed = status.status !== "draft" && status.status !== "cancelled";
+  const finished = status.status === "delivered" || status.status === "collected" || status.status === "cancelled";
+  const stage = pickup ? status.status === "collected" ? 3 : status.kitchenStatus === "ready" || status.kitchenStatus === "served" ? 2 : status.kitchenStatus === "preparing" ? 1 : 0 : status.status === "delivered" ? 4 : status.status === "dispatched" ? 3 : status.kitchenStatus === "ready" || status.kitchenStatus === "served" ? 2 : status.kitchenStatus === "preparing" ? 1 : 0;
+  const steps = pickup
+    ? [t("Order placed", "ऑर्डर हो गया"), t("Preparing", "बन रहा है"), t("Ready", "तैयार"), t("Collected", "ले लिया गया")]
+    : [t("Order placed", "ऑर्डर हो गया"), t("Preparing", "बन रहा है"), t("Packed", "पैक"), t("On the way", "रास्ते में"), t("Delivered", "पहुँच गया")];
+  const cash = status.paymentMode === "cod";
+  const method = cash ? (pickup ? t("Pay at pickup", "पिकअप पर पेमेंट") : t("Cash on delivery", "डिलीवरी पर नकद")) : status.paymentMode === "manual_qr" ? t("UPI QR", "UPI QR") : t("Online payment", "ऑनलाइन पेमेंट");
+  const head = orderHeadline(status, stage, t, cash && status.paid);
+  const locale = hindi ? "hi-IN-u-nu-latn" : "en-IN";
+  const placedOn = status.placedAt ? new Date(status.placedAt) : null;
+  const placedShort = placedOn ? placedOn.toLocaleString(locale, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" }) : "";
+  const subtotal = status.billBreakdown?.subtotalPaise ?? status.items.reduce((n, item) => n + item.unitPricePaise * item.qty, 0);
+  const count = status.items.reduce((n, item) => n + item.qty, 0);
+  const box = status.status === "cancelled"
+    ? { title: status.refundStatus === "none" || !status.refundStatus ? t(`No payment due · ${money(0)}`, `कोई पेमेंट बाकी नहीं · ${money(0)}`) : t(`Refund ${status.refundStatus === "success" ? "returned" : status.refundStatus === "failed" ? "failed" : "in progress"}`, status.refundStatus === "success" ? "रिफंड लौटाया गया" : status.refundStatus === "failed" ? "रिफंड नहीं हुआ" : "रिफंड जारी है"), note: `${t("Not charged", "पैसा नहीं लिया")} · ${method} ${t("cancelled", "रद्द")}` }
+    : status.paid ? { title: t(`${money(status.totalPaise)} paid`, `${money(status.totalPaise)} दिया गया`), note: `${t("Paid", "पेमेंट हो गया")} · ${method}` }
+      : { title: status.paymentMode === "manual_qr" ? t("Waiting for payment check", "पेमेंट जाँच बाकी") : status.paymentMode === "gateway" ? t("Pay online to start", "शुरू करने के लिए ऑनलाइन पेमेंट करें") : pickup ? t(`${money(status.totalPaise)} due at pickup`, `पिकअप पर ${money(status.totalPaise)} देना है`) : t(`${money(status.totalPaise)} due on delivery`, `डिलीवरी पर ${money(status.totalPaise)} देना है`), note: `${t("Pending", "बाकी")} · ${method}` };
+  const row = "flex justify-between gap-3 text-sm";
+  const lastUpdate = status.riderLocation ? new Date(status.riderLocation.at).toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" }) : null;
+
+  return <div className="grid gap-4">
+    <header className="flex items-center gap-3">
+      {onBack ? <button type="button" onClick={onBack} aria-label={t("Back to orders", "ऑर्डर पर वापस")} className="grid size-11 shrink-0 cursor-pointer place-items-center rounded-xl border border-line bg-surface"><ArrowLeft size={20} aria-hidden /></button>
+        : <Link href={base} aria-label={t("Back to home", "मुख्य पेज पर वापस")} className="grid size-11 shrink-0 place-items-center rounded-xl border border-line bg-surface"><ArrowLeft size={20} aria-hidden /></Link>}
+      <div className="min-w-0 flex-1"><h1 className="text-base font-bold leading-tight">{t("Your order", "आपका ऑर्डर")}</h1><p className="truncate text-xs text-muted">{shortOrderId(status.id)}</p></div>
+      <LanguageSwitch />
+    </header>
+    <div className="flex items-center justify-between gap-3">
+      <p className="truncate text-sm font-semibold text-muted">{brand?.outlet.name}</p>
+      {brand?.outlet.phone && <a href={`tel:${brand.outlet.phone}`} className="inline-flex shrink-0 items-center gap-1.5 text-sm font-bold text-brand"><Headphones size={18} aria-hidden />{t("Help", "मदद")}</a>}
     </div>
 
-    {placed && status.status !== "delivered" && status.status !== "collected" && <PushOffer hindi={hindi} outletCode={outletCode} />}
+    <section aria-label={t("Order status", "ऑर्डर की स्थिति")}>
+      <p className="text-sm font-bold text-brand">{head.kicker}</p>
+      <div className="mt-2 flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <h2 className="font-display text-[1.875rem] font-bold leading-[1.15] tracking-tight">{head.title}</h2>
+          <p className="mt-2 text-sm">{head.lead ?? statusMessage}</p>
+          {placedShort && <p className="mt-1 text-xs text-muted">{t("Order placed", "ऑर्डर का समय")} · {placedShort}</p>}
+        </div>
+        {head.art && <div className="shrink-0">{head.art}</div>}
+      </div>
+    </section>
 
-    {placed && <section className={card} aria-label={t("Order progress", "ऑर्डर की स्थिति")}>
-      <ol className="grid gap-0">
-        {steps.map((step, i) => {
-          const completed = status.status === "delivered" || status.status === "collected";
-          const done = i < stage || completed, current = i === stage && !completed;
-          return <li key={i} className="relative flex gap-3 pb-5 last:pb-0">
-            {i < steps.length - 1 && <span aria-hidden className={`absolute top-10 left-[19px] h-[calc(100%-32px)] w-0.5 ${i < stage ? "bg-success" : "bg-line"}`} />}
-            <span className={`relative grid size-10 shrink-0 place-items-center rounded-full ${done ? "bg-success text-white" : current ? "bg-brand text-brand-on ring-4 ring-brand/15" : "border border-line bg-paper text-muted"}`}>
-              <HugeiconsIcon icon={done ? CheckmarkCircle02Icon : step.icon} size={19} aria-hidden />
-            </span>
-            <span className="min-w-0 pt-1">
-              <span className={`block text-body ${current ? "font-bold text-ink" : done ? "font-semibold text-ink" : "text-muted"}`}>{step.title}</span>
-              {(done || current) && step.note && <span className="block text-caption text-muted">{step.note}</span>}
-            </span>
-          </li>;
-        })}
-      </ol>
-    </section>}
-
-    {!pickup && status.status === "dispatched" && status.riderLocation && <section className={card}>
-      <LiveMap className="h-72" route overlay={status.address.lat !== undefined && status.address.lng !== undefined ? <p className="text-body font-bold">🛵 {etaMinutes(distanceKm(status.riderLocation, { lat: status.address.lat, lng: status.address.lng }))} {t("min", "मिनट")} <span className="text-caption font-medium text-muted">· {distanceKm(status.riderLocation, { lat: status.address.lat, lng: status.address.lng }).toFixed(1)} km</span></p> : undefined} points={[
+    {!pickup && status.status === "dispatched" && (status.riderLocation ? <section>
+      <LiveMap className="h-56" route points={[
         { id: "rider", kind: "rider", lat: status.riderLocation.lat, lng: status.riderLocation.lng, photoUrl: status.courierPhotoUrl, label: status.courierName ?? "Rider" },
         ...(status.address.lat !== undefined && status.address.lng !== undefined ? [{ id: "home", kind: "home" as const, lat: status.address.lat, lng: status.address.lng, label: t("Your door", "आपका घर") }] : []),
       ]} />
-      <p className="mt-2 text-xs text-muted">{t("Location last updated", "लोकेशन अपडेट")} · {new Date(status.riderLocation.at).toLocaleTimeString([], {hour:"numeric",minute:"2-digit"})}</p>
-      {status.address.lat !== undefined && status.address.lng !== undefined
-        ? <p className="mt-2 text-body font-bold">{t(`About ${etaMinutes(distanceKm(status.riderLocation, { lat: status.address.lat, lng: status.address.lng }))} min away`, `लगभग ${etaMinutes(distanceKm(status.riderLocation, { lat: status.address.lat, lng: status.address.lng }))} मिनट दूर`)} <span className="text-caption font-medium text-muted">· {distanceKm(status.riderLocation, { lat: status.address.lat, lng: status.address.lng }).toFixed(1)} km</span></p>
-        : <p className="mt-2 text-caption text-muted">{t("Your rider is on the way. The map updates by itself.", "राइडर रास्ते में है। नक्शा अपने आप अपडेट होता है।")}</p>}
-    </section>}
+      <p className="mt-2 text-xs text-muted">{t("Location last updated", "लोकेशन अपडेट")} · {lastUpdate}</p>
+    </section> : <RouteArt label={t("Illustrative route · Not a live map", "सिर्फ़ चित्र · लाइव नक्शा नहीं")} note={t("Waiting for a fresh location update", "नई लोकेशन का इंतज़ार")} />)}
 
-    {!pickup && status.status === "dispatched" && !status.riderLocation && <section className={card}><p className="text-sm font-bold">{t("Your rider is on the way", "राइडर रास्ते में है")}</p><p className="mt-1 text-xs text-muted">{t("Waiting for a fresh location update. You can call your rider below.", "नई लोकेशन का इंतज़ार है। नीचे राइडर को कॉल कर सकते हैं।")}</p></section>}
+    {status.status !== "cancelled" && status.status !== "draft" && <ol aria-label={t("Order progress", "ऑर्डर की स्थिति")} className="flex items-start">
+      {steps.map((step, i) => {
+        const complete = status.status === "delivered" || status.status === "collected";
+        const done = i < stage || complete, current = i === stage && !complete;
+        return <li key={step} aria-current={current ? "step" : undefined} className="relative flex min-w-0 flex-1 flex-col items-center text-center">
+          {i > 0 && <span aria-hidden className={`absolute right-1/2 top-3 h-px w-full ${i <= stage ? "bg-brand" : "bg-line"}`} />}
+          <span className={`relative grid size-6 place-items-center rounded-full border-2 bg-paper ${done || current ? "border-brand text-brand" : "border-line"}`}>{done ? <Check size={13} strokeWidth={3} aria-hidden /> : current ? <span className="size-2 rounded-full bg-brand" /> : null}</span>
+          <span className={`mt-1.5 px-0.5 text-xs leading-tight ${current || (complete && i === steps.length - 1) ? "font-bold text-brand" : ""}`}>{step}</span>
+        </li>;
+      })}
+    </ol>}
 
-    {!pickup && status.deliveryPin && <section className={`${card} flex items-center justify-between gap-4 border-brand/40 bg-brand-soft/40`}>
-      <div className="min-w-0"><p className="text-caption font-bold text-brand-strong">{t("Delivery PIN", "डिलीवरी PIN")}</p><p className="text-caption text-muted">{t("Tell this to the rider when your food arrives. Do not share it before.", "खाना पहुँचने पर राइडर को यह बताएँ। पहले किसी को न बताएँ।")}</p></div>
-      <p className="shrink-0 font-display text-[2rem] leading-none font-bold tracking-[0.25em] tabular text-ink" aria-label={t(`PIN ${status.deliveryPin.split("").join(" ")}`, `PIN ${status.deliveryPin.split("").join(" ")}`)}>{status.deliveryPin}</p>
-    </section>}
-
-    {!pickup && status.courierName && ["dispatched", "delivered"].includes(status.status) && <section className={`${card} flex items-center gap-3`}>
+    {!pickup && status.courierName && ["dispatched", "delivered"].includes(status.status) && <section className="flex items-center gap-3 rounded-2xl border border-line bg-surface p-3.5">
       {status.courierPhotoUrl
         // Rider photos live in the photo bucket, so this stays a plain image
         // eslint-disable-next-line @next/next/no-img-element
-        ? <img src={status.courierPhotoUrl} alt="" className="size-12 shrink-0 rounded-full object-cover" />
-        : <span className="grid size-12 shrink-0 place-items-center rounded-full bg-brand-soft text-brand-strong"><HugeiconsIcon icon={DeliveryTruck01Icon} size={21} aria-hidden /></span>}
-      <div className="min-w-0 flex-1"><p className="text-caption text-muted">{t("Your delivery rider", "आपका डिलीवरी राइडर")}</p><p className="text-body font-bold">{status.courierName}{status.courierVerified && <span className="ml-1.5 inline-flex items-center gap-0.5 rounded-full bg-[var(--state-available-soft)] px-1.5 py-0.5 align-middle text-label font-bold text-[var(--state-available-text)]">✓ {t("Verified", "सत्यापित")}</span>}</p>{status.courierVehicleNo && <p className="text-caption font-semibold tracking-wide text-muted">{status.courierVehicleNo}</p>}{status.courierRating && <p className="text-caption font-semibold text-ink"><span className="text-[var(--state-held)]">★</span> {status.courierRating.rating !== null ? `${status.courierRating.rating.toFixed(1)} (${status.courierRating.ratings})` : t("New rider", "नए राइडर")} · {t(`${status.courierRating.rides} deliveries`, `${status.courierRating.rides} डिलीवरी`)}</p>}</div>
-      {status.courierPhone && <a href={`tel:${status.courierPhone}`} className="inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-brand px-4 text-caption font-bold text-brand-on shadow-[0_4px_12px_-2px_var(--brand-border)]"><HugeiconsIcon icon={Call02Icon} size={17} aria-hidden />{t("Call", "कॉल")}</a>}
+        ? <img src={status.courierPhotoUrl} alt="" className="size-11 shrink-0 rounded-full object-cover" />
+        : null}
+      <div className="min-w-0 flex-1"><p className="truncate text-sm font-bold">{status.courierName}{status.courierVerified && <span className="ml-1.5 text-xs font-bold text-[var(--state-available-text)]">✓ {t("Verified", "सत्यापित")}</span>}</p><p className="truncate text-xs text-muted">{[status.courierRating ? (status.courierRating.rating !== null ? `${status.courierRating.rating.toFixed(1)} (${status.courierRating.ratings})` : t("New rider", "नए राइडर")) : null, status.courierRating ? t(`${status.courierRating.rides} deliveries`, `${status.courierRating.rides} डिलीवरी`) : null, status.courierVehicleNo].filter(Boolean).join(" · ")}</p></div>
+      {status.courierPhone && status.status === "dispatched" && <a href={`tel:${status.courierPhone}`} className="inline-flex min-h-11 shrink-0 items-center rounded-xl border border-line px-3.5 text-sm font-bold text-brand">{t("Call rider", "राइडर को कॉल")}</a>}
     </section>}
 
-    {!pickup && status.status === "delivered" && (status.canRate || status.myRating) && <RateRider outletCode={outletCode} hindi={hindi} name={status.courierName} given={status.myRating} />}
+    {!pickup && status.deliveryPin && <section className="flex items-center justify-between gap-4 rounded-2xl bg-brand-soft p-4">
+      <div className="min-w-0"><p className="text-sm font-bold">{t("Delivery PIN", "डिलीवरी PIN")}</p><p className="text-xs">{t("Tell this to the rider when your food arrives. Do not share it before.", "खाना पहुँचने पर राइडर को यह बताएँ। पहले किसी को न बताएँ।")}</p></div>
+      <p className="shrink-0 font-display text-[2rem] font-bold leading-none tracking-[0.2em] tabular" aria-label={`PIN ${status.deliveryPin.split("").join(" ")}`}>{status.deliveryPin}</p>
+    </section>}
 
-    {status.status === "draft" && status.paymentMode === "manual_qr" && status.paymentStatus === "pending" && <section className={`${card} space-y-2 text-caption`}>
+    <section className="rounded-2xl bg-brand-soft p-4"><p className="text-sm font-bold">{head.nextTitle}</p><p className="mt-1 text-sm">{head.next}</p></section>
+
+    {placed && !finished && <PushOffer hindi={hindi} outletCode={outletCode} />}
+
+    {!finished && <div className="flex items-center justify-between gap-3">
+      <div className="min-w-0"><p className="text-sm font-bold">{t("Order status", "ऑर्डर की स्थिति")}</p><p className="text-xs text-muted">{t("Updates by itself", "अपने आप अपडेट होता है")}</p></div>
+      <button type="button" disabled={pending} onClick={onRefresh} className="min-h-11 shrink-0 cursor-pointer rounded-xl border border-line bg-surface px-4 text-sm font-bold text-brand disabled:opacity-50">{pending ? t("Updating…", "अपडेट हो रहा है…") : t("Refresh", "रिफ्रेश")}</button>
+    </div>}
+
+    {brand?.outlet.phone && <a href={`tel:${brand.outlet.phone}`} className="flex items-center gap-3 rounded-2xl border border-line bg-surface p-4">
+      <Headphones size={20} className="shrink-0 text-brand" aria-hidden />
+      <span className="min-w-0 flex-1"><b className="block text-sm">{head.help}</b><span className="block text-xs text-muted">{t("Contact the restaurant or get support", "रेस्टोरेंट से बात करें या मदद लें")}</span></span>
+      <ChevronRight size={18} className="shrink-0 text-muted" aria-hidden />
+    </a>}
+
+    {status.status === "draft" && status.paymentMode === "manual_qr" && status.paymentStatus === "pending" && <section className="space-y-2 rounded-2xl border border-line bg-surface p-4 text-sm">
       <p>{t("UPI reference", "UPI रेफरेंस")}: <strong className="font-mono">{status.manualPaymentReference}</strong></p>
-      <p className="text-muted">{t("The business will verify the payment before sending your order to the kitchen.", "किचन में ऑर्डर भेजने से पहले पेमेंट की पुष्टि की जाएगी।")}</p>
+      <p className="text-xs text-muted">{t("The business will verify the payment before sending your order to the kitchen.", "किचन में ऑर्डर भेजने से पहले पेमेंट की पुष्टि की जाएगी।")}</p>
       {status.manualPaymentQrUrl && <Image src={status.manualPaymentQrUrl} alt={t("Business payment QR", "पेमेंट QR")} width={192} height={192} unoptimized className="rounded-lg bg-white p-2" />}
     </section>}
 
-    <section className={card}>
-      {status.items.length > 0 && <ul className="mb-3 divide-y divide-line/70 border-b border-line/70 pb-1">
-        {status.items.map((item, i) => <li key={i} className="flex items-center gap-3 py-3"><Thumb photo={item.imageUrl} size="size-12"/><span className="min-w-0 flex-1"><b className="block text-sm">{item.qty} × {(hindi && item.nameHi) || item.name}</b>{item.modifiers?.length ? <span className="mt-1 block text-xs text-muted">{item.modifiers.map(m=>(hindi&&m.nameHi)||m.nameEn).join(" · ")}</span> : null}</span><span className="shrink-0 text-sm font-bold">{money(item.unitPricePaise*item.qty)}</span></li>)}
-      </ul>}
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-body font-bold">{t("Total", "कुल")}</span>
-        <span className="font-display text-section font-bold tabular">{money(status.totalPaise)}</span>
-      </div>
-      {status.deliveryFeePaise > 0 && <p className="text-caption text-muted">{t(`Includes delivery ${money(status.deliveryFeePaise)}`, `डिलीवरी ${money(status.deliveryFeePaise)} शामिल`)}</p>}
-      <p className={`mt-2 inline-flex rounded-full px-2.5 py-0.5 text-caption font-bold ${status.paid ? "bg-[var(--state-available-soft)] text-[var(--state-available-text)]" : "bg-[var(--state-bill-soft)] text-[var(--state-bill-text)]"}`}>
-        {paymentLabel}
-      </p>
-      {status.paymentFailureReason && <p role="status" className="mt-2 rounded-xl bg-brand-soft p-3 text-caption">{status.paymentFailureReason}</p>}
-      {status.status === "draft" && status.paymentStatus === "pending" && status.paymentMode === "gateway" && onPay && <button type="button" disabled={pending} className={`${button} mt-3`} onClick={onPay}>{t("Continue secure payment", "सुरक्षित पेमेंट जारी रखें")}</button>}
+    <section className="rounded-2xl border border-line bg-surface px-4 pb-4 pt-2.5" aria-label={t("Order summary", "ऑर्डर का सारांश")}>
+      <span aria-hidden className="mx-auto block h-1 w-10 rounded-full bg-line" />
+      <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="mt-3 flex w-full cursor-pointer items-center justify-between gap-3 text-left">
+        <span><b className="block text-base">{t("Order summary", "ऑर्डर का सारांश")}</b><span className="text-sm text-muted">{count > 0 ? t(`${count} ${count === 1 ? "item" : "items"}`, `${count} आइटम`) : t("Items", "आइटम")} · {status.status === "cancelled" ? t("Original value", "मूल राशि") : t("Total", "कुल")} {money(status.totalPaise)}</span></span>
+        <ChevronDown size={20} className={`shrink-0 text-muted transition-transform ${open ? "rotate-180" : ""}`} aria-hidden />
+      </button>
+      {open && <div className="mt-3 divide-y divide-line [&>*]:py-3 [&>*:last-child]:pb-0">
+        {status.items.length > 0 ? <ul className="grid gap-3">
+          {status.items.map((item, i) => <li key={i} className="flex items-center gap-3"><Thumb photo={item.imageUrl} size="size-14" /><span className="min-w-0 flex-1"><b className="block text-sm">{item.qty} × {(hindi && item.nameHi) || item.name}</b>{item.modifiers?.length ? <span className="mt-0.5 block text-xs text-muted">{item.modifiers.map((m) => (hindi && m.nameHi) || m.nameEn).join(" · ")}</span> : null}</span><b className="shrink-0 text-sm tabular">{money(item.unitPricePaise * item.qty)}</b></li>)}
+        </ul> : <div><p className="text-sm font-bold">{t("Items", "आइटम")}</p><p className="mt-1 text-sm text-muted">{t("Item names are unavailable in this record.", "इस रिकॉर्ड में आइटम के नाम नहीं हैं।")}</p></div>}
+        <div className="grid gap-2">
+          {subtotal > 0 && <p className={`${row} text-muted`}><span>{t("Item subtotal", "आइटम का कुल")}</span><span className="tabular">{money(subtotal)}</span></p>}
+          {!!status.billBreakdown?.discountPaise && <p className={`${row} text-brand`}><span>{t("Discount", "छूट")}</span><span className="tabular">−{money(status.billBreakdown.discountPaise)}</span></p>}
+          {!!status.billBreakdown?.taxPaise && <p className={`${row} text-muted`}><span>{t("Tax", "टैक्स")}</span><span className="tabular">{money(status.billBreakdown.taxPaise)}</span></p>}
+          {status.deliveryFeePaise > 0 && <p className={`${row} text-muted`}><span>{t("Delivery charge", "डिलीवरी शुल्क")}</span><span className="tabular">{money(status.deliveryFeePaise)}</span></p>}
+          {!!status.billBreakdown?.serviceChargePaise && <p className={`${row} text-muted`}><span>{t("Service charge", "सर्विस शुल्क")}</span><span className="tabular">{money(status.billBreakdown.serviceChargePaise)}</span></p>}
+          {!!status.billBreakdown?.roundOffPaise && <p className={`${row} text-muted`}><span>{t("Round off", "राउंड ऑफ़")}</span><span className="tabular">{money(status.billBreakdown.roundOffPaise)}</span></p>}
+          <p className={`${row} font-bold`}><span>{status.status === "cancelled" ? t("Original order value", "ऑर्डर की मूल राशि") : t("Bill total", "बिल का कुल")}</span><span className="text-base tabular">{money(status.totalPaise)}</span></p>
+          <div className="mt-1 rounded-xl bg-brand-soft p-3"><p className="text-sm font-bold">{box.title}</p><p className="mt-0.5 text-sm">{box.note}</p></div>
+          {status.paymentFailureReason && <p role="status" className="rounded-xl bg-brand-soft p-3 text-xs">{status.paymentFailureReason}</p>}
+          {status.status === "draft" && status.paymentStatus === "pending" && status.paymentMode === "gateway" && onPay && <button type="button" disabled={pending} className={button} onClick={onPay}>{t("Continue secure payment", "सुरक्षित पेमेंट जारी रखें")}</button>}
+          {status.billPdfUrl && <a href={status.billPdfUrl} className="mt-1 flex min-h-12 items-center justify-center rounded-xl border border-line text-sm font-bold text-brand">{status.status === "cancelled" ? t("Download order record", "ऑर्डर रिकॉर्ड डाउनलोड करें") : t("Download bill", "बिल डाउनलोड करें")}</a>}
+        </div>
+        {pickup ? brand?.outlet.address && <div><p className="text-sm font-bold">{t("Collect from", "यहाँ से लें")}</p><p className="mt-1 text-sm text-muted">{brand.outlet.address}, {brand.outlet.city}</p></div>
+          : <div><p className="text-sm font-bold">{status.status === "cancelled" ? t("Delivery address on order", "ऑर्डर का डिलीवरी पता") : t("Delivering to", "यहाँ डिलीवरी")}{status.status !== "cancelled" && status.name ? ` · ${status.name}` : ""}</p><p className="mt-1 text-sm text-muted">{status.address.line ? `${status.address.line}, ${status.address.locality} · ${status.address.pincode}` : t("Address is not available in this record.", "इस रिकॉर्ड में पता नहीं है।")}</p></div>}
+        <div>
+          <div className="flex items-center justify-between gap-3"><p className="text-sm font-bold">{t("Order details", "ऑर्डर की जानकारी")}</p><button type="button" onClick={() => { void navigator.clipboard.writeText(status.id).then(() => setCopied(true), () => setCopied(false)); }} className="inline-flex min-h-9 cursor-pointer items-center gap-1.5 text-sm font-bold text-brand"><Copy size={16} className="text-ink" aria-hidden />{copied ? t("Copied", "कॉपी हो गया") : t("Copy ID", "ID कॉपी करें")}</button></div>
+          <p className="mt-1 break-all text-sm text-muted">{status.id}</p>
+          {placedOn && <p className="mt-1 text-sm text-muted">{t("Placed", "ऑर्डर")} {placedOn.toLocaleDateString(locale, { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" })} · {placedOn.toLocaleTimeString(locale, { timeZone: "Asia/Kolkata" })}</p>}
+          <p className="mt-1 text-sm text-muted">{brand?.outlet.name} · {pickup ? t("Pickup", "पिकअप") : t("Delivery", "डिलीवरी")}</p>
+        </div>
+      </div>}
     </section>
 
-    {!pickup && <section className={`${card} flex items-start gap-3`}>
-      <HugeiconsIcon icon={Location01Icon} size={20} className="mt-0.5 shrink-0 text-brand" aria-hidden />
-      <div className="min-w-0"><p className="text-caption text-muted">{t("Delivering to", "यहाँ डिलीवरी")} {status.name ? `· ${status.name}` : ""}</p><p className="text-body">{status.address.line}, {status.address.locality} · {status.address.pincode}</p></div>
-    </section>}
+    {!pickup && status.status === "delivered" && (status.canRate || status.myRating) && <RateRider outletCode={outletCode} hindi={hindi} name={status.courierName} given={status.myRating} rider={status.courierRating} />}
 
-    {status.billPdfUrl && <a href={status.billPdfUrl} className="flex min-h-12 items-center justify-center rounded-2xl border border-line bg-surface text-sm font-bold text-brand-strong">{t("Download bill", "बिल डाउनलोड करें")}</a>}
-
-    {/* After delivery the next order is the main thing to do; while it is on its way it stays a quieter option */}
-    <Link href={newOrderHref.replace("?new=1", `?mode=${pickup ? "pickup" : "delivery"}&new=1`)} className={`flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl text-body font-bold ${status.status === "delivered" || status.status === "collected" || status.status === "cancelled" ? "bg-brand text-brand-on shadow-[0_8px_20px_-6px_var(--brand-border)]" : "border border-brand/40 bg-surface text-brand-strong"}`}><HugeiconsIcon icon={PlusSignIcon} size={18} strokeWidth={2} aria-hidden />{t("Start another order", "नया ऑर्डर करें")}</Link>
-    <button type="button" disabled={pending} onClick={onRefresh} className="mx-auto block min-h-10 px-2 text-caption font-semibold text-muted hover:text-ink">{pending ? t("Updating…", "अपडेट हो रहा है…") : t("Updates by itself · refresh now", "अपने आप अपडेट होता है · अभी देखें")}</button>
+    {finished && reorderHref
+      ? <Link href={reorderHref} className="flex min-h-12 items-center justify-center rounded-xl bg-brand text-sm font-bold text-brand-on">{t("Reorder · Review cart", "फिर से ऑर्डर · कार्ट देखें")}</Link>
+      : <Link href={newOrderHref.replace("?new=1", `?mode=${pickup ? "pickup" : "delivery"}&new=1`)} className={`flex min-h-12 items-center justify-center rounded-xl text-sm font-bold ${finished ? "bg-brand text-brand-on" : "border border-line bg-surface text-brand"}`}>{t("Start another order", "नया ऑर्डर करें")}</Link>}
   </div>;
 }
 
 /** After delivery: one tap of stars for the rider, with an optional word */
-function RateRider({ outletCode, hindi, name, given }: { outletCode: string; hindi: boolean; name: string | null; given: number | null }) {
+function RateRider({ outletCode, hindi, name, given, rider }: { outletCode: string; hindi: boolean; name: string | null; given: number | null; rider: Status["courierRating"] }) {
   const t = (en: string, hi: string) => (hindi ? hi : en);
   const [stars, setStars] = useState(given ?? 0);
   const [note, setNote] = useState("");
@@ -538,11 +589,12 @@ function RateRider({ outletCode, hindi, name, given }: { outletCode: string; hin
     <p className="mt-2 text-caption font-semibold text-success">{t("Thanks for rating your rider!", "राइडर को रेटिंग देने के लिए धन्यवाद!")}</p>
   </section>;
   return <section className="rounded-[22px] border border-line/70 bg-surface p-4">
-    <p className="text-body font-bold">{t(`How was ${name ?? "your rider"}?`, `${name ?? "राइडर"} कैसे थे?`)}</p>
-    <div role="radiogroup" aria-label={t("Rider rating", "राइडर रेटिंग")} className="mt-3 flex justify-center gap-1.5">
-      {[1, 2, 3, 4, 5].map((n) => <button key={n} type="button" role="radio" aria-checked={stars === n} aria-label={`${n} · ${labels[n - 1]}`} onClick={() => setStars(n)} className={`grid size-12 place-items-center rounded-xl text-[1.75rem] leading-none transition-transform active:scale-90 ${n <= stars ? "text-[var(--state-held)]" : "text-ink/15"}`}>★</button>)}
+    <p className="text-base font-bold">{t("How was your delivery?", "डिलीवरी कैसी रही?")}</p>
+    <p className="mt-1 text-sm text-muted">{[name, rider?.rating != null ? `${rider.rating.toFixed(1)} (${rider.ratings})` : null, rider ? t(`${rider.rides} deliveries`, `${rider.rides} डिलीवरी`) : null].filter(Boolean).join(" · ")}</p>
+    <div role="radiogroup" aria-label={t("Rider rating", "राइडर रेटिंग")} className="mt-3 flex gap-2">
+      {[1, 2, 3, 4, 5].map((n) => <button key={n} type="button" role="radio" aria-checked={stars === n} aria-label={`${n} · ${labels[n - 1]}`} onClick={() => setStars(n)} className={`grid size-12 cursor-pointer place-items-center rounded-xl border border-line text-[1.5rem] leading-none transition-transform active:scale-90 ${n <= stars ? "text-[var(--state-held)]" : "text-muted"}`}>{n <= stars ? "★" : "☆"}</button>)}
     </div>
-    <p className="mt-1 h-5 text-center text-caption font-semibold text-muted">{stars ? labels[stars - 1] : ""}</p>
+    <p className="mt-2 text-sm text-muted">{stars ? labels[stars - 1] : t("Optional · Not rated yet", "वैकल्पिक · अभी रेटिंग नहीं")}</p>
     {stars > 0 && <>
       <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={200} placeholder={t("Anything to add? (optional)", "कुछ कहना है? (वैकल्पिक)")} className="mt-2 min-h-11 w-full rounded-xl border border-line bg-paper px-3 text-body" />
       {error && <p role="alert" className="mt-2 text-caption font-semibold text-danger">{error}</p>}

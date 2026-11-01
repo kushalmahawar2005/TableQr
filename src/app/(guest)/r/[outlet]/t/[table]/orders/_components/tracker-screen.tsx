@@ -346,7 +346,7 @@ export function TrackerScreen({
                   aria-selected={on}
                   onClick={() => setTab(t)}
                   className={`flex min-h-12 items-center justify-center gap-2 rounded-2xl border text-body font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
-                    on ? "border-brand bg-brand text-brand-on shadow-[0_4px_12px_-2px_var(--brand-border)]" : "border-line/70 bg-surface text-ink shadow-[0_1px_3px_rgb(31_41_55/0.05)] hover:border-ink/30"
+                    on ? "border-brand bg-brand text-brand-on" : "border-line/70 bg-surface text-ink shadow-[0_1px_3px_rgb(31_41_55/0.05)] hover:border-ink/30"
                   }`}
                 >
                   <HugeiconsIcon icon={t === "orders" ? Note01Icon : LeftToRightListBulletIcon} size={18} aria-hidden />

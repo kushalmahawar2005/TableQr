@@ -1,10 +1,10 @@
 "use client";
 import { useEffect, useRef, type ReactNode } from "react";
 import Link from "next/link";
-import Image from "next/image";
-import { ArrowLeft, X, Soup } from "lucide-react";
+import { ArrowLeft, X } from "lucide-react";
 import { useGuestExperience } from "../guest-shell";
 import { useGuestBase } from "@/lib/guest-base";
+import { BowlArt } from "./order-art";
 
 export function GuestHeader({outlet,title,aside}:{outlet:string;title:string;aside?:ReactNode}) {
  const base=useGuestBase(outlet);
@@ -15,8 +15,14 @@ export function GuestSheet({title,children,onClose}:{title:string;children:React
  useEffect(()=>{const el=ref.current;el?.showModal();return()=>el?.close()},[]);
  return <dialog ref={ref} className="guest-sheet" onCancel={event=>{event.preventDefault();onClose()}} onClick={event=>{if(event.target===event.currentTarget)onClose()}}><div className="guest-sheet-content"><header><h2>{title}</h2><button type="button" className="guest-icon-button" onClick={onClose} aria-label="Close"><X size={20}/></button></header>{children}</div></dialog>;
 }
-export function GuestSplash({name,logoUrl}:{name?:string;logoUrl?:string|null}) {
+export function GuestSplash({name}:{name?:string}) {
  const {brand}=useGuestExperience();
- name=brand?.outlet.name ?? name ?? "Welcome"; logoUrl=brand?.outlet.logoUrl ?? logoUrl;
- return <div className="guest-splash" role="status" aria-label={`Opening ${name}`}><div className="guest-splash-art"><Soup size={64} strokeWidth={1.4}/><span>✦</span></div>{logoUrl&&<Image src={logoUrl} alt="" width={56} height={56} unoptimized className="size-14 rounded-full object-cover"/>}<h1>{name}</h1><p>Your favourites. A little closer.</p><span className="guest-loading-dots" aria-hidden><i/><i/><i/></span></div>;
+ name=brand?.outlet.name ?? name ?? "Welcome";
+ return <div className="guest-splash" role="status" aria-label={`Opening ${name}`}><BowlArt/><h1>{name}</h1><p>Your favourites. A little closer.</p></div>;
+}
+
+/** "EN / हिन्दी": taps straight to the other language */
+export function LanguageSwitch() {
+ const {language,setLanguage}=useGuestExperience();
+ return <button type="button" onClick={()=>setLanguage(language==="hi"?"en":"hi")} aria-label={language==="hi"?"Switch to English":"हिन्दी में देखें"} className="inline-flex min-h-11 shrink-0 cursor-pointer items-center gap-1.5 rounded-xl border border-line bg-surface px-3 text-sm"><b className={language==="en"?"text-ink":"font-normal text-muted"}>EN</b><span className="text-muted">/</span><b className={language==="hi"?"text-ink":"font-normal text-muted"}>हिन्दी</b></button>;
 }

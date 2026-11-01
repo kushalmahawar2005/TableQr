@@ -48,7 +48,7 @@ export function CartBar({
   );
   // Blocked: a quiet neutral surface, never the primary-action look
   const cls = `flex min-h-14 w-full items-center justify-between gap-3 rounded-cta px-4 py-2.5 text-left ${
-    pausedBy ? "border border-line bg-[#EFEAE2] text-ink shadow-[var(--shadow-dropdown)]" : "bg-brand text-brand-on shadow-[var(--shadow-float)]"
+    pausedBy ? "border border-line bg-[#EFEAE2] text-ink shadow-[var(--shadow-dropdown)]" : "bg-brand text-brand-on"
   }`;
 
   return (

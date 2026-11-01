@@ -26,7 +26,7 @@ function SlotGroups({ slots, selected, busy, onSelect, hindi, timezone }: { slot
       <div className="mt-2 grid grid-cols-3 gap-2">{part.map(slot => {
         const on = selected === slot.startAt;
         return <button type="button" key={slot.startAt} disabled={!slot.available || busy} onClick={() => onSelect(slot.startAt)} aria-pressed={on}
-          className={`min-h-12 rounded-2xl border-2 px-1 py-1.5 text-center transition-[border-color,background-color,transform] duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand active:scale-[0.97] disabled:cursor-not-allowed ${on ? "border-brand bg-brand text-brand-on shadow-[0_6px_16px_-6px_var(--brand-border)]" : slot.available ? "border-line/70 bg-surface text-ink hover:border-ink/30" : "border-transparent bg-paper text-muted line-through decoration-muted/50"}`}>
+          className={`min-h-12 rounded-2xl border-2 px-1 py-1.5 text-center transition-[border-color,background-color,transform] duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand active:scale-[0.97] disabled:cursor-not-allowed ${on ? "border-brand bg-brand text-brand-on" : slot.available ? "border-line/70 bg-surface text-ink hover:border-ink/30" : "border-transparent bg-paper text-muted line-through decoration-muted/50"}`}>
           <span className="block text-body font-bold tabular">{new Intl.DateTimeFormat(hindi ? "hi-IN-u-nu-latn" : "en-IN", { timeZone: timezone, hour: "numeric", minute: "2-digit" }).format(new Date(slot.startAt))}</span>
           {!slot.available ? <span className="block text-label no-underline">{hindi ? "भर गया" : "Full"}</span> : slot.creditRequiredPaise ? <span className={`block text-label ${on ? "text-brand-on/85" : "text-muted"}`}>{hindi ? "अग्रिम" : "Advance"} {money(slot.creditRequiredPaise)}</span> : null}
         </button>;
@@ -136,7 +136,7 @@ export function BookingClient({ outletCode, zones, timezone, today, freeCancella
       <div className="mt-4 flex items-center justify-between rounded-2xl bg-paper p-2">
         <button type="button" aria-label={t("Fewer guests", "कम मेहमान")} disabled={party <= 1} onClick={() => chooseParty(Math.max(1, party - 1))} className="grid size-12 place-items-center rounded-xl bg-surface text-ink shadow-[0_1px_3px_rgb(31_41_55/0.08)] transition-transform active:scale-95 disabled:opacity-40"><HugeiconsIcon icon={MinusSignIcon} size={20} strokeWidth={2.2} aria-hidden /></button>
         <span aria-live="polite" className="text-center"><span className="block font-display text-[1.75rem] leading-none font-bold tabular">{party}</span><span className="mt-1 block text-label text-muted">{party > 12 ? t("Event enquiry", "कार्यक्रम की पूछताछ") : party === 1 ? t("guest", "मेहमान") : t("guests", "मेहमान")}</span></span>
-        <button type="button" aria-label={t("More guests", "ज़्यादा मेहमान")} onClick={() => chooseParty(party + 1)} className="grid size-12 place-items-center rounded-xl bg-brand text-brand-on shadow-[0_4px_12px_-2px_var(--brand-border)] transition-transform active:scale-95"><HugeiconsIcon icon={PlusSignIcon} size={20} strokeWidth={2.2} aria-hidden /></button>
+        <button type="button" aria-label={t("More guests", "ज़्यादा मेहमान")} onClick={() => chooseParty(party + 1)} className="grid size-12 place-items-center rounded-xl bg-brand text-brand-on transition-transform active:scale-95"><HugeiconsIcon icon={PlusSignIcon} size={20} strokeWidth={2.2} aria-hidden /></button>
       </div>
       {party > 12 && <p className="mt-3 rounded-2xl bg-brand-soft/60 p-3 text-caption text-ink">{t("For 13 or more guests, send an enquiry so the restaurant can confirm arrangements with you.", "13 या अधिक मेहमानों के लिए पूछताछ भेजें ताकि रेस्टोरेंट व्यवस्था की पुष्टि कर सके।")}</p>}
     </Card>
@@ -144,7 +144,7 @@ export function BookingClient({ outletCode, zones, timezone, today, freeCancella
     <Card icon={Calendar03Icon} title={t("Date", "तारीख")}>
       <div className="-mx-4 mt-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] min-[380px]:-mx-5 min-[380px]:px-5">{dates.map(d => {
         const on = date === d; const p = dayParts(d);
-        return <button type="button" key={d} onClick={() => chooseDate(d)} aria-pressed={on} className={`flex min-w-[68px] shrink-0 flex-col items-center rounded-2xl border-2 px-2 py-2.5 transition-[border-color,background-color,transform] duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand active:scale-[0.97] ${on ? "border-brand bg-brand text-brand-on shadow-[0_6px_16px_-6px_var(--brand-border)]" : "border-line/70 bg-surface text-ink hover:border-ink/30"}`}>
+        return <button type="button" key={d} onClick={() => chooseDate(d)} aria-pressed={on} className={`flex min-w-[68px] shrink-0 flex-col items-center rounded-2xl border-2 px-2 py-2.5 transition-[border-color,background-color,transform] duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand active:scale-[0.97] ${on ? "border-brand bg-brand text-brand-on" : "border-line/70 bg-surface text-ink hover:border-ink/30"}`}>
           <span className={`text-label font-semibold ${on ? "text-brand-on/85" : "text-muted"}`}>{p.week}</span>
           <span className="mt-0.5 font-display text-[1.375rem] leading-tight font-bold tabular">{p.day}</span>
           <span className={`text-label ${on ? "text-brand-on/85" : "text-muted"}`}>{p.month}</span>
@@ -172,7 +172,7 @@ export function BookingClient({ outletCode, zones, timezone, today, freeCancella
         <input aria-label={t("Group request name", "समूह का नाम")} value={groupName} onChange={e => setGroupName(e.target.value)} placeholder={t("Your name", "आपका नाम")} className={field} />
         <input aria-label={t("Group request phone", "फोन नंबर")} type="tel" inputMode="tel" value={groupPhone} onChange={e => setGroupPhone(e.target.value)} placeholder={t("Phone number", "फोन नंबर")} className={field} />
         <textarea aria-label={t("Group request notes", "समूह की जानकारी")} value={groupNotes} onChange={e => setGroupNotes(e.target.value)} placeholder={t("Tell us about the occasion, preferred end time or any needs (optional)", "कार्यक्रम, पसंदीदा समाप्ति समय या ज़रूरी बात बताएँ (वैकल्पिक)")} className={`${field} min-h-24 py-3`} />
-        <button type="button" disabled={busy || !groupName || !groupPhone} onClick={() => void submitGroup()} className="min-h-13 rounded-2xl bg-brand px-4 text-button font-bold text-brand-on shadow-[0_8px_20px_-6px_var(--brand-border)] disabled:opacity-50 disabled:shadow-none">{t("Send event enquiry", "कार्यक्रम की पूछताछ भेजें")}</button>
+        <button type="button" disabled={busy || !groupName || !groupPhone} onClick={() => void submitGroup()} className="min-h-13 rounded-2xl bg-brand px-4 text-button font-bold text-brand-on disabled:opacity-50">{t("Send event enquiry", "कार्यक्रम की पूछताछ भेजें")}</button>
       </div>}
     </Card>}
 
@@ -185,7 +185,7 @@ export function BookingClient({ outletCode, zones, timezone, today, freeCancella
           <p className="text-label text-muted">{party} {party === 1 ? t("guest", "मेहमान") : t("guests", "मेहमान")}</p>
           <p className="truncate text-body font-bold">{selectedLabel ?? t("Pick a time", "समय चुनें")}</p>
         </div>
-        <button type="button" disabled={!selected || busy} onClick={() => void continueBooking()} className="min-h-12 shrink-0 rounded-2xl bg-brand px-6 text-button font-bold text-brand-on shadow-[0_8px_20px_-6px_var(--brand-border)] transition-transform active:scale-[0.98] disabled:bg-line disabled:text-muted disabled:shadow-none">{busy ? t("Working…", "प्रक्रिया जारी है…") : t("Continue", "आगे बढ़ें")}</button>
+        <button type="button" disabled={!selected || busy} onClick={() => void continueBooking()} className="min-h-12 shrink-0 rounded-2xl bg-brand px-6 text-button font-bold text-brand-on transition-transform active:scale-[0.98] disabled:bg-line disabled:text-muted">{busy ? t("Working…", "प्रक्रिया जारी है…") : t("Continue", "आगे बढ़ें")}</button>
       </div>
     </div>}
   </main>;

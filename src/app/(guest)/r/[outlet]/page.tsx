@@ -28,7 +28,8 @@ export default async function RestaurantPage(props: { params: Promise<{ outlet: 
   const app = await restaurantApp(outlet);
   const query = await props.searchParams;
   const mode = query.mode === "pickup" && data.services.pickup ? "pickup" : data.services.delivery ? "delivery" : "pickup";
-  if (data.services.delivery || data.services.pickup) {
+  // The guest link opens on the choice of what to do; only a link that names a mode goes to the menu
+  if (query.mode && (data.services.delivery || data.services.pickup)) {
     let menu;
     try { menu = await deliveryMenu(outlet, mode); } catch (error) { if (!(error instanceof AppError)) throw error; }
     if(menu) return <DeliveryScreen key={mode} outletCode={outlet} data={{ ...menu, outlet: { ...menu.outlet, name: data.outlet.name } }} initialServiceMode={mode} installable={app ? { name: app.name, logoUrl: app.logoUrl } : null} hindi={parseLang(jar.get(LANG_COOKIE)?.value) === "hi"} />;

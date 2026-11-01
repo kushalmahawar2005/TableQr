@@ -1174,7 +1174,7 @@ function UpiPay({ upi, amountPaise, note, lang, claimed, disabled, onPaid }: {
         </p>
       ) : (
         <>
-          <a href={link} className="mt-3 flex min-h-13 w-full items-center justify-center gap-2 rounded-2xl bg-brand px-4 text-button font-bold text-brand-on shadow-[0_8px_20px_-6px_var(--brand-border)]">
+          <a href={link} className="mt-3 flex min-h-13 w-full items-center justify-center gap-2 rounded-2xl bg-brand px-4 text-button font-bold text-brand-on">
             {t(`Pay ${formatRupees(amountPaise)} with a UPI app`, `UPI ऐप से ${formatRupees(amountPaise)} दें`)}
           </a>
           <button type="button" onClick={() => setShowQr((v) => !v)} className="mt-2 w-full text-center text-caption font-semibold text-brand-strong">{showQr ? t("Hide QR", "QR छिपाएँ") : t("Paying from another phone? Show QR", "दूसरे फ़ोन से? QR दिखाएँ")}</button>

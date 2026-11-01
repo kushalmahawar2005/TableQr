@@ -250,7 +250,7 @@ function RowAction({
           onClick={() => onQty(item.id, 1)}
           disabled={state.blocked}
           aria-label={blockedNote ? `${c.addOne(name)}. ${blockedNote}` : c.addOne(name)}
-          className="relative flex h-10 min-w-[96px] items-center justify-center gap-1.5 rounded-xl bg-brand px-4 text-body font-bold text-brand-on shadow-[0_4px_12px_-2px_var(--brand-border)] transition-[transform,background-color] duration-100 ease-natural before:absolute before:-inset-1 hover:bg-brand-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand active:scale-[0.96] disabled:cursor-default disabled:bg-line disabled:text-muted disabled:shadow-none"
+          className="relative flex h-10 min-w-[96px] items-center justify-center gap-1.5 rounded-xl bg-brand px-4 text-body font-bold text-brand-on transition-[transform,background-color] duration-100 ease-natural before:absolute before:-inset-1 hover:bg-brand-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand active:scale-[0.96] disabled:cursor-default disabled:bg-line disabled:text-muted"
         >
           <HugeiconsIcon icon={PlusSignIcon} size={17} strokeWidth={2.6} aria-hidden />
           {c.add}
@@ -266,7 +266,7 @@ function RowAction({
       <div
         role="group"
         aria-label={c.qtyOf(state.qty, name)}
-        className={`flex h-10 min-w-[96px] items-center justify-between gap-1 rounded-xl text-brand-on shadow-[0_4px_12px_-2px_var(--brand-border)] ${state.blocked ? "bg-muted" : "bg-brand"}`}
+        className={`flex h-10 min-w-[96px] items-center justify-between gap-1 rounded-xl text-brand-on ${state.blocked ? "bg-muted" : "bg-brand"}`}
       >
         <StepButton icon={MinusSignIcon} label={c.removeOne(name)} disabled={state.blocked} note={blockedNote} onClick={() => onQty(item.id, state.qty - 1)} />
         <span aria-live="polite" className="min-w-6 text-center text-body font-bold tabular">
@@ -308,7 +308,7 @@ function OutlineButton({
       onClick={onClick}
       disabled={disabled}
       aria-label={note ? `${ariaLabel}. ${note}` : ariaLabel}
-      className="relative flex h-10 min-w-[96px] items-center justify-center gap-1 rounded-xl px-3 py-1 border border-brand-border bg-surface text-body font-bold text-brand-strong shadow-[0_1px_2px_rgb(31_41_55/0.08)] transition-[transform,background-color] duration-100 ease-natural before:absolute before:-inset-1 hover:bg-brand-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand active:scale-[0.97] disabled:cursor-default disabled:border-line disabled:text-muted disabled:shadow-none disabled:hover:bg-surface disabled:active:scale-100"
+      className="relative flex h-10 min-w-[96px] items-center justify-center gap-1 rounded-xl px-3 py-1 border border-brand-border bg-surface text-body font-bold text-brand-strong shadow-[0_1px_2px_rgb(31_41_55/0.08)] transition-[transform,background-color] duration-100 ease-natural before:absolute before:-inset-1 hover:bg-brand-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand active:scale-[0.97] disabled:cursor-default disabled:border-line disabled:text-muted disabled:hover:bg-surface disabled:active:scale-100"
     >
       {label}
       <HugeiconsIcon icon={icon} size={16} strokeWidth={2.2} aria-hidden />

@@ -3,9 +3,13 @@ import { staffAppIconUrl } from "./staff-app";
 /** Use the restaurant's uploaded logo as the installed guest app icon when it exists. */
 export function restaurantAppIcons(code: string, logoUrl: string | null) {
   if (logoUrl) {
-    // A saved restaurant logo is already a square 512 px image. Declare it as scalable and
-    // maskable so Chrome can use it for both the install dialog and the home-screen icon.
-    return [{ src: logoUrl, sizes: "any", purpose: "any maskable" }];
+    // Android needs real PNG sizes from this site, so the logo is served through the app-icon route
+    const icon = `/r/${encodeURIComponent(code)}/app-icon`;
+    return [
+      { src: `${icon}/192`, sizes: "192x192", type: "image/png", purpose: "any" },
+      { src: `${icon}/512`, sizes: "512x512", type: "image/png", purpose: "any" },
+      { src: `${icon}/512?maskable=1`, sizes: "512x512", type: "image/png", purpose: "maskable" },
+    ];
   }
 
   // Keep the restaurant-specific initials as a useful fallback when no logo was uploaded.
