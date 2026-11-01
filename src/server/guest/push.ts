@@ -12,7 +12,7 @@ import { staffPushConfig, validateSubscription, type PushSubscriptionInput } fro
 // Push updates to a customer's phone about their own delivery. Same VAPID keys and service
 // worker as the staff app; a phone follows only its latest order.
 
-export type DeliveryNotice = "placed" | "dispatched" | "delivered" | "collected" | "cancelled";
+export type DeliveryNotice = "placed" | "ready" | "dispatched" | "delivered" | "collected" | "cancelled";
 
 /** Saves this phone for updates on the delivery its cookie belongs to */
 export async function saveDeliveryPush(code: string, token: string, deviceId: string, raw: PushSubscriptionInput) {
@@ -25,7 +25,7 @@ export async function saveDeliveryPush(code: string, token: string, deviceId: st
   return { saved: true };
 }
 
-const TEXT: Record<DeliveryNotice, (outlet: string, rider: string | null) => { title: string; body: string }> = {
+const TEXT: Record<Exclude<DeliveryNotice, "ready">, (outlet: string, rider: string | null) => { title: string; body: string }> = {
   placed: (o) => ({ title: `${o}: order confirmed`, body: "The kitchen has your order. We will tell you when it leaves." }),
   dispatched: (o, r) => ({ title: `${o}: on the way 🛵`, body: r ? `${r} is bringing your food. Tap to track.` : "Your food is on the way. Tap to track." }),
   delivered: (o) => ({ title: `${o}: delivered`, body: "Enjoy your meal! Thank you for ordering." }),
@@ -35,6 +35,7 @@ const TEXT: Record<DeliveryNotice, (outlet: string, rider: string | null) => { t
 
 const PICKUP_TEXT: Record<DeliveryNotice, (outlet: string) => { title: string; body: string }> = {
   placed: (o) => ({ title: `${o}: pickup order confirmed`, body: "The kitchen has your order. We will let you know when it is ready." }),
+  ready: (o) => ({ title: `${o}: ready for pickup`, body: "Your order is ready. Please collect it from the counter." }),
   dispatched: (o) => ({ title: `${o}: pickup order update`, body: "Your pickup order is being prepared. We will let you know when it is ready." }),
   delivered: (o) => ({ title: `${o}: pickup complete`, body: "Your pickup order has been collected. Enjoy your meal!" }),
   collected: (o) => ({ title: `${o}: pickup complete`, body: "Your pickup order has been collected. Enjoy your meal!" }),
@@ -52,9 +53,11 @@ export async function notifyDeliveryCustomer(scope: { tenantId: string; outletId
       .innerJoin(s.outlets, and(eq(s.outlets.tenantId, s.deliveryCheckouts.tenantId), eq(s.outlets.id, s.deliveryCheckouts.outletId)))
       .where(and(eq(s.deliveryCheckouts.tenantId, scope.tenantId), eq(s.deliveryCheckouts.sessionId, sessionId)));
     if (!row) return;
+    // Delivery customers next hear when the rider leaves
+    const text = row.serviceMode === "pickup" ? PICKUP_TEXT[notice](row.name) : notice === "ready" ? null : TEXT[notice](row.name, row.courierName);
+    if (!text) return;
     const subs = await db.select().from(s.guestPushSubscriptions).where(and(eq(s.guestPushSubscriptions.tenantId, scope.tenantId), eq(s.guestPushSubscriptions.deliveryCheckoutId, row.id)));
     if (!subs.length) return;
-    const text = row.serviceMode === "pickup" ? PICKUP_TEXT[notice](row.name) : TEXT[notice](row.name, row.courierName);
     const payload = JSON.stringify({ ...text, url: `/r/${encodeURIComponent(row.code)}/delivery`, tag: `delivery-${row.id.slice(0, 8)}`, icon: staffAppIconUrl(192, row.code), badge: staffAppIconUrl(180, row.code) });
     await Promise.allSettled(subs.map(async (sub) => {
       try {

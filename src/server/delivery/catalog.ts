@@ -9,7 +9,7 @@ import { priceLine } from "@/domain/pricing";
 import { tenantFeatures } from "../plan";
 import { tenantAccess } from "../access";
 import { AppError } from "../errors";
-import { outletGatewayFromConfig } from "../payments/outlet-gateway";
+import { outletGatewayReady } from "../payments/outlet-gateway";
 import { loadItemsForBrowsing, isWithinCategoryWindow, loadItems } from "../guest/menu";
 import type { Runner } from "../db-types";
 import { BUSINESS_PACKAGE_PROFILES, type BusinessType } from "@/lib/subscription-pricing";
@@ -28,7 +28,7 @@ export async function deliveryOutlet(code: string, ordering = true, now = new Da
     if (mode === "delivery" && !policy.acceptingOrders) throw new AppError("outlet_unavailable", "Delivery is paused. Please contact the business.");
     if (mode === "pickup" && !policy.acceptingPickupOrders) throw new AppError("outlet_unavailable", "Pickup orders are paused. Please contact the business.");
     if (mode === "delivery" && policy.paymentMode === "manual_qr" && !row.outlet.bookingPaymentQrUrl) throw new AppError("outlet_unavailable", "This business has not added its payment QR yet. Please contact staff.");
-    if (mode === "delivery" && policy.paymentMode === "gateway" && !outletGatewayFromConfig(row.outlet.paymentGatewayConfig)) throw new AppError("outlet_unavailable", "Online delivery payment is not available right now. Please contact the business.");
+    if (mode === "delivery" && policy.paymentMode === "gateway" && !outletGatewayReady(row.outlet.paymentGatewayConfig)) throw new AppError("outlet_unavailable", "Online delivery payment is not available right now. Please contact the business.");
     if (!isOpenAt(row.outlet.openingHours, row.outlet.timezone, now)) throw new AppError("outlet_unavailable", "This business is closed right now.");
   }
   return { ...row.outlet, policy, logoUrl: row.logoUrl };
@@ -64,7 +64,7 @@ export async function deliveryMenu(code: string, mode: OrderServiceMode = "deliv
     ...category,
     items: items.filter(item => item.categoryId === category.id),
   })).filter(category => category.items.length > 0);
-  const gatewayAvailable = !!outletGatewayFromConfig(outlet.paymentGatewayConfig);
+  const gatewayAvailable = outletGatewayReady(outlet.paymentGatewayConfig);
   return { outlet: { code: outlet.code, name: outlet.name, logoUrl: outlet.logoUrl, paymentQrUrl: outlet.bookingPaymentQrUrl, gatewayAvailable, policy: outlet.policy }, categories: menuCategories, items };
 }
 

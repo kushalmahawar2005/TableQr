@@ -17,7 +17,7 @@ export async function saveCommercial(admin: { id: string; email: string; role: s
   if (admin.role !== "super_admin") throw new Error("Only a super admin can change subscriptions.");
   if (!Object.hasOwn(BUSINESS_TYPES, input.businessType)) throw new Error("Choose a business category.");
   if (!Number.isInteger(input.outletCount) || input.outletCount < 1 || input.outletCount > 1000) throw new Error("Enter 1 to 1000 outlets.");
-  if (!Number.isFinite(input.setupReceivedRupees) || input.setupReceivedRupees < 0 || !Number.isSafeInteger(input.setupReceivedRupees * 100)) throw new Error("Enter the setup amount received.");
+  if (!Number.isFinite(input.setupReceivedRupees) || input.setupReceivedRupees < 0 || !Number.isSafeInteger(Math.round(input.setupReceivedRupees * 100))) throw new Error("Enter the setup amount received.");
   await db.transaction(async tx => {
     const [tenant] = await tx.select().from(s.tenants).where(eq(s.tenants.id, tenantId)).for("update");
     if (!tenant || tenant.status === "cancelled" || tenant.status === "suspended") throw new Error("Business is unavailable.");

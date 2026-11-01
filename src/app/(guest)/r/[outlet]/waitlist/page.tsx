@@ -11,12 +11,15 @@ export const metadata: Metadata = { title: "Waitlist", robots: { index: false, f
 export default async function WaitlistPage(props: PageProps<"/r/[outlet]/waitlist">) {
   const { outlet } = await props.params;
   const query = await props.searchParams;
-  let zones;
+  const token = typeof query.token === "string" ? query.token : "";
+  let zones: Awaited<ReturnType<typeof getBookingZones>>;
 
   try {
     zones = await getBookingZones(outlet);
   } catch (error) {
-    if (error instanceof AppError && error.code === "forbidden") {
+    // Someone already in the queue can still follow their place after online booking is switched off
+    if (error instanceof AppError && error.code === "forbidden" && token) zones = [];
+    else if (error instanceof AppError && error.code === "forbidden") {
       return (
         <main className="mx-auto grid min-h-[70dvh] max-w-[520px] place-items-center px-5 py-10 text-center text-ink">
           <div>
@@ -29,15 +32,15 @@ export default async function WaitlistPage(props: PageProps<"/r/[outlet]/waitlis
         </main>
       );
     }
-    if (error instanceof AppError && (error.code === "not_found" || error.code === "outlet_unavailable")) notFound();
-    throw error;
+    else if (error instanceof AppError && (error.code === "not_found" || error.code === "outlet_unavailable")) notFound();
+    else throw error;
   }
 
   return (
     <WaitlistClient
       outlet={outlet}
       zones={zones}
-      token={typeof query.token === "string" ? query.token : ""}
+      token={token}
       realtimeUrl={process.env.REALTIME_URL?.replace(/^http/, "ws") ?? null}
     />
   );

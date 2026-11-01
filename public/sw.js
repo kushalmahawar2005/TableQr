@@ -79,6 +79,20 @@ self.addEventListener("fetch", (event) => {
 });
 
 /* Staff push notifications for the installable Tableeqr PWA. */
+// true or false once the server has answered; null when it could not be reached.
+const pushSessionActive = async (sessionId) => {
+  const check = new URL("/api/staff/push-session", self.location.origin);
+  check.searchParams.set("sessionId", sessionId);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt) await new Promise((resolve) => setTimeout(resolve, attempt * 2000));
+    try {
+      const response = await fetch(check.href, { credentials: "include", cache: "no-store" });
+      if (response.ok) return (await response.json()).active === true;
+    } catch { /* a phone waking from sleep may need a moment to reconnect */ }
+  }
+  return null;
+};
+
 self.addEventListener("push", (event) => {
   let data = {};
   try { data = event.data ? event.data.json() : {}; } catch { data = { body: event.data?.text() ?? "" }; }
@@ -89,14 +103,10 @@ self.addEventListener("push", (event) => {
     if (staffNotification) {
       // Old or queued staff alerts must not appear after sign-out or after another account signs in.
       if (!sessionId) return;
-      try {
-        const check = new URL("/api/staff/push-session", self.location.origin);
-        check.searchParams.set("sessionId", sessionId);
-        const response = await fetch(check.href, { credentials: "include", cache: "no-store" });
-        if (!response.ok || (await response.json()).active !== true) return;
-      } catch {
-        return;
-      }
+      const active = await pushSessionActive(sessionId);
+      if (active === false) return;
+      // Never lose a new order to a bad connection, but show no details until the session is confirmed.
+      if (active === null) data = { url };
     }
     const title = typeof data.title === "string" ? data.title : "Tableeqr update";
     const options = {

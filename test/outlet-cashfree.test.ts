@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { encryptMerchantCredentials, outletGatewayFromConfig } from "@/server/payments/outlet-gateway";
+import { encryptMerchantCredentials, outletGatewayFromConfig, outletGatewayReady } from "@/server/payments/outlet-gateway";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -27,6 +27,20 @@ describe("restaurant Cashfree account isolation", () => {
     await gateway!.createOrder({ paymentId: "tenant_order_1", amountPaise: 12500, receipt: "tenant_order_1", callbackUrl: "https://restaurant.example/return" });
     expect(calls[0].headers).toMatchObject({ "x-client-id": "restaurant_client_123", "x-client-secret": "restaurant_secret_456" });
     expect(calls[0].headers).not.toMatchObject({ "x-client-id": "tableqr_platform_client", "x-client-secret": "tableqr_platform_secret" });
+  });
+
+  it("treats unreadable saved credentials as no online payment instead of failing the page", () => {
+    vi.stubEnv("NODE_ENV", "test");
+    vi.stubEnv("PAYMENT_CREDENTIALS_KEY", "a".repeat(64));
+    const encrypted = encryptMerchantCredentials({ mode: "sandbox", clientId: "restaurant_client_123", clientSecret: "restaurant_secret_456" });
+    expect(outletGatewayReady(encrypted)).toBe(true);
+
+    vi.stubEnv("PAYMENT_CREDENTIALS_KEY", "b".repeat(64));
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(() => outletGatewayFromConfig(encrypted)).toThrow();
+    expect(outletGatewayReady(encrypted)).toBe(false);
+    expect(log).toHaveBeenCalledTimes(1);
+    log.mockRestore();
   });
 
   it("refuses test-mode merchant credentials for live checkout", () => {

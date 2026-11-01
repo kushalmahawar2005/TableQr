@@ -440,7 +440,7 @@ export function StaffShell({
             />
           </div>
         </header>
-        {!preview && <NotificationPermissionOnboarding lang={lang} />}
+        {!preview && <NotificationPermissionOnboarding key={outlets.find((o) => o.current)?.id} lang={lang} />}
         {!preview && !networkOnline && <div role="status" className="flex flex-wrap items-center justify-between gap-2 border-b border-warning/40 bg-warning/10 px-4 py-2 text-caption font-semibold text-warning"><span>{lang === "hi" ? "इंटरनेट बंद है। डैशबोर्ड का डेटा पुराना हो सकता है। काउंटर जारी रखने के लिए सेव POS खोलें।" : "Internet is disconnected. Dashboard data may be out of date. Open saved POS to continue at the counter."}</span><a href="/offline-pos" className="inline-flex min-h-9 items-center rounded-lg border border-warning/50 bg-surface px-3 text-ink">{lang === "hi" ? "सेव POS खोलें" : "Open saved POS"}</a></div>}
         {children}
       </div>

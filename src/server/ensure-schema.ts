@@ -3,8 +3,8 @@ import { DELIVERY_TABLE_SQL } from "./delivery/schema-sql";
 import type { Pool, RowDataPacket } from "mysql2/promise";
 
 // Brings the live database up to what this release needs, once, when the server starts.
-// Hostinger builds and starts the app straight from Git and may not run `db:migrate`, so these
-// steps mirror the schema changes this startup path owns. Every step is safe to repeat after a
+// `build:production` runs `db:migrate` first; these steps are the safety net for a start without
+// it and mirror the schema changes this startup path owns. Every step is safe to repeat after a
 // restart or when multiple app instances start. Works on MySQL and MariaDB.
 
 type Step = { tag: string; when: number; hash: string; apply: (db: Pool) => Promise<void> };
@@ -439,8 +439,11 @@ const STEPS: Step[] = [
     tag: "0076_odd_starbolt", when: 1793286230727, hash: "d5966ee5d59dbd5bcdba34cba13a52c9cdf39c7d26a9fc98851b773b7f56898e",
     apply: async (db) => {
       // Pickup checkouts intentionally have no address; existing delivery rows remain unchanged.
-      await db.query("ALTER TABLE `delivery_checkouts` MODIFY COLUMN `address` json");
-      await db.query("ALTER TABLE `delivery_checkouts` MODIFY COLUMN `status` enum('draft','placed','dispatched','delivered','collected','cancelled') NOT NULL DEFAULT 'draft'");
+      // Only change what is still old: this runs at every start, and a later enum must not be reset.
+      const [columns] = await db.query<RowDataPacket[]>("SELECT COLUMN_NAME AS c, COLUMN_TYPE AS t, IS_NULLABLE AS n FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'delivery_checkouts' AND COLUMN_NAME IN ('address','status')");
+      const column = (name: string) => columns.find((row) => row.c === name);
+      if (column("address")?.n !== "YES") await db.query("ALTER TABLE `delivery_checkouts` MODIFY COLUMN `address` json");
+      if (!String(column("status")?.t ?? "").includes("'collected'")) await db.query("ALTER TABLE `delivery_checkouts` MODIFY COLUMN `status` enum('draft','placed','dispatched','delivered','collected','cancelled') NOT NULL DEFAULT 'draft'");
       await addColumn(db, "delivery_checkouts", "service_mode", "enum('delivery','pickup') DEFAULT 'delivery' NOT NULL");
       await addColumn(db, "delivery_checkouts", "collected_at", "datetime(3)");
     },
@@ -463,6 +466,8 @@ const STEPS: Step[] = [
 
 /** drizzle/0015, the last migration before these steps */
 const BEFORE = 1791043208000;
+/** drizzle/0074, the last migration before the steps from 0075 on; 0048 to 0074 have no step here */
+const UNMIRRORED_UNTIL = 1793276877691;
 
 export async function ensureSchema(db: Pool) {
   for (const step of STEPS) await step.apply(db);
@@ -479,7 +484,9 @@ export async function ensureSchema(db: Pool) {
     console.warn("[schema] __drizzle_migrations is behind; run `npm run db:migrate` once to catch up.");
     return;
   }
+  // Recording a later step would make `db:migrate` skip every migration still waiting before it
   for (const step of STEPS) {
+    if (step.when > UNMIRRORED_UNTIL && lastAt < UNMIRRORED_UNTIL) continue;
     if (step.when > lastAt) await db.query("INSERT INTO `__drizzle_migrations` (`hash`, `created_at`) VALUES (?, ?)", [step.hash, step.when]);
   }
 }

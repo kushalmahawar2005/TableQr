@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import { db as appDb } from "@/db";
 import * as s from "@/db/schema";
 import { DEFAULT_DELIVERY_POLICY } from "@/domain/delivery";
@@ -51,6 +51,35 @@ describe("cancelling a delivery order", () => {
     expect((await deliveryQueue(owner)).some((r) => r.id === o.id && r.status === "cancelled")).toBe(false);
     expect((await cancelDeliveryOrder(owner, o.id, "Customer unreachable")).replayed).toBe(true);
     expect(await env.db.select().from(s.refunds)).toHaveLength(0);
+  });
+
+  it("puts unmade portions back on sale, but not a plate the kitchen already finished", async () => {
+    const itemId = env.demo.itemIds["Dal Makhani"];
+    const scope = { tenantId: env.demo.tenantId, outletId: env.demo.outletId, itemId };
+    const left = async () => (await env.db.select({ n: s.outletItemOverrides.portionsLeft }).from(s.outletItemOverrides).where(and(eq(s.outletItemOverrides.outletId, env.demo.outletId), eq(s.outletItemOverrides.itemId, itemId))))[0].n;
+    await env.db.insert(s.outletItemOverrides).values({ ...scope, portionsLeft: 5 }).onDuplicateKeyUpdate({ set: { portionsLeft: 5 } });
+
+    const unmade = await placed("dc-portion-a", "9876500011");
+    expect(await left()).toBe(4);
+    await cancelDeliveryOrder(owner, unmade.id, "Customer unreachable");
+    expect(await left()).toBe(5);
+    await cancelDeliveryOrder(owner, unmade.id, "Customer unreachable");
+    expect(await left()).toBe(5);
+
+    const plated = await placed("dc-portion-b", "9876500012");
+    await env.db.update(s.orderLines).set({ status: "ready" }).where(eq(s.orderLines.sessionId, plated.sessionId));
+    await cancelDeliveryOrder(owner, plated.id, "Customer unreachable");
+    expect(await left()).toBe(4);
+    await env.db.update(s.outletItemOverrides).set({ portionsLeft: null }).where(and(eq(s.outletItemOverrides.outletId, env.demo.outletId), eq(s.outletItemOverrides.itemId, itemId)));
+  });
+
+  it("keeps one hidden zone for a business with no zones, however many orders it takes", async () => {
+    await env.db.update(s.zones).set({ isActive: false }).where(eq(s.zones.outletId, env.demo.outletId));
+    await placed("dc-zone-a", "9876500013");
+    await placed("dc-zone-b", "9876500014");
+    const hidden = await env.db.select({ id: s.zones.id }).from(s.zones).where(and(eq(s.zones.outletId, env.demo.outletId), eq(s.zones.name, "Online orders")));
+    expect(hidden).toHaveLength(1);
+    await env.db.update(s.zones).set({ isActive: true }).where(and(eq(s.zones.outletId, env.demo.outletId), ne(s.zones.name, "Online orders")));
   });
 
   it("sends back what was already paid, once, and never cancels a delivered order", async () => {

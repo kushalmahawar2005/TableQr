@@ -16,6 +16,19 @@ import { sendOutletPush } from "../staff/web-push";
 import type { GuestContext } from "./context";
 import { isWithinCategoryWindow, loadItems } from "./menu";
 
+/** Puts portions back on a dish with a counter; dishes without one are left alone. */
+export async function releasePortions(tx: Tx, scope: { tenantId: string; outletId: string }, itemId: string, qty: number) {
+  const [restored] = await tx.update(s.outletItemOverrides)
+    .set({ portionsLeft: sql`${s.outletItemOverrides.portionsLeft} + ${qty}` })
+    .where(and(
+      eq(s.outletItemOverrides.tenantId, scope.tenantId),
+      eq(s.outletItemOverrides.outletId, scope.outletId),
+      eq(s.outletItemOverrides.itemId, itemId),
+      sql`${s.outletItemOverrides.portionsLeft} IS NOT NULL`,
+    ));
+  return restored.affectedRows > 0;
+}
+
 // Place order: one order per round, one kitchen ticket per station (PS 3.5, 5.1).
 
 type PlaceInput = {

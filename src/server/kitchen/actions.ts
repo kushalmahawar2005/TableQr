@@ -7,6 +7,7 @@ import { nextLocalMidnight } from "@/domain/hours";
 import { RECALL_WINDOW_MS, type OrderStatus } from "@/domain/kitchen";
 import { LOCK_THEN_READ, type Tx } from "../db-types";
 import { AppError } from "../errors";
+import { notifyDeliveryCustomer } from "../guest/push";
 import { publish } from "../realtime/publish";
 import { topics } from "../realtime/token";
 import type { StaffContext } from "../staff/context";
@@ -29,6 +30,8 @@ async function announce(ctx: StaffContext, changes: Changed[]) {
       { topic: topics.session(c.sessionId), type: "order.status", data: { orderId: c.orderId, status: c.status } },
     ]),
   );
+  // Only a pickup order has someone waiting for this; other visits find no checkout and stop there
+  for (const change of changes) if (change.ready && change.status === "ready") void notifyDeliveryCustomer(ctx, change.sessionId, "ready");
   await Promise.all(changes.filter(change => change.ready).map(change => sendOutletPush(ctx, { title: "Food ready to serve", body: "The kitchen has food ready for your table.", url: "/waiter", tag: `ready-${change.orderId}` }, { sessionId: change.sessionId, kind: "ready" })));
 }
 

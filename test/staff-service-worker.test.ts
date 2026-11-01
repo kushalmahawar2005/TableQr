@@ -7,7 +7,7 @@ function worker(origin:string, control='no-cache') {
  const put=vi.fn();const match=vi.fn().mockResolvedValue(undefined);
  const showNotification=vi.fn().mockResolvedValue(undefined);
  const fetch=vi.fn().mockResolvedValue(new Response('chunk',{headers:{'cache-control':control}}));
- vm.runInNewContext(code,{URL,Response,fetch,caches:{open:async()=>({match,put})},self:{location:{origin},registration:{showNotification},addEventListener:(key:string,fn:(event:unknown)=>void)=>{listeners[key]=fn}}});
+ vm.runInNewContext(code,{URL,Response,fetch,setTimeout:(run:()=>void)=>run(),caches:{open:async()=>({match,put})},self:{location:{origin},registration:{showNotification},addEventListener:(key:string,fn:(event:unknown)=>void)=>{listeners[key]=fn}}});
  return {listeners,put,match,fetch,showNotification};
 }
 describe('staff worker app chunk caching',()=>{
@@ -47,6 +47,23 @@ describe('staff worker app chunk caching',()=>{
   w.listeners.push({data:{json:()=>({title:'Booking reminder',url:'/r/SRJ01'})},waitUntil:(work:Promise<unknown>)=>{pending=work}});
   await pending;
   expect(w.showNotification).toHaveBeenCalledTimes(2);
+ });
+ it('retries the session check and then shows a detail-free alert instead of losing it',async()=>{
+  const w=worker('https://app.example.com');
+  w.fetch.mockRejectedValueOnce(new TypeError('Failed to fetch')).mockResolvedValueOnce(new Response('',{status:503})).mockRejectedValueOnce(new TypeError('Failed to fetch'));
+  let pending:Promise<unknown>|undefined;
+  w.listeners.push({data:{json:()=>({title:'New order',body:'Table 4: 2 x Paneer',icon:'/staff-icon/192?outlet=SRJ01',url:'/console/orders',sessionId:'session-a'})},waitUntil:(work:Promise<unknown>)=>{pending=work}});
+  await pending;
+  expect(w.fetch).toHaveBeenCalledTimes(3);
+  expect(w.showNotification).toHaveBeenCalledWith('Tableeqr update',expect.objectContaining({body:'There is a new update for your restaurant.',icon:'/staff-icon/192',data:{url:'/console/orders',sessionId:'session-a'}}));
+ });
+ it('shows the full alert when a retry reaches the server',async()=>{
+  const w=worker('https://app.example.com');
+  w.fetch.mockRejectedValueOnce(new TypeError('Failed to fetch')).mockResolvedValueOnce(Response.json({active:true}));
+  let pending:Promise<unknown>|undefined;
+  w.listeners.push({data:{json:()=>({title:'New order',body:'Table 4',url:'/console/orders',sessionId:'session-a'})},waitUntil:(work:Promise<unknown>)=>{pending=work}});
+  await pending;
+  expect(w.showNotification).toHaveBeenCalledWith('New order',expect.objectContaining({body:'Table 4'}));
  });
  it('suppresses queued staff alerts from before session binding',async()=>{
   const w=worker('https://app.example.com');

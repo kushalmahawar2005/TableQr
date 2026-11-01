@@ -11,6 +11,7 @@ import { publish } from "../realtime/publish";
 import { topics } from "../realtime/token";
 import type { GuestContext } from "./context";
 import { addConfiguredLine, assertCartEditable } from "./cart";
+import { releasePortions } from "./order";
 
 // Order tracker (G6): every round with live item status, and cancelling before the kitchen accepts.
 
@@ -166,22 +167,12 @@ function cancelOrderLineTx(ctx: GuestContext, lineId: string, now: Date) {
       .where(and(eq(s.orderLines.tenantId, ctx.tenantId), eq(s.orderLines.id, lineId)));
 
     // Give the portion back if the dish has a counter
-    const [restored] = !line.itemId ? [{ affectedRows: 0 }] : await tx
-      .update(s.outletItemOverrides)
-      .set({ portionsLeft: sql`${s.outletItemOverrides.portionsLeft} + ${line.qty}` })
-      .where(
-        and(
-          eq(s.outletItemOverrides.tenantId, ctx.tenantId),
-          eq(s.outletItemOverrides.outletId, ctx.outletId),
-          eq(s.outletItemOverrides.itemId, line.itemId),
-          sql`${s.outletItemOverrides.portionsLeft} IS NOT NULL`,
-        ),
-      );
+    const portionsRestored = !!line.itemId && await releasePortions(tx, ctx, line.itemId, line.qty);
 
     await syncTickets(tx, ctx.tenantId, line.orderId, now);
     const status = await syncOrderStatus(tx, ctx.tenantId, line.orderId, now);
     if (session.status === "bill_requested") await syncBill(tx, ctx, now);
-    return { orderId: line.orderId, itemId: line.itemId, status, changed: true, portionsRestored: restored.affectedRows > 0, billUpdated: session.status === "bill_requested" };
+    return { orderId: line.orderId, itemId: line.itemId, status, changed: true, portionsRestored, billUpdated: session.status === "bill_requested" };
   }, LOCK_THEN_READ);
 }
 

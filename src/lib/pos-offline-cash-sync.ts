@@ -1,4 +1,5 @@
 import { markOfflinePosBillSettled, readOfflinePosCashCollections, readOfflinePosOrders, withOfflinePosSyncLock, writeOfflinePosCashCollection, type OfflinePosCashCollection } from "./pos-offline-queue";
+import { connectionLost } from "./pos-offline-sync";
 
 /** Cash is posted only after its existing server bill is still owed the exact locally recorded amount. */
 export async function syncSavedPosCashCollections(input: {
@@ -13,10 +14,12 @@ export async function syncSavedPosCashCollections(input: {
     const cashRecords = await readOfflinePosCashCollections(input.outletId);
     const orders = await readOfflinePosOrders(input.outletId);
     let synced = 0;
+    let blocked: OfflinePosCashCollection | null = null;
+    // Each record settles its own bill, so one stopped record never holds back another.
     for (const saved of cashRecords) {
       if (orders.some((order) => order.current.sessionId === saved.sessionId)) continue;
       let cash = saved;
-      if (!input.force && cash.nextRetryAt && cash.nextRetryAt > now()) break;
+      if (!input.force && cash.nextRetryAt && cash.nextRetryAt > now()) continue;
       try {
         if (cash.staffUserId !== input.staffUserId) throw new Error("This offline cash record belongs to a different staff session. Ask a manager to review it.");
         await input.deliver(cash);
@@ -32,10 +35,11 @@ export async function syncSavedPosCashCollections(input: {
           nextRetryAt: now() + retryDelay,
         };
         await writeOfflinePosCashCollection(input.outletId, cash);
-        return { synced, blocked: cash };
+        blocked ??= cash;
+        if (connectionLost(error)) break;
       }
     }
-    return { synced, blocked: null };
+    return { synced, blocked };
   });
   return lock.acquired ? lock.result! : { synced: 0, blocked: null, locked: true as const };
 }

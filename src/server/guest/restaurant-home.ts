@@ -7,7 +7,7 @@ import { tenantFeatures } from "../plan";
 import { tenantAccess } from "@/server/access";
 import { AppError } from "@/server/errors";
 import { configuredGuestServices } from "@/domain/guest-services";
-import { outletGatewayFromConfig } from "@/server/payments/outlet-gateway";
+import { outletGatewayReady } from "@/server/payments/outlet-gateway";
 import { BUSINESS_PACKAGE_PROFILES } from "@/lib/subscription-pricing";
 
 /** Public business entry point. Resolve the tenant from the public outlet code, then scope all
@@ -49,8 +49,8 @@ export async function getRestaurantHome(outletCode: string) {
   const profile = BUSINESS_PACKAGE_PROFILES[row.businessType ?? "restaurant"];
   const selected = configuredGuestServices(row.guestServices);
   const deliveryPolicy = readDeliveryPolicy(row.deliveryPolicy);
-  const deliveryPaymentReady = deliveryPolicy.paymentMode === "cod" || (deliveryPolicy.paymentMode === "manual_qr" && !!row.paymentQrUrl) || (deliveryPolicy.paymentMode === "gateway" && !!outletGatewayFromConfig(row.paymentGatewayConfig));
-  const pickupPaymentReady = deliveryPolicy.pickupCodEnabled || !!row.paymentQrUrl || !!outletGatewayFromConfig(row.paymentGatewayConfig);
+  const deliveryPaymentReady = deliveryPolicy.paymentMode === "cod" || (deliveryPolicy.paymentMode === "manual_qr" && !!row.paymentQrUrl) || (deliveryPolicy.paymentMode === "gateway" && outletGatewayReady(row.paymentGatewayConfig));
+  const pickupPaymentReady = deliveryPolicy.pickupCodEnabled || !!row.paymentQrUrl || outletGatewayReady(row.paymentGatewayConfig);
   return {
     outlet: { code: row.code, name: row.name, city: row.city, address: row.address, phone: row.phone, openingHours: row.openingHours, businessType: row.businessType, logoUrl: row.logoUrl, accentColor: row.accentColor, announcement: row.announcementActive && row.announcementTitle && row.announcementBody ? { title: row.announcementTitle, body: row.announcementBody } : null },
     services: {

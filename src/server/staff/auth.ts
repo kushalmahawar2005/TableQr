@@ -51,13 +51,14 @@ export async function verifyStaffPin(input: { outletCode: string; phone: string;
   const scope = { tenantId: outlet.tenantId, outletId: outlet.id };
 
   // Serialize checks and writes for this phone/outlet across every app worker. Keep all queries on
-  // the same connection as GET_LOCK: named locks belong to a connection, and waiting logins must
-  // not consume the pool connections needed by the login that currently owns the lock.
+  // the same connection as GET_LOCK: named locks belong to a connection. A login never waits for
+  // the lock, because each waiter would hold a pool connection and a burst of requests for one
+  // phone could stall the whole app.
   const lockName = `tq_login_${createHash("sha256").update(`${scope.tenantId}:${scope.outletId}:${phone}`).digest("hex").slice(0, 55)}`;
   const connection = await db.$client.getConnection();
   let locked = false;
   try {
-    const [lockRows] = await connection.query("SELECT GET_LOCK(?, 5) AS acquired", [lockName]);
+    const [lockRows] = await connection.query("SELECT GET_LOCK(?, 0) AS acquired", [lockName]);
     locked = Number((lockRows as { acquired: number | null }[])[0]?.acquired ?? 0) === 1;
     if (!locked) throw failed("Too many login attempts right now. Try again shortly.", { reason: "locked" });
 

@@ -8,7 +8,7 @@ import { LOCK_THEN_READ } from "../db-types";
 import { AppError } from "../errors";
 import { lockSession, loadBillInputs, syncBill } from "../billing/bill";
 import { announceBill, requestBillInTransaction, reopenBill } from "../billing/payments";
-import { isOpenLine, placeOrderTx, type AnyDraftLine } from "../guest/order";
+import { isOpenLine, placeOrderTx, releasePortions, type AnyDraftLine } from "../guest/order";
 import type { PriceQuote } from "@/domain/pricing";
 import { publish } from "../realtime/publish";
 import { topics } from "../realtime/token";
@@ -99,11 +99,8 @@ export async function changeWaiterLine(staff:StaffSession,input:{sessionId:strin
       await tx.update(s.orderLines).set({status:"voided",voidedAt:now,voidedByUserId:staff.userId,voidReason:input.reason!.trim().slice(0,200)}).where(and(eq(s.orderLines.tenantId,staff.tenantId),eq(s.orderLines.id,line.id)));
       // Ordering reserves finite portions. Release that reservation exactly once when a line is
       // voided; the line lock and the early return above make repeated void requests harmless.
-      const [restored] = !line.itemId ? [{ affectedRows: 0 }] : await tx.update(s.outletItemOverrides)
-        .set({portionsLeft:sql`${s.outletItemOverrides.portionsLeft} + ${line.qty}`})
-        .where(and(eq(s.outletItemOverrides.tenantId,staff.tenantId),eq(s.outletItemOverrides.outletId,staff.outletId),eq(s.outletItemOverrides.itemId,line.itemId),sql`${s.outletItemOverrides.portionsLeft} IS NOT NULL`));
       itemId=line.itemId;
-      portionsRestored=restored.affectedRows>0;
+      portionsRestored=!!line.itemId&&await releasePortions(tx,scope,line.itemId,line.qty);
       await syncTickets(tx,staff.tenantId,line.orderId,now);await syncOrderStatus(tx,staff.tenantId,line.orderId,now);
     }
     await syncBill(tx,scope,now);

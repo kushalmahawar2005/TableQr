@@ -57,6 +57,16 @@ export function outletGatewayFromConfig(encrypted: string | null | undefined): P
   return mockAllowed() ? mockGateway : null;
 }
 
+/** For deciding what to offer: broken saved credentials mean no online payment, not a failed page. */
+export function outletGatewayReady(encrypted: string | null | undefined) {
+  try {
+    return !!outletGatewayFromConfig(encrypted);
+  } catch {
+    console.error("[payments] saved outlet payment credentials could not be read");
+    return false;
+  }
+}
+
 export async function outletPaymentGateway(tenantId: string, outletId: string): Promise<PaymentGateway | null> {
   const [outlet] = await db.select({ encrypted: s.outlets.paymentGatewayConfig }).from(s.outlets)
     .where(and(eq(s.outlets.tenantId, tenantId), eq(s.outlets.id, outletId)));

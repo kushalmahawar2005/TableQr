@@ -16,7 +16,8 @@ import { notifyDeliveryCustomer } from "../guest/push";
 import { readDeliveryPolicy } from "@/domain/delivery";
 import { BUSINESS_PACKAGE_PROFILES, type BusinessType } from "@/lib/subscription-pricing";
 import { tenantFeatures } from "../plan";
-import { outletGatewayFromConfig } from "../payments/outlet-gateway";
+import { outletGatewayReady } from "../payments/outlet-gateway";
+import { releasePortions } from "../guest/order";
 
 export const deliveryStaffRoles = ["owner", "manager", "cashier"] as const;
 
@@ -29,8 +30,7 @@ export async function availableGuestOrderModes(staff: StaffSession) {
   const profile = BUSINESS_PACKAGE_PROFILES[(outlet.businessType ?? "restaurant") as BusinessType];
   const policy = readDeliveryPolicy(outlet.policy);
   const features = await tenantFeatures(staff.tenantId, staff.outletId);
-  let gatewayAvailable = false;
-  try { gatewayAvailable = !!outletGatewayFromConfig(outlet.gatewayConfig); } catch { /* a broken merchant key must not break the order desk */ }
+  const gatewayAvailable = outletGatewayReady(outlet.gatewayConfig);
   const deliveryPaymentReady = policy.paymentMode === "cod" || (policy.paymentMode === "manual_qr" && !!outlet.paymentQrUrl) || (policy.paymentMode === "gateway" && gatewayAvailable);
   const pickupPaymentReady = policy.pickupCodEnabled || !!outlet.paymentQrUrl || gatewayAvailable;
   return {
@@ -82,8 +82,9 @@ export async function assignDeliveryCourier(staff: StaffSession, id: string, inp
   await db.transaction(async tx => {
     const [row] = await tx.select({ id: s.deliveryCheckouts.id, status: s.deliveryCheckouts.status, serviceMode: s.deliveryCheckouts.serviceMode, sessionId: s.deliveryCheckouts.sessionId, courierName: s.deliveryCheckouts.courierName, courierPhone: s.deliveryCheckouts.courierPhone }).from(s.deliveryCheckouts)
       .where(and(eq(s.deliveryCheckouts.tenantId, staff.tenantId), eq(s.deliveryCheckouts.outletId, staff.outletId), eq(s.deliveryCheckouts.id, String(id)))).for("update");
-    if (row?.serviceMode !== "delivery") throw new AppError("invalid_state", "Pickup orders are collected at the counter and cannot be assigned to a rider.");
-    if (!row || !["placed", "dispatched"].includes(row.status)) throw new AppError("not_found", "This delivery order can no longer be assigned.");
+    if (!row) throw new AppError("not_found", "This delivery order can no longer be assigned.");
+    if (row.serviceMode !== "delivery") throw new AppError("invalid_state", "Pickup orders are collected at the counter and cannot be assigned to a rider.");
+    if (!["placed", "dispatched"].includes(row.status)) throw new AppError("not_found", "This delivery order can no longer be assigned.");
     if (row.courierName === courier.name && row.courierPhone === courier.phone) return;
     sessionId = row.sessionId;
     // A typed-in rider replaces any team rider on this order
@@ -157,8 +158,14 @@ export async function cancelDeliveryOrder(staff: StaffSession, id: string, rawRe
     if (row.status !== "placed" && row.status !== "dispatched") throw new AppError("invalid_state", "This delivery order cannot be cancelled.");
     const [session] = await tx.select({ tableId: s.tableSessions.tableId }).from(s.tableSessions)
       .where(and(eq(s.tableSessions.tenantId, scope.tenantId), eq(s.tableSessions.id, row.sessionId))).for("update");
+    const lines = await tx.select({ itemId: s.orderLines.itemId, qty: s.orderLines.qty, status: s.orderLines.status }).from(s.orderLines)
+      .where(and(eq(s.orderLines.tenantId, scope.tenantId), eq(s.orderLines.sessionId, row.sessionId), notInArray(s.orderLines.status, ["cancelled", "voided"]))).for("update");
     await tx.update(s.orderLines).set({ status: "cancelled" })
       .where(and(eq(s.orderLines.tenantId, scope.tenantId), eq(s.orderLines.sessionId, row.sessionId), notInArray(s.orderLines.status, ["cancelled", "voided"])));
+    // A finished plate cannot be sold again; everything else goes back on sale.
+    const unmade = new Map<string, number>();
+    for (const line of lines) if (line.itemId && line.status !== "ready" && line.status !== "served") unmade.set(line.itemId, (unmade.get(line.itemId) ?? 0) + line.qty);
+    for (const [itemId, qty] of [...unmade].sort(([a], [b]) => a.localeCompare(b))) await releasePortions(tx, scope, itemId, qty);
     await tx.update(s.deliveryCheckouts).set({
       status: "cancelled",
       ...(row.paymentStatus === "paid" ? { paymentStatus: "refund_pending", refundStatus: "pending" } : {}),

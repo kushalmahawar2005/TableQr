@@ -25,7 +25,7 @@ import { deliveryOutlet, cleanDeliveryCart, priceDeliveryCart } from "./catalog"
 import { audit } from "../staff/audit";
 import { requireStaffRole } from "../staff/waiter";
 import type { StaffSession } from "../staff/auth";
-import { outletGatewayFromConfig } from "../payments/outlet-gateway";
+import { outletGatewayReady } from "../payments/outlet-gateway";
 
 export function cleanManualPaymentReference(value: unknown) {
   const reference = String(value ?? "").trim().toUpperCase();
@@ -74,7 +74,7 @@ export async function createDeliveryCheckout(code: string, deviceId: string, inp
 function paymentAllowed(outlet: Awaited<ReturnType<typeof deliveryOutlet>>, mode: "cod" | "gateway" | "manual_qr", serviceMode: OrderServiceMode) {
   if (mode === "cod") return serviceMode === "pickup" ? outlet.policy.pickupCodEnabled : outlet.policy.paymentMode === "cod";
   if (mode === "manual_qr") return !!outlet.bookingPaymentQrUrl;
-  return !!outletGatewayFromConfig(outlet.paymentGatewayConfig);
+  return outletGatewayReady(outlet.paymentGatewayConfig);
 }
 
 /** Both a random bearer cookie and the device cookie are required. No sequential ids grant access. */
@@ -114,7 +114,7 @@ export async function claimManualQrDeliveryPayment(code: string, token: string, 
     await tx.update(s.deliveryCheckouts).set({ manualPaymentReference: reference, manualPaymentClaimedAt: now, paymentStatus: "pending", expiresAt: new Date(now.getTime() + 24 * 60 * 60_000) }).where(and(eq(s.deliveryCheckouts.tenantId, outlet.tenantId), eq(s.deliveryCheckouts.id, row.id)));
   }, LOCK_THEN_READ);
   const pickup = row.serviceMode === "pickup";
-  await sendOutletPush({ tenantId: outlet.tenantId, outletId: outlet.id }, { title: `${pickup ? "Pickup" : "Delivery"} payment needs checking`, body: `A guest submitted a ${pickup ? "pickup" : "delivery"} payment reference. Verify it to accept the order.`, url: "/console/orders?view=delivery", tag: `verify-${row.id}` }, { kind: "management" });
+  void sendOutletPush({ tenantId: outlet.tenantId, outletId: outlet.id }, { title: `${pickup ? "Pickup" : "Delivery"} payment needs checking`, body: `A guest submitted a ${pickup ? "pickup" : "delivery"} payment reference. Verify it to accept the order.`, url: "/console/orders?view=delivery", tag: `verify-${row.id}` }, { kind: "management" });
   return { submitted: true as const };
 }
 
@@ -148,6 +148,8 @@ async function placeKnownDeliveryOrder(code: string, found: Awaited<ReturnType<t
     const quote = await priceDeliveryCart(tx, outlet, checkout.lines, checkoutPincode(checkout.serviceMode, checkout.address), now, checkout.serviceMode);
     if (!Number.isSafeInteger(expectedTotalPaise) || quote.totalPaise !== expectedTotalPaise) throw new AppError("price_changed", "Prices or delivery charges changed. Review the cart before placing your order.");
     let [zone] = await tx.select({ id: s.zones.id }).from(s.zones).where(and(eq(s.zones.tenantId, outlet.tenantId), eq(s.zones.outletId, outlet.id), eq(s.zones.isActive, true))).orderBy(s.zones.sortOrder).limit(1);
+    // A business with no zones keeps one hidden zone for all its online orders
+    if (!zone) [zone] = await tx.select({ id: s.zones.id }).from(s.zones).where(and(eq(s.zones.tenantId, outlet.tenantId), eq(s.zones.outletId, outlet.id), eq(s.zones.name, "Online orders"))).limit(1);
     if (!zone) {
       const zoneId = uuidv7();
       await tx.insert(s.zones).values({ id: zoneId, tenantId: outlet.tenantId, outletId: outlet.id, name: "Online orders", sortOrder: 10000, isActive: false });
@@ -174,13 +176,13 @@ async function placeKnownDeliveryOrder(code: string, found: Awaited<ReturnType<t
     return { sessionId, order, billPayment, replayed: false as const };
   }, LOCK_THEN_READ);
   if (!placed.replayed) {
-    await sendOutletPush(deliveryScope(found), {
+    await publish(deliveryScope(found), [{ topic: topics.kitchen, type: "ticket.created", data: { orderId: placed.order!.orderId, stations: placed.order!.stations } }, { topic: topics.floor, type: "delivery.placed", data: { sessionId: placed.sessionId } }, { topic: topics.session(placed.sessionId), type: "delivery.placed" }]);
+    void sendOutletPush(deliveryScope(found), {
       title: row.serviceMode === "pickup" ? "New pickup order" : "New delivery order",
       body: row.serviceMode === "pickup" ? "A guest placed a pickup order. Open the order desk to review it." : "A guest placed a delivery order. Open the order desk to review it.",
       url: "/console/orders?view=delivery",
-      tag: `delivery-${found.id}`,
+      tag: `delivery-${row.id}`,
     }, { kind: "delivery" });
-    await publish(deliveryScope(found), [{ topic: topics.kitchen, type: "ticket.created", data: { orderId: placed.order!.orderId, stations: placed.order!.stations } }, { topic: topics.floor, type: "delivery.placed", data: { sessionId: placed.sessionId } }, { topic: topics.session(placed.sessionId), type: "delivery.placed" }]);
     void notifyDeliveryCustomer(deliveryScope(found), placed.sessionId, "placed");
     if (placed.billPayment) announceBill(placed.billPayment.scope, placed.billPayment.closedTableIds ? { tableIds: placed.billPayment.closedTableIds, state: "needs_cleaning" } : undefined, [{ topic: topics.session(placed.sessionId), type: "payment.updated", data: { paymentId: placed.billPayment.paymentId } }, { topic: topics.session(placed.sessionId), type: "session.closed" }]);
   }

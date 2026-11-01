@@ -168,6 +168,101 @@ describe("offline POS durable outbox", () => {
     expect(await storage.readOfflinePosOrders("outlet-1")).toEqual([]);
   });
 
+  it("sends a second offline round into the visit the first round opened", async () => {
+    const storage = await import("@/lib/pos-offline-queue");
+    const { syncSavedPosOrders } = await import("@/lib/pos-offline-sync");
+    await storage.writeOfflinePosOrder("outlet-1", makeOrder("round-1"));
+    await storage.writeOfflinePosOrder("outlet-1", makeOrder("round-2", 200));
+    const opened: string[] = [];
+    const sentTo: Array<string | null> = [];
+    const result = await syncSavedPosOrders({
+      outletId: "outlet-1",
+      deliver: async (order, checkpoint) => {
+        if (!order.current.sessionId) {
+          opened.push(order.id);
+          await checkpoint({ ...order, current: { ...order.current, sessionId: "session-1" } });
+          sentTo.push("session-1");
+          return;
+        }
+        sentTo.push(order.current.sessionId);
+      },
+    });
+    expect(opened).toEqual(["round-1"]);
+    expect(sentTo).toEqual(["session-1", "session-1"]);
+    expect(result).toEqual({ synced: 2, blocked: null });
+  });
+
+  it("does not attach another login's or a manager-approved order to the opened visit", async () => {
+    const storage = await import("@/lib/pos-offline-queue");
+    const { syncSavedPosOrders } = await import("@/lib/pos-offline-sync");
+    await storage.writeOfflinePosOrder("outlet-1", makeOrder("round-1"));
+    await storage.writeOfflinePosOrder("outlet-1", { ...makeOrder("other-login", 200), staffUserId: "cashier-2" });
+    await storage.writeOfflinePosOrder("outlet-1", { ...makeOrder("approved", 300), managerApprovedByUserId: "manager-1" });
+    const seen = new Map<string, string | null>();
+    await syncSavedPosOrders({
+      outletId: "outlet-1",
+      deliver: async (order, checkpoint) => {
+        seen.set(order.id, order.current.sessionId);
+        if (order.id === "round-1") await checkpoint({ ...order, current: { ...order.current, sessionId: "session-1" } });
+      },
+    });
+    expect(seen.get("other-login")).toBeNull();
+    expect(seen.get("approved")).toBeNull();
+  });
+
+  it("lets other tables through when one saved order is stopped, and holds that table's later rounds", async () => {
+    const storage = await import("@/lib/pos-offline-queue");
+    const { syncSavedPosOrders } = await import("@/lib/pos-offline-sync");
+    const onTable = (id: string, createdAt: number, tableId: string): OfflinePosOrder => ({ ...makeOrder(id, createdAt), current: { ...makeOrder(id).current, tableId } });
+    await storage.writeOfflinePosOrder("outlet-1", { ...onTable("stuck", 100, "table-1"), staffUserId: "cashier-1" });
+    await storage.writeOfflinePosOrder("outlet-1", onTable("same-table", 200, "table-1"));
+    await storage.writeOfflinePosOrder("outlet-1", onTable("other-table", 300, "table-2"));
+    const delivered: string[] = [];
+    const result = await syncSavedPosOrders({
+      outletId: "outlet-1", now: () => 1000,
+      deliver: async (order) => {
+        delivered.push(order.id);
+        if (order.id === "stuck") throw new Error("This saved order belongs to a different staff session.");
+      },
+    });
+    expect(delivered).toEqual(["stuck", "other-table"]);
+    expect(result).toMatchObject({ synced: 1, blocked: { id: "stuck" } });
+    expect((await storage.readOfflinePosOrders("outlet-1")).map((order) => order.id)).toEqual(["stuck", "same-table"]);
+  });
+
+  it("keeps other tables moving while one order waits out its retry delay", async () => {
+    const storage = await import("@/lib/pos-offline-queue");
+    const { syncSavedPosOrders } = await import("@/lib/pos-offline-sync");
+    await storage.writeOfflinePosOrder("outlet-1", { ...makeOrder("waiting"), retryCount: 1, nextRetryAt: 5000 });
+    await storage.writeOfflinePosOrder("outlet-1", { ...makeOrder("free", 200), current: { ...makeOrder("free").current, tableId: "table-2" } });
+    const delivered: string[] = [];
+    expect(await syncSavedPosOrders({ outletId: "outlet-1", now: () => 1000, deliver: async (order) => { delivered.push(order.id); } })).toEqual({ synced: 1, blocked: null });
+    expect(delivered).toEqual(["free"]);
+  });
+
+  it("ends the pass when the connection drops instead of failing every saved order", async () => {
+    const storage = await import("@/lib/pos-offline-queue");
+    const { syncSavedPosOrders } = await import("@/lib/pos-offline-sync");
+    await storage.writeOfflinePosOrder("outlet-1", makeOrder("first"));
+    await storage.writeOfflinePosOrder("outlet-1", { ...makeOrder("second", 200), current: { ...makeOrder("second").current, tableId: "table-2" } });
+    const deliver = vi.fn(async () => { throw new TypeError("Failed to fetch"); });
+    const result = await syncSavedPosOrders({ outletId: "outlet-1", now: () => 1000, deliver });
+    expect(deliver).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({ synced: 0, blocked: { id: "first" } });
+  });
+
+  it("settles other bills when one offline cash record is stopped", async () => {
+    const storage = await import("@/lib/pos-offline-queue");
+    const { syncSavedPosCashCollections } = await import("@/lib/pos-offline-cash-sync");
+    const cash = (id: string, sessionId: string, createdAt: number, staffUserId = "cashier-1") => ({ id, createdAt, staffUserId, sessionId, billId: `bill-${sessionId}`, tableCode: "T1", expectedDuePaise: 12500, receivedPaise: 15000 });
+    await storage.writeOfflinePosCashCollection("outlet-1", cash("cash-record-0001", "session-1", 100, "cashier-2"));
+    await storage.writeOfflinePosCashCollection("outlet-1", cash("cash-record-0002", "session-2", 200));
+    const delivered: string[] = [];
+    const result = await syncSavedPosCashCollections({ outletId: "outlet-1", staffUserId: "cashier-1", now: () => 1000, deliver: async (record) => { delivered.push(record.id); } });
+    expect(delivered).toEqual(["cash-record-0002"]);
+    expect(result).toMatchObject({ synced: 1, blocked: { id: "cash-record-0001" } });
+  });
+
   it("coordinates queue draining across two POS tabs", async () => {
     const storage = await import("@/lib/pos-offline-queue");
     const { syncSavedPosOrders } = await import("@/lib/pos-offline-sync");

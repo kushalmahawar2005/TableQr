@@ -35,7 +35,7 @@ export async function claimManualAdvance(outletCode: string, token: string, refe
     await tx.update(s.reservations).set({ manualAdvanceReference: cleanReference, manualAdvanceClaimedAt: now, holdExpiresAt, creditStatus: "pending", updatedAt: now }).where(and(eq(s.reservations.tenantId, scope.tenantId), eq(s.reservations.id, row.id)));
     return { holdExpiresAt: holdExpiresAt.getTime() };
   }, LOCK_THEN_READ);
-  if (!row.manualAdvanceClaimedAt) await sendOutletPush(scope, { title: "Booking advance needs checking", body: "A guest submitted an advance payment reference. Verify it to confirm the booking.", url: "/console/reservations", tag: `advance-${row.id}` }, { kind: "management" });
+  if (!row.manualAdvanceClaimedAt) void sendOutletPush(scope, { title: "Booking advance needs checking", body: "A guest submitted an advance payment reference. Verify it to confirm the booking.", url: "/console/reservations", tag: `advance-${row.id}` }, { kind: "management" });
   await publish(scope, [{ topic: topics.floor, type: "reservation.updated", data: { reservationId: row.id } }]);
   return result;
 }
