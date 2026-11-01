@@ -1,0 +1,17 @@
+from pathlib import Path
+p=Path('src/server/staff/menu-manager.ts');s=p.read_text().replace('type ItemInput = { id?: string;', 'type ItemInput = { sizes?: { name: string; pricePaise: number }[]; id?: string;');s=s.replace('  const pricePaise = Math.max(0, Math.round(Number(input.pricePaise)));','''  const sizes = !input.id ? (input.sizes ?? []) : [];
+  if (sizes.length && (sizes.length < 2 || sizes.length > 20 || new Set(sizes.map(x => x.name.trim().toLowerCase())).size !== sizes.length || sizes.some(x => !x.name.trim() || x.name.trim().length > 80 || !Number.isSafeInteger(x.pricePaise) || x.pricePaise <= 0 || !isValidNewPrice(x.pricePaise)))) throw new AppError("invalid_state", "Add at least two unique sizes with valid whole-rupee prices.");
+  const pricePaise = sizes.length ? Math.min(...sizes.map(x => x.pricePaise)) : Math.max(0, Math.round(Number(input.pricePaise)));''');a=s.index('  const [row] = await db.insert(s.menuItems)');b=s.index('\n  return id;',a);s=s[:a]+'''  const id = await db.transaction(async tx => {
+    const [row] = await tx.insert(s.menuItems).values(values).$returningId();
+    if (sizes.length) {
+      const [group] = await tx.insert(s.modifierGroups).values({ tenantId: staff.tenantId, itemId: row.id, nameEn: "Size", minSelect: 1, maxSelect: 1 }).$returningId();
+      await tx.insert(s.modifiers).values(sizes.map((size, sortOrder) => ({ tenantId: staff.tenantId, groupId: group.id, nameEn: size.name.trim(), priceDeltaPaise: size.pricePaise - pricePaise, isAvailable: true, sortOrder })));
+    }
+    await audit(tx, staff, "menu.item_created", "menu_item", row.id, null, { ...values, sizes });
+    return row.id;
+  });
+  await menuChanged(staff, "item", id, "created");'''+s[b:];p.write_text(s)
+p=Path('src/app/(console)/console/(app)/menu/_components/menu-manager.tsx');s=p.read_text();s=s.replace(' const newItem=!item;',''' const newItem=!item;
+ const [useSizes,setUseSizes]=useState(false);
+ const [newSizes,setNewSizes]=useState([{name:"Half",price:""},{name:"Full",price:""}]);''',1);s=s.replace('imageUrl:photo});','imageUrl:photo,sizes:newItem&&useSizes?newSizes.map(x=>({name:x.name,pricePaise:Math.round(Number(x.price)*100)})):undefined});',1);s=s.replace('  <Block title="Food details"','''  {newItem&&<Block title="Sizes · Half / Full plate" note="Set different prices while adding this dish."><label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={useSizes} onChange={e=>setUseSizes(e.target.checked)}/>This dish has sizes</label>{useSizes&&<><p className={hint}>The lowest size price becomes the base price.</p>{newSizes.map((size,i)=><div key={i} className="flex flex-wrap gap-2"><Input aria-label={\`Size \${i+1} name\`} className="min-w-0 flex-1" value={size.name} required maxLength={80} onChange={e=>setNewSizes(old=>old.map((x,j)=>i===j?{...x,name:e.target.value}:x))}/><Input aria-label={\`Size \${i+1} price\`} className="w-28" type="number" min="1" step="1" value={size.price} required onChange={e=>setNewSizes(old=>old.map((x,j)=>i===j?{...x,price:e.target.value}:x))}/><button type="button" disabled={newSizes.length<=2} onClick={()=>setNewSizes(old=>old.filter((_,j)=>j!==i))}>Remove</button></div>)}<button type="button" className={act} disabled={newSizes.length>=20} onClick={()=>setNewSizes(old=>[...old,{name:"",price:""}])}>+ Add size</button></>}</Block>}
+  <Block title="Food details"''',1);p.write_text(s)
