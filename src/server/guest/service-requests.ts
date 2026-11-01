@@ -13,6 +13,7 @@ import { visitChanged } from "../floor/assignments";
 import { rebalanceWaiterVisit } from "../staff/waiter-coverage";
 import { sendOutletPush } from "../staff/web-push";
 import type { StaffContext } from "../staff/context";
+import { confirmTableOrder, placeConfirmedCarts } from "./table-confirmation";
 import type { GuestContext } from "./context";
 
 export const SERVICE_COOLDOWN_MS = 2 * 60_000;
@@ -107,15 +108,17 @@ export async function completeServiceRequest(ctx: StaffContext, requestId: strin
   const [user] = await db.select().from(s.users)
     .where(and(eq(s.users.tenantId, ctx.tenantId), eq(s.users.id, ctx.userId)));
   const [role] = await db.select().from(s.staffRoles)
-    .where(and(eq(s.staffRoles.tenantId, ctx.tenantId), eq(s.staffRoles.userId, ctx.userId), inArray(s.staffRoles.role, ["waiter", "manager", "owner"]), or(isNull(s.staffRoles.outletId), eq(s.staffRoles.outletId, ctx.outletId))));
+    .where(and(eq(s.staffRoles.tenantId, ctx.tenantId), eq(s.staffRoles.userId, ctx.userId), inArray(s.staffRoles.role, ["waiter", "cashier", "host", "manager", "owner"]), or(isNull(s.staffRoles.outletId), eq(s.staffRoles.outletId, ctx.outletId))));
   if (!user || !user.isActive || !role) {
     throw new AppError("invalid_state", "You cannot complete requests for this outlet.");
   }
+  let confirmed: Awaited<ReturnType<typeof confirmTableOrder>> = [];
   const request = await db.transaction(async (tx) => {
     const [row] = await tx.select().from(s.serviceRequests)
       .where(and(eq(s.serviceRequests.tenantId, ctx.tenantId), eq(s.serviceRequests.outletId, ctx.outletId), eq(s.serviceRequests.id, requestId))).for("update");
     if (!row) throw new AppError("not_found", "This service request was not found.");
     if (row.status === "done") return null;
+    if (row.kind === "confirm_order") confirmed = await confirmTableOrder(ctx, tx, row.sessionId, now);
     await tx.update(s.serviceRequests).set({ status: "done", doneAt: now, doneByUserId: ctx.userId })
       .where(and(eq(s.serviceRequests.tenantId, ctx.tenantId), eq(s.serviceRequests.id, requestId)));
     await tx.insert(s.auditLog).values({tenantId:ctx.tenantId,outletId:ctx.outletId,actorLabel:"staff",actorUserId:ctx.userId,action:"waiter.request_done",entity:"service_request",entityId:requestId,after:{sessionId:row.sessionId},createdAt:now});
@@ -126,6 +129,7 @@ export async function completeServiceRequest(ctx: StaffContext, requestId: strin
     { topic: topics.session(request.sessionId), type: "service_request.done", data: { requestId } },
     visitChanged(request.sessionId, "service_request"),
   ]);
+  if (confirmed.length) await placeConfirmedCarts(ctx.tenantId, confirmed, now);
 }
 
 /** Called by the authenticated scheduled job, independent of whether any guest page is open. */

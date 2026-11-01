@@ -1,5 +1,6 @@
 "use server";
 
+import { requestTableConfirmation } from "@/server/guest/table-confirmation";
 import { cookies } from "next/headers";
 import { DEVICE_COOKIE } from "@/lib/guest-device";
 import { AppError } from "@/server/errors";
@@ -71,7 +72,7 @@ export async function restoreLineAction(outletCode: string, shortCode: string, s
 
 export type PlaceResult =
   | { ok: true; roundNo: number }
-  | { ok: false; error: Err | "items" | "cap" | "name_required" | "invalid_name" | "phone_required" | "empty" | "prices" | "verification_required" };
+  | { ok: false; error: Err | "items" | "cap" | "name_required" | "invalid_name" | "phone_required" | "empty" | "prices" | "verification_required" | "confirm" | "guest_blocked" };
 
 /** The reviewed prices from the phone, reduced to plain numbers; used only to compare */
 function cleanQuote(raw: unknown): Record<string, number> {
@@ -103,6 +104,11 @@ export async function placeOrderAction(
           return { ok: false, error: "items" };
         case "needs_staff_confirmation":
           return { ok: false, error: "cap" };
+        case "needs_table_confirmation":
+          await requestTableConfirmation(await context(outletCode, shortCode), { requestId: String(input.requestId).slice(0, 64), name: input.name ? String(input.name) : undefined });
+          return { ok: false, error: "confirm" };
+        case "guest_blocked":
+          return { ok: false, error: "guest_blocked" };
         case "name_required":
         case "invalid_name":
         case "phone_required":

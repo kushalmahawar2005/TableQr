@@ -7,6 +7,8 @@ export type DeliveryPolicy = {
   minimumOrderPaise: number;
   deliveryFeePaise: number;
   freeDeliveryAbovePaise: number | null;
+  /** The most a new customer may order on cash; above it they pay online. Null means no limit. */
+  firstCashLimitPaise?: number | null;
   estimatedMinutes: number;
   paymentMode: "gateway" | "manual_qr" | "cod";
 };
@@ -35,9 +37,10 @@ export function validateDeliveryPolicy(raw: unknown): DeliveryPolicy {
   const minimumOrderPaise = money("minimumOrderPaise");
   const deliveryFeePaise = money("deliveryFeePaise");
   const freeDeliveryAbovePaise = value.freeDeliveryAbovePaise === null ? null : money("freeDeliveryAbovePaise");
+  const firstCashLimitPaise = value.firstCashLimitPaise === null || value.firstCashLimitPaise === undefined ? null : money("firstCashLimitPaise");
   if (typeof value.estimatedMinutes !== "number" || !Number.isInteger(value.estimatedMinutes) || value.estimatedMinutes < 10 || value.estimatedMinutes > 240) throw new Error("Estimated delivery time must be between 10 and 240 minutes.");
   if (typeof value.paymentMode !== "string" || !["gateway", "manual_qr", "cod"].includes(value.paymentMode)) throw new Error("Choose a valid delivery payment method.");
-  return { acceptingOrders: value.acceptingOrders, acceptingPickupOrders, pickupCodEnabled, pincodes, minimumOrderPaise, deliveryFeePaise, freeDeliveryAbovePaise, estimatedMinutes: value.estimatedMinutes, paymentMode: value.paymentMode as DeliveryPolicy["paymentMode"] };
+  return { acceptingOrders: value.acceptingOrders, acceptingPickupOrders, pickupCodEnabled, pincodes, minimumOrderPaise, deliveryFeePaise, freeDeliveryAbovePaise, ...(firstCashLimitPaise ? { firstCashLimitPaise } : {}), estimatedMinutes: value.estimatedMinutes, paymentMode: value.paymentMode as DeliveryPolicy["paymentMode"] };
 }
 
 /** Missing or damaged stored configuration fails closed. */

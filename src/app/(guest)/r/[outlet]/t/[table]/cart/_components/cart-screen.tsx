@@ -39,7 +39,7 @@ export type CartPreview = {
   name?: string;
   offline?: boolean;
   placing?: boolean;
-  notice?: "failed" | "cap" | "items" | "prices";
+  notice?: "failed" | "cap" | "items" | "prices" | "staff";
   /** Show the Undo toast for this line, already removed */
   undoLine?: string;
 };
@@ -77,7 +77,7 @@ export function CartScreen({
   const [contactError, setContactError] = useState<string | null>(null);
   const hindi = lang === "hi";
   const [placing, setPlacing] = useState(!!preview?.placing);
-  const [notice, setNotice] = useState<"failed" | "cap" | "items" | "prices" | null>(preview?.notice ?? null);
+  const [notice, setNotice] = useState<"failed" | "cap" | "items" | "prices" | "staff" | null>(preview?.notice ?? null);
   const [toast, setToast] = useState<{ text: string; snapshot?: RemovedLine | null; lineId?: string } | null>(() => {
     const line = preview?.undoLine ? data.mine.find((l) => l.id === preview.undoLine) : undefined;
     return line ? { text: c.removed(pick(lang, line.nameEn, line.nameHi)), lineId: line.id } : null;
@@ -201,6 +201,12 @@ export function CartScreen({
       case "cap":
         setNotice("cap");
         break;
+      case "guest_blocked":
+        setNotice("staff");
+        break;
+      case "confirm":
+        refresh();
+        break;
       case "gone":
         router.replace(tablePath);
         return;
@@ -226,6 +232,7 @@ export function CartScreen({
   // ---- the button ----
   let cta: { label: string; enabled: boolean };
   if (placing) cta = { label: c.placing, enabled: false };
+  else if (session.awaitingStaff) cta = { label: c.ctaAwaitingStaff, enabled: false };
   else if (paused) cta = { label: c.ctaPaused, enabled: false };
   else if (billRequested) cta = { label: c.ctaBill, enabled: false };
   else if (!online) cta = { label: c.ctaOffline, enabled: false };
@@ -347,7 +354,7 @@ export function CartScreen({
                       <HugeiconsIcon icon={Alert02Icon} size={20} className="shrink-0 text-danger" aria-hidden />
                       <div>
                         <p className="text-body font-semibold text-danger">
-                          {notice === "cap" ? c.capTitle : notice === "items" ? c.itemsChanged : notice === "prices" ? c.pricesChanged : c.failed}
+                          {notice === "staff" ? c.askStaff : notice === "cap" ? c.capTitle : notice === "items" ? c.itemsChanged : notice === "prices" ? c.pricesChanged : c.failed}
                         </p>
                         {notice === "cap" && <p className="mt-0.5 text-caption text-ink/75">{c.capBody}</p>}
                       </div>

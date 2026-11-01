@@ -61,6 +61,8 @@ export async function getCartScreen(outletCode: string, shortCode: string, devic
     .filter((g) => g.lines.length > 0);
 
   const mine = cart.mine.map(line);
+  const pendingConfirmation = await db.select({ id: s.serviceRequests.id }).from(s.serviceRequests)
+    .where(and(eq(s.serviceRequests.tenantId, t.outlet.tenantId), eq(s.serviceRequests.sessionId, open.session.id), eq(s.serviceRequests.participantId, me.id), eq(s.serviceRequests.kind, "confirm_order"), eq(s.serviceRequests.status, "open"))).limit(1);
   return {
     renderedAt,
     outlet: { code: t.outlet.code, name: t.outlet.name, logoUrl: t.logoUrl, accentColor: t.outlet.accentColor },
@@ -73,6 +75,8 @@ export async function getCartScreen(outletCode: string, shortCode: string, devic
       hostName: host && !isPlaceholderName(host.displayName) ? host.displayName : null,
       // A checked-in room guest orders with a name and phone, no OTP
       verified: !!me.guestId || !!roomStay || (open.session.mode === "open" && open.people.some((person) => !!person.guestId)),
+      /** A staff member is checking this table before the cart goes to the kitchen */
+      awaitingStaff: pendingConfirmation.length > 0,
       /** Open mode asks for a first name at the first order */
       needsName: open.session.mode === "open" && isPlaceholderName(me.displayName),
       /** Room guest without a saved name and phone yet: asked in the cart, prefilled from check-in */

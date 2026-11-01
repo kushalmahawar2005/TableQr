@@ -153,7 +153,7 @@ export const serviceRequestKinds = [
 ] as const;
 
 /** Not grid buttons: the guest chose to pay at the counter, or says they paid the restaurant's UPI (G8) */
-export const storedServiceRequestKinds = [...serviceRequestKinds, "pay_at_counter", "paid_upi"] as const;
+export const storedServiceRequestKinds = [...serviceRequestKinds, "pay_at_counter", "paid_upi", "confirm_order"] as const;
 
 export const serviceRequests = mysqlTable(
   "service_requests",

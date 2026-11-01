@@ -347,7 +347,11 @@ export function WaiterScreen({
                           </div>
                           <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ${urgency === "urgent" ? "bg-danger text-white" : urgency === "warning" ? "bg-warning text-black" : "bg-ink/10 text-muted"}`}>{urgency !== "waiting" && <AlertTriangle className="size-3" aria-hidden="true" />}{age(r.createdAt)}</span>
                         </div>
-                        {isNew(r.id) ? <button className={`${primary} mt-3 w-full`} disabled={disabled} onClick={() => accept([r.id], r.sessionId)}><BellRing className="size-5" aria-hidden="true" />{L("Accept", "स्वीकारें")}</button> : <button disabled={disabled} className={`${primary} mt-3 w-full`} onClick={() => perform(() => actions.doneAction(r.id))}><Check className="size-5" aria-hidden="true" />{c.done}</button>}
+                        {r.kind === "confirm_order" ? <div className="mt-3 grid grid-cols-2 gap-2">
+                          <button className={`${primary} col-span-2`} disabled={disabled} onClick={() => perform(() => actions.doneAction(r.id))}>{L("Guest is here · accept order", "ग्राहक टेबल पर है · ऑर्डर लें")}</button>
+                          <button className={btn} disabled={disabled} onClick={() => perform(() => actions.rejectTableOrderAction(r.id, false))}>{L("Reject", "मना करें")}</button>
+                          <button className={btn} disabled={disabled} onClick={() => perform(() => actions.rejectTableOrderAction(r.id, true))}>{L("Reject & block", "मना करें और ब्लॉक")}</button>
+                        </div> : isNew(r.id) ? <button className={`${primary} mt-3 w-full`} disabled={disabled} onClick={() => accept([r.id], r.sessionId)}><BellRing className="size-5" aria-hidden="true" />{L("Accept", "स्वीकारें")}</button> : <button disabled={disabled} className={`${primary} mt-3 w-full`} onClick={() => perform(() => actions.doneAction(r.id))}><Check className="size-5" aria-hidden="true" />{c.done}</button>}
                       </article>
                     );
                   })}

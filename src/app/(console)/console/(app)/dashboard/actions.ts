@@ -8,6 +8,8 @@ import type { StaffSession } from "@/server/staff/auth";
 import { dashboardView, getDashboard, getRevenueTrend } from "@/server/staff/dashboard";
 import { staffRealtimeToken, topics } from "@/server/realtime/token";
 import { staffFor } from "@/server/staff/request";
+import { completeServiceRequest } from "@/server/guest/service-requests";
+import { rejectTableOrder } from "@/server/guest/table-confirmation";
 
 // O1 Owner Dashboard reads and interactive quick actions.
 export type DashboardResult<T> = { ok: true; data: T } | { ok: false; code: string; message: string };
@@ -36,6 +38,9 @@ export async function resolveServiceRequestAction(requestId: string) {
     // The money-only view has no floor to act on
     if (dashboardView(staff.roles) === "money") return { ok: false };
     const now = new Date();
+    const [request] = await db.select({ kind: s.serviceRequests.kind }).from(s.serviceRequests).where(and(eq(s.serviceRequests.tenantId, staff.tenantId), eq(s.serviceRequests.outletId, staff.outletId), eq(s.serviceRequests.id, requestId)));
+    // Confirming a table also sends its waiting order to the kitchen
+    if (request?.kind === "confirm_order") { await completeServiceRequest(staff, requestId, now); return { ok: true }; }
     await db
       .update(s.serviceRequests)
       .set({ status: "done", doneAt: now, doneByUserId: staff.userId })
@@ -49,6 +54,18 @@ export async function resolveServiceRequestAction(requestId: string) {
     return { ok: true };
   } catch (err) {
     console.error("[dashboard] resolveServiceRequestAction failed", err);
+    return { ok: false };
+  }
+}
+
+export async function rejectTableOrderAction(requestId: string, block: boolean) {
+  try {
+    const staff = await staffFor(consoleSectionRoles.dashboard, "dashboard");
+    if (dashboardView(staff.roles) === "money") return { ok: false };
+    await rejectTableOrder(staff, requestId, { block });
+    return { ok: true };
+  } catch (err) {
+    console.error("[dashboard] rejectTableOrderAction failed", err);
     return { ok: false };
   }
 }

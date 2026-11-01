@@ -7,7 +7,7 @@ import { uuidv7 } from "@/db/id";
 import * as s from "@/db/schema";
 import { checkFirstName } from "@/domain/guest-name";
 import { isValidIndianMobile, normaliseIndianMobile, toE164 } from "@/domain/phone";
-import { LOCK_THEN_READ } from "../db-types";
+import { LOCK_THEN_READ, type Tx } from "../db-types";
 import { AppError } from "../errors";
 import { placeOrderInTransaction } from "../guest/order";
 import { quoteKey } from "@/domain/pricing";
@@ -76,6 +76,17 @@ function paymentAllowed(outlet: Awaited<ReturnType<typeof deliveryOutlet>>, mode
   if (mode === "cod") return serviceMode === "pickup" ? outlet.policy.pickupCodEnabled : outlet.policy.paymentMode === "cod";
   if (mode === "manual_qr") return !!outlet.bookingPaymentQrUrl;
   return outletGatewayReady(outlet.paymentGatewayConfig);
+}
+
+/** Cash is a promise: a blocked number cannot use it, and a new customer's first one has a limit. */
+async function assertCashAllowed(tx: Tx, outlet: Awaited<ReturnType<typeof deliveryOutlet>>, guestId: string, totalPaise: number) {
+  const [guest] = await tx.select({ blockedAt: s.guests.blockedAt }).from(s.guests).where(and(eq(s.guests.tenantId, outlet.tenantId), eq(s.guests.id, guestId)));
+  if (guest?.blockedAt) throw new AppError("guest_blocked", "Cash orders are not available for this number. Please pay online.");
+  const limit = outlet.policy.firstCashLimitPaise;
+  if (!limit || totalPaise <= limit) return;
+  const [earlier] = await tx.select({ id: s.deliveryCheckouts.id }).from(s.deliveryCheckouts)
+    .where(and(eq(s.deliveryCheckouts.tenantId, outlet.tenantId), eq(s.deliveryCheckouts.guestId, guestId), inArray(s.deliveryCheckouts.status, ["delivered", "collected"]))).limit(1);
+  if (!earlier) throw new AppError("invalid_state", `A first cash order can be up to ₹${limit / 100}. Pay online or reduce your cart.`, { reason: "first_cash_limit" });
 }
 
 /**
@@ -159,6 +170,7 @@ async function placeKnownDeliveryOrder(code: string, found: Awaited<ReturnType<t
     if (checkout.paymentMode === "gateway" && (checkout.paymentStatus !== "paid" || !checkout.gatewayPaymentId)) throw new AppError("invalid_state", "Complete the secure online payment before placing your order.", { reason: "payment_required" });
     if (checkout.paymentMode === "manual_qr" && (!manualVerification || !claimedManualPayment || checkout.manualPaymentReference !== manualVerification.reference || !checkout.manualPaymentQrUrl)) throw new AppError("invalid_state", "The business must verify the submitted QR payment before placing this order.");
     if (checkout.paymentMode === "cod" && checkout.paymentStatus !== "none") throw new AppError("invalid_state", "This delivery checkout has an unexpected payment state.");
+    if (checkout.paymentMode === "cod" && checkout.guestId) await assertCashAllowed(tx, outlet, checkout.guestId, checkout.totalPaise);
     const itemIds = [...new Set(checkout.lines.map(line => line.itemId))];
     await tx.select({ id: s.outletItemOverrides.id }).from(s.outletItemOverrides).where(and(eq(s.outletItemOverrides.tenantId, outlet.tenantId), eq(s.outletItemOverrides.outletId, outlet.id), inArray(s.outletItemOverrides.itemId, itemIds))).orderBy(s.outletItemOverrides.id).for("update");
     const quote = await priceDeliveryCart(tx, outlet, checkout.lines, checkoutPincode(checkout.serviceMode, checkout.address), now, checkout.serviceMode);

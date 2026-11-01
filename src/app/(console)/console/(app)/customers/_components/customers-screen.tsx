@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { Customer, CustomerFilter, CustomersPage } from "@/server/staff/customers";
+import { setCustomerBlockedAction } from "../actions";
 
 // Customers: the regulars, how often they come and when they last did. A guest is messaged only
 // one at a time from here, and offers only to people who agreed to receive them.
@@ -92,6 +93,7 @@ export function CustomersScreen({ data, q, filter, outletName }: { data: Custome
                   <td className="p-3 text-right tabular-nums">{c.spendPaise ? rs(c.spendPaise) : "—"}</td>
                   <td className="p-3">{c.offersOk ? <span className="text-[var(--state-available-text)]">Yes</span> : <span className="text-muted">No</span>}</td>
                   <td className="p-3 text-right">
+                    <button type="button" onClick={() => void setCustomerBlockedAction(c.phone, !c.blocked)} className={`mr-2 inline-flex min-h-9 cursor-pointer items-center rounded-lg border px-3 text-sm font-semibold ${c.blocked ? "border-rose-300 text-rose-700" : "border-line text-ink"}`}>{c.blocked ? "Unblock" : "Block"}</button>
                     <a href={`https://wa.me/91${c.phone}`} target="_blank" rel="noreferrer noopener" className="inline-flex min-h-9 items-center rounded-lg border border-line px-3 text-xs font-semibold hover:border-ink/40">WhatsApp</a>
                   </td>
                 </tr>

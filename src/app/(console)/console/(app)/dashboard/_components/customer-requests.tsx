@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import type { CustomerRequestItem } from "@/server/staff/dashboard";
-import { resolveServiceRequestAction } from "../actions";
+import { rejectTableOrderAction, resolveServiceRequestAction } from "../actions";
 import { Panel, viewAllClass } from "./dashboard-shared";
 
 /**
@@ -34,8 +34,25 @@ export function CustomerRequests({ initialRequests }: { initialRequests: Custome
     });
   };
 
+  const handleReject = (id: string, block: boolean) => {
+    setResolvingId(id);
+    setFailed(false);
+    start(async () => {
+      const res = await rejectTableOrderAction(id, block).catch(() => null);
+      setResolvingId(null);
+      if (res?.ok) {
+        setDismissedIds((prev) => new Set(prev).add(id));
+        router.refresh();
+      } else {
+        setFailed(true);
+      }
+    });
+  };
+
   const getKindDetails = (kind: string) => {
     switch (kind) {
+      case "confirm_order":
+        return { label: "Returning guest · confirm they are at the table", icon: UtensilsCrossed, color: "text-terracotta bg-terracotta/10", actionLabel: "Accept order" };
       case "water":
         return { label: "Extra water", icon: Droplets, color: "text-sky-600 bg-sky-50", actionLabel: "Mark done" };
       case "cutlery":
@@ -88,6 +105,10 @@ export function CustomerRequests({ initialRequests }: { initialRequests: Custome
                     </p>
                   </div>
                 </div>
+                {r.kind === "confirm_order" && <>
+                  <button type="button" onClick={() => handleReject(r.id, false)} disabled={resolvingId === r.id} className="inline-flex min-h-10 shrink-0 cursor-pointer items-center rounded-input border border-line px-3 text-sm font-semibold text-ink disabled:opacity-60">Reject</button>
+                  <button type="button" onClick={() => handleReject(r.id, true)} disabled={resolvingId === r.id} className="inline-flex min-h-10 shrink-0 cursor-pointer items-center rounded-input border border-rose-300 px-3 text-sm font-semibold text-rose-700 disabled:opacity-60">Reject &amp; block</button>
+                </>}
                 <button
                   type="button"
                   onClick={() => handleResolve(r.id)}

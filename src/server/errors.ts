@@ -17,6 +17,8 @@ export type AppErrorCode =
   | "invalid_line"
   | "items_unavailable"
   | "needs_staff_confirmation"
+  | "needs_table_confirmation"
+  | "guest_blocked"
   | "invalid_state"
   | "recall_expired"
   | "needs_choice"

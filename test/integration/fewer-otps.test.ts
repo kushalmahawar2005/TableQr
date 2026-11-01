@@ -11,6 +11,12 @@ import { tableHasVerifiedDiner } from "@/server/guest/order";
 import { startOrJoinTable } from "@/server/guest/session";
 import { isRecentlyVerified, sendCode, verifyCode } from "@/server/guest/verify";
 import { mockGateway } from "@/server/payments/gateway";
+import { addConfiguredLine } from "@/server/guest/cart";
+import { getGuestContext } from "@/server/guest/context";
+import { placeOrder } from "@/server/guest/order";
+import { completeServiceRequest } from "@/server/guest/service-requests";
+import { rejectTableOrder, requestTableConfirmation } from "@/server/guest/table-confirmation";
+import { AppError } from "@/server/errors";
 import { resetTestDb } from "./setup-db";
 
 // Every SMS costs money: a phone that already proved itself, or paid online, must not be asked again.
@@ -105,5 +111,78 @@ describe("at a table", () => {
     const verified = await verifyCode({ outletCode: "SRJ01", shortCode: env.demo.tableQr.T2, deviceId: device, challengeId: sent.challengeId, code: (sent as typeof sent & { devCode: string }).devCode, name: "Aarav", consent: false, now: NOON });
     expect(verified.ok).toBe(true);
     expect(await isRecentlyVerified("SRJ01", env.demo.tableQr.T3, device, NOON)).toBe(true);
+  });
+});
+
+describe("a returning guest at a table", () => {
+  const staff = () => ({ tenantId: env.demo.tenantId, outletId: env.demo.outletId, userId: env.demo.staffIds.owner });
+  const guestId = async () => (await env.db.select({ id: s.guests.id }).from(s.guests).where(and(eq(s.guests.tenantId, env.demo.tenantId), eq(s.guests.phone, "+919876501004"))))[0].id;
+
+  async function seated(table: string, device: string) {
+    const shortCode = env.demo.tableQr[table];
+    const seat = await startOrJoinTable({ outletCode: "SRJ01", shortCode, deviceId: device, customer: { guestId: await guestId(), name: "Meena" } });
+    const ctx = await getGuestContext("SRJ01", shortCode, seat.participantId, device);
+    await addConfiguredLine(ctx, { itemId: env.demo.itemIds.Cola, qty: 1, modifierIds: [] });
+    return { ctx, seat };
+  }
+  const refused = (ctx: Awaited<ReturnType<typeof getGuestContext>>) => placeOrder(ctx, {}).then(() => null, (error: AppError) => error.code);
+  const orders = (sessionId: string) => env.db.select({ id: s.orders.id }).from(s.orders).where(eq(s.orders.sessionId, sessionId));
+  const confirmation = async (sessionId: string) => (await env.db.select().from(s.serviceRequests).where(and(eq(s.serviceRequests.sessionId, sessionId), eq(s.serviceRequests.kind, "confirm_order"))))[0];
+
+  it("holds the first order for staff, then accepting sends it to the kitchen and trusts the table", async () => {
+    const { ctx, seat } = await seated("T4", "returning-a");
+    expect(await refused(ctx)).toBe("needs_table_confirmation");
+    await requestTableConfirmation(ctx, { requestId: "returning-a-1" });
+    await requestTableConfirmation(ctx, { requestId: "returning-a-2" });
+    expect(await orders(seat.sessionId)).toHaveLength(0);
+
+    await completeServiceRequest(staff(), (await confirmation(seat.sessionId)).id);
+    expect(await orders(seat.sessionId)).toHaveLength(1);
+
+    await addConfiguredLine(ctx, { itemId: env.demo.itemIds.Cola, qty: 1, modifierIds: [] });
+    await placeOrder(ctx, {});
+    expect(await orders(seat.sessionId)).toHaveLength(2);
+  });
+
+  it("frees an empty table when staff reject, and can block the number", async () => {
+    const { ctx, seat } = await seated("T5", "returning-b");
+    await requestTableConfirmation(ctx, { requestId: "returning-b-1" });
+    await rejectTableOrder(staff(), (await confirmation(seat.sessionId)).id, { block: true });
+    const [visit] = await env.db.select({ status: s.tableSessions.status }).from(s.tableSessions).where(eq(s.tableSessions.id, seat.sessionId));
+    const [table] = await env.db.select({ state: s.diningTables.state }).from(s.diningTables).where(eq(s.diningTables.id, env.demo.tableIds.T5));
+    expect(visit.status).toBe("closed");
+    expect(table.state).toBe("available");
+    expect(await orders(seat.sessionId)).toHaveLength(0);
+
+    const again = await seated("T6", "returning-c");
+    expect(await refused(again.ctx)).toBe("guest_blocked");
+    await env.db.update(s.guests).set({ blockedAt: null }).where(eq(s.guests.id, await guestId()));
+  });
+
+  it("lets a phone that just verified at the table order straight away", async () => {
+    const device = "first-timer";
+    const shortCode = env.demo.tableQr.T7;
+    const sent = await sendCode({ outletCode: "SRJ01", shortCode, deviceId: device, country: "IN", phone: "9876501006" });
+    if (!sent.ok) throw new Error(sent.error);
+    await verifyCode({ outletCode: "SRJ01", shortCode, deviceId: device, challengeId: sent.challengeId, code: (sent as typeof sent & { devCode: string }).devCode, name: "Aarav", consent: false });
+    const seat = await startOrJoinTable({ outletCode: "SRJ01", shortCode, deviceId: device });
+    const ctx = await getGuestContext("SRJ01", shortCode, seat.participantId, device);
+    await addConfiguredLine(ctx, { itemId: env.demo.itemIds.Cola, qty: 1, modifierIds: [] });
+    await placeOrder(ctx, {});
+    expect(await orders(seat.sessionId)).toHaveLength(1);
+  });
+});
+
+describe("cash limits", () => {
+  it("limits a new customer's first cash order and refuses a blocked number", async () => {
+    const device = "cash-limit-device";
+    await env.db.update(s.outlets).set({ deliveryPolicy: { ...DEFAULT_DELIVERY_POLICY, acceptingOrders: true, pincodes: ["302001"], deliveryFeePaise: 3000, firstCashLimitPaise: 1000 } }).where(eq(s.outlets.id, env.demo.outletId));
+    const created = await createDeliveryCheckout("SRJ01", device, { lines: lines(), address });
+    const sent = await sendDeliveryOtp("SRJ01", created.token, device, "9876501007");
+    const verified = await verifyDeliveryOtp("SRJ01", created.token, device, sent.challengeId, sent.devCode!, "Ravi");
+    await expect(placeDeliveryOrder("SRJ01", created.token, device, created.quote.totalPaise)).rejects.toMatchObject({ details: { reason: "first_cash_limit" } });
+    await env.db.update(s.guests).set({ blockedAt: new Date() }).where(eq(s.guests.id, verified.guestId));
+    await expect(placeDeliveryOrder("SRJ01", created.token, device, created.quote.totalPaise)).rejects.toMatchObject({ code: "guest_blocked" });
+    await policy("cod");
   });
 });

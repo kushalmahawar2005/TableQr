@@ -4,6 +4,7 @@ import { AppError } from "@/server/errors";
 import { waiterBoard, waiterDetail, waiterMenu } from "@/server/staff/waiter-read";
 import { claimWaiterVisit, requireOwnVisit, waiterRealtimeToken, waiterSeatTable } from "@/server/staff/waiter";
 import { completeServiceRequest } from "@/server/guest/service-requests";
+import { rejectTableOrder } from "@/server/guest/table-confirmation";
 import { markServed } from "@/server/kitchen/actions";
 import { addPhonelessDiner, staffPlaceOrder, waiterRequestBill, waiterReopenBill, changeWaiterLine, type Approval } from "@/server/staff/waiter-mutations";
 import { settleAtCounter } from "@/server/billing/payments";
@@ -26,6 +27,7 @@ export async function detailAction(sessionId:string){return run(s=>waiterDetail(
 export async function menuAction(){return run(waiterMenu);}
 export async function tokenAction(){return waiterRealtimeToken(await waiterStaff());}
 export async function doneAction(id:string){return run(s=>completeServiceRequest(s,id));}
+export async function rejectTableOrderAction(id:string,block:boolean){return run(s=>rejectTableOrder(s,id,{block}));}
 export async function servedAction(ids:string[]){return run(s=>markServed(s,ids));}
 export async function addDinerAction(sessionId:string,name:string){return run(async s=>{await requireOwnVisit(s,sessionId);return addPhonelessDiner(s,sessionId,name);});}
 export async function orderAction(input:Parameters<typeof staffPlaceOrder>[1]){return run(async s=>{await requireOwnVisit(s,input.sessionId);return staffPlaceOrder(s,input);});}

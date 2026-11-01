@@ -32,6 +32,8 @@ export const guests = mysqlTable(
     consentAt: at("consent_at"),
     dietaryFlags: json("dietary_flags").$type<string[]>(),
     noShowCount: int("no_show_count").notNull().default(0),
+    /** Staff stopped this number from table orders and cash orders */
+    blockedAt: at("blocked_at"),
     firstSeenAt: createdAt("first_seen_at"),
     lastSeenAt: at("last_seen_at"),
   },
@@ -66,6 +68,10 @@ export const tableSessions = mysqlTable(
     /** No FK: participants reference the session, so this would be circular */
     hostParticipantId: ref("host_participant_id"),
     orderingLocked: boolean("ordering_locked").notNull().default(false),
+    /** Opened by a signed-in guest with no fresh code: staff check the table before its first order */
+    needsStaffCheck: boolean("needs_staff_check").notNull().default(false),
+    /** Staff confirmed someone is really at this table */
+    staffConfirmedAt: at("staff_confirmed_at"),
     /**
      * Equals tableId while the session is not closed, null once closed.
      * The unique index on it enforces one open session per table (PS 3.3).

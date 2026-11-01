@@ -462,6 +462,16 @@ const STEPS: Step[] = [
       await db.query("UPDATE `delivery_checkouts` SET `refund_amount_paise` = `total_paise` WHERE `refund_amount_paise` IS NULL AND `refund_status` = 'pending' AND `refund_gateway_ref` IS NOT NULL");
     },
   },
+  {
+    tag: "0079_broken_black_widow", when: 1793516058717, hash: "65d13dce5c69db07e05ae01e0c6259cded3ae90c37aaa9e81166f6e9821edd9f",
+    apply: async (db) => {
+      const [kind] = await db.query<RowDataPacket[]>("SELECT COLUMN_TYPE AS t FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'service_requests' AND COLUMN_NAME = 'kind'");
+      if (!String(kind[0]?.t ?? "").includes("'confirm_order'")) await db.query("ALTER TABLE `service_requests` MODIFY COLUMN `kind` enum('water','cutlery','call_waiter','clean_table','request_bill','pay_at_counter','paid_upi','confirm_order') NOT NULL");
+      await addColumn(db, "guests", "blocked_at", "datetime(3)");
+      await addColumn(db, "table_sessions", "needs_staff_check", "boolean DEFAULT false NOT NULL");
+      await addColumn(db, "table_sessions", "staff_confirmed_at", "datetime(3)");
+    },
+  },
 ];
 
 /** drizzle/0015, the last migration before these steps */

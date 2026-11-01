@@ -24,6 +24,8 @@ export type Customer = {
   spendPaise: number;
   offersOk: boolean;
   firstSeenAt: number | null;
+  /** Staff stopped this number from table and cash orders */
+  blocked?: boolean;
   /** Who else sat at the table on their last visit: names first, then how many gave no name */
   companions: { names: string[]; unnamed: number };
 };
@@ -164,7 +166,9 @@ export async function getCustomers(
   const page = opts.all ? 1 : Math.min(pages, Math.max(1, Math.floor(opts.page ?? 1) || 1));
   const shown = opts.all ? matches : matches.slice((page - 1) * CUSTOMERS_PAGE_SIZE, page * CUSTOMERS_PAGE_SIZE);
   await addCompanions(t, shown, phoneOfGuest);
-  return { customers: shown, counts, total: matches.length, page, pages };
+  const blocked = await db.select({ phone: s.guests.phone }).from(s.guests).where(and(eq(s.guests.tenantId, staff.tenantId), isNotNull(s.guests.blockedAt)));
+  const blockedPhones = new Set(blocked.map((guest) => normal(guest.phone)));
+  return { customers: shown.map((customer) => ({ ...customer, blocked: blockedPhones.has(customer.phone) })), counts, total: matches.length, page, pages };
 }
 
 /** Who else sat at the table on each shown guest's last visit. Only these guests are looked up. */

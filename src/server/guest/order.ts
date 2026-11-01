@@ -47,8 +47,8 @@ type PlaceInput = {
   quote?: PriceQuote;
 };
 
-export async function placeOrder(ctx: GuestContext, input: PlaceInput = {}, now = new Date()) {
-  const placed = await placeOrderTx(ctx, input, now);
+export async function placeOrder(ctx: GuestContext, input: PlaceInput = {}, now = new Date(), opts: OrderChecks = {}) {
+  const placed = await placeOrderTx(ctx, input, now, undefined, opts);
   // A replayed request already announced itself the first time
   if (placed.replayed) return placed;
   void publish(ctx, [
@@ -85,11 +85,14 @@ export async function tableHasVerifiedDiner(tx: Tx, ctx: { tenantId: string; ses
   return !!diner;
 }
 
-export function placeOrderTx(ctx: GuestContext, input: PlaceInput, now: Date, staffDraft?: StaffOrder) {
-  return db.transaction(tx => placeOrderInTransaction(tx, ctx, input, now, staffDraft), LOCK_THEN_READ);
+/** Checks already done elsewhere: the money arrived online, or staff saw the guest at the table */
+type OrderChecks = { paidOnline?: boolean; staffConfirmed?: boolean };
+
+export function placeOrderTx(ctx: GuestContext, input: PlaceInput, now: Date, staffDraft?: StaffOrder, opts: OrderChecks = {}) {
+  return db.transaction(tx => placeOrderInTransaction(tx, ctx, input, now, staffDraft, opts), LOCK_THEN_READ);
 }
 
-export async function placeOrderInTransaction(tx: Tx, ctx: GuestContext, input: PlaceInput, now: Date, staffDraft?: StaffOrder, opts: { paidOnline?: boolean } = {}) {
+export async function placeOrderInTransaction(tx: Tx, ctx: GuestContext, input: PlaceInput, now: Date, staffDraft?: StaffOrder, opts: OrderChecks = {}) {
     // Lock the session so two phones at the table cannot take the same round number
     const [session] = await tx
       .select()
@@ -273,7 +276,14 @@ export async function placeOrderInTransaction(tx: Tx, ctx: GuestContext, input: 
       .where(and(eq(s.outlets.tenantId, ctx.tenantId), eq(s.outlets.id, ctx.outletId)));
 
     // Open mode: a big first order on a fresh table waits for staff (PS 3.3)
-    if (!staffDraft && session.mode === "open" && roundNo === 1 && subtotalPaise > outlet.cap) {
+    if (!staffDraft && !activeRoomStay && !opts.paidOnline && !opts.staffConfirmed) {
+      if (me.guestId) {
+        const [guest] = await tx.select({ blockedAt: s.guests.blockedAt }).from(s.guests).where(and(eq(s.guests.tenantId, ctx.tenantId), eq(s.guests.id, me.guestId)));
+        if (guest?.blockedAt) throw new AppError("guest_blocked", "Please ask a staff member to take your order.");
+      }
+      if (session.needsStaffCheck) throw new AppError("needs_table_confirmation", "A staff member will confirm your table first.");
+    }
+    if (!staffDraft && !opts.staffConfirmed && session.mode === "open" && roundNo === 1 && subtotalPaise > outlet.cap) {
       throw new AppError("needs_staff_confirmation", "This is a large first order, so a staff member will confirm it. Please ask your waiter.", {
         subtotalPaise,
         capPaise: outlet.cap,

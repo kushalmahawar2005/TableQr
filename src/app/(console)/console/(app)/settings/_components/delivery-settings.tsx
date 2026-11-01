@@ -40,6 +40,11 @@ export function DeliverySettings({ value, onChange, disabled, hasGateway, hasPay
       <span><span className="block">Allow pay at pickup</span><span className="mt-0.5 block text-xs font-normal text-muted">Guests can pay at the counter when collecting.</span></span>
       <input type="checkbox" checked={value.pickupCodEnabled} disabled={disabled} onChange={event => update({ pickupCodEnabled: event.target.checked })} className="size-5 shrink-0 accent-[var(--brand)]" />
     </label>}
+    {(hasDelivery || pickupOn) && <div className="space-y-1.5 rounded-2xl border border-line bg-surface px-4 py-3">
+      <label htmlFor="first-cash-limit" className="block text-sm font-semibold text-ink">First cash order limit (₹)</label>
+      <Input id="first-cash-limit" type="number" min="0" max="100000" step="1" value={value.firstCashLimitPaise ? value.firstCashLimitPaise / 100 : ""} disabled={disabled} placeholder="No limit" onChange={event => update({ firstCashLimitPaise: event.target.value ? Math.round(Number(event.target.value) * 100) : null })} />
+      <p className="text-xs text-muted">New customers above this amount must pay online. Leave empty for no limit.</p>
+    </div>}
     {pickupOn && !value.pickupCodEnabled && !hasGateway && !hasPaymentQr && <p className="rounded-xl bg-[var(--state-held-soft)] p-3 text-xs text-[var(--state-held-text)]">Pickup cannot accept orders yet. Turn on pay at pickup, connect Cashfree, or add a payment QR.</p>}
 
     {anyServiceOn && <div className="space-y-2">

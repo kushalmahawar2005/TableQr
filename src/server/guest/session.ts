@@ -11,6 +11,7 @@ import { publish } from "../realtime/publish";
 import { topics } from "../realtime/token";
 import { assignTable, visitChanged } from "../floor/assignments";
 import { assertCanSeat, findMovedSession, findOpenSession, findTableByQr, wasRemoved } from "./table";
+import { tableIsTrusted } from "./table-confirmation";
 import { findRecentVerification } from "./verify";
 import { ROOM_CLASS } from "@/domain/rooms";
 import { shiftWaiterId } from "../staff/waiter-coverage";
@@ -73,7 +74,13 @@ async function seat(input: SeatInput): Promise<Seated | { refused: JoinCodeRefus
 
     // Guests can browse the menu before sharing their number. OTP is enforced atomically when an
     // order is placed; recent verification still restores the guest identity on this device/table.
-    const verified = !stay ? input.customer ?? await findRecentVerification(tx, tenantId, input.deviceId, now) : null;
+    const recent = !stay ? await findRecentVerification(tx, tenantId, input.deviceId, now) : null;
+    const verified = recent ?? (stay ? null : input.customer ?? null);
+    // A sign-in lasts months and can order from anywhere, so it does not prove this phone is here.
+    const needsStaffCheck = !!input.customer && !recent && !stay && (!open || !await tableIsTrusted(tx, tenantId, open.session.id, open.session, now));
+    if (open && (needsStaffCheck || (recent && open.session.needsStaffCheck))) {
+      await tx.update(s.tableSessions).set({ needsStaffCheck }).where(and(eq(s.tableSessions.tenantId, tenantId), eq(s.tableSessions.id, open.session.id)));
+    }
 
     const existing = open?.people.find((p) => p.deviceId === input.deviceId);
     if (existing && open!.session.status === "open") {
@@ -132,6 +139,7 @@ async function seat(input: SeatInput): Promise<Seated | { refused: JoinCodeRefus
         tableId: t.table.id,
         waiterUserId: await shiftWaiterId(tx, { tenantId, outletId: t.outlet.id }, t.table.id, now),
         mode: t.outlet.sessionMode,
+        needsStaffCheck,
         openKey: t.table.id,
         openedAt: now,
         lastActivityAt: now,
