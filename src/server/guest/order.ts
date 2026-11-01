@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { uuidv7 } from "@/db/id";
 import * as s from "@/db/schema";
@@ -78,11 +78,18 @@ export const isOpenLine = (l: AnyDraftLine): l is OpenDraftLine => "open" in l &
 type StaffOrder = { userId: string; lines: AnyDraftLine[] };
 
 /** Internal shared transaction; staff caller authenticates before providing staffDraft. */
+/** One verified diner vouches for their table: friends on other phones need no code of their own. */
+export async function tableHasVerifiedDiner(tx: Tx, ctx: { tenantId: string; sessionId: string }) {
+  const [diner] = await tx.select({ id: s.participants.id }).from(s.participants)
+    .where(and(eq(s.participants.tenantId, ctx.tenantId), eq(s.participants.sessionId, ctx.sessionId), isNotNull(s.participants.guestId), isNull(s.participants.removedAt))).limit(1);
+  return !!diner;
+}
+
 export function placeOrderTx(ctx: GuestContext, input: PlaceInput, now: Date, staffDraft?: StaffOrder) {
   return db.transaction(tx => placeOrderInTransaction(tx, ctx, input, now, staffDraft), LOCK_THEN_READ);
 }
 
-export async function placeOrderInTransaction(tx: Tx, ctx: GuestContext, input: PlaceInput, now: Date, staffDraft?: StaffOrder) {
+export async function placeOrderInTransaction(tx: Tx, ctx: GuestContext, input: PlaceInput, now: Date, staffDraft?: StaffOrder, opts: { paidOnline?: boolean } = {}) {
     // Lock the session so two phones at the table cannot take the same round number
     const [session] = await tx
       .select()
@@ -139,7 +146,7 @@ export async function placeOrderInTransaction(tx: Tx, ctx: GuestContext, input: 
         : [];
       throw new AppError("ordering_locked", `Ordering paused by ${host?.name ?? "the host"}.`);
     }
-    if (!staffDraft && !me.guestId && !activeRoomStay) {
+    if (!staffDraft && !me.guestId && !activeRoomStay && !opts.paidOnline && !(session.mode === "open" && await tableHasVerifiedDiner(tx, ctx))) {
       throw new AppError("verification_required", "Verify your phone number before placing this order.");
     }
 

@@ -6,8 +6,8 @@ export const OTP = {
   length: 4,
   /** A code works for 5 minutes */
   validSeconds: 5 * 60,
-  /** A new code for the same number after 30 seconds */
-  resendSeconds: 30,
+  /** A new code for the same number after 60 seconds */
+  resendSeconds: 60,
   /** Three wrong codes lock the number and the phone for 60 seconds */
   maxAttempts: 3,
   lockSeconds: 60,
@@ -15,7 +15,7 @@ export const OTP = {
   perPhonePerDay: 5,
   perDevicePer10Min: 3,
   perTablePer10Min: 10,
-  /** A table verified on this phone in the last 12 hours does not ask again */
+  /** A phone verified at this restaurant in the last 12 hours does not ask again at any table */
   skipHours: 12,
 } as const;
 

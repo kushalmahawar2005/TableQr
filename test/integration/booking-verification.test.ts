@@ -54,8 +54,8 @@ describe("booking identity and OTP boundaries", () => {
     const held = await hold();
     await sendBookingOtp("SRJ01", held.manageToken, "resend-device", "9876543103", now);
     await expect(sendBookingOtp("SRJ01", held.manageToken, "resend-device", "9876543103", now)).rejects.toMatchObject({ code: "rate_limited" });
-    for (const seconds of [31, 62]) await sendBookingOtp("SRJ01", held.manageToken, "resend-device", "9876543103", new Date(now.getTime() + seconds * 1000));
-    await expect(sendBookingOtp("SRJ01", held.manageToken, "resend-device", "9876543104", new Date(now.getTime() + 93_000))).rejects.toMatchObject({ code: "rate_limited" });
+    for (const seconds of [61, 122]) await sendBookingOtp("SRJ01", held.manageToken, "resend-device", "9876543103", new Date(now.getTime() + seconds * 1000));
+    await expect(sendBookingOtp("SRJ01", held.manageToken, "resend-device", "9876543104", new Date(now.getTime() + 183_000))).rejects.toMatchObject({ code: "rate_limited" });
   });
 
   it("cannot verify a different reservation using a valid code from the same table", async () => {

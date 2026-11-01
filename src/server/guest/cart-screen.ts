@@ -72,7 +72,7 @@ export async function getCartScreen(outletCode: string, shortCode: string, devic
       orderingLocked: open.session.orderingLocked,
       hostName: host && !isPlaceholderName(host.displayName) ? host.displayName : null,
       // A checked-in room guest orders with a name and phone, no OTP
-      verified: !!me.guestId || !!roomStay,
+      verified: !!me.guestId || !!roomStay || (open.session.mode === "open" && open.people.some((person) => !!person.guestId)),
       /** Open mode asks for a first name at the first order */
       needsName: open.session.mode === "open" && isPlaceholderName(me.displayName),
       /** Room guest without a saved name and phone yet: asked in the cart, prefilled from check-in */

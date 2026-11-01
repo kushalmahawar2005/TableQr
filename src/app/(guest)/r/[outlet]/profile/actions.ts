@@ -4,11 +4,11 @@ import { randomBytes } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import * as s from "@/db/schema";
-import { customerCookie, customerFor, customerHistory, logoutCustomer, sendCustomerOtp, verifyCustomerOtp } from "@/server/guest/customer-account";
+import { customerCookie, customerCookieOptions, customerFor, customerHistory, logoutCustomer, sendCustomerOtp, verifyCustomerOtp } from "@/server/guest/customer-account";
 import { checkFirstName } from "@/domain/guest-name";
 import { AppError } from "@/server/errors";
 import type { DeliveryAddress } from "@/db/schema/delivery";
-const options={httpOnly:true,sameSite:"lax" as const,secure:process.env.NODE_ENV==="production",path:"/",maxAge:30*86400};
+const options=customerCookieOptions;
 async function device(){const jar=await cookies();let id=jar.get("tq_customer_device")?.value;if(!id){id=randomBytes(24).toString("base64url");jar.set("tq_customer_device",id,options);}return id;}
 async function run<T>(fn:()=>Promise<T>){try{return {ok:true as const,data:await fn()}}catch(e){return {ok:false as const,error:e instanceof AppError?e.message:"Could not complete this request. Try again."}}}
 export async function requestCustomerCodeAction(outlet:string,phone:string){return run(()=>device().then(id=>sendCustomerOtp(outlet,phone,id)));}

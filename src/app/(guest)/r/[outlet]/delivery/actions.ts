@@ -1,11 +1,11 @@
 "use server";
-import { customerCookie, identifyCustomerCheckout } from "@/server/guest/customer-account";
+import { customerCookie, customerCookieOptions, identifyCustomerCheckout, renewCustomerSession, startCustomerSession } from "@/server/guest/customer-account";
 import { cookies } from "next/headers";
 import { headers } from "next/headers";
 import { uuidv7 } from "@/db/id";
 import type { DeliveryAddress, DeliveryCartLine } from "@/db/schema/delivery";
 import type { OrderServiceMode } from "@/domain/delivery";
-import { claimManualQrDeliveryPayment, createDeliveryCheckout, deliveryRealtimeToken, deliveryStatus, placeDeliveryOrder, rateDeliveryRider } from "@/server/delivery/checkout";
+import { prepaidCheckoutContact, claimManualQrDeliveryPayment, createDeliveryCheckout, deliveryRealtimeToken, deliveryStatus, placeDeliveryOrder, rateDeliveryRider } from "@/server/delivery/checkout";
 import { priceDeliveryCart, deliveryOutlet } from "@/server/delivery/catalog";
 import { sendDeliveryOtp, verifyDeliveryOtp } from "@/server/delivery/otp";
 import { lookupPincode, reverseGeocode } from "@/server/delivery/pincode";
@@ -32,13 +32,18 @@ async function result<T>(fn: () => Promise<T>): Promise<{ ok: true; data: T } | 
 export async function quoteDeliveryAction(outlet: string, lines: DeliveryCartLine[], pincode: string, serviceMode: OrderServiceMode = "delivery") {
   return result(async () => priceDeliveryCart(db, await deliveryOutlet(outlet, true, new Date(), serviceMode), lines, serviceMode === "delivery" ? pincode : undefined, new Date(), serviceMode));
 }
-export async function startDeliveryAction(outlet: string, lines: DeliveryCartLine[], address: DeliveryAddress, phone: string, serviceMode: OrderServiceMode = "delivery", paymentMode?: "cod" | "gateway" | "manual_qr") {
+export async function startDeliveryAction(outlet: string, lines: DeliveryCartLine[], address: DeliveryAddress, phone: string, serviceMode: OrderServiceMode = "delivery", paymentMode?: "cod" | "gateway" | "manual_qr", name = "") {
   return result(async () => {
     const identityData = await identity(outlet);
     const checkout = await createDeliveryCheckout(outlet, identityData.deviceId, { lines, address, serviceMode, paymentMode });
     identityData.jar.set(cookieName(outlet), checkout.token, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 7 * 86400 });
-    if (await identifyCustomerCheckout(outlet,identityData.jar.get(customerCookie(outlet))?.value,checkout.token,identityData.deviceId)) return {quote:checkout.quote,otp:null};
-    const otp = await sendDeliveryOtp(outlet, checkout.token, identityData.deviceId, phone);
+    const signedIn = identityData.jar.get(customerCookie(outlet))?.value;
+    if (await identifyCustomerCheckout(outlet,signedIn,checkout.token,identityData.deviceId)) {
+      if (await renewCustomerSession(outlet,signedIn)) identityData.jar.set(customerCookie(outlet),signedIn!,customerCookieOptions);
+      return {quote:checkout.quote,otp:null};
+    }
+    if (await prepaidCheckoutContact(outlet, checkout.token, identityData.deviceId, name, phone)) return { quote: checkout.quote, otp: null };
+    const otp = await sendDeliveryOtp(outlet, checkout.token, identityData.deviceId, phone, new Date(), { reuseLiveCode: true });
     return { quote: checkout.quote, otp };
   });
 }
@@ -46,7 +51,11 @@ export async function resendDeliveryAction(outlet: string, phone: string) {
   return result(async () => { const who = await identity(outlet); return sendDeliveryOtp(outlet, who.token, who.deviceId, phone); });
 }
 export async function verifyDeliveryAction(outlet: string, challengeId: string, code: string, name: string) {
-  return result(async () => { const who = await identity(outlet); await verifyDeliveryOtp(outlet, who.token, who.deviceId, challengeId, code, name); });
+  return result(async () => {
+    const who = await identity(outlet);
+    const verified = await verifyDeliveryOtp(outlet, who.token, who.deviceId, challengeId, code, name);
+    who.jar.set(customerCookie(outlet), await startCustomerSession(verified.tenantId, verified.guestId), customerCookieOptions);
+  });
 }
 export async function placeDeliveryAction(outlet: string, totalPaise: number) {
   return result(async () => { const who = await identity(outlet); return placeDeliveryOrder(outlet, who.token, who.deviceId, totalPaise); });

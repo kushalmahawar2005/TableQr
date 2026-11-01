@@ -84,6 +84,8 @@ export type AnalyticsData = {
   byWeekday: number[];
   topTenants: { id: string; name: string; orders: number; salesPaise: number }[];
   topCities: { city: string; orders: number; salesPaise: number }[];
+  /** SMS codes requested, the running cost to watch */
+  otp: { total: number; previousTotal: number; tableAndBooking: number; delivery: number; account: number; staff: number; topTenants: { id: string; name: string; codes: number }[] };
   funnel: { tenants: number; withOutlet: number; withTables: number; withMenu: number; withOrders: number; withPaidBill: number };
 };
 

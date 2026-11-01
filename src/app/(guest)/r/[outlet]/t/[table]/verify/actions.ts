@@ -1,6 +1,8 @@
 "use server";
 
+import { cookies } from "next/headers";
 import { AppError } from "@/server/errors";
+import { customerCookie, customerCookieOptions, startCustomerSession } from "@/server/guest/customer-account";
 import { ensureDeviceId } from "@/server/guest/device-cookie";
 import { startOrJoinTable } from "@/server/guest/session";
 import { sendCode, verifyCode, type SendOutcome, type VerifyOutcome } from "@/server/guest/verify";
@@ -46,6 +48,7 @@ export async function verifyCodeAction(
       consent: input.consent === true,
     });
     if (!res.ok) return res;
+    (await cookies()).set(customerCookie(outletCode), await startCustomerSession(res.tenantId, res.guestId), customerCookieOptions);
     await startOrJoinTable({ outletCode, shortCode, deviceId });
     return { ok: true, to: `/r/${encodeURIComponent(outletCode)}/t/${encodeURIComponent(shortCode)}/menu` };
   } catch (err) {

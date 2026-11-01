@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, count, countDistinct, eq, gte, lt, sql } from "drizzle-orm";
+import { and, count, countDistinct, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
 import * as s from "@/db/schema";
 import type { AnalyticsData, AnalyticsRange } from "@/app/admin/admin-types";
@@ -9,6 +9,16 @@ import { requirePlatformAdmin } from "./auth";
 const DAY = 86_400_000;
 
 /** Platform-wide usage analytics for one period. Aggregates only; no guest data is read. */
+/** Codes per tenant since `from`, from each table that records a send */
+async function otpUsage(from: Date, until?: Date) {
+  // isolation-exempt: authenticated platform admins read cross-tenant aggregates for analytics.
+  const perTenant = (table: typeof s.otpChallenges | typeof s.deliveryOtpChallenges | typeof s.customerChallenges | typeof s.staffInvitationOtps) =>
+    db.select({ tenantId: table.tenantId, codes: count() }).from(table).where(and(gte(table.createdAt, from), until ? lt(table.createdAt, until) : undefined)).groupBy(table.tenantId);
+  const [tableAndBooking, delivery, account, staff] = await Promise.all([perTenant(s.otpChallenges), perTenant(s.deliveryOtpChallenges), perTenant(s.customerChallenges), perTenant(s.staffInvitationOtps)]);
+  return { tableAndBooking, delivery, account, staff };
+}
+const sumCodes = (rows: { codes: number }[]) => rows.reduce((total, row) => total + Number(row.codes), 0);
+
 export async function getAnalyticsData(range: AnalyticsRange): Promise<AnalyticsData> {
   await requirePlatformAdmin();
   if (![7, 30, 90].includes(range)) range = 30;
@@ -74,8 +84,21 @@ export async function getAnalyticsData(range: AnalyticsRange): Promise<Analytics
   const topCities = cityOrderRows.map((r) => ({ city: r.city, orders: Number(r.total), salesPaise: citySales.get(r.city) ?? 0 }))
     .sort((a, b) => b.salesPaise - a.salesPaise || b.orders - a.orders).slice(0, 8);
 
+  const [otpNow, otpBefore] = await Promise.all([otpUsage(start), otpUsage(previousStart, start)]);
+  const otpByTenant = new Map<string, number>();
+  for (const rows of Object.values(otpNow)) for (const row of rows) otpByTenant.set(row.tenantId, (otpByTenant.get(row.tenantId) ?? 0) + Number(row.codes));
+  const otpTop = [...otpByTenant].sort((a, b) => b[1] - a[1]).slice(0, 5);
+  // isolation-exempt: authenticated platform admins read cross-tenant aggregates for analytics.
+  const otpNames = otpTop.length ? await db.select({ id: s.tenants.id, name: s.tenants.name }).from(s.tenants).where(inArray(s.tenants.id, otpTop.map(([id]) => id))) : [];
+
   return {
     range,
+    otp: {
+      total: Object.values(otpNow).reduce((total, rows) => total + sumCodes(rows), 0),
+      previousTotal: Object.values(otpBefore).reduce((total, rows) => total + sumCodes(rows), 0),
+      tableAndBooking: sumCodes(otpNow.tableAndBooking), delivery: sumCodes(otpNow.delivery), account: sumCodes(otpNow.account), staff: sumCodes(otpNow.staff),
+      topTenants: otpTop.map(([id, codes]) => ({ id, name: otpNames.find((tenant) => tenant.id === id)?.name ?? "Removed tenant", codes })),
+    },
     totals: {
       salesPaise: Number(salesTotals.sales), previousSalesPaise: Number(prevSalesTotals.sales),
       orders: Number(orderTotals.orders), previousOrders: Number(prevOrderTotals.orders),

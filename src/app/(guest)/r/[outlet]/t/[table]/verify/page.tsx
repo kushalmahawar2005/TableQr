@@ -1,3 +1,5 @@
+import { customerAtTable, customerCookie } from "@/server/guest/customer-account";
+import { startOrJoinTable } from "@/server/guest/session";
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -23,6 +25,12 @@ export default async function VerifyPage(props: PageProps<"/r/[outlet]/t/[table]
   if (!data) redirect(tablePath);
   const { landing } = data;
   if (landing.kind !== "start" && landing.kind !== "join" && landing.kind !== "rejoin") redirect(tablePath);
+  // A signed-in customer already verified once: seat them with that identity, no new code.
+  const customer = deviceId ? await customerAtTable(outlet, jar.get(customerCookie(outlet))?.value) : null;
+  if (deviceId && customer) {
+    const seated = await startOrJoinTable({ outletCode: outlet, shortCode: table, deviceId, customer }).then(() => true, () => false);
+    if (seated) redirect(returnToCart ? `${tablePath}/cart` : `${tablePath}/menu`);
+  }
   // Verified here within 12 hours: return to the cart that requested verification.
   if (deviceId && (await isRecentlyVerified(outlet, table, deviceId))) redirect(returnToCart ? `${tablePath}/cart` : `${tablePath}/menu`);
 

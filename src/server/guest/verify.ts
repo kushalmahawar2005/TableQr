@@ -9,6 +9,7 @@ import { CONSENT_VERSION, isCompleteCode, normaliseCode, OTP } from "@/domain/ot
 import { countryByIso, isValidIndianMobile, normaliseIndianMobile, toE164 } from "@/domain/phone";
 import { LOCK_THEN_READ, type Runner } from "../db-types";
 import { smsMockEnabled, smsSender } from "../sms/sender";
+import { limitSmsByClient } from "../request-limit";
 import { assertCanSeat, findOpenSession, findTableByQr } from "./table";
 
 // G2: guests confirm their mobile with a 4-digit SMS code before placing an order. Codes are per
@@ -51,7 +52,7 @@ export type SendOutcome =
   | { ok: false; error: "locked"; retryIn: number };
 
 /**
- * Send code / Resend code / Send a new code. Asking again for the same number within 30 seconds
+ * Send code / Resend code / Send a new code. Asking again for the same number within 60 seconds
  * returns the code already on its way instead of sending another. Table problems (closed,
  * settling, not ready) throw the same AppErrors as Start ordering, so the guest goes back to G1.
  */
@@ -63,6 +64,7 @@ export async function sendCode(input: {
   phone: string;
   now?: Date;
 }): Promise<SendOutcome> {
+  await limitSmsByClient();
   const now = input.now ?? new Date();
   const country = countryByIso(input.country);
   if (!country?.otp) return { ok: false, error: "unsupported_country" };
@@ -193,7 +195,7 @@ export async function sendCode(input: {
 }
 
 export type VerifyOutcome =
-  | { ok: true; guestId: string }
+  | { ok: true; tenantId: string; guestId: string }
   | { ok: false; error: "invalid_name" | "expired" }
   | { ok: false; error: "wrong"; attemptsLeft: number }
   | { ok: false; error: "locked"; retryIn: number };
@@ -271,12 +273,12 @@ export async function verifyCode(input: {
       .update(s.otpChallenges)
       .set({ verifiedAt: now, guestId: guest.id })
       .where(and(eq(s.otpChallenges.tenantId, tenantId), eq(s.otpChallenges.id, ch.id)));
-    return { ok: true, guestId: guest.id };
+    return { ok: true, tenantId, guestId: guest.id };
   }, LOCK_THEN_READ);
 }
 
-/** The guest this phone verified as at this table within the last 12 hours, if any */
-export async function findRecentVerification(run: Runner, tenantId: string, tableId: string, deviceId: string, now: Date) {
+/** The guest this phone verified as at this restaurant within the last 12 hours, if any */
+export async function findRecentVerification(run: Runner, tenantId: string, deviceId: string, now: Date) {
   const [row] = await run
     .select({ guestId: s.guests.id, name: s.guests.name })
     .from(s.otpChallenges)
@@ -284,7 +286,6 @@ export async function findRecentVerification(run: Runner, tenantId: string, tabl
     .where(
       and(
         eq(s.otpChallenges.tenantId, tenantId),
-        eq(s.otpChallenges.tableId, tableId),
         eq(s.otpChallenges.deviceId, deviceId),
         gt(s.otpChallenges.verifiedAt, later(now, -OTP.skipHours * 3600)),
       ),
@@ -297,5 +298,5 @@ export async function findRecentVerification(run: Runner, tenantId: string, tabl
 /** For the G2 page: a phone verified here recently skips G2 entirely */
 export async function isRecentlyVerified(outletCode: string, shortCode: string, deviceId: string, now = new Date()) {
   const t = await findTableByQr(db, outletCode, shortCode);
-  return !!(await findRecentVerification(db, t.outlet.tenantId, t.table.id, deviceId, now));
+  return !!(await findRecentVerification(db, t.outlet.tenantId, deviceId, now));
 }

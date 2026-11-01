@@ -181,6 +181,14 @@ function Loaded({ a, tenants, plans, range }: { a: AnalyticsData; tenants: Admin
       </Card>
     </div>
 
+    <Card><CardHeader><CardTitle>SMS codes</CardTitle><CardDescription>{a.otp.total} requested in the last {period}, {a.otp.previousTotal} in the period before</CardDescription></CardHeader>
+      <CardContent className="grid gap-4 sm:grid-cols-2">
+        <dl className="space-y-2 text-sm">
+          {([["Table and booking", a.otp.tableAndBooking], ["Delivery and pickup", a.otp.delivery], ["Customer sign-in", a.otp.account], ["Staff invitations", a.otp.staff]] as const).map(([label, value]) => <div key={label} className="flex justify-between"><dt className="text-muted-foreground">{label}</dt><dd className="font-semibold">{value}</dd></div>)}
+        </dl>
+        <div className="space-y-2 text-sm">{a.otp.topTenants.length ? a.otp.topTenants.map((tenant) => <div key={tenant.id} className="flex justify-between gap-3"><span className="truncate">{tenant.name}</span><b>{tenant.codes}</b></div>) : <p className="text-muted-foreground">No codes requested in this period.</p>}</div>
+      </CardContent>
+    </Card>
     <Card><CardHeader><CardTitle>Subscription income by plan</CardTitle><CardDescription>Monthly income from paying tenants</CardDescription></CardHeader><CardContent>
       <BarList empty="No plans yet." rows={byPlan.map((p) => ({ ...p, text: `${money(p.value)} / month` }))} />
     </CardContent></Card>

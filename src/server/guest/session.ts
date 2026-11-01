@@ -22,6 +22,8 @@ type SeatInput = {
   shortCode: string;
   deviceId: string;
   displayName?: string;
+  /** The signed-in customer on this phone; they verified once and need no new code */
+  customer?: { guestId: string; name: string } | null;
   /** Host-confirmed mode only: the table's 4-digit code, checked here on the server */
   joinCode?: string;
   now?: Date;
@@ -71,7 +73,7 @@ async function seat(input: SeatInput): Promise<Seated | { refused: JoinCodeRefus
 
     // Guests can browse the menu before sharing their number. OTP is enforced atomically when an
     // order is placed; recent verification still restores the guest identity on this device/table.
-    const verified = !stay ? await findRecentVerification(tx, tenantId, t.table.id, input.deviceId, now) : null;
+    const verified = !stay ? input.customer ?? await findRecentVerification(tx, tenantId, input.deviceId, now) : null;
 
     const existing = open?.people.find((p) => p.deviceId === input.deviceId);
     if (existing && open!.session.status === "open") {

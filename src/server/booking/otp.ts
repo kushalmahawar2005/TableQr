@@ -9,7 +9,7 @@ import { OTP, normaliseCode } from "@/domain/otp";
 import { isValidIndianMobile, normaliseIndianMobile, toE164 } from "@/domain/phone";
 import { LOCK_THEN_READ } from "../db-types";
 import { AppError } from "../errors";
-import { limitByClient } from "../request-limit";
+import { limitSmsByClient } from "../request-limit";
 import { smsMockEnabled, smsSender } from "../sms/sender";
 import { bookingByToken } from "./core";
 
@@ -28,7 +28,7 @@ function activeHold(row: typeof s.reservations.$inferSelect, now: Date) {
 }
 
 export async function sendBookingOtp(outletCode: string, token: string, deviceId: string, phoneInput: string, now = new Date()) {
-  await limitByClient("sms", 20);
+  await limitSmsByClient();
   const { row, scope } = await bookingByToken(outletCode, token, now);
   activeHold(row, now);
   if (!deviceId || deviceId.length > 64) throw new AppError("invalid_state", "Please reopen the booking page and try again.");
@@ -50,7 +50,7 @@ export async function sendBookingOtp(outletCode: string, token: string, deviceId
     const [locked] = await tx.select({ id: s.otpChallenges.id }).from(s.otpChallenges).where(and(eq(s.otpChallenges.tenantId, scope.tenantId), identity, gt(s.otpChallenges.lockedUntil, now))).limit(1);
     if (locked) throw new AppError("locked", "Too many wrong codes. Please wait a minute.");
     const [recent] = await tx.select({ id: s.otpChallenges.id }).from(s.otpChallenges).where(and(eq(s.otpChallenges.tenantId, scope.tenantId), identity, isNull(s.otpChallenges.deadAt), gt(s.otpChallenges.resendAt, now))).limit(1);
-    if (recent) throw new AppError("rate_limited", "Please wait 30 seconds before requesting another code.");
+    if (recent) throw new AppError("rate_limited", "Please wait a minute before requesting another code.");
     const since = new Date(now.getTime() - 10 * 60_000);
     const [[phoneCount], [deviceCount], [tableCount]] = await Promise.all([
       tx.select({ n: count() }).from(s.otpChallenges).where(and(eq(s.otpChallenges.tenantId, scope.tenantId), eq(s.otpChallenges.phone, phone), gte(s.otpChallenges.createdAt, new Date(now.getTime() - 24 * 3600_000)))),
@@ -90,8 +90,8 @@ export async function verifyBookingOtp(outletCode: string, token: string, device
     const [guest] = await tx.select({ id: s.guests.id }).from(s.guests).where(and(eq(s.guests.tenantId, scope.tenantId), eq(s.guests.phone, ch.phone)));
     await tx.update(s.otpChallenges).set({ verifiedAt: now, guestId: guest.id }).where(and(eq(s.otpChallenges.tenantId, scope.tenantId), eq(s.otpChallenges.id, ch.id)));
     await tx.update(s.reservations).set({ guestId: guest.id, name: cleanName, phone: ch.phone, bookingDeviceId: deviceId, updatedAt: now }).where(and(eq(s.reservations.tenantId, scope.tenantId), eq(s.reservations.id, row.id)));
-    return { ok: true as const, guestId: guest.id, phone: ch.phone };
+    return { ok: true as const, tenantId: scope.tenantId, guestId: guest.id, phone: ch.phone };
   }, LOCK_THEN_READ);
   if (!result.ok) throw result.error;
-  return { guestId: result.guestId, phone: result.phone };
+  return { tenantId: result.tenantId, guestId: result.guestId, phone: result.phone };
 }

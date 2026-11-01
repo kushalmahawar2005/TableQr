@@ -6,6 +6,7 @@ import { db } from "@/db";
 import { uuidv7 } from "@/db/id";
 import * as s from "@/db/schema";
 import { checkFirstName } from "@/domain/guest-name";
+import { isValidIndianMobile, normaliseIndianMobile, toE164 } from "@/domain/phone";
 import { LOCK_THEN_READ } from "../db-types";
 import { AppError } from "../errors";
 import { placeOrderInTransaction } from "../guest/order";
@@ -77,6 +78,20 @@ function paymentAllowed(outlet: Awaited<ReturnType<typeof deliveryOutlet>>, mode
   return outletGatewayReady(outlet.paymentGatewayConfig);
 }
 
+/**
+ * Online payment already stops fake orders, so a prepaid checkout costs no SMS. The number stays
+ * unverified: it reaches the kitchen and rider, but is never linked to a guest account.
+ */
+export async function prepaidCheckoutContact(code: string, token: string, deviceId: string, nameInput: string, phoneInput: string, now = new Date()) {
+  const { outlet, row } = await deliveryCheckout(code, token, deviceId, now);
+  if (row.paymentMode !== "gateway") return false;
+  const name = checkFirstName(nameInput), digits = normaliseIndianMobile(phoneInput);
+  if (!name.ok) throw new AppError("invalid_name", "Enter your name using letters, up to 40 characters.");
+  if (!isValidIndianMobile(digits)) throw new AppError("invalid_phone", "Enter a valid Indian mobile number.");
+  await db.update(s.deliveryCheckouts).set({ name: name.name, phone: toE164("+91", digits) }).where(and(eq(s.deliveryCheckouts.tenantId, outlet.tenantId), eq(s.deliveryCheckouts.id, row.id), eq(s.deliveryCheckouts.status, "draft")));
+  return true;
+}
+
 /** Both a random bearer cookie and the device cookie are required. No sequential ids grant access. */
 export async function deliveryCheckout(code: string, token: string, deviceId: string, now = new Date()) {
   const outlet = await deliveryOutlet(code, false, now);
@@ -139,7 +154,8 @@ async function placeKnownDeliveryOrder(code: string, found: Awaited<ReturnType<t
     if (checkout.sessionId) return { sessionId: checkout.sessionId, replayed: true as const };
     const claimedManualPayment = checkout.paymentMode === "manual_qr" && checkout.paymentStatus === "pending" && !!checkout.manualPaymentReference && !!checkout.manualPaymentClaimedAt;
     if ((checkout.expiresAt <= now && !(manualVerification && claimedManualPayment)) || checkout.status !== "draft") throw new AppError("expired", "Your checkout expired.");
-    if (!checkout.guestId || !checkout.verifiedAt || !checkFirstName(checkout.name ?? "").ok) throw new AppError("verification_required", "Verify your phone before placing this order.");
+    const prepaid = checkout.paymentMode === "gateway";
+    if ((prepaid ? !checkout.phone : !checkout.guestId || !checkout.verifiedAt) || !checkFirstName(checkout.name ?? "").ok) throw new AppError("verification_required", "Verify your phone before placing this order.");
     if (checkout.paymentMode === "gateway" && (checkout.paymentStatus !== "paid" || !checkout.gatewayPaymentId)) throw new AppError("invalid_state", "Complete the secure online payment before placing your order.", { reason: "payment_required" });
     if (checkout.paymentMode === "manual_qr" && (!manualVerification || !claimedManualPayment || checkout.manualPaymentReference !== manualVerification.reference || !checkout.manualPaymentQrUrl)) throw new AppError("invalid_state", "The business must verify the submitted QR payment before placing this order.");
     if (checkout.paymentMode === "cod" && checkout.paymentStatus !== "none") throw new AppError("invalid_state", "This delivery checkout has an unexpected payment state.");
@@ -162,7 +178,7 @@ async function placeKnownDeliveryOrder(code: string, found: Awaited<ReturnType<t
     await tx.insert(s.participants).values({ id: participantId, tenantId: outlet.tenantId, sessionId, guestId: checkout.guestId, displayName: checkout.name!, deviceId, joinedAt: now });
     await tx.insert(s.cartLines).values(checkout.lines.map(line => ({ tenantId: outlet.tenantId, sessionId, participantId, itemId: line.itemId, qty: line.qty, modifiers: line.modifierIds.map(modifierId => ({ modifierId, groupId: "" })), personalForPickup: true })));
     const ctx = { tenantId: outlet.tenantId, outletId: outlet.id, brandId: outlet.brandId, timezone: outlet.timezone, tableId, sessionId, participantId };
-    const order = await placeOrderInTransaction(tx, ctx, { requestId: checkout.id, note: `${checkout.serviceMode === "pickup" ? "PICKUP" : "DELIVERY"} · Pack all items`, quote: Object.fromEntries(quote.lines.map(line => [quoteKey(line.itemId, line.modifierIds), line.unitPricePaise])) }, now);
+    const order = await placeOrderInTransaction(tx, ctx, { requestId: checkout.id, note: `${checkout.serviceMode === "pickup" ? "PICKUP" : "DELIVERY"} · Pack all items`, quote: Object.fromEntries(quote.lines.map(line => [quoteKey(line.itemId, line.modifierIds), line.unitPricePaise])) }, now, undefined, { paidOnline: prepaid });
     // Delivery never inherits optional dine-in service charges.
     await syncBill(tx, ctx, now, { serviceChargeWaived: true, requestedAt: now });
     await tx.update(s.tableSessions).set({ status: "bill_requested", orderingLocked: true }).where(and(eq(s.tableSessions.tenantId, outlet.tenantId), eq(s.tableSessions.id, sessionId)));

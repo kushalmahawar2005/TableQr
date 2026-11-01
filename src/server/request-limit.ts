@@ -31,3 +31,9 @@ export async function limitByClient(action: string, limit: number, windowMs = 60
   const address = await clientAddress();
   if (address && overLimit(`${action}:${address}`, limit, windowMs)) throw new AppError("rate_limited", "Too many requests. Try again in a minute.");
 }
+
+/** Every code costs money, so one address cannot ask for many across restaurants or numbers */
+export async function limitSmsByClient() {
+  await limitByClient("sms", 10);
+  await limitByClient("sms-hour", 60, 3_600_000);
+}

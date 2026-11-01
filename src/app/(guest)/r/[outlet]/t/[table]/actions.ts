@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { uuidv7 } from "@/db/id";
 import { LANG_COOKIE, parseLang } from "@/lib/i18n";
 import { DEVICE_COOKIE } from "@/lib/guest-device";
+import { customerAtTable, customerCookie } from "@/server/guest/customer-account";
 import { AppError } from "@/server/errors";
 import { joinTableWithCode, startOrJoinTable } from "@/server/guest/session";
 
@@ -31,7 +32,7 @@ export async function startOrJoin(outletCode: string, shortCode: string, _prev: 
 
   const tablePath = `/r/${encodeURIComponent(outletCode)}/t/${encodeURIComponent(shortCode)}`;
   try {
-    await startOrJoinTable({ outletCode, shortCode, deviceId });
+    await startOrJoinTable({ outletCode, shortCode, deviceId, customer: await customerAtTable(outletCode, jar.get(customerCookie(outletCode))?.value) });
   } catch (err) {
     if (!(err instanceof AppError)) return { error: "failed" };
     if (err.code === "verification_required") {

@@ -66,7 +66,7 @@ describe("G2 verify number", () => {
     expect(beforeOtp.isHost).toBe(true);
 
     const sent = await send("T1", "d-happy", "98765 43210");
-    expect(sent).toMatchObject({ phone: "+919876543210", expiresIn: 300, resendIn: 30 });
+    expect(sent).toMatchObject({ phone: "+919876543210", expiresIn: 300, resendIn: 60 });
     expect(sent.devCode).toMatch(/^\d{4}$/);
     expect(mockSms.lastCode("+919876543210")).toBe(sent.devCode);
 
@@ -87,18 +87,18 @@ describe("G2 verify number", () => {
     expect(row.codeHash).not.toContain(sent.devCode);
   });
 
-  it("returns the code already sent when asked again within 30 seconds, and a new one after", async () => {
+  it("returns the code already sent when asked again within 60 seconds, and a new one after", async () => {
     const first = await send("T2", "d-resend", "9876500002");
     const again = await send("T2", "d-resend", "9876500002", at(10));
     expect(again.challengeId).toBe(first.challengeId);
-    expect(again.resendIn).toBe(20);
+    expect(again.resendIn).toBe(50);
     expect(again.devCode).toBeUndefined();
 
-    const fresh = await send("T2", "d-resend", "9876500002", at(31));
+    const fresh = await send("T2", "d-resend", "9876500002", at(61));
     expect(fresh.challengeId).not.toBe(first.challengeId);
     // The older code is dead
-    expect(await verify("T2", "d-resend", first.challengeId, first.devCode, at(32))).toEqual({ ok: false, error: "expired" });
-    expect((await verify("T2", "d-resend", fresh.challengeId, fresh.devCode, at(33))).ok).toBe(true);
+    expect(await verify("T2", "d-resend", first.challengeId, first.devCode, at(62))).toEqual({ ok: false, error: "expired" });
+    expect((await verify("T2", "d-resend", fresh.challengeId, fresh.devCode, at(63))).ok).toBe(true);
   });
 
   it("changing the number kills the old code", async () => {
@@ -201,7 +201,7 @@ describe("G2 verify number", () => {
     });
   });
 
-  it("skips G2 on the same table within 12 hours, but not on another table or after 12 hours", async () => {
+  it("skips G2 at any table of the restaurant within 12 hours, but not after 12 hours", async () => {
     const qr = env.demo.tableQr.B3;
     const sent = await send("B3", "d-skip", "9876500060");
     await verify("B3", "d-skip", sent.challengeId, sent.devCode, at(1), { name: "Meera" });
@@ -218,11 +218,11 @@ describe("G2 verify number", () => {
     const [p] = await env.db.select().from(s.participants).where(eq(s.participants.id, again.participantId));
     expect(p.displayName).toBe("Meera");
 
-    // Another table asks again; so does this one after 12 hours
+    // Another table of this restaurant trusts the same phone; 12 hours later both ask again
     const anotherTable = await startOrJoinTable({ outletCode: "SRJ01", shortCode: env.demo.tableQr.B4, deviceId: "d-skip", now: at(7200) });
     const [anotherParticipant] = await env.db.select().from(s.participants).where(eq(s.participants.id, anotherTable.participantId));
-    expect(anotherParticipant.guestId).toBeNull();
-    expect(await isRecentlyVerified("SRJ01", env.demo.tableQr.B4, "d-skip", at(7200))).toBe(false);
+    expect(anotherParticipant.guestId).toBe(p.guestId);
+    expect(await isRecentlyVerified("SRJ01", env.demo.tableQr.B4, "d-skip", at(7200))).toBe(true);
     expect(await isRecentlyVerified("SRJ01", qr, "d-skip", at(12 * 3600 + 2))).toBe(false);
   });
 

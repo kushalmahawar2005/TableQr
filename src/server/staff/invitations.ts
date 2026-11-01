@@ -149,7 +149,7 @@ export async function sendStaffInvitationOtp(token: string, phoneInput: string, 
     const [latest] = await tx.select().from(s.staffInvitationOtps)
       .where(and(eq(s.staffInvitationOtps.tenantId, invite.tenantId), eq(s.staffInvitationOtps.invitationId, invite.id)))
       .orderBy(desc(s.staffInvitationOtps.createdAt)).limit(1);
-    if (latest && latest.resendAt > now) throw new AppError("rate_limited", "Wait 30 seconds before requesting another code.");
+    if (latest && latest.resendAt > now) throw new AppError("rate_limited", "Wait a minute before requesting another code.");
     const since = new Date(now.getTime() - 10 * 60_000);
     const dayAgo = new Date(now.getTime() - 24 * 3600_000);
     const [[sentToday], [sentRecently]] = await Promise.all([

@@ -19,7 +19,7 @@ type DeliveryVerdict = { gatewayRef: string; status: "success" | "failed"; amoun
 export async function startDeliveryPayment(code: string, token: string, deviceId: string, callbackTemplate: string) {
   const { outlet, row } = await deliveryCheckout(code, token, deviceId);
   if (row.status !== "draft" || row.paymentMode !== "gateway") throw noPayment("This order is not set up for online prepayment.");
-  if (!row.guestId || !row.verifiedAt || !row.name || !row.phone) throw new AppError("verification_required", "Verify your phone before paying for delivery.");
+  if (!row.name || !row.phone) throw new AppError("verification_required", "Add your name and phone before paying.");
   if (row.paymentStatus === "failed" || row.paymentStatus.startsWith("refund")) throw noPayment("This payment could not be completed. Start a new delivery checkout or contact the restaurant.");
   const gateway = await gatewayForOutletPayment(outlet.tenantId, outlet.id, "cashfree") ?? (process.env.NODE_ENV !== "production" ? await gatewayForOutletPayment(outlet.tenantId, outlet.id, "mock") : null);
   if (!gateway) throw noPayment("This restaurant has not connected its own live Cashfree account for delivery payments.");
@@ -35,7 +35,7 @@ export async function startDeliveryPayment(code: string, token: string, deviceId
       amountPaise: row.totalPaise,
       receipt: row.id,
       callbackUrl,
-      customer: { id: row.guestId, phone: row.phone, name: row.name },
+      customer: { id: row.guestId ?? row.id, phone: row.phone, name: row.name },
     })).gatewayRef;
     await db.update(s.deliveryCheckouts).set({ paymentProvider: gateway.name, gatewayRef, paymentStatus: "pending", paymentFailureReason: null })
       .where(and(eq(s.deliveryCheckouts.tenantId, row.tenantId), eq(s.deliveryCheckouts.id, row.id), eq(s.deliveryCheckouts.status, "draft"), eq(s.deliveryCheckouts.paymentStatus, "none")));
