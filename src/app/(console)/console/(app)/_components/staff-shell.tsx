@@ -49,6 +49,7 @@ import type { Lang } from "@/lib/i18n";
 import { shrinkPhotoFile } from "@/lib/shrink-photo";
 import { myPhotoAction, saveMyPhotoAction } from "./profile-actions";
 import { NotificationBell } from "./notification-bell";
+import { useLiveOrderCounts } from "@/lib/live-order-counts";
 import { switchOutletAction } from "./outlet-actions";
 
 const ICONS: Record<string, IconSvgElement> = {
@@ -296,7 +297,7 @@ export function StaffShell({
                 aria-current={current ? "page" : undefined}
                 aria-label={s.label}
                 title={s.label}
-                className={`flex min-h-11 items-center gap-3 rounded-input px-3 text-body font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-ink ${current ? "bg-forest text-white shadow-xs" : "text-muted hover:bg-ink/5 hover:text-ink"}`}
+                className={`relative flex min-h-11 items-center gap-3 rounded-input px-3 text-body font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-ink ${current ? "bg-forest text-white shadow-xs" : "text-muted hover:bg-ink/5 hover:text-ink"}`}
               >
                 <HugeiconsIcon
                   icon={ICONS[s.slug] ?? DashboardSquare01Icon}
@@ -305,6 +306,7 @@ export function StaffShell({
                   aria-hidden
                 />
                 <span className={`truncate ${wideLabel}`}>{s.label}</span>
+                {s.slug === "orders" && <WaitingBadge />}
               </Link>
             );
           })}
@@ -456,7 +458,7 @@ export function StaffShell({
               href={preview ? "#" : `/console/${s.slug}`}
               data-tour={`nav-${s.slug}`}
               aria-current={current ? "page" : undefined}
-              className={`flex min-h-14 min-w-0 flex-1 flex-col items-center justify-center gap-1 px-1 text-[10px] font-semibold ${current ? "text-forest" : "text-muted"}`}
+              className={`relative flex min-h-14 min-w-0 flex-1 flex-col items-center justify-center gap-1 px-1 text-[10px] font-semibold ${current ? "text-forest" : "text-muted"}`}
             >
               <HugeiconsIcon
                 icon={ICONS[s.slug] ?? DashboardSquare01Icon}
@@ -464,6 +466,7 @@ export function StaffShell({
                 aria-hidden
               />
               <span className="max-w-full truncate">{s.label}</span>
+              {s.slug === "orders" && <WaitingBadge />}
             </Link>
           );
         })}
@@ -477,6 +480,14 @@ export function StaffShell({
       </nav>
     </div>
   );
+}
+
+/** How many orders are waiting for the kitchen, on the Orders menu item */
+function WaitingBadge() {
+  const { table, guest } = useLiveOrderCounts();
+  const total = table + guest;
+  if (!total) return null;
+  return <span aria-label={`${total} new ${total === 1 ? "order" : "orders"}`} className="absolute right-2 top-1 grid h-5 min-w-5 place-items-center rounded-full bg-danger px-1 text-[11px] font-bold leading-none text-white tabular lg:top-1/2 lg:-translate-y-1/2">{total > 99 ? "99+" : total}</span>;
 }
 
 /** Functional global search across sections, tables and operations */

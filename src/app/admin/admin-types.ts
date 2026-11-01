@@ -1,4 +1,5 @@
 import type { Features } from "@/lib/plan-features";
+import type { BusinessType } from "@/lib/subscription-pricing";
 import type { RoleAccess } from "@/lib/staff-permissions";
 export type AdminTenant = {
   subscriptionFee?: {perOutletPaise:number;outletCount:number;totalPaise:number;addonPaise:number;pricingVersion:number};
@@ -7,6 +8,8 @@ export type AdminTenant = {
   contactName: string;
   contactEmail: string | null;
   contactPhone: string;
+  /** What kind of business it is; null until the admin sets it */
+  businessType: BusinessType | null;
   planCode: string;
   planName: string;
   /** The admin's choice when set, else the plan's; null override means it follows the plan */

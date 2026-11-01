@@ -13,45 +13,26 @@ type Grid = Record<ConsoleSectionSlug, StaffRole[]>;
 const gridFor = (access: RoleAccess | null) =>
   Object.fromEntries(visibleSections.map((s) => [s.slug, sectionRoles(s.slug, access).filter((r) => r !== "owner")])) as Grid;
 
-/** Which staff role opens which console section at one restaurant. The owner always has all of them. */
+/** Which sections each staff role opens at one restaurant: pick a role, tick its sections. The owner always has all of them. */
 export function RoleAccessForm({ roleAccess, pending, onSave }: { roleAccess: RoleAccess | null; pending: boolean; onSave: (access: RoleAccess) => void }) {
   const [grid, setGrid] = useState(() => gridFor(roleAccess));
-  const toggle = (slug: ConsoleSectionSlug, role: StaffRole) =>
+  const [role, setRole] = useState<StaffRole>(GRID_ROLES[0]);
+  const toggle = (slug: ConsoleSectionSlug) =>
     setGrid((g) => ({ ...g, [slug]: g[slug].includes(role) ? g[slug].filter((r) => r !== role) : [...g[slug], role] }));
+  const sections = visibleSections.filter((s) => assignableRoles(s.slug).includes(role));
+  const count = (r: StaffRole) => visibleSections.filter((s) => grid[s.slug].includes(r)).length;
   return (
-    <section className="space-y-3">
-      <div>
-        <h3 className="text-sm font-semibold">Roles</h3>
-        <p className="text-xs text-muted-foreground">Tick which staff role can open each section at this restaurant. The owner always sees everything. Dashboard, Reports and Customers can go to any role; other sections only to the roles that run them.</p>
+    <div className="space-y-3">
+      <div role="group" aria-label="Staff role" className="no-scrollbar flex gap-1.5 overflow-x-auto">
+        {GRID_ROLES.map((r) => <button key={r} type="button" aria-pressed={role === r} onClick={() => setRole(r)} className={`h-9 shrink-0 whitespace-nowrap rounded-full border px-3 text-[13px] font-semibold ${role === r ? "border-transparent bg-[var(--admin-brand)] text-white" : "bg-card text-muted-foreground hover:text-foreground"}`}>{ROLE_LABELS[r]} {count(r)}</button>)}
       </div>
-      <div className="overflow-x-auto rounded-lg border">
-        <table className="w-full min-w-[560px] text-xs">
-          <thead>
-            <tr className="bg-muted/60 text-left">
-              <th className="px-2 py-1.5 font-semibold">Section</th>
-              {GRID_ROLES.map((r) => <th key={r} className="px-1 py-1.5 text-center font-semibold">{ROLE_LABELS[r]}</th>)}
-            </tr>
-          </thead>
-          <tbody>
-            {visibleSections.map((s) => (
-              <tr key={s.slug} className="border-t">
-                <td className="px-2 py-1.5 font-medium">{s.label}</td>
-                {GRID_ROLES.map((r) => (
-                  <td key={r} className="px-1 py-1.5 text-center">
-                    {assignableRoles(s.slug).includes(r)
-                      ? <input type="checkbox" aria-label={`${ROLE_LABELS[r]} can open ${s.label}`} checked={grid[s.slug].includes(r)} onChange={() => toggle(s.slug, r)} className="size-4 accent-[#5b42f5]" />
-                      : <span className="text-muted-foreground" aria-hidden>·</span>}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="grid gap-x-4 gap-y-0.5 sm:grid-cols-2">
+        {sections.map((s) => <label key={s.slug} className="flex min-h-10 items-center gap-2.5 text-sm"><input type="checkbox" checked={grid[s.slug].includes(role)} onChange={() => toggle(s.slug)} className="size-4 accent-[var(--admin-brand)]" />{s.label}</label>)}
       </div>
       <div className="flex flex-wrap gap-2">
-        <Button disabled={pending} onClick={() => onSave(grid)}>{pending && <Loader2 className="animate-spin" />}Save roles</Button>
+        <Button disabled={pending} onClick={() => onSave(grid)}>{pending && <Loader2 className="animate-spin" />}Save</Button>
         <Button variant="outline" disabled={pending} onClick={() => { setGrid(gridFor(null)); onSave({}); }}>Back to defaults</Button>
       </div>
-    </section>
+    </div>
   );
 }

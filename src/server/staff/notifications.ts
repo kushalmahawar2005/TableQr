@@ -33,6 +33,17 @@ const REQUEST_TEXT: Record<string, string> = {
 };
 const LIMIT = 20;
 
+/** Orders the kitchen has not started yet, from the last day, split into table and guest app orders */
+export async function getLiveOrderCounts(staff: Staff, now = new Date()) {
+  const rows = await db
+    .select({ guest: s.deliveryCheckouts.id, n: count() })
+    .from(s.orders)
+    .leftJoin(s.deliveryCheckouts, and(eq(s.deliveryCheckouts.tenantId, s.orders.tenantId), eq(s.deliveryCheckouts.sessionId, s.orders.sessionId)))
+    .where(and(eq(s.orders.tenantId, staff.tenantId), eq(s.orders.outletId, staff.outletId), inArray(s.orders.status, ["placed", "accepted"]), gt(s.orders.placedAt, new Date(now.getTime() - 86_400_000))))
+    .groupBy(s.deliveryCheckouts.id);
+  return { table: rows.filter((r) => r.guest === null).reduce((n, r) => n + Number(r.n), 0), guest: rows.filter((r) => r.guest !== null).reduce((n, r) => n + Number(r.n), 0) };
+}
+
 /** Everything new at this outlet after `since`, newest first, at most a screenful */
 export async function getConsoleNotices(staff: Staff, since: Date): Promise<ConsoleNotice[]> {
   const [orders, requests, paid, bookings, waitlist, parties, deliveryClaims, advances] = await Promise.all([

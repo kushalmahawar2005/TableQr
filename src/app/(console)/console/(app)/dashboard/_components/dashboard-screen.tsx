@@ -14,6 +14,7 @@ import { KitchenOrders } from "./kitchen-orders";
 import { LiveActivity } from "./live-activity";
 import { LiveFloor } from "./live-floor";
 import { alertsOf, NeedsAttention } from "./needs-attention";
+import { NewOrdersStrip } from "./live-orders";
 import { QuickActions } from "./quick-actions";
 import { RecentPayments } from "./recent-payments";
 import { SalesPerformance } from "./sales-performance";
@@ -153,6 +154,8 @@ export function DashboardScreen({
         {setup}
 
         {data.view !== "operations" && <DashboardKpis data={data} trend={trend} features={features} />}
+
+        <NewOrdersStrip />
 
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
           {data.view !== "money" && <QuickActions features={features} />}

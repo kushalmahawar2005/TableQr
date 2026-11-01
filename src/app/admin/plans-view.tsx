@@ -2,28 +2,19 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, EyeOff, IndianRupee, Layers, Loader2, Pencil, Plus, Users, X } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { Check, IndianRupee, Layers, Loader2, Minus, Plus, Trophy, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { savePlanAction, type PlanInput } from "./actions";
 import { FEATURE_KEYS, FEATURE_LABELS } from "@/lib/plan-features";
 import type { AdminData, AdminPlan } from "./admin-types";
+import { Kpi } from "./admin-ui";
 
 const money = (paise: number) => `₹${Math.round(paise / 100).toLocaleString("en-IN")}`;
-const TONES = ["#5b42f5", "#16c784", "#f08b18", "#ed5368", "#3d91ef", "#e875b1"];
-
 const FEATURES = FEATURE_KEYS.map((key) => ({ key, ...FEATURE_LABELS[key] }));
-
-function Stat({ icon: Icon, label, value, note, tone }: { icon: typeof Layers; label: string; value: string; note: string; tone: string }) {
-  return <Card size="sm"><CardContent className="flex items-center gap-3">
-    <span className="grid size-11 shrink-0 place-items-center rounded-xl" style={{ background: `${tone}1f`, color: tone }}><Icon className="size-5" aria-hidden="true" /></span>
-    <div className="min-w-0"><p className="text-xs text-muted-foreground">{label}</p><p className="truncate text-2xl font-bold leading-tight">{value}</p><p className="truncate text-[11px] text-muted-foreground">{note}</p></div>
-  </CardContent></Card>;
-}
 
 function PlanDialog({ plan, onClose }: { plan: AdminPlan | "new" | null; onClose: () => void }) {
   const router = useRouter();
@@ -53,34 +44,79 @@ function PlanDialog({ plan, onClose }: { plan: AdminPlan | "new" | null; onClose
   };
 
   const f = editing?.features;
-  const check = (name: string, label: string, on: boolean, hint?: string) => <label key={name} className="flex items-start gap-2 text-sm"><input type="checkbox" name={name} defaultChecked={on} className="mt-0.5 size-4 accent-[#5b42f5]" /><span>{label}{hint && <span className="block text-xs text-muted-foreground">{hint}</span>}</span></label>;
+  const check = (name: string, label: string, on: boolean, hint?: string) => <label key={name} title={hint} className="flex min-h-10 items-center gap-2.5 text-sm"><input type="checkbox" name={name} defaultChecked={on} className="size-4 shrink-0 accent-[var(--admin-brand)]" />{label}</label>;
+  const heading = "text-xs font-semibold uppercase tracking-wide text-muted-foreground";
 
-  return <Dialog open={!!plan} onOpenChange={(open) => { if (!open) { setError(null); onClose(); } }}>
-    <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-xl">
-      <DialogHeader><DialogTitle>{editing ? `Edit ${editing.name}` : "Add plan"}</DialogTitle><DialogDescription>{editing ? "Price changes apply to new subscriptions. Existing tenants keep the price they agreed to." : "Create a new plan that tenants can be put on."}</DialogDescription></DialogHeader>
-      {plan && <form key={editing?.code ?? "new"} onSubmit={submit} className="space-y-5">
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-1.5"><Label htmlFor="plan-name">Plan name</Label><Input id="plan-name" name="name" defaultValue={editing?.name} required maxLength={40} /></div>
-          {!editing && <div className="space-y-1.5"><Label htmlFor="plan-code">Plan code</Label><Input id="plan-code" name="code" required placeholder="e.g. growth" pattern="[a-z0-9_]{2,20}" /><p className="text-xs text-muted-foreground">Lowercase, cannot be changed later.</p></div>}
-          <div className="space-y-1.5"><Label htmlFor="plan-price">Price per outlet / month (₹)</Label><Input id="plan-price" name="price" type="number" min={0} step="1" defaultValue={editing?.monthlyPricePaise != null ? editing.monthlyPricePaise / 100 : ""} /><p className="text-xs text-muted-foreground">Leave empty for custom pricing.</p></div>
-          <div className="space-y-1.5"><Label htmlFor="plan-tables">Max tables</Label><Input id="plan-tables" name="maxTables" type="number" min={1} defaultValue={f?.maxTables ?? ""} /><p className="text-xs text-muted-foreground">Empty = unlimited.</p></div>
-          <div className="space-y-1.5"><Label htmlFor="plan-staff">Max staff</Label><Input id="plan-staff" name="maxStaff" type="number" min={1} defaultValue={f?.maxStaff ?? ""} /><p className="text-xs text-muted-foreground">Empty = unlimited.</p></div>
-          <div className="space-y-1.5"><Label htmlFor="plan-rooms">Max rooms</Label><Input id="plan-rooms" name="maxRooms" type="number" min={1} defaultValue={f?.maxRooms ?? ""} /><p className="text-xs text-muted-foreground">Hotel plans only. Empty = unlimited.</p></div>
+  return <Sheet open={!!plan} onOpenChange={(open) => { if (!open) { setError(null); onClose(); } }}>
+    <SheetContent className="w-full gap-0 overflow-y-auto bg-[var(--admin-bg)] data-[side=right]:sm:max-w-xl">
+      <SheetHeader className="border-b bg-white p-4 sm:p-5"><SheetTitle className="pr-8 text-lg">{editing ? `Edit ${editing.name}` : "Add plan"}</SheetTitle><SheetDescription>{editing ? "A new price applies to new subscriptions only." : "A plan tenants can be put on."}</SheetDescription></SheetHeader>
+      {plan && <form key={editing?.code ?? "new"} onSubmit={submit} className="flex flex-1 flex-col">
+        <div className="flex-1 space-y-2 p-3 sm:p-4">
+          <section className="space-y-3 rounded-xl border bg-card p-4">
+            <p className={heading}>Name and price</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5"><Label htmlFor="plan-name">Plan name</Label><Input id="plan-name" name="name" defaultValue={editing?.name} required maxLength={40} /></div>
+              {!editing && <div className="space-y-1.5"><Label htmlFor="plan-code">Plan code</Label><Input id="plan-code" name="code" required placeholder="e.g. growth" pattern="[a-z0-9_]{2,20}" /><p className="text-xs text-muted-foreground">Lowercase, cannot be changed later.</p></div>}
+              <div className="space-y-1.5"><Label htmlFor="plan-price">Price per outlet a month (₹)</Label><Input id="plan-price" name="price" type="number" min={0} step="1" placeholder="Custom" defaultValue={editing?.monthlyPricePaise != null ? editing.monthlyPricePaise / 100 : ""} /></div>
+            </div>
+          </section>
+          <section className="space-y-3 rounded-xl border bg-card p-4">
+            <p className={heading}>Limits</p>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="space-y-1.5"><Label htmlFor="plan-tables">Tables</Label><Input id="plan-tables" name="maxTables" type="number" min={1} placeholder="No limit" defaultValue={f?.maxTables ?? ""} /></div>
+              <div className="space-y-1.5"><Label htmlFor="plan-staff">Staff</Label><Input id="plan-staff" name="maxStaff" type="number" min={1} placeholder="No limit" defaultValue={f?.maxStaff ?? ""} /></div>
+              <div className="space-y-1.5"><Label htmlFor="plan-rooms">Rooms</Label><Input id="plan-rooms" name="maxRooms" type="number" min={1} placeholder="No limit" defaultValue={f?.maxRooms ?? ""} /></div>
+            </div>
+          </section>
+          <fieldset className="rounded-xl border bg-card p-4"><legend className="sr-only">Included features</legend>
+            <p className={`mb-1 ${heading}`}>Features</p>
+            <div className="grid gap-x-4 sm:grid-cols-2">{FEATURES.map((x) => check(x.key, x.label, f?.[x.key] ?? false, x.hint))}{check("poweredBy", "Show “Powered by Tableeqr”", f?.poweredBy ?? false, "A small line on the guest page. Usually on for lower plans.")}</div>
+          </fieldset>
+          <section className="rounded-xl border bg-card px-4 py-2">{check("isPublic", "Available for new tenants", editing?.isPublic ?? true, "Turn off to hide this plan. Existing tenants on it are not affected.")}</section>
+          {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
         </div>
-        <fieldset className="space-y-2.5"><legend className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Included features</legend>
-          <div className="grid gap-2.5 sm:grid-cols-2">{FEATURES.map((x) => check(x.key, x.label, f?.[x.key] ?? false, x.hint))}</div>
-          {check("poweredBy", "Show “Powered by Tableeqr”", f?.poweredBy ?? false, "A small line on the guest page. Usually on for lower plans.")}
-        </fieldset>
-        {check("isPublic", "Available for new tenants", editing?.isPublic ?? true, "Turn off to hide this plan. Existing tenants on it are not affected.")}
-        {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-        <div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={onClose}>Cancel</Button><Button type="submit" disabled={pending}>{pending && <Loader2 className="animate-spin" />}{editing ? "Save plan" : "Create plan"}</Button></div>
+        <div className="sticky bottom-0 flex justify-end gap-2 border-t bg-white p-3 sm:p-4"><Button type="button" variant="outline" onClick={onClose}>Cancel</Button><Button type="submit" disabled={pending}>{pending && <Loader2 className="animate-spin" />}{editing ? "Save plan" : "Create plan"}</Button></div>
       </form>}
-    </DialogContent>
-  </Dialog>;
+    </SheetContent>
+  </Sheet>;
+}
+
+/** Only the limits that exist: "10 tables · 5 staff", or "No limits" */
+const limits = (p: AdminPlan) => [p.features.dineIn && p.features.maxTables && `${p.features.maxTables} tables`, p.features.maxStaff && `${p.features.maxStaff} staff`, p.features.rooms && p.features.maxRooms && `${p.features.maxRooms} rooms`].filter(Boolean).join(" · ") || "No limits";
+
+function PlanCard({ p, tenants, income, onEdit }: { p: AdminPlan; tenants: number; income: number; onEdit: () => void }) {
+  const on = FEATURES.filter((x) => p.features[x.key]).length;
+  return <article className="flex min-w-0 flex-col rounded-2xl border bg-card p-4">
+    <h3 className="truncate font-display text-base font-bold">{p.name}</h3>
+    <p className="mt-2 font-display text-2xl font-bold tracking-tight tabular-nums">{p.monthlyPricePaise != null ? money(p.monthlyPricePaise) : "Custom"}</p>
+    <p className="text-xs text-muted-foreground">{p.monthlyPricePaise != null ? "per outlet a month" : "price agreed per tenant"}</p>
+    <p className="mt-3 truncate text-xs font-medium">{limits(p)}</p>
+    <div className="mt-2"><div className="h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-[#2f7d5b]" style={{ width: `${Math.round((on / FEATURES.length) * 100)}%` }} /></div><p className="mt-1 text-xs text-muted-foreground">{on} of {FEATURES.length} features</p></div>
+    <div className="mt-auto flex items-center justify-between gap-2 pt-3">
+      <p className="min-w-0 truncate text-sm"><b className="tabular-nums">{tenants}</b> {tenants === 1 ? "tenant" : "tenants"}{income > 0 ? ` · ${money(income)}` : ""}</p>
+      <Button variant="outline" size="sm" onClick={onEdit}>Edit</Button>
+    </div>
+  </article>;
+}
+
+/** Every plan side by side; the first column stays put when a phone scrolls sideways */
+function ComparePlans({ plans }: { plans: AdminPlan[] }) {
+  const cell = "px-3 py-2 text-center";
+  const name = "sticky left-0 z-10 bg-card px-3 py-2 text-left font-medium";
+  return <div className="no-scrollbar overflow-x-auto rounded-2xl border bg-card">
+    <table className="w-full min-w-max text-sm">
+      <thead><tr className="border-b"><th scope="col" className={`${name} font-semibold`}>Feature</th>{plans.map((p) => <th key={p.code} scope="col" className={`${cell} whitespace-nowrap font-semibold`}>{p.name}</th>)}</tr></thead>
+      <tbody className="divide-y">
+        <tr><th scope="row" className={name}>Price</th>{plans.map((p) => <td key={p.code} className={`${cell} whitespace-nowrap tabular-nums`}>{p.monthlyPricePaise != null ? money(p.monthlyPricePaise) : "Custom"}</td>)}</tr>
+        {FEATURES.map((x) => <tr key={x.key}><th scope="row" className={`${name} whitespace-nowrap`}>{x.label}</th>{plans.map((p) => <td key={p.code} className={cell}>{p.features[x.key] ? <Check className="mx-auto size-4 text-emerald-700" aria-label="Included" /> : <Minus className="mx-auto size-4 text-muted-foreground/50" aria-label="Not included" />}</td>)}</tr>)}
+      </tbody>
+    </table>
+  </div>;
 }
 
 export function PlansView({ data }: { data: AdminData }) {
   const [dialog, setDialog] = useState<AdminPlan | "new" | null>(null);
+  const [comparing, setComparing] = useState(false);
   const plans = [...data.plans].sort((a, b) => a.sortOrder - b.sortOrder);
 
   const stats = plans.map((p) => {
@@ -91,42 +127,34 @@ export function PlansView({ data }: { data: AdminData }) {
   const popular = [...stats].sort((a, b) => b.tenants - a.tenants)[0];
   const totalIncome = stats.reduce((sum, s) => sum + s.income, 0);
 
-  return <div className="space-y-6">
-    <div className="flex flex-wrap items-start justify-between gap-3">
-      <div><h1 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">Plans &amp; Pricing</h1><p className="mt-1 text-sm text-muted-foreground">What each plan costs and what it includes.</p></div>
+  const card = (row: (typeof stats)[number]) => <PlanCard key={row.p.code} p={row.p} tenants={row.tenants} income={row.income} onEdit={() => setDialog(row.p)} />;
+  const open = stats.filter((row) => row.p.isPublic);
+  const hidden = stats.filter((row) => !row.p.isPublic);
+  const grid = "grid gap-2 sm:grid-cols-2 sm:gap-4 xl:grid-cols-4";
+
+  return <div className="space-y-4">
+    <div className="md:pr-44"><h1 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">Plans &amp; Pricing</h1><p className="mt-1 text-sm text-muted-foreground">What each plan costs and what it includes.</p></div>
+
+    <div className="grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-4">
+      <Kpi icon={Layers} label="Plans" value={String(plans.length)} hint={`${hidden.length} hidden`} />
+      <Kpi icon={Users} label="Tenants on plans" value={String(data.tenants.length)} hint={`${data.tenants.filter((t) => t.status === "active").length} paying`} />
+      <Kpi icon={IndianRupee} label="Monthly income" value={money(totalIncome)} hint="From paying tenants" />
+      <Kpi icon={Trophy} label="Most popular" value={popular && popular.tenants ? popular.p.name : "—"} hint={popular && popular.tenants ? `${popular.tenants} ${popular.tenants === 1 ? "tenant" : "tenants"}` : "No tenants yet"} />
+    </div>
+
+    <div className="grid grid-cols-2 gap-2 sm:flex sm:justify-end">
+      <Button variant="outline" aria-pressed={comparing} onClick={() => setComparing(!comparing)} disabled={!plans.length}>{comparing ? "Show plans" : "Compare plans"}</Button>
       <Button onClick={() => setDialog("new")}><Plus />Add plan</Button>
     </div>
 
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4 [&>*]:min-w-0">
-      <Stat icon={Layers} label="Plans" value={String(plans.length)} note={`${plans.filter((p) => !p.isPublic).length} hidden`} tone="#5b42f5" />
-      <Stat icon={Users} label="Tenants on plans" value={String(data.tenants.length)} note={`${data.tenants.filter((t) => t.status === "active").length} paying`} tone="#16c784" />
-      <Stat icon={IndianRupee} label="Monthly income" value={money(totalIncome)} note="From paying tenants" tone="#f08b18" />
-      <Stat icon={Layers} label="Most popular" value={popular && popular.tenants ? popular.p.name : "—"} note={popular && popular.tenants ? `${popular.tenants} ${popular.tenants === 1 ? "tenant" : "tenants"}` : "No tenants yet"} tone="#ed5368" />
-    </div>
+    {!plans.length ? <Card><CardContent className="py-14 text-center"><p className="font-medium">No plans yet</p><p className="mt-1 text-sm text-muted-foreground">Add your first plan so tenants can be put on it.</p></CardContent></Card>
+      : comparing ? <ComparePlans plans={plans} />
+      : <>
+        {open.length > 0 && <section className="space-y-2"><h2 className="text-sm font-semibold">For new tenants</h2><div className={grid}>{open.map(card)}</div></section>}
+        {hidden.length > 0 && <section className="space-y-2"><h2 className="text-sm font-semibold">Hidden</h2><div className={grid}>{hidden.map(card)}</div></section>}
+      </>}
 
-    {plans.length ? <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4 [&>*]:min-w-0">{stats.map(({ p, tenants, income }, i) => {
-      const tone = TONES[i % TONES.length];
-      return <Card key={p.code} className="flex flex-col">
-        <CardContent className="flex flex-1 flex-col gap-4">
-          <div className="flex items-start justify-between gap-2">
-            <div><div className="flex items-center gap-2"><span className="size-2.5 rounded-full" style={{ background: tone }} /><h2 className="text-base font-semibold">{p.name}</h2></div><p className="mt-0.5 text-xs text-muted-foreground">{p.code}</p></div>
-            {!p.isPublic && <Badge variant="secondary" className="gap-1 bg-zinc-100 text-zinc-600"><EyeOff className="size-3" />Hidden</Badge>}
-          </div>
-          <div><p className="text-3xl font-bold tracking-tight">{p.monthlyPricePaise != null ? money(p.monthlyPricePaise) : "Custom"}</p><p className="text-xs text-muted-foreground">{p.monthlyPricePaise != null ? "per outlet / month" : "price agreed per tenant"}</p></div>
-          {p.code === "custom" && <p className="rounded-lg border border-dashed p-3 text-xs text-muted-foreground">Features and price are picked for each restaurant. Open the restaurant in Tenants, then Manage. The list below is only the starting point.</p>}
-          <div className="rounded-lg bg-muted/60 p-3 text-sm"><p><span className="font-semibold">{tenants}</span> {tenants === 1 ? "tenant" : "tenants"} · <span className="font-semibold">{money(income)}</span> / month</p></div>
-          <ul className="space-y-1.5 text-sm">
-            {p.features.dineIn && <li className="flex justify-between"><span className="text-muted-foreground">Tables</span><span className="font-medium">{p.features.maxTables ? `Up to ${p.features.maxTables}` : "Unlimited"}</span></li>}
-            <li className="flex justify-between"><span className="text-muted-foreground">Staff</span><span className="font-medium">{p.features.maxStaff ? `Up to ${p.features.maxStaff}` : "Unlimited"}</span></li>
-            {p.features.rooms && <li className="flex justify-between"><span className="text-muted-foreground">Rooms</span><span className="font-medium">{p.features.maxRooms ? `Up to ${p.features.maxRooms}` : "Unlimited"}</span></li>}
-          </ul>
-          <ul className="space-y-1.5 border-t pt-3 text-sm">{FEATURES.map((x) => { const on = p.features[x.key]; return <li key={x.key} className={`flex items-center gap-2 ${on ? "" : "text-muted-foreground"}`}>{on ? <Check className="size-4 text-emerald-600" aria-label="Included" /> : <X className="size-4 text-zinc-300" aria-label="Not included" />}{x.label}</li>; })}</ul>
-          <Button variant="outline" className="mt-auto" onClick={() => setDialog(p)}><Pencil />Edit plan</Button>
-        </CardContent>
-      </Card>;
-    })}</div> : <Card><CardContent className="py-14 text-center"><p className="font-medium">No plans yet</p><p className="mt-1 text-sm text-muted-foreground">Add your first plan so tenants can be put on it.</p><Button className="mt-4" onClick={() => setDialog("new")}><Plus />Add plan</Button></CardContent></Card>}
-
-    <p className="text-xs text-muted-foreground">Changing a plan&apos;s price affects new subscriptions only. Tenants already on the plan keep the price they agreed to.</p>
+    <p className="text-xs text-muted-foreground">A new price applies to new subscriptions only. Tenants already on the plan keep the price they agreed to. Custom plans are set per tenant in Tenants, then Manage.</p>
     <PlanDialog key={dialog === "new" ? "new" : dialog?.code ?? "none"} plan={dialog} onClose={() => setDialog(null)} />
   </div>;
 }

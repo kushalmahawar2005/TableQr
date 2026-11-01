@@ -57,7 +57,8 @@ export function QueuePanel({ title, meta, columns, children }: { title: string; 
 
 export const columnHead = "hidden items-center gap-3 border-b border-line bg-paper/60 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted sm:px-5 lg:grid";
 export const rowCells = "relative grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-b border-l-2 border-b-line px-4 py-3 last:border-b-0 sm:px-5 lg:gap-y-0";
-export const rowTone = (selected: boolean, urgent: boolean) => `${urgent ? "bg-[var(--state-seated-soft)]" : selected ? "bg-sage/60" : "hover:bg-paper"} ${selected ? "border-l-forest" : urgent ? "border-l-danger" : "border-l-transparent"}`;
+/** A row's colour: late beats selected beats new; a new order waits with a green edge */
+export const rowTone = (selected: boolean, urgent: boolean, fresh = false) => `${urgent ? "bg-[var(--state-seated-soft)]" : selected ? "bg-sage/60" : fresh ? "bg-[var(--state-available-soft)]" : "hover:bg-paper"} ${selected ? "border-l-forest" : urgent ? "border-l-danger" : fresh ? "border-l-[var(--state-available)]" : "border-l-transparent"}`;
 
 /** The whole row chooses the order; the row's own action button sits above this */
 export function RowSelect({ selected, onSelect, children }: { selected: boolean; onSelect: () => void; children: ReactNode }) {

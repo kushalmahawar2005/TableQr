@@ -134,7 +134,7 @@ export function OrdersScreen({ orders, outlet, tabs }: { orders: OrderRow[]; out
                 const took = o.servedAt ? Math.max(0, Math.round((new Date(o.servedAt).getTime() - new Date(o.placedAt).getTime()) / 60_000)) : null;
                 const live = ACTIVE.includes(o.status);
                 return (
-                  <li key={o.id} className={`${rowCells} ${COLUMNS} ${rowTone(selected?.id === o.id, isSlow)}`}>
+                  <li key={o.id} className={`${rowCells} ${COLUMNS} ${rowTone(selected?.id === o.id, isSlow, o.status === "placed")}`}>
                     <RowSelect selected={selected?.id === o.id} onSelect={() => setPicked(o.id)}>
                       <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                         <span className="min-w-0 truncate text-sm font-bold text-ink">{titleOf(o)}</span>

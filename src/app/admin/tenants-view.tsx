@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { Bar, CartesianGrid, ComposedChart, Line, XAxis, YAxis } from "recharts";
 import { useRouter } from "next/navigation";
-import { ArrowDown, ArrowUp, ArrowUpRight, ArrowDownRight, Ban, ChevronLeft, ChevronRight, Download, FlaskConical, Loader2, Plus, RotateCcw, Search, Store, Users, XCircle } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Download, ListFilter, Loader2, Plus, RotateCcw, Search, XCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -19,15 +19,18 @@ import { CreateTenantDialog } from "./create-tenant-dialog";
 import { FeeForm } from "./subscriptions-view";
 import type { AdminData, AdminTenant, TenantDetail } from "./admin-types";
 import { FEATURE_KEYS, FEATURE_LABELS, type Features } from "@/lib/plan-features";
-import { takePendingTenant } from "./admin-nav";
+import { BUSINESS_TYPES } from "@/lib/subscription-pricing";
+import { onAdminOpen, takePendingTenant } from "./admin-nav";
+import { csvCell, filterChip, ManageRow } from "./admin-ui";
+import { CommercialForm } from "./commercial-form";
 import { RoleAccessForm } from "./role-access-form";
 
-const detailChart = { orders: { label: "Orders", color: "#5b42f5" }, revenue: { label: "Revenue (₹)", color: "#a78bfa" } } satisfies ChartConfig;
+const detailChart = { orders: { label: "Orders", color: "#D86B45" }, revenue: { label: "Paid bills (₹)", color: "#2f7d5b" } } satisfies ChartConfig;
 const shortDay = (v: string) => new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", timeZone: "UTC" }).format(new Date(v));
 
 function UsageBar({ label, used, max }: { label: string; used: number; max: number | null }) {
   const pct = max ? Math.min(100, Math.round((used / max) * 100)) : 0;
-  return <div className="space-y-1"><div className="flex justify-between text-xs"><span className="text-muted-foreground">{label}</span><span className="font-medium">{used}{max ? ` / ${max}` : " · no limit"}</span></div>{max ? <div className="h-1.5 rounded-full bg-muted"><div className={`h-full rounded-full ${pct >= 90 ? "bg-red-500" : "bg-[#5b42f5]"}`} style={{ width: `${pct}%` }} /></div> : null}</div>;
+  return <div className="space-y-1"><div className="flex justify-between text-xs"><span className="text-muted-foreground">{label}</span><span className="font-medium">{used}{max ? ` / ${max}` : " · no limit"}</span></div>{max ? <div className="h-1.5 rounded-full bg-muted"><div className={`h-full rounded-full ${pct >= 90 ? "bg-red-500" : "bg-[var(--admin-brand)]"}`} style={{ width: `${pct}%` }} /></div> : null}</div>;
 }
 
 function attentionFor(t: AdminTenant, now: number) {
@@ -56,6 +59,8 @@ function healthOf(t: AdminTenant, now: number): Health {
   if (sinceLast <= 7) return "Good";
   return "At risk";
 }
+/** The tenant's kind of business in plain words, for the list and the category filter */
+const categoryOf = (t: AdminTenant) => (t.businessType ? BUSINESS_TYPES[t.businessType] : "Not set");
 const mrr = (t: AdminTenant) => t.status === "active" ? (t.monthlyPricePaise ?? 0) * t.outletCount : 0;
 
 /** Status in words: trial days left, trial ended, fees due, or paused */
@@ -96,19 +101,21 @@ function FeatureList({ features }: { features: Features }) {
 function PriceForm({ tenant, planPricePaise, pending, onSave }: { tenant: AdminTenant; planPricePaise: number | null; pending: boolean; onSave: (rupees: number | null) => void }) {
   const [price, setPrice] = useState(tenant.customPricePaise === null ? "" : String(tenant.customPricePaise / 100));
   const list = planPricePaise === null ? "no list price" : `₹${(planPricePaise / 100).toLocaleString("en-IN")}`;
-  return <section className="space-y-2">
-    <h3 className="text-sm font-semibold">Price for this restaurant</h3>
-    <p className="text-xs text-muted-foreground">Per outlet per month. Leave empty to charge the {tenant.planName} plan&apos;s price ({list}).</p>
+  return <section className="space-y-1.5">
+    <Label>Price per outlet per month</Label>
+    <p className="text-xs text-muted-foreground">Leave empty for the plan&apos;s price ({list}).</p>
     <div className="flex gap-2">
       <Input inputMode="numeric" value={price} onChange={(e) => setPrice(e.target.value.replace(/\D/g, "").slice(0, 7))} placeholder={planPricePaise === null ? "₹ per month" : String(planPricePaise / 100)} aria-label="Price per outlet per month in rupees" />
       <Button variant="outline" disabled={pending} onClick={() => onSave(price === "" ? null : Number(price))}>Save</Button>
     </div>
-    {tenant.customPricePaise !== null && <p className="text-xs text-[#5b42f5]">Special price: ₹{(tenant.customPricePaise / 100).toLocaleString("en-IN")} instead of {list}.</p>}
+    {tenant.customPricePaise !== null && <p className="text-xs text-[var(--admin-brand)]">Special price: ₹{(tenant.customPricePaise / 100).toLocaleString("en-IN")} instead of {list}.</p>}
   </section>;
 }
 
 /** Another outlet: it shares the menu; the owner switches to it at the top of the console */
 function AddOutletForm({ pending, maxTables, onSave }: { pending: boolean; maxTables: number | null; onSave: (input: { name: string; city: string; address: string; code: string; tableCount: number }) => void }) {
+  const [open, setOpen] = useState(false);
+  if (!open) return <Button variant="outline" onClick={() => setOpen(true)}><Plus />Add outlet</Button>;
   return <form className="space-y-3 rounded-xl border bg-white p-4" onSubmit={(e) => {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
@@ -126,16 +133,16 @@ function AddOutletForm({ pending, maxTables, onSave }: { pending: boolean; maxTa
   </form>;
 }
 
-/** Custom plan: tick what this restaurant gets, set its limits and its price */
+/** Tick what this restaurant gets, set its limits and its price */
 function CustomPackageForm({ tenant, pending, onSave }: { tenant: AdminTenant; pending: boolean; onSave: (input: { features: Features; priceRupees: number }) => void }) {
   const [f, setF] = useState<Features>(tenant.features);
   const [price, setPrice] = useState(String(Math.round((tenant.customPricePaise ?? tenant.monthlyPricePaise ?? 0) / 100)));
   const limit = (v: string) => (v === "" ? null : Math.max(1, Number(v.replace(/\D/g, "")) || 1));
-  return <section className="space-y-3 rounded-xl border border-[#5b42f5]/40 bg-[#5b42f5]/[0.03] p-4">
-    <div><h3 className="text-sm font-semibold">Custom package</h3><p className="text-xs text-muted-foreground">Tick what this restaurant gets and set its price. It applies as soon as you save.</p></div>
-    <div className="grid gap-2.5 sm:grid-cols-2">
-      {FEATURE_KEYS.map((k) => <label key={k} className="flex items-start gap-2 text-sm"><input type="checkbox" checked={f[k]} onChange={(e) => setF({ ...f, [k]: e.target.checked })} className="mt-0.5 size-4 accent-[#5b42f5]" /><span>{FEATURE_LABELS[k].label}<span className="block text-xs text-muted-foreground">{FEATURE_LABELS[k].hint}</span></span></label>)}
-      <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={f.poweredBy} onChange={(e) => setF({ ...f, poweredBy: e.target.checked })} className="mt-0.5 size-4 accent-[#5b42f5]" /><span>Show “Powered by Tableeqr”<span className="block text-xs text-muted-foreground">A small line on the guest page</span></span></label>
+  const tick = "flex min-h-10 items-center gap-2.5 text-sm";
+  return <div className="space-y-3">
+    <div className="grid gap-x-4 gap-y-0.5 sm:grid-cols-2">
+      {FEATURE_KEYS.map((k) => <label key={k} title={FEATURE_LABELS[k].hint} className={tick}><input type="checkbox" checked={f[k]} onChange={(e) => setF({ ...f, [k]: e.target.checked })} className="size-4 shrink-0 accent-[var(--admin-brand)]" />{FEATURE_LABELS[k].label}</label>)}
+      <label title="A small line on the guest page" className={tick}><input type="checkbox" checked={f.poweredBy} onChange={(e) => setF({ ...f, poweredBy: e.target.checked })} className="size-4 shrink-0 accent-[var(--admin-brand)]" />Show “Powered by Tableeqr”</label>
     </div>
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
       <div className="space-y-1"><Label htmlFor="custom-tables" className="text-xs">Tables</Label><Input id="custom-tables" inputMode="numeric" value={f.maxTables ?? ""} placeholder="No limit" onChange={(e) => setF({ ...f, maxTables: limit(e.target.value) })} /></div>
@@ -143,8 +150,9 @@ function CustomPackageForm({ tenant, pending, onSave }: { tenant: AdminTenant; p
       <div className="space-y-1"><Label htmlFor="custom-rooms" className="text-xs">Rooms</Label><Input id="custom-rooms" inputMode="numeric" value={f.maxRooms ?? ""} placeholder="No limit" onChange={(e) => setF({ ...f, maxRooms: limit(e.target.value) })} /></div>
       <div className="space-y-1"><Label htmlFor="custom-price" className="text-xs">Price / month (₹)</Label><Input id="custom-price" inputMode="numeric" value={price} onChange={(e) => setPrice(e.target.value.replace(/\D/g, "").slice(0, 7))} /></div>
     </div>
-    <Button disabled={pending || price === ""} onClick={() => onSave({ features: f, priceRupees: Number(price) })}>{pending && <Loader2 className="animate-spin" />}Save custom package</Button>
-  </section>;
+    {tenant.planCode !== "custom" && <p className="text-xs text-muted-foreground">Saving moves this tenant to a custom package.</p>}
+    <Button disabled={pending || price === ""} onClick={() => onSave({ features: f, priceRupees: Number(price) })}>{pending && <Loader2 className="animate-spin" />}Save</Button>
+  </div>;
 }
 
 function Detail({ label, children }: { label: string; children: React.ReactNode }) {
@@ -158,6 +166,9 @@ function TenantSheet({ tenant, plans, now, onClose }: { tenant: AdminTenant | nu
   const [notice, setNotice] = useState<string | null>(null);
   const [pin, setPin] = useState("");
   const [tab, setTab] = useState("overview");
+  const [row, setRow] = useState<string | null>(null);
+  const manage = (name: string) => { setTab("manage"); setRow(name); };
+  const toggleRow = (name: string) => setRow((open) => (open === name ? null : name));
   const [loaded, setLoaded] = useState<{ id: string; detail: TenantDetail | null; error: string | null } | null>(null);
   const tenantId = tenant?.id;
   useEffect(() => {
@@ -184,31 +195,41 @@ function TenantSheet({ tenant, plans, now, onClose }: { tenant: AdminTenant | nu
   const busy = pending && <Loader2 className="animate-spin" />;
 
   return <Sheet open={!!tenant} onOpenChange={(open) => { if (!open) { setError(null); setNotice(null); setPin(""); setTab("overview"); onClose(); } }}>
-    <SheetContent className="w-full overflow-y-auto bg-[var(--admin-bg)] data-[side=right]:sm:max-w-3xl">
+    <SheetContent className="w-full gap-0 overflow-y-auto bg-[var(--admin-bg)] data-[side=right]:sm:max-w-3xl">
       {tenant && <>
-        <SheetHeader className="border-b bg-white p-5">
-          <div className="flex items-center gap-4 pr-8">
-            <span className="grid size-12 shrink-0 place-items-center rounded-xl bg-[#5b42f5] text-sm font-bold text-white">{tenant.name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase()}</span>
+        <SheetHeader className="border-b bg-white p-4 sm:p-5">
+          <div className="flex items-center gap-3 pr-8">
+            <span className="hidden size-12 shrink-0 place-items-center rounded-xl bg-[var(--admin-brand)] sm:grid text-sm font-bold text-white">{tenant.name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase()}</span>
             <div className="min-w-0 flex-1">
               <SheetTitle className="flex flex-wrap items-center gap-2 text-lg">{tenant.name}<Badge variant="secondary" className={accessBadge(tenant, now).tone}>{accessBadge(tenant, now).label}</Badge></SheetTitle>
               <SheetDescription className="truncate">{[tenant.contactEmail ?? tenant.contactPhone, tenant.cities.join(", ")].filter(Boolean).join(" · ")}</SheetDescription>
             </div>
-            <Badge variant="secondary">{tenant.planName}</Badge>
+            <Badge variant="secondary" className="shrink-0">{tenant.planName}</Badge>
           </div>
         </SheetHeader>
         <Tabs value={tab} className="gap-0" onValueChange={(v) => { setTab(String(v)); setError(null); setNotice(null); }}>
-          <TabsList variant="line" className="h-11 w-full justify-start border-b bg-white px-4"><TabsTrigger value="overview">Overview</TabsTrigger><TabsTrigger value="outlets">Outlets</TabsTrigger><TabsTrigger value="staff">Staff</TabsTrigger><TabsTrigger value="edit">Edit</TabsTrigger><TabsTrigger value="manage">Manage</TabsTrigger></TabsList>
-          <div className="space-y-4 p-4">
-          {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-          {notice && <p role="status" className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</p>}
+          <TabsList variant="line" className="no-scrollbar h-11 w-full justify-start overflow-x-auto border-b bg-white px-2 sm:px-4"><TabsTrigger value="overview">Overview</TabsTrigger><TabsTrigger value="outlets">Outlets</TabsTrigger><TabsTrigger value="staff">Staff</TabsTrigger><TabsTrigger value="edit">Edit</TabsTrigger><TabsTrigger value="manage">Manage</TabsTrigger></TabsList>
+          <div className="space-y-4 p-3 sm:p-4">
+          {error && <p role="alert" className="sticky top-0 z-10 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+          {notice && <p role="status" className="sticky top-0 z-10 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</p>}
 
           <TabsContent value="overview" className="space-y-4">
-            <div className="grid grid-cols-3 gap-3">
-              {[["Orders (30d)", tenant.orders30d.toLocaleString("en-IN")], ["Paid bill value (30d)", money(tenant.paidBills30dPaise)], ["Outlets", String(tenant.outletCount)]].map(([k, v]) => <div key={k} className="rounded-xl border bg-white p-3.5"><p className="text-[11px] text-muted-foreground">{k}</p><p className="mt-1 text-xl font-bold">{v}</p></div>)}
+            {tenant.requests.length > 0 && <section className="rounded-xl border border-[var(--admin-brand)]/40 bg-card p-4">
+                <h3 className="text-sm font-semibold">They asked for</h3>
+                <p className="mb-2 text-xs text-muted-foreground">Make the change in Manage, then mark it done.</p>
+                <ul className="space-y-2">{tenant.requests.map((r) => <li key={r.id} className="flex items-start justify-between gap-3 text-sm">
+                  <div className="min-w-0"><p className="font-medium">{r.feature && r.feature in FEATURE_LABELS ? FEATURE_LABELS[r.feature as keyof typeof FEATURE_LABELS].label : "Plan change"}</p>
+                    <p className="text-xs text-muted-foreground">{r.note ? `“${r.note}” · ` : ""}{r.requestedBy} · {shortDay(r.createdAt)}</p></div>
+                  <div className="flex shrink-0 gap-2"><Button size="sm" variant="outline" onClick={() => manage("plan")}>Manage</Button><Button size="sm" disabled={pending} onClick={() => run(() => markPlanRequestDoneAction(r.id), "Marked done.")}>Done</Button></div>
+                </li>)}</ul>
+              </section>}
+            <div className="grid grid-cols-3 gap-2 sm:gap-3">
+              {[["Orders", tenant.orders30d.toLocaleString("en-IN")], ["Paid bills", money(tenant.paidBills30dPaise)], ["Outlets", String(tenant.outletCount)]].map(([k, v]) => <div key={k} className="min-w-0 rounded-xl border bg-white p-3"><p className="truncate text-[11px] text-muted-foreground">{k}</p><p className="mt-1 truncate text-base font-bold tabular-nums sm:text-xl">{v}</p></div>)}
             </div>
+            <p className="-mt-2 text-[11px] text-muted-foreground">Orders and paid bills are for the last 30 days.</p>
             {detailError && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{detailError}</p>}
             {!detail && !detailError && <p className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" />Loading details…</p>}
-            {detail && <section className="rounded-xl border bg-white p-4"><h3 className="mb-2 text-sm font-semibold">Orders &amp; revenue (30 days)</h3>
+            {detail && <section className="rounded-xl border bg-white p-4"><h3 className="mb-2 text-sm font-semibold">Orders and paid bills</h3>
               <ChartContainer config={detailChart} className="h-48 w-full">
                 <ComposedChart data={detail.daily.map((d) => ({ label: shortDay(d.date), orders: d.orders, revenue: Math.round(d.revenuePaise / 100) }))} margin={{ left: -16, right: -16 }}>
                   <CartesianGrid vertical={false} />
@@ -223,7 +244,7 @@ function TenantSheet({ tenant, plans, now, onClose }: { tenant: AdminTenant | nu
             </section>}
             <div className="grid gap-4 sm:grid-cols-2">
               <section className="rounded-xl border bg-white p-4"><h3 className="mb-1 text-sm font-semibold">Tenant details</h3>
-                <dl className="overflow-hidden rounded-lg border"><Detail label="Contact">{tenant.contactName}</Detail><Detail label="Phone">{tenant.contactPhone}</Detail><Detail label="Email">{tenant.contactEmail ?? "—"}</Detail><Detail label="Last order">{date(tenant.lastOrderAt)}</Detail><Detail label="Joined">{date(tenant.createdAt)}</Detail></dl>
+                <dl className="overflow-hidden rounded-lg border"><Detail label="Category">{categoryOf(tenant)}</Detail><Detail label="Contact">{tenant.contactName}</Detail><Detail label="Phone">{tenant.contactPhone}</Detail><Detail label="Email">{tenant.contactEmail ?? "—"}</Detail><Detail label="Last order">{date(tenant.lastOrderAt)}</Detail><Detail label="Joined">{date(tenant.createdAt)}</Detail></dl>
               </section>
               {detail ? <section className="space-y-3 rounded-xl border bg-white p-4"><h3 className="text-sm font-semibold">Usage vs plan limits</h3>
                 <UsageBar label="Tables" used={detail.usage.tables} max={detail.usage.maxTables} />
@@ -232,7 +253,7 @@ function TenantSheet({ tenant, plans, now, onClose }: { tenant: AdminTenant | nu
                 <UsageBar label="Outlets" used={detail.usage.outlets} max={null} />
                 <p className="flex justify-between text-xs"><span className="text-muted-foreground">QR codes</span><span className="font-medium">{detail.usage.qrCodes}</span></p>
                 <p className="flex justify-between text-xs"><span className="text-muted-foreground">Menu items</span><span className="font-medium">{detail.usage.menuItems}</span></p>
-              </section> : <div className="rounded-xl border bg-white p-4" />}
+              </section> : null}
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <section className="rounded-xl border bg-white p-4"><h3 className="mb-2 flex items-center gap-2 text-sm font-semibold">Needs attention{attentionFor(tenant, now).length > 0 && <Badge variant="secondary" className="bg-amber-100 text-amber-700">{attentionFor(tenant, now).length}</Badge>}</h3>
@@ -251,20 +272,67 @@ function TenantSheet({ tenant, plans, now, onClose }: { tenant: AdminTenant | nu
                 <p className="text-lg font-bold">{tenant.planName}</p>
                 <p className="text-sm text-muted-foreground">{tenant.monthlyPricePaise ? `${money(tenant.monthlyPricePaise)} / outlet / month` : "Custom pricing"}{tenant.billingCycle ? ` · ${tenant.billingCycle}` : ""}</p>
                 <p className="mt-2 text-xs text-muted-foreground">{tenant.status === "trial" ? "Trial ends" : "Next renewal"}: <span className="font-medium text-foreground">{date(tenant.status === "trial" ? tenant.trialEndsAt : tenant.renewalAt)}</span></p>
-                <Button variant="outline" size="sm" className="mt-3" onClick={() => setTab("manage")}>{tenant.planCode === "custom" ? "Edit custom package" : "Change plan"}</Button>
+                <Button variant="outline" size="sm" className="mt-3" onClick={() => manage(tenant.planCode === "custom" ? "features" : "plan")}>{tenant.planCode === "custom" ? "Edit custom package" : "Change plan"}</Button>
               </section>
-              {tenant.requests.length > 0 && <section className="rounded-xl border border-[#5b42f5]/40 bg-[#5b42f5]/[0.04] p-4 sm:col-span-2">
-                <h3 className="text-sm font-semibold">They asked for</h3>
-                <p className="mb-2 text-xs text-muted-foreground">Change the plan, custom package or price in Manage, then mark it done.</p>
-                <ul className="space-y-2">{tenant.requests.map((r) => <li key={r.id} className="flex items-start justify-between gap-3 text-sm">
-                  <div className="min-w-0"><p className="font-medium">{r.feature && r.feature in FEATURE_LABELS ? FEATURE_LABELS[r.feature as keyof typeof FEATURE_LABELS].label : "Plan change"}</p>
-                    <p className="text-xs text-muted-foreground">{r.note ? `“${r.note}” · ` : ""}{r.requestedBy} · {shortDay(r.createdAt)}</p></div>
-                  <div className="flex shrink-0 gap-2"><Button size="sm" variant="outline" onClick={() => setTab("manage")}>Manage</Button><Button size="sm" disabled={pending} onClick={() => run(() => markPlanRequestDoneAction(r.id), "Marked done.")}>Done</Button></div>
-                </li>)}</ul>
-              </section>}
+              
               <section className="rounded-xl border bg-white p-4 sm:col-span-2"><h3 className="mb-2 text-sm font-semibold">What they get</h3><FeatureList features={tenant.features} /></section>
-              {tenant.planCode !== "custom" && <>
-              <section className="rounded-xl border bg-white p-4 sm:col-span-2">
+              <section className="rounded-xl border bg-white p-4"><h3 className="mb-2 text-sm font-semibold">Quick actions</h3>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setTab("edit")}>Edit details</Button>
+                  <Button variant="outline" size="sm" onClick={() => manage("pin")}>Reset owner PIN</Button>
+                  {tenant.status !== "cancelled" && <Button variant="outline" size="sm" onClick={() => manage("fees")}>{tenant.status === "trial" ? "Extend trial / fees" : "Record fees"}</Button>}
+                  {tenant.status === "suspended" || tenant.status === "cancelled"
+                    ? <Button size="sm" disabled={pending} onClick={() => run(() => setTenantStatusAction(tenant.id, "active"), "Tenant activated.")}>Activate</Button>
+                    : <Button variant="destructive" size="sm" disabled={pending} onClick={() => { if (window.confirm(`Suspend ${tenant.name}? Their staff will lose access.`)) run(() => setTenantStatusAction(tenant.id, "suspended"), "Tenant suspended."); }}>Suspend</Button>}
+                </div>
+              </section>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="outlets" className="space-y-4">
+            <section className="rounded-xl border bg-white p-4">
+              {detail ? <Table><TableHeader><TableRow><TableHead>Outlet</TableHead><TableHead>Sign-in code</TableHead><TableHead className="hidden sm:table-cell">City</TableHead><TableHead className="text-right">Tables</TableHead></TableRow></TableHeader>
+                <TableBody>{detail.outlets.map((o) => <TableRow key={o.id}><TableCell className="max-w-0 w-full"><span className="block truncate font-medium">{o.name}</span><span className="block truncate text-xs text-muted-foreground sm:hidden">{o.city}</span></TableCell><TableCell className="font-mono">{o.code}</TableCell><TableCell className="hidden text-muted-foreground sm:table-cell">{o.city}</TableCell><TableCell className="text-right">{o.tables}</TableCell></TableRow>)}</TableBody></Table>
+                : <p className="text-sm text-muted-foreground">{detailError ?? "Loading…"}</p>}
+            </section>
+            {tenant.features.multiOutlet
+              ? <AddOutletForm key={tenant.id} pending={pending} maxTables={tenant.features.maxTables} onSave={(input) => run(async () => {
+                  const r = await addOutletAction(tenant.id, input);
+                  if (!r.error) { const d = await getTenantDetailAction(tenant.id); setLoaded({ id: tenant.id, detail: d.detail, error: d.error }); }
+                  return r;
+                }, `Outlet added. The owner signs in there with its sign-in code, or switches outlet at the top of the console.`)} />
+              : <section className="rounded-xl border border-dashed bg-white p-4 text-sm text-muted-foreground">Multiple outlets is not in the {tenant.planName} plan. Change the plan, or pick Custom and tick “Multiple outlets”, to add another outlet.</section>}
+          </TabsContent>
+
+          <TabsContent value="staff" className="rounded-xl border bg-white p-2 sm:p-4">
+            {detail ? <Table><TableHeader><TableRow><TableHead>Name</TableHead><TableHead className="hidden sm:table-cell">Role</TableHead><TableHead className="hidden sm:table-cell">Phone</TableHead><TableHead className="pl-3">Status</TableHead></TableRow></TableHeader>
+              <TableBody>{detail.staff.map((m, i) => <TableRow key={`${m.id}-${i}`}><TableCell className="max-w-0 w-full"><span className="block truncate font-medium">{m.name}</span><span className="block truncate text-xs capitalize text-muted-foreground sm:hidden">{m.role} · {m.phone}</span></TableCell><TableCell className="hidden capitalize sm:table-cell">{m.role}</TableCell><TableCell className="hidden text-muted-foreground sm:table-cell">{m.phone}</TableCell><TableCell className="pl-3"><Badge variant="secondary" className={m.isActive ? statusTone.active : statusTone.cancelled}>{m.isActive ? "Active" : "Inactive"}</Badge></TableCell></TableRow>)}</TableBody></Table>
+              : <p className="text-sm text-muted-foreground">{detailError ?? "Loading…"}</p>}
+          </TabsContent>
+
+          <TabsContent value="edit" className="rounded-xl border bg-white p-4">
+            <form key={tenant.id} className="space-y-3" onSubmit={(e) => {
+              e.preventDefault();
+              const f = new FormData(e.currentTarget);
+              run(() => updateTenantAction(tenant.id, { name: String(f.get("name")), contactName: String(f.get("contactName")), contactPhone: String(f.get("contactPhone")), contactEmail: String(f.get("contactEmail")) }), "Details saved.");
+            }}>
+              {[["name", "Company name", tenant.name], ["contactName", "Contact person", tenant.contactName], ["contactPhone", "Phone", tenant.contactPhone], ["contactEmail", "Email", tenant.contactEmail ?? ""]].map(([name, label, value]) => <div key={name} className="space-y-1.5"><Label htmlFor={`edit-${name}`}>{label}</Label><Input id={`edit-${name}`} name={name} defaultValue={value} /></div>)}
+              <Button type="submit" disabled={pending}>{busy}Save changes</Button>
+            </form>
+          </TabsContent>
+
+          <TabsContent value="manage" className="space-y-2">
+            <ManageRow title="Plan and price" note={`${tenant.planName}${tenant.monthlyPricePaise ? ` · ${money(tenant.monthlyPricePaise)} per outlet` : ""}`} open={row === "plan"} onToggle={() => toggleRow("plan")}>
+              <div className="space-y-1.5">
+                <Label>Plan</Label>
+                <Select value={tenant.planCode} onValueChange={(v) => v && v !== tenant.planCode && run(() => changeTenantPlanAction(tenant.id, v), "Plan changed.")}>
+                  <SelectTrigger className="w-full" aria-label="Change plan"><SelectValue>{tenant.planName}</SelectValue></SelectTrigger>
+                  <SelectContent>{plans.map((p) => <SelectItem key={p.code} value={p.code}>{p.name}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              {tenant.planCode !== "custom" && <PriceForm key={`${tenant.id}-${tenant.customPricePaise}`} tenant={tenant} planPricePaise={plans.find((p) => p.code === tenant.planCode)?.monthlyPricePaise ?? null} pending={pending}
+                onSave={(rupees) => run(() => setTenantPriceAction(tenant.id, rupees), rupees === null ? "Back to the plan's price." : "Price saved.")} />}
+              {tenant.planCode !== "custom" && <><div>
                 <form
                   className="flex flex-wrap items-end justify-between gap-3"
                   onSubmit={(e) => { e.preventDefault(); const v = String(new FormData(e.currentTarget).get("tableLimit") ?? "").trim(); run(() => setTenantTableLimitAction(tenant.id, v === "" ? null : Number(v)), v === "" ? "Table limit follows the plan again." : "Table limit saved."); }}
@@ -278,8 +346,8 @@ function TenantSheet({ tenant, plans, now, onClose }: { tenant: AdminTenant | nu
                     <Button size="sm" type="submit" disabled={pending}>Save</Button>
                   </div>
                 </form>
-              </section>
-              <section className="rounded-xl border bg-white p-4 sm:col-span-2">
+              </div>
+              <div>
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <h3 className="text-sm font-semibold">Kitchen screen</h3>
@@ -296,91 +364,35 @@ function TenantSheet({ tenant, plans, now, onClose }: { tenant: AdminTenant | nu
                     {tenant.kitchenOverride !== null && <Button size="sm" variant="ghost" disabled={pending} onClick={() => run(() => setTenantKitchenAction(tenant.id, null), "Kitchen screen follows the plan again.")}>Use plan</Button>}
                   </div>
                 </div>
-              </section>
-              </>}
-              <section className="rounded-xl border bg-white p-4"><h3 className="mb-2 text-sm font-semibold">Quick actions</h3>
-                <div className="flex flex-wrap gap-2">
-                  <Button variant="outline" size="sm" onClick={() => setTab("edit")}>Edit details</Button>
-                  <Button variant="outline" size="sm" onClick={() => setTab("manage")}>Reset owner PIN</Button>
-                  {tenant.status !== "cancelled" && <Button variant="outline" size="sm" onClick={() => setTab("manage")}>{tenant.status === "trial" ? "Extend trial / fees" : "Record fees"}</Button>}
-                  {tenant.status === "suspended" || tenant.status === "cancelled"
-                    ? <Button size="sm" disabled={pending} onClick={() => run(() => setTenantStatusAction(tenant.id, "active"), "Tenant activated.")}>Activate</Button>
-                    : <Button variant="destructive" size="sm" disabled={pending} onClick={() => { if (window.confirm(`Suspend ${tenant.name}? Their staff will lose access.`)) run(() => setTenantStatusAction(tenant.id, "suspended"), "Tenant suspended."); }}>Suspend</Button>}
-                </div>
-              </section>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="outlets" className="space-y-4">
-            <section className="rounded-xl border bg-white p-4">
-              {detail ? <Table><TableHeader><TableRow><TableHead>Outlet</TableHead><TableHead>Sign-in code</TableHead><TableHead>City</TableHead><TableHead className="text-right">Tables</TableHead></TableRow></TableHeader>
-                <TableBody>{detail.outlets.map((o) => <TableRow key={o.id}><TableCell className="font-medium">{o.name}</TableCell><TableCell className="font-mono">{o.code}</TableCell><TableCell className="text-muted-foreground">{o.city}</TableCell><TableCell className="text-right">{o.tables}</TableCell></TableRow>)}</TableBody></Table>
-                : <p className="text-sm text-muted-foreground">{detailError ?? "Loading…"}</p>}
-            </section>
-            {tenant.features.multiOutlet
-              ? <AddOutletForm key={tenant.id} pending={pending} maxTables={tenant.features.maxTables} onSave={(input) => run(async () => {
-                  const r = await addOutletAction(tenant.id, input);
-                  if (!r.error) { const d = await getTenantDetailAction(tenant.id); setLoaded({ id: tenant.id, detail: d.detail, error: d.error }); }
-                  return r;
-                }, `Outlet added. The owner signs in there with its sign-in code, or switches outlet at the top of the console.`)} />
-              : <section className="rounded-xl border border-dashed bg-white p-4 text-sm text-muted-foreground">Multiple outlets is not in the {tenant.planName} plan. Change the plan, or pick Custom and tick “Multiple outlets”, to add another outlet.</section>}
-          </TabsContent>
-
-          <TabsContent value="staff" className="rounded-xl border bg-white p-4">
-            {detail ? <Table><TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Role</TableHead><TableHead>Phone</TableHead><TableHead className="pl-6">Status</TableHead></TableRow></TableHeader>
-              <TableBody>{detail.staff.map((m, i) => <TableRow key={`${m.id}-${i}`}><TableCell className="font-medium">{m.name}</TableCell><TableCell className="capitalize">{m.role}</TableCell><TableCell className="text-muted-foreground">{m.phone}</TableCell><TableCell><Badge variant="secondary" className={m.isActive ? statusTone.active : statusTone.cancelled}>{m.isActive ? "Active" : "Inactive"}</Badge></TableCell></TableRow>)}</TableBody></Table>
-              : <p className="text-sm text-muted-foreground">{detailError ?? "Loading…"}</p>}
-          </TabsContent>
-
-          <TabsContent value="edit" className="rounded-xl border bg-white p-4">
-            <form key={tenant.id} className="space-y-3" onSubmit={(e) => {
-              e.preventDefault();
-              const f = new FormData(e.currentTarget);
-              run(() => updateTenantAction(tenant.id, { name: String(f.get("name")), contactName: String(f.get("contactName")), contactPhone: String(f.get("contactPhone")), contactEmail: String(f.get("contactEmail")) }), "Details saved.");
-            }}>
-              {[["name", "Company name", tenant.name], ["contactName", "Contact person", tenant.contactName], ["contactPhone", "Phone", tenant.contactPhone], ["contactEmail", "Email", tenant.contactEmail ?? ""]].map(([name, label, value]) => <div key={name} className="space-y-1.5"><Label htmlFor={`edit-${name}`}>{label}</Label><Input id={`edit-${name}`} name={name} defaultValue={value} /></div>)}
-              <Button type="submit" disabled={pending}>{busy}Save changes</Button>
-            </form>
-          </TabsContent>
-
-          <TabsContent value="manage" className="space-y-6 rounded-xl border bg-white p-4">
-            <section className="space-y-2">
-              <h3 className="text-sm font-semibold">Plan</h3>
-              <Select value={tenant.planCode} onValueChange={(v) => v && v !== tenant.planCode && run(() => changeTenantPlanAction(tenant.id, v), "Plan changed.")}>
-                <SelectTrigger className="w-full" aria-label="Change plan"><SelectValue>{tenant.planName}</SelectValue></SelectTrigger>
-                <SelectContent>{plans.map((p) => <SelectItem key={p.code} value={p.code}>{p.name}</SelectItem>)}</SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">The plan is the starting package. Use the tenant package below to override individual features and limits for this restaurant.</p>
-            </section>
-            {tenant.planCode !== "custom" && <PriceForm key={`${tenant.id}-${tenant.customPricePaise}`} tenant={tenant} planPricePaise={plans.find((p) => p.code === tenant.planCode)?.monthlyPricePaise ?? null} pending={pending}
-              onSave={(rupees) => run(() => setTenantPriceAction(tenant.id, rupees), rupees === null ? "Back to the plan's price." : "Price saved.")} />}
-            <CustomPackageForm key={tenant.id} tenant={tenant} pending={pending} onSave={(input) => run(() => setCustomPackageAction(tenant.id, input), "Custom package saved.")} />
-            <RoleAccessForm key={`roles-${tenant.id}`} roleAccess={tenant.roleAccess} pending={pending} onSave={(access) => run(() => setRoleAccessAction(tenant.id, access), "Roles saved.")} />
-            {tenant.status !== "cancelled" && <section className="space-y-3">
-              <div>
-                <h3 className="text-sm font-semibold">Trial and fees</h3>
-                <p className="text-xs text-muted-foreground">{tenant.access.state === "blocked" && tenant.access.reason !== "suspended" ? "Paused now. Give more free days or record their fees, and it opens again at once." : tenant.access.state === "grace" ? "Ended; it pauses when the grace days run out. Give more free days or record their fees." : "Give more free days, or record fees when they pay."}</p>
-              </div>
-              {tenant.status === "trial" && <ExtendTrial pending={pending} onExtend={(days) => run(() => extendTrialAction(tenant.id, days), `Trial extended by ${days} days.`)} />}
-              <FeeForm key={tenant.id} t={tenant} pending={pending} onSave={(input) => run(() => recordFeePaymentAction(tenant.id, input), `Saved. Paid for ${input.months} ${input.months === 1 ? "month" : "months"}.`)} />
-            </section>}
-            <section className="space-y-2">
-              <h3 className="text-sm font-semibold">Reset owner PIN</h3>
+              </div></>}
+            </ManageRow>
+            <ManageRow title="Features" note={`${FEATURE_KEYS.filter((k) => tenant.features[k]).length} of ${FEATURE_KEYS.length} on · ${tenant.features.maxTables ?? "No limit on"} tables`} open={row === "features"} onToggle={() => toggleRow("features")}>
+              <CustomPackageForm tenant={tenant} pending={pending} onSave={(input) => run(() => setCustomPackageAction(tenant.id, input), "Features saved.")} />
+            </ManageRow>
+            <ManageRow title="Staff access" note="Which role opens which screen" open={row === "roles"} onToggle={() => toggleRow("roles")}>
+              <RoleAccessForm roleAccess={tenant.roleAccess} pending={pending} onSave={(access) => run(() => setRoleAccessAction(tenant.id, access), "Staff access saved.")} />
+            </ManageRow>
+            {tenant.status !== "cancelled" && <ManageRow title="Trial and fees" note={accessBadge(tenant, now).label} open={row === "fees"} onToggle={() => toggleRow("fees")}>
+              {tenant.status === "trial" && <div className="space-y-2"><p className="text-sm font-semibold">Give more free days</p><ExtendTrial pending={pending} onExtend={(days) => run(() => extendTrialAction(tenant.id, days), `Trial extended by ${days} days.`)} /></div>}
+              <FeeForm t={tenant} pending={pending} onSave={(input) => run(() => recordFeePaymentAction(tenant.id, input), `Saved. Paid for ${input.months} ${input.months === 1 ? "month" : "months"}.`)} />
+            </ManageRow>}
+            <ManageRow title="Category and setup" note={categoryOf(tenant)} open={row === "setup"} onToggle={() => toggleRow("setup")}>
+              <CommercialForm tenantId={tenant.id} />
+            </ManageRow>
+            <ManageRow title="Owner PIN" note="Set a new 4-digit PIN" open={row === "pin"} onToggle={() => toggleRow("pin")}>
               <div className="flex gap-2">
                 <Input value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))} inputMode="numeric" placeholder="New 4-digit PIN" aria-label="New owner PIN" />
                 <Button variant="outline" disabled={pending || pin.length !== 4} onClick={() => run(() => resetOwnerPinAction(tenant.id, pin), "Owner PIN reset.")}>Reset</Button>
               </div>
-            </section>
-            <section className="space-y-2">
-              <h3 className="text-sm font-semibold">Access</h3>
+            </ManageRow>
+            <ManageRow title="Access" note={tenant.status === "suspended" || tenant.status === "cancelled" ? "Turned off" : "Tenant can use Tableeqr"} open={row === "access"} onToggle={() => toggleRow("access")}>
               <div className="flex flex-wrap gap-2">
-                {null}
                 {tenant.status === "suspended" || tenant.status === "cancelled"
                   ? <Button disabled={pending} onClick={() => run(() => setTenantStatusAction(tenant.id, "active"), "Tenant activated.")}>{busy}Activate tenant</Button>
                   : <Button variant="destructive" disabled={pending} onClick={() => { if (window.confirm(`Suspend ${tenant.name}? Their staff will lose access.`)) run(() => setTenantStatusAction(tenant.id, "suspended"), "Tenant suspended."); }}>{busy}Suspend tenant</Button>}
-                {(tenant.status === "suspended" || tenant.status === "cancelled") && <Button variant="destructive" disabled={pending} onClick={() => { const typed = window.prompt(`This deletes ${tenant.name} and all its data forever. Type the name to confirm:`); if (typed !== null) run(() => deleteTenantPermanentlyAction(tenant.id, typed), "Restaurant deleted permanently."); }}>{busy}Delete permanently</Button>}
+                {(tenant.status === "suspended" || tenant.status === "cancelled") && <Button variant="destructive" disabled={pending} onClick={() => { const typed = window.prompt(`This deletes ${tenant.name} and all its data forever. Type the name to confirm:`); if (typed !== null) run(() => deleteTenantPermanentlyAction(tenant.id, typed), "Tenant deleted permanently."); }}>{busy}Delete permanently</Button>}
               </div>
-            </section>
+            </ManageRow>
           </TabsContent>
 
           </div>
@@ -391,8 +403,7 @@ function TenantSheet({ tenant, plans, now, onClose }: { tenant: AdminTenant | nu
 }
 
 type SortKey = "name" | "outletCount" | "mrr" | "orders30d" | "createdAt";
-
-function csvCell(value: string | number) { const text = String(value); return /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text; }
+const SORTS = [{ value: "createdAt:-1", label: "Newest first" }, { value: "name:1", label: "Name A to Z" }, { value: "orders30d:-1", label: "Most orders" }, { value: "mrr:-1", label: "Most income" }, { value: "outletCount:-1", label: "Most outlets" }];
 
 export function TenantsView({ data, canRemove }: { data: AdminData; canRemove: boolean }) {
   const [query, setQuery] = useState("");
@@ -405,12 +416,16 @@ export function TenantsView({ data, canRemove }: { data: AdminData; canRemove: b
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(10);
   const [city, setCity] = useState("all");
+  const [category, setCategory] = useState("all");
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [health, setHealth] = useState("all");
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [selectionError, setSelectionError] = useState<string | null>(null);
   const [isRemoving, startRemove] = useTransition();
   const router = useRouter();
   const now = new Date(data.asOf).getTime();
+  // A notification can ask for a tenant while this page is already open
+  useEffect(() => onAdminOpen(() => { const id = takePendingTenant(); if (id) setSelectedId(id); }), []);
 
   const counts = useMemo(() => {
     const c: Record<string, number> = { all: data.tenants.length, active: 0, trial: 0, suspended: 0, cancelled: 0 };
@@ -423,11 +438,17 @@ export function TenantsView({ data, canRemove }: { data: AdminData; canRemove: b
     const value = (t: AdminTenant): string | number => sort.key === "mrr" ? mrr(t) : sort.key === "name" ? t.name.toLowerCase() : t[sort.key];
     return data.tenants.filter((t) =>
       (status === "all" || t.status === status) && (plan === "all" || t.planCode === plan) &&
-      (city === "all" || t.cities.includes(city)) && (health === "all" || healthOf(t, now) === health) &&
+      (city === "all" || t.cities.includes(city)) && (category === "all" || categoryOf(t) === category) && (health === "all" || healthOf(t, now) === health) &&
       (!q || [t.name, t.contactName, t.contactEmail ?? "", t.contactPhone, ...t.cities].some((v) => v.toLowerCase().includes(q))))
       .sort((a, b) => (value(a) < value(b) ? -1 : value(a) > value(b) ? 1 : 0) * sort.dir);
-  }, [data.tenants, query, status, plan, city, health, sort, now]);
+  }, [data.tenants, query, status, plan, city, category, health, sort, now]);
   const cities = useMemo(() => [...new Set(data.tenants.flatMap((t) => t.cities))].sort(), [data.tenants]);
+
+  const categories = useMemo(() => {
+    const seen = new Map<string, number>();
+    for (const t of data.tenants) seen.set(categoryOf(t), (seen.get(categoryOf(t)) ?? 0) + 1);
+    return [...seen].sort((a, b) => b[1] - a[1]);
+  }, [data.tenants]);
 
   const pages = Math.max(1, Math.ceil(all.length / pageSize));
   const current = Math.min(page, pages - 1);
@@ -438,9 +459,9 @@ export function TenantsView({ data, canRemove }: { data: AdminData; canRemove: b
   </TableHead>;
 
   const exportCsv = () => {
-    const header = ["Name", "Contact", "Phone", "Email", "Plan", "Status", "Outlets", "Cities", "MRR (INR)", "Orders 30d", "Joined"];
+    const header = ["Name", "Category", "Contact", "Phone", "Email", "Plan", "Status", "Outlets", "Cities", "Monthly income (INR)", "Orders 30d", "Joined"];
     const exportRows = checked.size ? all.filter((t) => checked.has(t.id)) : all;
-    const lines = exportRows.map((t) => [t.name, t.contactName, t.contactPhone, t.contactEmail ?? "", t.planName, t.status, t.outletCount, t.cities.join("; "), Math.round(mrr(t) / 100), t.orders30d, t.createdAt.slice(0, 10)].map(csvCell).join(","));
+    const lines = exportRows.map((t) => [t.name, categoryOf(t), t.contactName, t.contactPhone, t.contactEmail ?? "", t.planName, t.status, t.outletCount, t.cities.join("; "), Math.round(mrr(t) / 100), t.orders30d, t.createdAt.slice(0, 10)].map(csvCell).join(","));
     const url = URL.createObjectURL(new Blob([[header.join(","), ...lines].join("\n")], { type: "text/csv" }));
     const link = Object.assign(document.createElement("a"), { href: url, download: "tenants.csv" });
     link.click();
@@ -448,8 +469,8 @@ export function TenantsView({ data, canRemove }: { data: AdminData; canRemove: b
   };
 
   const selected = data.tenants.find((t) => t.id === selectedId) ?? null;
-  const filtered = !!query || status !== "all" || plan !== "all" || city !== "all" || health !== "all";
-  const resetFilters = () => { setQuery(""); setStatus("all"); setPlan("all"); setCity("all"); setHealth("all"); setPage(0); };
+  const filtered = !!query || status !== "all" || plan !== "all" || city !== "all" || category !== "all" || health !== "all";
+  const resetFilters = () => { setQuery(""); setStatus("all"); setPlan("all"); setCity("all"); setCategory("all"); setHealth("all"); setPage(0); };
   const pageIds = rows.map((t) => t.id);
   const allChecked = pageIds.length > 0 && pageIds.every((id) => checked.has(id));
   const toggleAll = () => setChecked((c) => { const n = new Set(c); for (const id of pageIds) { if (allChecked) n.delete(id); else n.add(id); } return n; });
@@ -470,52 +491,56 @@ export function TenantsView({ data, canRemove }: { data: AdminData; canRemove: b
     });
   };
 
-  return <div className="space-y-6">
-    <div className="flex flex-wrap items-start justify-between gap-3">
-      <div><h1 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">Tenants</h1><p className="mt-1 text-sm text-muted-foreground">{data.tenants.length} {data.tenants.length === 1 ? "tenant" : "tenants"} on the platform</p></div>
-      <div className="flex gap-2"><Button variant="outline" onClick={exportCsv} disabled={!all.length}><Download />{checked.size ? `Export ${checked.size} selected` : "Export CSV"}</Button><Button onClick={() => setAdding(true)}><Plus />Add tenant</Button></div>
-    </div>
+  const sortChoice = `${sort.key}:${sort.dir}`;
+  const pickCategory = (value: string) => { setCategory(value); setPage(0); };
 
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5 [&>*]:min-w-0">
-      {([
-        { label: "Total tenants", value: counts.all, icon: Users, tone: "#5b42f5", change: data.changes.tenants },
-        { label: "Active", value: counts.active, icon: Store, tone: "#16c784" },
-        { label: "Trial", value: counts.trial, icon: FlaskConical, tone: "#f08b18" },
-        { label: "Suspended", value: counts.suspended, icon: Ban, tone: "#ed5368" },
-        { label: "Cancelled", value: counts.cancelled, icon: XCircle, tone: "#71717a" },
-      ] as { label: string; value: number; icon: typeof Users; tone: string; change?: number | null }[]).map(({ label, value, icon: Icon, tone, change }) => <Card key={label} size="sm"><CardContent className="flex items-center gap-3">
-        <span className="grid size-11 shrink-0 place-items-center rounded-xl" style={{ background: `${tone}1f`, color: tone }}><Icon className="size-5" aria-hidden="true" /></span>
-        <div className="min-w-0"><p className="truncate text-xs text-muted-foreground">{label}</p><p className="text-2xl font-bold leading-tight">{value}</p>
-          <p className="flex items-center gap-1 text-[11px] text-muted-foreground">{change != null ? <span className={`flex items-center font-semibold ${change < 0 ? "text-red-600" : "text-emerald-600"}`}>{change < 0 ? <ArrowDownRight className="size-3" /> : <ArrowUpRight className="size-3" />}{Math.abs(change)}%</span> : null}{label === "Total tenants" ? "vs last month" : `${counts.all ? Math.round((value / counts.all) * 100) : 0}% of total`}</p></div>
-      </CardContent></Card>)}
+  return <div className="space-y-4">
+    <div className="md:pr-44"><h1 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">Tenants</h1><p className="mt-1 text-sm text-muted-foreground">{data.tenants.length} on Tableeqr</p></div>
+
+    <div className="flex flex-wrap items-center gap-2">
+      <div role="group" aria-label="Category" className="no-scrollbar -mx-4 flex min-w-0 flex-1 basis-full gap-1.5 overflow-x-auto px-4 sm:mx-0 sm:basis-0 sm:px-0">
+        <button type="button" aria-pressed={category === "all"} onClick={() => pickCategory("all")} className={filterChip(category === "all")}>All {data.tenants.length}</button>
+        {categories.map(([name, count]) => <button key={name} type="button" aria-pressed={category === name} onClick={() => pickCategory(name)} className={filterChip(category === name)}>{name} {count}</button>)}
+      </div>
+      <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto"><Button variant="outline" onClick={exportCsv} disabled={!all.length}><Download />{checked.size ? `Export ${checked.size}` : "Export"}</Button><Button onClick={() => setAdding(true)}><Plus />Add tenant</Button></div>
     </div>
 
     <Card>
-      <CardContent className="space-y-4">
-        <Tabs value={status} onValueChange={(v) => { setStatus(String(v)); setPage(0); }}>
-          <TabsList variant="line" className="h-auto flex-wrap justify-start gap-x-1 gap-y-1 group-data-horizontal/tabs:h-auto [&>*]:h-8">{(["all", "active", "trial", "suspended", "cancelled"] as const).map((k) => <TabsTrigger key={k} value={k} className="capitalize">{k} ({counts[k]})</TabsTrigger>)}</TabsList>
-        </Tabs>
+      <CardContent className="space-y-3">
         <div className="flex flex-wrap items-center gap-2">
-          <div className="relative min-w-52 flex-1">
+          <div className="relative min-w-0 flex-1 sm:w-full sm:flex-none xl:w-auto xl:min-w-64 xl:flex-1">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-            <Input value={query} onChange={(e) => { setQuery(e.target.value); setPage(0); }} placeholder="Search name, contact, phone, city…" className="pl-8" aria-label="Search tenants" />
+            <Input value={query} onChange={(e) => { setQuery(e.target.value); setPage(0); }} placeholder="Search name, phone, city" className="pl-8" aria-label="Search tenants" />
           </div>
+          <Button variant="outline" className="sm:hidden" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(!filtersOpen)}><ListFilter />Filter{filtered && " •"}</Button>
+          <div className={`${filtersOpen ? "grid" : "hidden"} w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap [&_[data-slot=select-trigger]]:w-full sm:[&_[data-slot=select-trigger]]:w-auto`}>
+            <Select value={status} onValueChange={(v) => { if (v) { setStatus(v); setPage(0); } }}>
+              <SelectTrigger aria-label="Status filter"><SelectValue>{status === "all" ? "All status" : `${status[0].toUpperCase()}${status.slice(1)} (${counts[status]})`}</SelectValue></SelectTrigger>
+              <SelectContent><SelectItem value="all">All status</SelectItem>{(["active", "trial", "suspended", "cancelled"] as const).map((k) => <SelectItem key={k} value={k}><span className="capitalize">{k}</span> ({counts[k]})</SelectItem>)}</SelectContent>
+            </Select>
           <Select value={plan} onValueChange={(v) => { if (v) { setPlan(v); setPage(0); } }}>
-            <SelectTrigger aria-label="Plan filter"><SelectValue>{plan === "all" ? "All plans" : data.plans.find((p) => p.code === plan)?.name}</SelectValue></SelectTrigger>
-            <SelectContent><SelectItem value="all">All plans</SelectItem>{data.plans.map((p) => <SelectItem key={p.code} value={p.code}>{p.name}</SelectItem>)}</SelectContent>
-          </Select>
-          <Select value={city} onValueChange={(v) => { if (v) { setCity(v); setPage(0); } }}>
-            <SelectTrigger aria-label="City filter"><SelectValue>{city === "all" ? "All cities" : city}</SelectValue></SelectTrigger>
-            <SelectContent><SelectItem value="all">All cities</SelectItem>{cities.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
-          </Select>
-          <Select value={health} onValueChange={(v) => { if (v) { setHealth(v); setPage(0); } }}>
-            <SelectTrigger aria-label="Health filter"><SelectValue>{health === "all" ? "All health" : health}</SelectValue></SelectTrigger>
-            <SelectContent><SelectItem value="all">All health</SelectItem>{HEALTHS.map((h) => <SelectItem key={h} value={h}>{h}</SelectItem>)}</SelectContent>
-          </Select>
-          {filtered && <Button variant="ghost" size="sm" onClick={resetFilters}><RotateCcw />Reset filters</Button>}
+              <SelectTrigger aria-label="Plan filter"><SelectValue>{plan === "all" ? "All plans" : data.plans.find((p) => p.code === plan)?.name}</SelectValue></SelectTrigger>
+              <SelectContent><SelectItem value="all">All plans</SelectItem>{data.plans.map((p) => <SelectItem key={p.code} value={p.code}>{p.name}</SelectItem>)}</SelectContent>
+            </Select>
+            <Select value={city} onValueChange={(v) => { if (v) { setCity(v); setPage(0); } }}>
+              <SelectTrigger aria-label="City filter"><SelectValue>{city === "all" ? "All cities" : city}</SelectValue></SelectTrigger>
+              <SelectContent><SelectItem value="all">All cities</SelectItem>{cities.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+            </Select>
+            <Select value={health} onValueChange={(v) => { if (v) { setHealth(v); setPage(0); } }}>
+              <SelectTrigger aria-label="Health filter"><SelectValue>{health === "all" ? "All health" : health}</SelectValue></SelectTrigger>
+              <SelectContent><SelectItem value="all">All health</SelectItem>{HEALTHS.map((h) => <SelectItem key={h} value={h}>{h}</SelectItem>)}</SelectContent>
+            </Select>
+            <div className="lg:hidden">
+              <Select value={sortChoice} onValueChange={(v) => { if (v) { const [key, dir] = v.split(":"); setSort({ key: key as SortKey, dir: Number(dir) as 1 | -1 }); setPage(0); } }}>
+                <SelectTrigger aria-label="Sort"><SelectValue>{SORTS.find((o) => o.value === sortChoice)?.label ?? "Sort"}</SelectValue></SelectTrigger>
+                <SelectContent>{SORTS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+          </div>
+          {filtered && <Button variant="ghost" size="sm" onClick={resetFilters}><RotateCcw />Reset</Button>}
         </div>
 
-        {checked.size > 0 && <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#5b42f5]/25 bg-[#5b42f5]/5 px-3 py-2.5">
+        {checked.size > 0 && <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--admin-brand)]/25 bg-[var(--admin-brand)]/5 px-3 py-2.5">
           <div className="text-sm font-medium">{checked.size} selected{selectionError ? <p role="alert" className="mt-1 font-normal text-red-600">{selectionError}</p> : null}</div>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" onClick={() => { setChecked(new Set()); setSelectionError(null); }}>Clear selection</Button>
@@ -523,28 +548,42 @@ export function TenantsView({ data, canRemove }: { data: AdminData; canRemove: b
           </div>
         </div>}
 
-        {rows.length ? <Table>
-          <TableHeader><TableRow><TableHead className="w-8"><input type="checkbox" aria-label="Select all on page" checked={allChecked} onChange={toggleAll} className="size-4 accent-[#5b42f5]" /></TableHead>{sortHead("name", "Tenant")}<TableHead>City</TableHead><TableHead>Plan</TableHead>{sortHead("outletCount", "Outlets", true)}<TableHead>Status</TableHead>{sortHead("mrr", "MRR", true)}{sortHead("orders30d", "Orders (30d)", true)}{sortHead("createdAt", "Joined", false, "pl-6")}<TableHead className="pl-6">Health</TableHead><TableHead className="text-right"><span className="sr-only">Actions</span></TableHead></TableRow></TableHeader>
+        {rows.length ? <>
+        <ul className="divide-y lg:hidden">{rows.map((t) => { const badge = accessBadge(t, now); return <li key={t.id} className="flex items-start gap-3 py-3">
+          <input type="checkbox" aria-label={`Select ${t.name}`} checked={checked.has(t.id)} onChange={() => toggleOne(t.id)} className="mt-1 size-4 shrink-0 accent-[var(--admin-brand)]" />
+          <button type="button" onClick={() => setSelectedId(t.id)} className="flex min-w-0 flex-1 items-center gap-2 text-left focus-visible:outline-2 focus-visible:outline-[var(--admin-brand)]">
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-semibold">{t.name}</span>
+              <span className="block truncate text-xs text-muted-foreground">{[categoryOf(t), t.cities.join(", "), t.planName].filter(Boolean).join(" · ")}</span>
+              <span className="mt-1.5 flex flex-wrap items-center gap-1.5"><Badge variant="secondary" className={badge.tone}>{badge.label}</Badge><Badge variant="secondary" className={healthTone[healthOf(t, now)]}>{healthOf(t, now)}</Badge></span>
+              <span className="mt-1 block text-xs tabular-nums text-muted-foreground">{t.orders30d.toLocaleString("en-IN")} orders{t.status === "active" ? ` · ${money(mrr(t))} a month` : ""}</span>
+            </span>
+            <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          </button>
+        </li>; })}</ul>
+        <div className="hidden lg:block"><Table>
+          <TableHeader><TableRow><TableHead className="w-8"><input type="checkbox" aria-label="Select all on page" checked={allChecked} onChange={toggleAll} className="size-4 accent-[var(--admin-brand)]" /></TableHead>{sortHead("name", "Tenant")}<TableHead className="hidden xl:table-cell">Category</TableHead><TableHead>Plan</TableHead>{sortHead("outletCount", "Outlets", true, "hidden 2xl:table-cell")}<TableHead className="pl-6">Status</TableHead>{sortHead("mrr", "A month", true)}{sortHead("orders30d", "Orders", true)}{sortHead("createdAt", "Joined", false, "hidden pl-6 2xl:table-cell")}<TableHead className="pl-6">Health</TableHead><TableHead><span className="sr-only">Open</span></TableHead></TableRow></TableHeader>
           <TableBody>{rows.map((t) => <TableRow key={t.id} className="cursor-pointer" onClick={() => setSelectedId(t.id)}>
-            <TableCell onClick={(e) => e.stopPropagation()}><input type="checkbox" aria-label={`Select ${t.name}`} checked={checked.has(t.id)} onChange={() => toggleOne(t.id)} className="size-4 accent-[#5b42f5]" /></TableCell>
-            <TableCell><p className="font-medium">{t.name}</p><p className="text-xs text-muted-foreground">{t.contactEmail ?? t.contactPhone}</p></TableCell>
-            <TableCell className="text-muted-foreground">{t.cities.join(", ") || "—"}</TableCell>
+            <TableCell onClick={(e) => e.stopPropagation()}><input type="checkbox" aria-label={`Select ${t.name}`} checked={checked.has(t.id)} onChange={() => toggleOne(t.id)} className="size-4 accent-[var(--admin-brand)]" /></TableCell>
+            <TableCell className="max-w-64"><p className="truncate font-semibold">{t.name}</p><p className="truncate text-xs text-muted-foreground">{t.cities.join(", ") || t.contactEmail || t.contactPhone}</p></TableCell>
+            <TableCell className="hidden text-muted-foreground xl:table-cell">{categoryOf(t)}</TableCell>
             <TableCell><Badge variant="secondary">{t.planName}</Badge></TableCell>
-            <TableCell className="text-right">{t.outletCount}</TableCell>
+            <TableCell className="hidden text-right tabular-nums 2xl:table-cell">{t.outletCount}</TableCell>
             <TableCell className="pl-6"><Badge variant="secondary" className={accessBadge(t, now).tone}>{accessBadge(t, now).label}</Badge></TableCell>
-            <TableCell className="text-right">{t.status === "active" ? money(mrr(t)) : "—"}</TableCell>
-            <TableCell className="text-right">{t.orders30d.toLocaleString("en-IN")}</TableCell>
-            <TableCell className="pl-6 text-muted-foreground">{date(t.createdAt)}</TableCell>
+            <TableCell className="text-right tabular-nums">{t.status === "active" ? money(mrr(t)) : "—"}</TableCell>
+            <TableCell className="text-right font-semibold tabular-nums">{t.orders30d.toLocaleString("en-IN")}</TableCell>
+            <TableCell className="hidden pl-6 text-muted-foreground 2xl:table-cell">{date(t.createdAt)}</TableCell>
             <TableCell className="pl-6"><Badge variant="secondary" className={healthTone[healthOf(t, now)]}>{healthOf(t, now)}</Badge></TableCell>
-            <TableCell className="text-right"><Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); setSelectedId(t.id); }}>View</Button></TableCell>
+            <TableCell className="w-8 text-right"><button type="button" aria-label={`Open ${t.name}`} onClick={(e) => { e.stopPropagation(); setSelectedId(t.id); }} className="grid size-8 place-items-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-[var(--admin-brand)]"><ChevronRight className="size-4" /></button></TableCell>
           </TableRow>)}</TableBody>
-        </Table> : <div className="py-14 text-center">
-          <p className="font-medium">{filtered ? "No tenants match your filters" : "No tenants yet"}</p>
-          <p className="mt-1 text-sm text-muted-foreground">{filtered ? "Try a different search or clear the filters." : "Add your first restaurant to get started."}</p>
+        </Table></div>
+        </> : <div className="py-14 text-center">
+          <p className="font-medium">{filtered ? "No tenants match" : "No tenants yet"}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{filtered ? "Try another search or reset the filters." : "Add your first restaurant to get started."}</p>
           {!filtered && <Button className="mt-4" onClick={() => setAdding(true)}><Plus />Add tenant</Button>}
         </div>}
         {all.length > 0 && <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
-          <p>Showing {current * pageSize + 1}–{Math.min(all.length, (current + 1) * pageSize)} of {all.length} {all.length === 1 ? "tenant" : "tenants"}</p>
+          <p>{current * pageSize + 1}–{Math.min(all.length, (current + 1) * pageSize)} of {all.length}</p>
           <div className="flex items-center gap-1">
             <Button variant="outline" size="icon-sm" aria-label="Previous page" disabled={current === 0} onClick={() => setPage(current - 1)}><ChevronLeft /></Button>
             {Array.from({ length: pages }, (_, i) => i).filter((i) => i === 0 || i === pages - 1 || Math.abs(i - current) <= 1).map((i, idx, arr) => <span key={i} className="flex items-center gap-1">
@@ -553,7 +592,7 @@ export function TenantsView({ data, canRemove }: { data: AdminData; canRemove: b
             </span>)}
             <Button variant="outline" size="icon-sm" aria-label="Next page" disabled={current >= pages - 1} onClick={() => setPage(current + 1)}><ChevronRight /></Button>
           </div>
-          <label className="flex items-center gap-2">Rows per page
+          <label className="hidden items-center gap-2 sm:flex">Rows per page
             <Select value={String(pageSize)} onValueChange={(v) => { if (v) { setPageSize(Number(v)); setPage(0); } }}>
               <SelectTrigger size="sm" aria-label="Rows per page"><SelectValue>{pageSize}</SelectValue></SelectTrigger>
               <SelectContent>{[10, 25, 50].map((n) => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}</SelectContent>
@@ -564,6 +603,6 @@ export function TenantsView({ data, canRemove }: { data: AdminData; canRemove: b
     </Card>
 
     <CreateTenantDialog key={String(adding)} open={adding} onOpenChange={setAdding} plans={data.plans.filter((p) => p.isPublic).map((p) => ({ code: p.code, name: p.name, features: p.features }))} />
-    <TenantSheet tenant={selected} plans={data.plans} now={now} onClose={() => setSelectedId(null)} />
+    <TenantSheet key={selectedId ?? "closed"} tenant={selected} plans={data.plans} now={now} onClose={() => setSelectedId(null)} />
   </div>;
 }

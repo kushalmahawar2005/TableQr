@@ -41,8 +41,9 @@ function DesktopSidebar({ children, className }: { children: ReactNode; classNam
 /** Top bar with a hamburger; opens a full-screen slide-in drawer. */
 function MobileSidebar({ children, className }: { children: ReactNode; className?: string }) {
   const { open, setOpen } = useSidebar();
-  return <div className="flex h-14 w-full shrink-0 items-center justify-between border-b border-border bg-background px-4 md:hidden">
+  return <div className="sticky top-0 z-30 flex h-14 w-full shrink-0 items-center gap-2 border-b border-border bg-background px-3 md:hidden">
     <button type="button" aria-label="Open menu" onClick={() => setOpen(true)} className="grid size-9 place-items-center rounded-lg text-muted-foreground hover:bg-hover"><Menu className="size-5" /></button>
+    <span className="font-display text-sm font-bold text-foreground">Tableeqr Admin</span>
     <AnimatePresence>
       {open && <motion.div
         initial={{ x: "-100%" }} animate={{ x: 0 }} exit={{ x: "-100%" }}
@@ -78,7 +79,7 @@ export function SidebarLink({ icon, label, active, onClick, className, ...props 
     className={cn(
       "flex h-10 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-medium outline-none transition-colors",
       "focus-visible:ring-2 focus-visible:ring-ring",
-      active ? "bg-[#5b42f5]/10 text-[#5b42f5]" : "text-muted-foreground hover:bg-hover hover:text-foreground",
+      active ? "bg-[var(--admin-brand)] text-white" : "text-muted-foreground hover:bg-hover hover:text-foreground",
       className,
     )}
   >

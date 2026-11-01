@@ -183,7 +183,7 @@ export function DeliveryQueueScreen({ rows, pendingPayments, canAssignCourier, t
           {shown.map(row => {
             const stage = stageOf(row), isLate = late(row), paid = row.paid === "paid", chosen = selected?.id === row.id;
             const billHref = `/console/billing?session=${encodeURIComponent(row.sessionId ?? "")}`;
-            return <li key={row.id} className={`${rowCells} ${COLUMNS} ${rowTone(chosen, isLate)}`}>
+            return <li key={row.id} className={`${rowCells} ${COLUMNS} ${rowTone(chosen, isLate, isLive(row) && stage === 0)}`}>
               <RowSelect selected={chosen} onSelect={() => setPicked(row.id)}>
                 <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5"><span className="min-w-0 truncate text-sm font-bold text-ink">{row.name ?? "Guest"}</span><span className="text-xs font-medium text-muted">{row.serviceMode === "pickup" ? "Pickup" : "Delivery"}</span></span>
                 <span className="mt-0.5 flex items-center gap-2 text-xs font-medium text-muted tabular"><span className="min-w-0 truncate">{row.phone}</span>{isLate && <UrgentTag />}</span>

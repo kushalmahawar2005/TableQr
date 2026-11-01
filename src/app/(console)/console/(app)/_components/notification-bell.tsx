@@ -10,6 +10,7 @@ import type { ConsoleNotice } from "@/server/staff/notifications";
 import { noticesAction } from "./notification-actions";
 import { enableStaffPushNotifications } from "@/lib/staff-push-client";
 import { showStaffNotification } from "@/lib/show-staff-notification";
+import { setLiveOrderCounts } from "@/lib/live-order-counts";
 
 const POLL_MS = 8_000;
 const SOUND_KEY = "tq_console_sound";
@@ -90,6 +91,7 @@ export function NotificationBell({ sessionId, preview = false, className = "", p
         return; // offline for a moment: the next check catches up
       }
       if (stopped || !res.ok) return;
+      setLiveOrderCounts(res.waiting);
       // A little overlap so nothing falls between two checks; seen ids stop repeats
       since.current = res.now - 2_000;
       const fresh = res.notices.filter((n) => !seen.current.has(n.id));

@@ -396,11 +396,11 @@ body {
 
 /* Platform admin: shadcn tokens, kept apart from the brand --accent/--muted used by the guest and staff apps. */
 .admin-scope {
-  --accent: oklch(0.97 0 0);
-  --muted: oklch(0.97 0 0);
-  --primary: #5b42f5;
+  --accent: #F3F1EA;
+  --muted: #F3F1EA;
+  --primary: var(--admin-brand);
   --primary-foreground: #ffffff;
-  --ring: #5b42f5;
+  --ring: var(--admin-brand);
   --radius: 0.75rem;
 }
 
@@ -601,12 +601,15 @@ html.console-ui.theme-dark, .staff-theme.theme-dark {
 
 /* Platform admin dark theme (shadcn .dark tokens are set on <html> and the shell) */
 /* html.dark exists only while the admin panel is mounted; see AdminShell */
-:root { --admin-bg: #f7f8fc; --admin-fg: #172033; }
-.dark { --admin-bg: oklch(0.16 0 0); --admin-fg: oklch(0.95 0 0); --hover: oklch(0.27 0 0); color-scheme: dark; }
-.dark .admin-scope { --accent: oklch(0.269 0 0); --muted: oklch(0.269 0 0); --primary: #7c6bff; --ring: #7c6bff; }
+:root { --admin-bg: #F4F2EC; --admin-fg: #17251f; --admin-brand: #103B2C; --admin-brand-hover: #0c2b20; }
+.dark { --admin-bg: #171b22; --admin-fg: #e8eaf0; --admin-brand: #2f7d5b; --admin-brand-hover: #276a4d; --hover: #282d35; color-scheme: dark; }
+/* The admin shares the console's colours: warm canvas and forest green, or the console's dark set. */
+.admin-ui, .admin-ui .admin-scope { --border: #E8E3D9; --input: #E8E3D9; --muted-foreground: #66706b; --primary: var(--admin-brand); --primary-foreground: #ffffff; --ring: var(--admin-brand); }
+.admin-ui.dark, .admin-ui .dark, .admin-ui .dark .admin-scope { --background: #171b22; --foreground: #e8eaf0; --card: #1b1f27; --card-foreground: #e8eaf0; --popover: #1b1f27; --popover-foreground: #e8eaf0; --border: #2c323e; --input: #2c323e; --muted: #282d35; --accent: #282d35; --muted-foreground: #9aa3b2; --primary: var(--admin-brand); --primary-foreground: #ffffff; --ring: var(--admin-brand); }
+.dark .admin-scope { --primary: var(--admin-brand); --ring: var(--admin-brand); }
 .dark .bg-white, .dark [class*="bg-white"] { background-color: var(--card); }
 .dark .bg-emerald-100, .dark .bg-green-50 { background-color: rgb(16 185 129 / 0.16); }
-.dark .text-emerald-700 { color: #6ee7b7; }
+.dark .text-emerald-700, .dark .text-green-700 { color: #6ee7b7; }
 .dark .bg-amber-100 { background-color: rgb(245 158 11 / 0.16); }
 .dark .text-amber-700 { color: #fcd34d; }
 .dark .bg-red-100, .dark .bg-red-50 { background-color: rgb(239 68 68 / 0.16); }
@@ -616,15 +619,17 @@ html.console-ui.theme-dark, .staff-theme.theme-dark {
 .dark .bg-sky-100 { background-color: rgb(14 165 233 / 0.16); }
 .dark .text-sky-700 { color: #7dd3fc; }
 .dark .bg-indigo-100 { background-color: rgb(99 102 241 / 0.2); }
-.dark .text-indigo-700, .dark .text-\[\#5b42f5\] { color: #a5b4fc; }
+.dark .text-indigo-700, .dark .text-\[var\(--admin-brand\)\] { color: #86c9a8; }
 .dark .bg-emerald-50 { background-color: rgb(16 185 129 / 0.12); }
 .dark .text-emerald-800 { color: #a7f3d0; }
 
 /* Platform admin: borders without a colour of their own take the soft border tone, never black.
    .admin-ui sits on <html> while the admin is open, so dialogs and side panels get it too. */
 .admin-ui *, .admin-ui ::before, .admin-ui ::after { border-color: var(--border); }
+.admin-ui [data-slot="tabs-trigger"] { border-color: transparent; }
+.admin-ui [data-slot="tabs-trigger"]:focus-visible { box-shadow: none; outline: none; color: var(--foreground); }
 /* Side panels and dialogs render outside .admin-scope, so the soft grey surfaces must be set here too */
-.admin-ui:not(.dark) { --muted: oklch(0.97 0 0); --accent: oklch(0.97 0 0); }
+.admin-ui:not(.dark) { --muted: #F3F1EA; --accent: #F3F1EA; }
 
 /* Scrolls as usual, but without a visible scrollbar */
 .no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }

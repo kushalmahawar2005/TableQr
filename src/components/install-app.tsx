@@ -36,7 +36,7 @@ function hiddenForNow(key = HIDE_KEY) {
   }
 }
 
-export function InstallApp({ className = "", name = "Tableeqr", logoUrl = null, compact = false, title, blurb, guest = false, downloadHref }: { className?: string; name?: string; logoUrl?: string | null; compact?: boolean; title?: string; blurb?: string; /** A customer page: its own "not now", and only for a day */ guest?: boolean; /** A native app to download instead of installing this site (the rider's Android app) */ downloadHref?: string }) {
+export function InstallApp({ className = "", name = "Tableeqr", logoUrl = null, compact = false, pill = false, title, blurb, guest = false, downloadHref }: { /** A small button for a top bar, instead of the card */ pill?: boolean; className?: string; name?: string; logoUrl?: string | null; compact?: boolean; title?: string; blurb?: string; /** A customer page: its own "not now", and only for a day */ guest?: boolean; /** A native app to download instead of installing this site (the rider's Android app) */ downloadHref?: string }) {
   const hideKey = guest ? "tq_guest_install_hidden_until" : HIDE_KEY;
   const [prompt, setPrompt] = useState<InstallEvent | null>(null);
   const [ios, setIos] = useState(false);
@@ -92,6 +92,13 @@ export function InstallApp({ className = "", name = "Tableeqr", logoUrl = null, 
     setPrompt(null);
     if (outcome === "accepted") setShow(false);
   };
+
+  if (pill) return (
+    <div className="relative">
+      <button type="button" onClick={() => void install()} className={className}><HugeiconsIcon icon={Download04Icon} size={16} aria-hidden className="shrink-0" />Install</button>
+      {helpOpen && <p role="status" className="absolute right-0 z-50 mt-2 w-60 rounded-xl border border-border bg-popover p-3 text-xs leading-relaxed text-popover-foreground shadow-xl">{ios ? "Tap Share, then Add to Home Screen." : "Open your browser menu and choose Install app or Add to Home screen."}</p>}
+    </div>
+  );
 
   const small = compact ? "text-[11px] leading-snug" : "text-caption";
   return (

@@ -68,6 +68,37 @@ export function DeliveryScreen({ outletCode, data, initialStatus, initialService
   const [resendAt, setResendAt] = useState(0);
   const [quote, setQuote] = useState<Quote | null>(null), [status, setStatus] = useState<Status | undefined>(initialStatus);
   const serviceMode = status?.serviceMode ?? activeMode;
+  // A refresh keeps the cart and the details step; it lasts as long as this tab
+  const draftKey = `tq_delivery_draft_${outletCode}`;
+  const [draftRead, setDraftRead] = useState(false);
+  useEffect(() => {
+    queueMicrotask(() => {
+      setDraftRead(true);
+      if (initialCart.length || initialStatus) return;
+      try {
+        const saved = JSON.parse(sessionStorage.getItem(draftKey) ?? "null") as { cart: DeliveryCartLine[]; details: boolean } | null;
+        const lines = saved?.cart.filter((line) => data?.items.some((item) => item.id === line.itemId)) ?? [];
+        if (!lines.length) return;
+        setCart(lines);
+        if (saved?.details) openCart();
+      } catch { /* Nothing readable saved: start with an empty cart */ }
+    });
+    // Only once, when the screen opens
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    if (!draftRead || status) return;
+    try {
+      if (cart.length) sessionStorage.setItem(draftKey, JSON.stringify({ cart, details: step !== "menu" }));
+      else sessionStorage.removeItem(draftKey);
+    } catch { /* Private mode: the order still works, it just won't survive a refresh */ }
+  }, [cart, step, status, draftRead, draftKey]);
+  // Once an order exists the address must lead back to it, not to a new order
+  useEffect(() => {
+    if (!status) return;
+    try { sessionStorage.removeItem(draftKey); } catch { /* Private mode */ }
+    window.history.replaceState(null, "", `${base}/delivery?mode=${status.serviceMode}`);
+  }, [status, base, draftKey]);
   const [pickupPaymentMode, setPickupPaymentMode] = useState<"cod" | "gateway" | "manual_qr">("cod");
   const [error, setError] = useState<string | null>(null), [pending, start] = useTransition();
   const [selected, setSelected] = useState<Menu["items"][number] | null>(null), [choices, setChoices] = useState<string[]>([]);
@@ -207,7 +238,7 @@ export function DeliveryScreen({ outletCode, data, initialStatus, initialService
     {status ? <><StatusView outletCode={outletCode} status={status} hindi={hindi} pending={pending} statusMessage={statusMessage} onPay={() => run(payDelivery)} onRefresh={() => run(loadStatus)} newOrderHref={`${base}/delivery?new=1&lang=${hindi ? "hi" : "en"}`} />{installable && <InstallApp guest className="mt-4" name={installable.name} logoUrl={installable.logoUrl} title={t("Install our app", "हमारा ऐप इंस्टॉल करें")} blurb={t(`Track this order and order again from ${installable.name} in one tap.`, `इस ऑर्डर को ट्रैक करें और ${installable.name} से एक टैप में दोबारा ऑर्डर करें।`)} />}</> : <>
     {step === "menu" && data && <>
       {orderModes.length > 1 && <div className="mt-5 grid grid-cols-2 gap-1 rounded-xl bg-ink/5 p-1" aria-label="Order type">
-        {orderModes.map(({key,label,icon:Icon})=><button key={key} type="button" aria-pressed={serviceMode===key} onClick={()=>setActiveMode(key)} className={`flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-lg text-sm font-bold ${serviceMode===key?"bg-surface text-brand":"text-muted"}`}><Icon size={17}/>{label}</button>)}
+        {orderModes.map(({key,label,icon:Icon})=><button key={key} type="button" aria-pressed={serviceMode===key} onClick={()=>{setActiveMode(key);const url=new URL(window.location.href);url.searchParams.set("mode",key);window.history.replaceState(null,"",url);}} className={`flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-lg text-sm font-bold ${serviceMode===key?"bg-surface text-brand":"text-muted"}`}><Icon size={17}/>{label}</button>)}
       </div>}
       {experience.brand?.services.reservations&&<Link href={`${base}/book`} className="mt-4 flex items-center gap-3 rounded-2xl border border-line bg-surface px-4 py-3"><CalendarDays size={20} className="text-brand"/><span className="flex-1 text-sm"><b className="block">{t("A table for your next get-together?","अगली मुलाकात के लिए टेबल?")}</b><span className="text-xs text-muted">{t("Reserve a table or plan a party","टेबल या पार्टी बुक करें")}</span></span><ChevronRight size={18}/></Link>}
 

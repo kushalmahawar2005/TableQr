@@ -22,7 +22,7 @@ function RealtimeTest() {
   return <Card>
     <CardHeader><CardTitle>Live updates</CardTitle><CardDescription>Sends a test update through the live-updates service and waits for a screen to receive it. Touches no restaurant.</CardDescription></CardHeader>
     <CardContent className="space-y-3">
-      <button type="button" onClick={run} disabled={state === "running"} className="inline-flex h-9 items-center gap-2 rounded-md bg-[#5b42f5] px-4 text-sm font-medium text-white disabled:opacity-60">
+      <button type="button" onClick={run} disabled={state === "running"} className="inline-flex h-9 items-center gap-2 rounded-md bg-[var(--admin-brand)] px-4 text-sm font-medium text-white disabled:opacity-60">
         {state === "running" && <Loader2 className="size-4 animate-spin" />}Run check
       </button>
       {state && state !== "running" && (state.error || !state.data
@@ -44,7 +44,7 @@ function Loaded({ data }: { data: SettingsData }) {
     <Card>
       <CardHeader><CardTitle>Your account</CardTitle><CardDescription>The account you are signed in with</CardDescription></CardHeader>
       <CardContent className="flex flex-wrap items-center gap-4">
-        <span className="grid size-14 place-items-center rounded-full bg-[#5b42f5] text-lg font-bold text-white">{initials(data.me.name)}</span>
+        <span className="grid size-14 place-items-center rounded-full bg-[var(--admin-brand)] text-lg font-bold text-white">{initials(data.me.name)}</span>
         <div className="min-w-0 flex-1"><p className="text-lg font-semibold">{data.me.name}</p><p className="text-sm text-muted-foreground">{data.me.email}</p></div>
         <div className="text-right"><Badge variant="secondary" className="bg-indigo-100 text-indigo-700">{ROLE[data.me.role]}</Badge><p className="mt-1 text-xs text-muted-foreground">{ROLE_HELP[data.me.role]}</p></div>
       </CardContent>
@@ -56,7 +56,7 @@ function Loaded({ data }: { data: SettingsData }) {
         <Table>
           <TableHeader><TableRow><TableHead>Person</TableHead><TableHead>Role</TableHead><TableHead>Status</TableHead><TableHead>Last sign-in</TableHead></TableRow></TableHeader>
           <TableBody>{data.team.map((m) => <TableRow key={m.id}>
-            <TableCell><div className="flex items-center gap-2.5"><span className="grid size-8 shrink-0 place-items-center rounded-full bg-[#5b42f5]/10 text-xs font-bold text-[#5b42f5]">{initials(m.name)}</span><div className="min-w-0"><p className="truncate font-medium">{m.name}{m.email === data.me.email && <span className="ml-1.5 text-xs font-normal text-muted-foreground">(you)</span>}</p><p className="truncate text-xs text-muted-foreground">{m.email}</p></div></div></TableCell>
+            <TableCell><div className="flex items-center gap-2.5"><span className="grid size-8 shrink-0 place-items-center rounded-full bg-[var(--admin-brand)]/10 text-xs font-bold text-[var(--admin-brand)]">{initials(m.name)}</span><div className="min-w-0"><p className="truncate font-medium">{m.name}{m.email === data.me.email && <span className="ml-1.5 text-xs font-normal text-muted-foreground">(you)</span>}</p><p className="truncate text-xs text-muted-foreground">{m.email}</p></div></div></TableCell>
             <TableCell>{ROLE[m.role]}</TableCell>
             <TableCell><Badge variant="secondary" className={m.isActive ? "bg-emerald-100 text-emerald-700" : "bg-zinc-100 text-zinc-600"}>{m.isActive ? "Active" : "Disabled"}</Badge></TableCell>
             <TableCell className="text-muted-foreground">{when(m.lastLoginAt)}</TableCell>

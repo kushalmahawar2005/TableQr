@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { cookies } from "next/headers";
 import { currentPlatformAdmin } from "@/server/admin/auth";
 import { getAdminData } from "@/server/admin/dashboard";
@@ -16,9 +16,17 @@ import { adminLogoutAction } from "./actions";
 import { AppsView } from "./apps-view";
 import { appReleases } from "@/server/admin/app-releases";
 
-export const metadata: Metadata = { title: "Platform admin", robots: { index: false, follow: false } };
+export const metadata: Metadata = {
+  title: "Platform admin",
+  robots: { index: false, follow: false },
+  manifest: "/admin/manifest.webmanifest",
+  applicationName: "Tableeqr Admin",
+  appleWebApp: { capable: true, title: "Tableeqr Admin", statusBarStyle: "default" },
+  icons: { apple: "/admin/app-icon/192" },
+};
+export const viewport: Viewport = { themeColor: "#103B2C" };
 
-export default async function AdminPage() {
+export default async function AdminPage(props: { searchParams: Promise<{ page?: string }> }) {
   const admin = await currentPlatformAdmin();
   if (!admin) return <main className="grid min-h-dvh place-items-center bg-[#f7f8fc] px-4"><AdminLogin /></main>;
   const [data, releases] = await Promise.all([getAdminData(), appReleases("rider")]);
@@ -30,6 +38,7 @@ export default async function AdminPage() {
     ...t.requests.map((r) => ({ id: r.id, title: `${t.name} asked for ${r.feature && r.feature in FEATURE_LABELS ? FEATURE_LABELS[r.feature as keyof typeof FEATURE_LABELS].label : "a plan change"}`, detail: r.note ? `“${r.note}”` : `by ${r.requestedBy}`, page: "Tenants", tenantId: t.id })),
   ]);
   return <AdminShell
+    initialPage={(await props.searchParams).page}
     alerts={alerts}
     theme={theme}
     email={admin.email}

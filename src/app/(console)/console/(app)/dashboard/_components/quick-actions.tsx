@@ -2,6 +2,7 @@ import type { Features } from "@/lib/plan-features";
 import { BarChart3, BedDouble, Calendar, Clock, CreditCard, FileText, Plus } from "lucide-react";
 import Link from "next/link";
 import { focusRing } from "./dashboard-shared";
+import { DeliveryOrdersLink } from "./live-orders";
 
 /** Every quick action is a real route that already exists; Day Close keeps its own safety flow */
 export function QuickActions({ features }: { features?: Features }) {
@@ -39,6 +40,7 @@ export function QuickActions({ features }: { features?: Features }) {
           <span>{label}</span>
         </Link>
       ))}
+      {features?.delivery && <DeliveryOrdersLink />}
     </nav>
   );
 }
