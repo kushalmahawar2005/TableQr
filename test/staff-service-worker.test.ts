@@ -4,11 +4,11 @@ import { describe, expect, it, vi } from 'vitest';
 const code=readFileSync(new URL('../public/sw.js',import.meta.url),'utf8');
 function worker(origin:string, control='no-cache') {
  const listeners:Record<string,(event:unknown)=>void>={};
- const put=vi.fn();const match=vi.fn().mockResolvedValue(undefined);
+ const put=vi.fn();const match=vi.fn().mockResolvedValue(undefined);const keys=vi.fn().mockResolvedValue([]);const del=vi.fn().mockResolvedValue(true);
  const showNotification=vi.fn().mockResolvedValue(undefined);
  const fetch=vi.fn().mockResolvedValue(new Response('chunk',{headers:{'cache-control':control}}));
- vm.runInNewContext(code,{URL,Response,fetch,setTimeout:(run:()=>void)=>run(),caches:{open:async()=>({match,put})},self:{location:{origin},registration:{showNotification},addEventListener:(key:string,fn:(event:unknown)=>void)=>{listeners[key]=fn}}});
- return {listeners,put,match,fetch,showNotification};
+ vm.runInNewContext(code,{URL,Response,fetch,setTimeout:(run:()=>void)=>run(),caches:{open:async()=>({match,put,keys,delete:del})},self:{location:{origin},registration:{showNotification},addEventListener:(key:string,fn:(event:unknown)=>void)=>{listeners[key]=fn}}});
+ return {listeners,put,match,keys,del,fetch,showNotification};
 }
 describe('staff worker app chunk caching',()=>{
  it('always lets localhost development chunks go to the network',()=>{
@@ -25,6 +25,13 @@ describe('staff worker app chunk caching',()=>{
   const w=worker('https://app.example.com','public,max-age=31536000,immutable');let response:Promise<Response>|undefined;
   w.listeners.fetch({request:{method:'GET',url:'https://app.example.com/_next/static/chunks/hash.js'},respondWith:(p:Promise<Response>)=>{response=p}});
   await response;expect(w.put).toHaveBeenCalledOnce();
+ });
+ it('drops the oldest stored chunks once a device holds too many',async()=>{
+  const w=worker('https://app.example.com','public,max-age=31536000,immutable');let response:Promise<Response>|undefined;
+  w.keys.mockResolvedValue(Array.from({length:602},(_,index)=>`chunk-${index}`));
+  w.listeners.fetch({request:{method:'GET',url:'https://app.example.com/_next/static/chunks/new.js'},respondWith:(p:Promise<Response>)=>{response=p}});
+  await response;
+  expect(w.del.mock.calls.map(([entry])=>entry)).toEqual(['chunk-0','chunk-1']);
  });
  it('does not show a staff alert after its session is no longer active',async()=>{
   const w=worker('https://app.example.com');
@@ -81,7 +88,7 @@ describe('staff worker app chunk caching',()=>{
   const event={notification:{data:{url:'/console/orders',sessionId:'session-a'},close},waitUntil:vi.fn()};
   // Re-evaluate with the client API available for the click handler.
   const listeners:Record<string,(event:unknown)=>void>={};
-  vm.runInNewContext(code,{URL,Response,fetch:w.fetch,caches:{open:async()=>({match:w.match,put:w.put})},self:{location:{origin:'https://app.example.com'},registration:{showNotification:w.showNotification},clients:{matchAll:async()=>[client],openWindow},addEventListener:(key:string,fn:(event:unknown)=>void)=>{listeners[key]=fn}}});
+  vm.runInNewContext(code,{URL,Response,fetch:w.fetch,caches:{open:async()=>({match:w.match,put:w.put,keys:w.keys,delete:w.del})},self:{location:{origin:'https://app.example.com'},registration:{showNotification:w.showNotification},clients:{matchAll:async()=>[client],openWindow},addEventListener:(key:string,fn:(event:unknown)=>void)=>{listeners[key]=fn}}});
   listeners.notificationclick?.(event);
   await (event.waitUntil as ReturnType<typeof vi.fn>).mock.calls[0][0];
   expect(close).toHaveBeenCalledOnce();

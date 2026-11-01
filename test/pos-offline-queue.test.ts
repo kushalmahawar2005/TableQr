@@ -192,6 +192,20 @@ describe("offline POS durable outbox", () => {
     expect(result).toEqual({ synced: 2, blocked: null });
   });
 
+  it("attaches a round saved while the sync was running to the visit it opened", async () => {
+    const storage = await import("@/lib/pos-offline-queue");
+    const { syncSavedPosOrders } = await import("@/lib/pos-offline-sync");
+    await storage.writeOfflinePosOrder("outlet-1", makeOrder("round-1"));
+    await syncSavedPosOrders({
+      outletId: "outlet-1",
+      deliver: async (order, checkpoint) => {
+        await storage.writeOfflinePosOrder("outlet-1", makeOrder("saved-during-sync", 200));
+        await checkpoint({ ...order, current: { ...order.current, sessionId: "session-1" } });
+      },
+    });
+    expect((await storage.readOfflinePosOrders("outlet-1")).map((order) => [order.id, order.current.sessionId])).toEqual([["saved-during-sync", "session-1"]]);
+  });
+
   it("does not attach another login's or a manager-approved order to the opened visit", async () => {
     const storage = await import("@/lib/pos-offline-queue");
     const { syncSavedPosOrders } = await import("@/lib/pos-offline-sync");

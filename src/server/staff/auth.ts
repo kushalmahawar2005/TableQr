@@ -8,6 +8,7 @@ import { uuidv7 } from "@/db/id";
 import * as s from "@/db/schema";
 import { actionRoles, can, canUse, type ConsoleSectionSlug, type FloorPermission, type RoleAccess, type StaffRole } from "@/lib/staff-permissions";
 import { AppError } from "../errors";
+import { limitByClient } from "../request-limit";
 import type { StaffContext } from "./context";
 import { ACCESS_STOPPED, tenantAccess } from "../access";
 
@@ -43,6 +44,7 @@ const failed = (message = "Phone number or PIN is not right.", details?: Record<
  */
 export async function verifyStaffPin(input: { outletCode: string; phone: string; pin: string; now?: Date }) {
   const { verifyPin } = await import("./pin");
+  await limitByClient("staff-login", 60);
   const now = input.now ?? new Date();
   const phone = normalPhone(String(input.phone ?? ""));
   // isolation-exempt: the tenant is resolved here, from the public outlet code typed at sign-in

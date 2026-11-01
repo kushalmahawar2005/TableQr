@@ -9,6 +9,7 @@ import { OTP, normaliseCode } from "@/domain/otp";
 import { isValidIndianMobile, normaliseIndianMobile, toE164 } from "@/domain/phone";
 import { LOCK_THEN_READ } from "../db-types";
 import { AppError } from "../errors";
+import { limitByClient } from "../request-limit";
 import { smsMockEnabled, smsSender } from "../sms/sender";
 import { bookingByToken } from "./core";
 
@@ -27,6 +28,7 @@ function activeHold(row: typeof s.reservations.$inferSelect, now: Date) {
 }
 
 export async function sendBookingOtp(outletCode: string, token: string, deviceId: string, phoneInput: string, now = new Date()) {
+  await limitByClient("sms", 20);
   const { row, scope } = await bookingByToken(outletCode, token, now);
   activeHold(row, now);
   if (!deviceId || deviceId.length > 64) throw new AppError("invalid_state", "Please reopen the booking page and try again.");

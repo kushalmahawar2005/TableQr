@@ -59,7 +59,7 @@ export async function placeOrder(ctx: GuestContext, input: PlaceInput = {}, now 
     // Portion counters that reached zero take the dish off every phone's menu
     ...placed.soldOutItemIds.map((itemId) => ({ topic: topics.menu, type: "item.availability", data: { itemId, available: false } })),
   ]);
-  await sendOutletPush(ctx, {
+  void sendOutletPush(ctx, {
     title: "New table order",
     body: "A guest placed an order. Open Tableeqr to view it.",
     url: "/console",

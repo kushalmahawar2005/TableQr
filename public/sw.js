@@ -1,6 +1,7 @@
 /* Staff PWA: cache the user-independent offline POS shell and immutable app code. */
 const STAFF_SHELL_CACHE = "tableeqr-staff-shell-v2";
 const STAFF_ASSET_CACHE = "tableeqr-staff-assets-v2";
+const MAX_CACHED_ASSETS = 600;
 
 self.addEventListener("install", (event) => {
   event.waitUntil((async () => {
@@ -44,7 +45,12 @@ self.addEventListener("fetch", (event) => {
       const hit = await cache.match(request);
       if (hit) return hit;
       const response = await fetch(request);
-      if (response.ok && response.headers.get("cache-control")?.includes("immutable")) await cache.put(request, response.clone());
+      if (response.ok && response.headers.get("cache-control")?.includes("immutable")) {
+        await cache.put(request, response.clone());
+        // Every deploy adds new hashed files; the oldest belong to builds no tab still needs.
+        const stored = await cache.keys();
+        await Promise.all(stored.slice(0, Math.max(0, stored.length - MAX_CACHED_ASSETS)).map((entry) => cache.delete(entry)));
+      }
       return response;
     })());
     return;

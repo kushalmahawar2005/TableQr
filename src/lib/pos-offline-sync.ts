@@ -36,6 +36,7 @@ export async function syncSavedPosOrders(input: {
     const hold = (order: OfflinePosOrder) => visitKeys(order).forEach((key) => held.add(key));
     let synced = 0;
     let blocked: OfflinePosOrder | null = null;
+    const openedVisits: OfflinePosOrder[] = [];
     for (let index = 0; index < orders.length; index++) {
       let order = orders[index];
       const id = order.id;
@@ -49,7 +50,9 @@ export async function syncSavedPosOrders(input: {
           await writeOfflinePosOrder(input.outletId, updated);
           const opened = !order.current.sessionId && !!updated.current.sessionId;
           order = updated;
-          if (opened) await shareOpenedVisit(input.outletId, orders, updated, index + 1);
+          if (!opened) return;
+          openedVisits.push(updated);
+          await shareOpenedVisit(input.outletId, orders, updated, index + 1);
         });
         await removeOfflinePosOrder(input.outletId, order.id);
         synced++;
@@ -67,6 +70,11 @@ export async function syncSavedPosOrders(input: {
         hold(stopped);
         if (connectionLost(error)) break;
       }
+    }
+    // An order saved while this pass was running is not in the snapshot
+    if (openedVisits.length) {
+      const queued = await readOfflinePosOrders(input.outletId);
+      for (const visit of openedVisits) await shareOpenedVisit(input.outletId, queued, visit, 0);
     }
     return { synced, blocked };
   });

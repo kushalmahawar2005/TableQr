@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { readDeliveryPolicy } from "@/domain/delivery";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
@@ -12,7 +13,7 @@ import { BUSINESS_PACKAGE_PROFILES } from "@/lib/subscription-pricing";
 
 /** Public business entry point. Resolve the tenant from the public outlet code, then scope all
  * other reads to that tenant so an untrusted URL cannot reveal another outlet's details. */
-export async function getRestaurantHome(outletCode: string) {
+async function loadRestaurantHome(outletCode: string) {
   const [row] = await db.select({
     id: s.outlets.id,
     tenantId: s.outlets.tenantId,
@@ -62,3 +63,6 @@ export async function getRestaurantHome(outletCode: string) {
     },
   };
 }
+
+/** The layout, page and app manifest all ask for this; one guest page load reads it once. */
+export const getRestaurantHome = cache(loadRestaurantHome);

@@ -9,6 +9,7 @@ import { OTP, normaliseCode } from "@/domain/otp";
 import { isValidIndianMobile, normaliseIndianMobile, toE164 } from "@/domain/phone";
 import { LOCK_THEN_READ } from "../db-types";
 import { AppError } from "../errors";
+import { limitByClient } from "../request-limit";
 import { smsMockEnabled, smsSender } from "../sms/sender";
 import { deliveryCheckout } from "./checkout";
 import { deliveryOutlet } from "./catalog";
@@ -24,6 +25,7 @@ const active = (row: typeof s.deliveryCheckouts.$inferSelect, now: Date) => {
 };
 
 export async function sendDeliveryOtp(code: string, token: string, deviceId: string, phoneInput: string, now = new Date()) {
+  await limitByClient("sms", 20);
   const { outlet, row } = await deliveryCheckout(code, token, deviceId, now);
   await deliveryOutlet(code, true, now, row.serviceMode);
   active(row, now);
