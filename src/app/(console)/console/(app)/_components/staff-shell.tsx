@@ -217,7 +217,7 @@ export function StaffShell({
     <div
       lang={lang}
       style={{ "--sidebar-width": folded ? "4rem" : "13rem" } as CSSProperties}
-      className={`flex min-h-dvh flex-1 flex-col bg-paper pt-[max(env(safe-area-inset-top),var(--staff-app-top,0px))] text-ink sm:flex-row sm:pt-0 ${dark ? "theme-dark" : ""}`}
+      className={`staff-theme flex min-h-dvh flex-1 flex-col bg-dashboard-canvas pt-[max(env(safe-area-inset-top),var(--staff-app-top,0px))] text-ink sm:flex-row sm:pt-0 ${dark ? "theme-dark" : ""}`}
     >
       <header
         className={`sticky top-[max(env(safe-area-inset-top),var(--staff-app-top,0px))] z-30 flex h-12 shrink-0 items-center justify-between border-b px-2.5 sm:hidden print:hidden ${active === "dashboard" ? "border-line bg-paper" : "border-line bg-surface"}`}
@@ -228,7 +228,7 @@ export function StaffShell({
             <span className="block truncate font-display text-[12px] font-bold leading-tight text-ink">
               {brandName ?? staff.outlet}
             </span>
-            {staff.outlet !== brandName && <span className="block truncate text-[10px] font-medium leading-tight text-muted">
+            {brandName && staff.outlet !== brandName && <span className="block truncate text-[10px] font-medium leading-tight text-muted">
               {staff.outlet}
             </span>}
           </span>
@@ -267,19 +267,19 @@ export function StaffShell({
         </span>
       </header>
       <aside
-        className={`sticky top-0 hidden h-dvh w-16 shrink-0 flex-col border-r transition-[width] duration-200 sm:flex print:hidden ${active === "dashboard" ? "border-line bg-paper" : "border-line bg-surface"} ${folded ? "" : "lg:w-52"}`}
+        className={`sticky top-0 hidden h-dvh w-16 shrink-0 flex-col border-r transition-[width] duration-200 sm:flex print:hidden border-line bg-surface ${folded ? "" : "lg:w-52"}`}
       >
         <div
           className={`flex h-18 items-center gap-3 border-b border-line px-3 ${folded ? "" : "lg:px-4"}`}
         >
           <OutletBrandMark name={brandName ?? staff.outlet} logoUrl={logoUrl} />
           <span className={`hidden min-w-0 ${folded ? "" : "lg:block"}`}>
-            <span className="block truncate font-display text-base font-bold text-ink">
+            <span title={brandName ?? staff.outlet} className="block truncate font-display text-sm font-bold text-ink">
               {brandName ?? staff.outlet}
             </span>
-            <span className="block truncate text-xs font-medium text-muted">
+            {brandName && staff.outlet !== brandName && <span className="block truncate text-xs font-medium text-muted">
               {staff.outlet}
-            </span>
+            </span>}
           </span>
         </div>
         <nav
@@ -371,7 +371,7 @@ export function StaffShell({
       <div className="flex min-w-0 flex-1 flex-col pb-[calc(4rem+env(safe-area-inset-bottom))] sm:pb-0">
         {/* Top bar on tablets and computers, level with the sidebar's logo row */}
         <header
-          className={`sticky top-0 z-20 hidden h-18 shrink-0 print:hidden items-center justify-between gap-4 border-b px-4 backdrop-blur-[4px] sm:flex lg:px-6 ${active === "dashboard" ? "border-line bg-paper/95" : "border-line bg-surface/95"}`}
+          className={`sticky top-0 z-20 hidden h-18 shrink-0 print:hidden items-center justify-between gap-4 border-b border-line bg-surface px-4 sm:flex lg:px-6`}
         >
           {/* Left: Sidebar toggle + Restaurant / Outlet Identity */}
           <div className="flex items-center gap-2.5 min-w-0">
@@ -397,7 +397,7 @@ export function StaffShell({
             {outlets.length > 1 && !preview ? (
               <OutletSwitcher outlets={outlets} lang={lang} logoUrl={logoUrl} />
             ) : (
-              <div className="flex h-12 items-center gap-3 rounded-xl px-2 py-1">
+              <div className={`flex h-12 items-center gap-3 rounded-xl px-2 py-1 ${folded ? "" : "lg:hidden"}`}>
                 <OutletBrandMark name={staff.outlet} logoUrl={logoUrl} />
                 <div className="min-w-0 text-left">
                   <p className="truncate text-sm font-bold text-ink">

@@ -2,8 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { useEffect, useState, useTransition } from "react";
-import { Check, ClipboardList, Clock, Copy, CreditCard, Lock, Plus, Receipt, Store, Trash2, Upload, Wallet, Wifi, X, type LucideIcon } from "lucide-react";
+import { createContext, useContext, useEffect, useState, useTransition, type ReactNode } from "react";
+import { Check, ClipboardList, Clock, Copy, CreditCard, Globe, Link2, Lock, Plus, Printer, Receipt, Store, Trash2, Truck, Upload, Wallet, Wifi, X, type LucideIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { OutletSettings } from "@/server/staff/settings-read";
@@ -14,38 +14,39 @@ import { DeliverySettings } from "./delivery-settings";
 import { GUEST_SERVICE_LABELS, type GuestService } from "@/domain/guest-services";
 import { LogoCropDialog } from "./logo-crop-dialog";
 import { BUSINESS_PACKAGE_PROFILES } from "@/lib/subscription-pricing";
+import { primaryButton } from "../../orders/_components/orders-ui";
 
 const DAYS = [["mon", "Monday"], ["tue", "Tuesday"], ["wed", "Wednesday"], ["thu", "Thursday"], ["fri", "Friday"], ["sat", "Saturday"], ["sun", "Sunday"]] as const;
 const MODE: Record<string, string> = { open: "Open: anyone who scans can order", verified: "Verified: guests confirm their phone number first", host_confirmed: "Host confirms: staff approve each table" };
 const TIP_OPTIONS = [5, 10, 15, 20];
-// Left-hand list of settings sections available to this business category.
+// The settings list. One section shows at a time; the second group saves itself, so it has no save bar.
 const NAV = [
-  ["restaurant", "Restaurant", Store], ["tax", "Tax and licences", Receipt], ["bill", "Bill and tips", Wallet],
-  ["orders", "Orders", ClipboardList], ["guest-link", "Guest entry link", Store], ["delivery", "Delivery setup", Store], ["room-guest", "Room guest page", Wifi], ["hours", "Opening hours", Clock], ["plan", "Plan", CreditCard],
+  ["restaurant", "Business profile", Store], ["tax", "Tax and licences", Receipt], ["bill", "Bill and tips", Wallet],
+  ["orders", "Order preferences", ClipboardList], ["guest-link", "Guest experience", Link2], ["delivery", "Pickup and delivery", Truck], ["room-guest", "Room guest page", Wifi], ["hours", "Opening hours", Clock], ["plan", "Plan and setup", CreditCard],
 ] as const;
+const ADVANCED = [["payments", "Online payments", CreditCard], ["printers", "Printers", Printer], ["domain", "Custom domain", Globe]] as const;
+const ActiveSection = createContext("");
 type Hours = Record<string, [string, string][]>;
 
 const emptyHours = (): Hours => Object.fromEntries(DAYS.map(([k]) => [k, []]));
-const fieldCls = "h-11 rounded-xl";
+const fieldCls = "h-10 rounded-input";
 
 function Toggle({ on, onChange, label, disabled }: { on: boolean; onChange: (v: boolean) => void; label: string; disabled?: boolean }) {
   return (
-    <button type="button" role="switch" aria-checked={on} aria-label={label} disabled={disabled} onClick={() => onChange(!on)} className={`relative h-7 w-12 shrink-0 rounded-full border transition-colors disabled:opacity-50 ${on ? "border-brand bg-brand" : "border-line bg-ink/10"}`}>
-      <span className={`absolute top-0.5 size-5 rounded-full bg-white shadow transition-all ${on ? "left-[1.375rem]" : "left-0.5"}`} />
+    <button type="button" role="switch" aria-checked={on} aria-label={label} disabled={disabled} onClick={() => onChange(!on)} className={`relative h-6 w-10 shrink-0 cursor-pointer rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${on ? "bg-[var(--state-available)]" : "bg-ink/20"}`}>
+      <span className={`absolute top-0.5 size-5 rounded-full bg-white shadow transition-all ${on ? "left-[18px]" : "left-0.5"}`} />
     </button>
   );
 }
 
-function Section({ id, icon: Icon, title, desc, action, children }: { id: string; icon: LucideIcon; title: string; desc: string; action?: React.ReactNode; children?: React.ReactNode }) {
+function Section({ id, title, desc, action, children }: { id: string; icon?: LucideIcon; title: string; desc: string; action?: ReactNode; children?: ReactNode }) {
+  const shown = useContext(ActiveSection) === id;
   return (
-    <section id={id} aria-labelledby={`${id}-title`} className="scroll-mt-20 overflow-hidden rounded-2xl border border-line bg-surface">
+    <section id={id} aria-labelledby={`${id}-title`} hidden={!shown} className="overflow-hidden rounded-2xl border border-line bg-surface">
       <header className={`flex items-start justify-between gap-3 px-5 py-4 ${children ? "border-b border-line" : ""}`}>
-        <div className="flex min-w-0 items-start gap-3">
-          <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-ink/5 text-ink"><Icon className="size-4" aria-hidden="true" /></span>
-          <div className="min-w-0">
-            <h2 id={`${id}-title`} className="font-display text-section font-bold text-ink">{title}</h2>
-            <p className="text-sm text-muted">{desc}</p>
-          </div>
+        <div className="min-w-0">
+          <h2 id={`${id}-title`} className="font-display text-base font-bold text-ink">{title}</h2>
+          <p className="mt-0.5 text-sm text-muted">{desc}</p>
         </div>
         {action}
       </header>
@@ -71,7 +72,7 @@ function Fixed({ children }: { children: React.ReactNode }) {
   return <p className="flex items-center gap-1.5 text-sm font-semibold text-ink sm:justify-end"><Lock className="size-3.5 text-muted" aria-hidden="true" />{children}</p>;
 }
 
-export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boolean }) {
+export function SettingsScreen({ o, canEdit, payments, printers, domain }: { o: OutletSettings; canEdit: boolean; payments?: ReactNode; printers?: ReactNode; domain?: ReactNode }) {
   const router = useRouter();
   const businessType = o.businessType ?? "restaurant";
   const businessProfile = BUSINESS_PACKAGE_PROFILES[businessType];
@@ -137,29 +138,21 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
   const scNum = sc.trim() === "" ? 0 : Number(sc);
   const bookingAdvanceNum = bookingAdvance.trim() === "" ? 0 : Number(bookingAdvance);
 
-  // Light up the section in the left list that is at the top of the screen
+  // A link such as /console/settings#hours opens that section
   useEffect(() => {
-    const seen = new IntersectionObserver((entries) => {
-      const hash = window.location.hash.slice(1);
-      const atPageEnd = window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 8;
-      // The last sections cannot reach the top of the viewport because there is little content
-      // after them. Keep the clicked anchor selected while the browser is pinned at the bottom.
-      if (atPageEnd && NAV.some(([id]) => id === hash)) {
-        setActiveId(hash);
-        return;
-      }
-      const top = entries.filter((e) => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
-      if (top) setActiveId(top.target.id);
-    }, { rootMargin: "-80px 0px -60% 0px" });
-    NAV.forEach(([id]) => { const el = document.getElementById(id); if (el) seen.observe(el); });
     const syncHash = () => {
       const hash = window.location.hash.slice(1);
-      if (NAV.some(([id]) => id === hash)) setActiveId(hash);
+      if ([...NAV, ...ADVANCED].some(([id]) => id === hash)) setActiveId(hash);
     };
     window.addEventListener("hashchange", syncHash);
     syncHash();
-    return () => { seen.disconnect(); window.removeEventListener("hashchange", syncHash); };
+    return () => window.removeEventListener("hashchange", syncHash);
   }, []);
+  const openSection = (id: string) => { setActiveId(id); window.history.replaceState(null, "", `#${id}`); window.scrollTo({ top: 0 }); };
+  const navItem = (id: string, label: string, Icon: LucideIcon) => (
+    <li key={id}><button type="button" onClick={() => openSection(id)} aria-current={activeId === id ? "true" : undefined} className={`flex min-h-10 w-full cursor-pointer items-center gap-2.5 rounded-lg px-3 text-left text-sm font-semibold transition-colors ${activeId === id ? "bg-sage text-forest" : "text-muted hover:bg-ink/5 hover:text-ink"}`}><Icon className="size-4 shrink-0" aria-hidden="true" />{label}</button></li>
+  );
+  const advancedOpen = ADVANCED.some(([id]) => id === activeId);
 
   function copyCode() {
     try { void navigator.clipboard.writeText(o.code); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* clipboard may be blocked; the code stays on screen */ }
@@ -273,40 +266,30 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
   }
 
   return (
-    <main className="mx-auto w-full max-w-[1280px] px-4 pt-5 pb-28 sm:px-6 lg:px-8 lg:pt-7">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="text-caption font-semibold uppercase tracking-[0.12em] text-muted">{o.name} · {businessLabel} settings</p>
-          <h1 className="mt-1 font-display text-title font-bold text-ink">Settings</h1>
-          <p className="mt-1 max-w-2xl text-body text-muted">{canEdit ? "Keep your business details, guest payments and ordering preferences up to date." : "View only. Ask the outlet owner to change these settings."}</p>
+    <ActiveSection.Provider value={activeId}>
+    <div className="dashboard-theme min-h-[calc(100dvh-4rem)] bg-dashboard-canvas sm:min-h-[calc(100dvh-4.5rem)]">
+    <main className="mx-auto w-full max-w-[1440px] px-3 pt-3 pb-28 sm:px-6 sm:pt-5 lg:px-8 lg:pt-6">
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="font-display text-lg font-bold leading-6 tracking-tight text-ink sm:text-[28px] sm:leading-8">Settings</h1>
+          <p className="mt-1 text-sm font-medium text-muted">{canEdit ? "Choose what you want to change." : "View only. Ask the outlet owner to change these settings."}</p>
         </div>
-        <span className="inline-flex items-center gap-2 rounded-full border border-line bg-surface px-3 py-1.5 text-xs font-semibold text-muted">
-          <span className={`size-2 rounded-full ${canEdit ? "bg-[var(--state-available)]" : "bg-ink/30"}`} aria-hidden="true" />
-          {canEdit ? "Owner access" : "View only"}
-        </span>
+        <span className="inline-flex items-center gap-1.5 rounded-md bg-sage px-2 py-1 text-xs font-semibold text-forest">{canEdit ? "Owner access" : "View only"}</span>
       </header>
 
-      <nav aria-label="Settings sections" className="no-scrollbar -mx-4 mt-5 flex gap-1.5 overflow-x-auto px-4 pb-1 lg:hidden">
-        {visibleNav.map(([id, label]) => <a key={id} href={`#${id}`} onClick={() => setActiveId(id)} className={`shrink-0 rounded-full border px-3 py-1.5 text-sm font-semibold ${activeId === id ? "border-ink bg-ink text-paper" : "border-line text-muted hover:text-ink"}`}>{id === "restaurant" ? "Business profile" : id === "guest-link" ? "Guest link" : label}</a>)}
+      <nav aria-label="Settings sections" className="no-scrollbar -mx-3 mt-4 flex gap-2 overflow-x-auto px-3 pb-1 sm:-mx-6 sm:px-6 lg:hidden">
+        {[...visibleNav, ...ADVANCED].map(([id, label]) => <button key={id} type="button" onClick={() => openSection(id)} aria-current={activeId === id ? "true" : undefined} className={`min-h-10 shrink-0 cursor-pointer rounded-full border px-4 text-sm font-semibold transition-colors ${activeId === id ? "border-forest bg-forest text-white" : "border-line bg-surface text-muted hover:text-ink"}`}>{label}</button>)}
       </nav>
 
-      <div className="mt-4 grid gap-6 lg:mt-6 lg:grid-cols-[15rem_minmax(0,1fr)]">
-        <nav aria-label="Settings sections" className="hidden lg:block">
-          <div className="sticky top-20 rounded-2xl border border-line bg-surface p-2">
-          <p className="px-3 pb-2 pt-1 text-[11px] font-bold uppercase tracking-wider text-muted">Settings menu</p>
-          <ul className="space-y-1">
-            {visibleNav.map(([id, label, Icon]) => (
-              <li key={id}>
-                <a href={`#${id}`} onClick={() => setActiveId(id)} aria-current={activeId === id ? "true" : undefined} className={`flex min-h-10 items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-semibold transition-colors ${activeId === id ? "bg-brand-soft text-brand-strong" : "text-muted hover:bg-ink/[0.03] hover:text-ink"}`}>
-                  <Icon className="size-4" aria-hidden="true" />{id === "restaurant" ? "Business profile" : id === "guest-link" ? "Guest link" : label}
-                </a>
-              </li>
-            ))}
-          </ul>
-          </div>
+      <div className="mt-3 grid items-start gap-4 lg:mt-5 lg:grid-cols-[14rem_minmax(0,1fr)]">
+        <nav aria-label="Settings sections" className="sticky top-22 hidden rounded-2xl border border-line bg-surface p-2 lg:block">
+          <p className="px-3 pb-1.5 pt-1 text-[11px] font-semibold uppercase tracking-wide text-muted">Daily</p>
+          <ul className="space-y-0.5">{visibleNav.map(([id, label, Icon]) => navItem(id, label, Icon))}</ul>
+          <p className="mt-3 px-3 pb-1.5 pt-1 text-[11px] font-semibold uppercase tracking-wide text-muted">Advanced</p>
+          <ul className="space-y-0.5">{ADVANCED.map(([id, label, Icon]) => navItem(id, label, Icon))}</ul>
         </nav>
 
-        <div className="min-w-0 space-y-4">
+        <div className="w-full min-w-0 max-w-4xl">
           <Section id="restaurant" icon={Store} title="Business profile" desc="Shown on bills and guest pages.">
             <Row label="Brand logo" hint="Choose a logo, crop it into a circle, and it will show across your guest pages and app.">
               <div className="flex flex-wrap items-center gap-3 sm:justify-end">
@@ -317,12 +300,12 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
                   ) : <Store className="size-6 text-muted" aria-hidden="true" />}
                 </div>
                 {canEdit && <>
-                  <label className={`inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-xl border border-line bg-surface px-3 text-sm font-semibold text-ink hover:border-brand hover:text-brand ${logoBusy ? "pointer-events-none opacity-50" : ""}`}>
+                  <label className={`inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-xl border border-line bg-surface px-3 text-sm font-semibold text-ink hover:border-forest/40 ${logoBusy ? "pointer-events-none opacity-50" : ""}`}>
                     <Upload className="size-4" aria-hidden="true" />{selectedLogo ? "Choose another" : logoUrl ? "Change logo" : "Upload logo"}
                     <input type="file" accept="image/jpeg,image/png,image/webp,image/avif" className="sr-only" disabled={logoBusy} onChange={selectLogo} />
                   </label>
                   {selectedLogo ? <>
-                    <button type="button" disabled={logoBusy} onClick={() => void saveLogo()} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-brand px-4 text-sm font-semibold text-brand-on hover:bg-brand-hover disabled:opacity-50"><Check className="size-4" aria-hidden="true" />{logoBusy ? "Saving…" : "Save logo"}</button>
+                    <button type="button" disabled={logoBusy} onClick={() => void saveLogo()} className="inline-flex min-h-10 items-center gap-2 rounded-input bg-forest px-4 text-sm font-semibold text-white hover:bg-forest-hover disabled:opacity-50"><Check className="size-4" aria-hidden="true" />{logoBusy ? "Saving…" : "Save logo"}</button>
                     <button type="button" disabled={logoBusy} onClick={cancelLogoSelection} className="inline-flex min-h-10 items-center rounded-xl px-3 text-sm font-semibold text-muted hover:bg-ink/5 hover:text-ink disabled:opacity-50">Cancel</button>
                   </> : logoUrl && <button type="button" disabled={logoBusy} onClick={() => void removeLogo()} className="inline-flex min-h-10 items-center gap-2 rounded-xl px-3 text-sm font-semibold text-muted hover:bg-danger/10 hover:text-danger disabled:opacity-50"><Trash2 className="size-4" aria-hidden="true" />Remove</button>}
                 </>}
@@ -339,7 +322,7 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
             </Row>
             <Row label="Guest link" hint="Share this link so guests can use the services you offer.">
               <div className="flex min-w-0 items-center gap-2 sm:justify-end">
-                <a href={`/r/${encodeURIComponent(o.code)}`} target="_blank" rel="noreferrer" className="min-w-0 truncate text-sm font-medium text-brand-strong underline underline-offset-2">/r/{o.code}</a>
+                <a href={`/r/${encodeURIComponent(o.code)}`} target="_blank" rel="noreferrer" className="min-w-0 truncate text-sm font-medium text-forest underline underline-offset-2">/r/{o.code}</a>
                 <button type="button" onClick={copyGuestLink} aria-label="Copy guest link" className="inline-flex min-h-8 shrink-0 items-center gap-1 rounded-lg border border-line px-2 text-xs font-semibold hover:border-ink/40">{guestLinkCopied ? <Check className="size-3.5" aria-hidden="true" /> : <Copy className="size-3.5" aria-hidden="true" />}{guestLinkCopied ? "Copied" : "Copy"}</button>
               </div>
             </Row>
@@ -364,7 +347,7 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
               <div className="flex flex-wrap gap-2 sm:justify-end">
                 {TIP_OPTIONS.map((t) => {
                   const on = tips.includes(t);
-                  return <button key={t} type="button" disabled={!canEdit} aria-pressed={on} onClick={() => setTips((x) => (on ? x.filter((v) => v !== t) : [...x, t].sort((a, b) => a - b)))} className={`min-h-10 min-w-14 rounded-full border px-4 text-sm font-semibold disabled:opacity-60 ${on ? "border-ink bg-ink text-paper" : "border-line hover:border-ink/40"}`}>{t}%</button>;
+                  return <button key={t} type="button" disabled={!canEdit} aria-pressed={on} onClick={() => setTips((x) => (on ? x.filter((v) => v !== t) : [...x, t].sort((a, b) => a - b)))} className={`min-h-10 min-w-14 rounded-full border px-4 text-sm font-semibold disabled:opacity-60 ${on ? "border-forest bg-forest text-white" : "border-line hover:border-ink/40"}`}>{t}%</button>;
                 })}
               </div>
             </Row>
@@ -395,7 +378,7 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
             <div className="space-y-3 py-4">
               <div className="flex items-center justify-between gap-4"><div><p className="text-sm font-semibold">Guest announcement</p><p className="mt-0.5 text-xs text-muted">Publish a short message guests see on your guest link.</p></div><Toggle on={announcementActive} onChange={setAnnouncementActive} label="Publish guest announcement" disabled={!canEdit} /></div>
               <Input aria-label="Announcement title" maxLength={80} placeholder="Title, e.g. Weekend special" className={fieldCls} value={announcementTitle} onChange={event => setAnnouncementTitle(event.target.value)} disabled={!canEdit} />
-              <textarea aria-label="Announcement message" maxLength={240} rows={3} placeholder="Write a short update for guests" className="w-full resize-y rounded-xl border border-line bg-surface px-3 py-2 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-brand" value={announcementBody} onChange={event => setAnnouncementBody(event.target.value)} disabled={!canEdit} />
+              <textarea aria-label="Announcement message" maxLength={240} rows={3} placeholder="Write a short update for guests" className="w-full resize-y rounded-xl border border-line bg-surface px-3 py-2 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-forest" value={announcementBody} onChange={event => setAnnouncementBody(event.target.value)} disabled={!canEdit} />
               <p className="text-right text-xs text-muted">{announcementBody.length}/240</p>
             </div>
             {showBookingSettings && <Row label="Booking advance per reservation" hint="This fixed deposit is charged when a guest books and is credited to their final bill. Set ₹0 to collect only preorder or peak-slot advances."><div className="relative sm:ml-auto sm:max-w-xs"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted">₹</span><Input inputMode="decimal" type="number" min="0" max="10000000" step="0.01" className={`${fieldCls} w-full pl-8`} value={bookingAdvance} onChange={event => setBookingAdvance(event.target.value)} disabled={!canEdit} /></div></Row>}
@@ -418,7 +401,7 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
                 finally { setQrBusy(false); }
               }} /></label>
             </div>}
-            <a className="inline-flex min-h-11 items-center py-3 font-semibold text-brand-strong underline underline-offset-4" href={`/r/${encodeURIComponent(o.code)}`} target="_blank" rel="noreferrer">Preview guest link ↗</a>
+            <a className="inline-flex min-h-11 items-center py-3 font-semibold text-forest underline underline-offset-4" href={`/r/${encodeURIComponent(o.code)}`} target="_blank" rel="noreferrer">Preview guest link ↗</a>
           </Section>
 
           {showDelivery && <Section id="delivery" icon={Store} title={o.deliveryAvailable && o.pickupAvailable ? "Online orders" : o.deliveryAvailable ? "Delivery setup" : "Pickup setup"} desc="Choose which online order types guests can place and how they pay.">
@@ -477,19 +460,24 @@ export function SettingsScreen({ o, canEdit }: { o: OutletSettings; canEdit: boo
               {planStats.map(([k, v]) => <div key={k} className="min-w-0 px-4 first:pl-0"><dt className="text-xs text-muted">{k}</dt><dd className="truncate font-display text-section font-bold">{v}</dd></div>)}
             </dl>
           </Section>
+          <div hidden={activeId !== "payments"} className="[&>section]:mt-0">{payments}</div>
+          <div hidden={activeId !== "printers"} className="[&>section]:mt-0">{printers}</div>
+          <div hidden={activeId !== "domain"} className="[&>section]:mt-0">{domain}</div>
         </div>
       </div>
       {logoToCrop && <LogoCropDialog file={logoToCrop} onCancel={() => setLogoToCrop(null)} onSave={acceptLogoCrop} />}
 
-      {canEdit && (
+      {canEdit && !advancedOpen && (
         <div className="fixed inset-x-3 bottom-[calc(4rem+env(safe-area-inset-bottom)+0.75rem)] z-20 mx-auto flex max-w-[1100px] items-center justify-between gap-3 rounded-2xl border border-line bg-surface p-3 shadow-lg sm:bottom-3 lg:left-[calc(var(--sidebar-width,16rem)+0.75rem)] lg:right-3 lg:mx-0 lg:max-w-none">
-          <p role={msg?.ok === false ? "alert" : "status"} className={`flex min-w-0 items-center gap-2 text-sm font-semibold ${msg ? (msg.ok ? "text-[#16a34a]" : "text-danger") : "text-muted"}`}>
-            {!msg && <span className={`size-2 shrink-0 rounded-full ${dirty ? "bg-brand" : "bg-[var(--state-available)]"}`} aria-hidden="true" />}
+          <p role={msg?.ok === false ? "alert" : "status"} className={`flex min-w-0 items-center gap-2 text-sm font-semibold ${msg ? (msg.ok ? "text-[var(--state-available-text)]" : "text-danger") : "text-muted"}`}>
+            {!msg && <span className={`size-2 shrink-0 rounded-full ${dirty ? "bg-terracotta" : "bg-[var(--state-available)]"}`} aria-hidden="true" />}
             {msg && !(msg.ok && dirty) ? msg.text : dirty ? "You have changes that are not saved" : "Everything is saved"}
           </p>
-          <button type="button" disabled={pending || !dirty} onClick={save} className="inline-flex h-11 shrink-0 items-center rounded-xl border border-brand bg-brand px-6 text-sm font-semibold text-white hover:bg-brand-strong disabled:opacity-50">{pending ? "Saving…" : "Save changes"}</button>
+          <button type="button" disabled={pending || !dirty} onClick={save} className={primaryButton}>{pending ? "Saving…" : "Save changes"}</button>
         </div>
       )}
     </main>
+    </div>
+    </ActiveSection.Provider>
   );
 }

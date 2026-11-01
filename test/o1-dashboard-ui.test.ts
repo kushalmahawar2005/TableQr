@@ -1,3 +1,4 @@
+import { placeLabel } from "@/domain/delivery";
 import { DEFAULT_PLANS } from "@/lib/plan-features";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -207,7 +208,7 @@ describe("screen", () => {
     expect(quiet).toContain("Nothing needs your attention");
     expect(quiet).toContain("No items sold yet today.");
     expect(quiet).toContain("No reservations due");
-    expect(quiet).toContain("No recent sales trend");
+    expect(quiet).not.toContain("<svg class=\"mb-0.5");
     expect(render("no-baseline")).toContain("No baseline");
     expect(alertsOf(caseOf("quiet").data)).toEqual([]);
     expect(alertsOf(caseOf("blocked").data).map((a) => a.key)).toEqual(["blocked"]);
@@ -274,3 +275,23 @@ describe("live floor sizing", () => {
 });
 
 describe("business-aware dashboard",()=>{it("hides floor and booking panels for a cloud kitchen",()=>{const c=dashboardCases()[0];const features={...DEFAULT_PLANS[0].features,dineIn:false,rooms:false,reservations:false};const html=renderToStaticMarkup(createElement(DashboardScreen,{initial:c.data,initialTrend:c.trend,features}));for(const text of ["Live Floor","Tables in Use","Open Floor","Bookings Coming Up","Waiting List"])expect(html).not.toContain(text);expect(html).toContain("New counter order");});});
+
+describe("place names on the dashboard", () => {
+  it("never shows a hidden counter's raw code", () => {
+    expect(placeLabel("DL-q9Mi1ti_x", "Kushal")).toBe("Delivery · Kushal");
+    expect(placeLabel("DL-q9Mi1ti_x")).toBe("Delivery");
+    expect(placeLabel("TA-5")).toBe("Takeaway 5");
+    expect(placeLabel("T12")).toBe("Table T12");
+  });
+
+  it("keeps a hotel room's own name", () => {
+    expect(placeLabel("Room 204")).toBe("Room 204");
+  });
+
+  it("raises open room requests only for a business with rooms", () => {
+    const data = { ...caseOf("quiet").data, alerts: { ...caseOf("quiet").data.alerts, roomRequests: 2 } };
+    const keys = (rooms: boolean) => alertsOf(data, { rooms } as Parameters<typeof alertsOf>[1]).map((a) => a.key);
+    expect(keys(true)).toContain("room-requests");
+    expect(keys(false)).not.toContain("room-requests");
+  });
+});

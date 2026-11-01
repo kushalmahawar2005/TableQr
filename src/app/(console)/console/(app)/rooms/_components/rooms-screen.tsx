@@ -121,10 +121,10 @@ export function RoomsScreen({ initial, history: initialHistory }: { initial: Roo
   });
 
   return (
-    <main className="mx-auto w-full max-w-[1200px] px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
+    <main className="mx-auto w-full max-w-[1440px] px-3 py-3 pb-6 sm:px-6 sm:py-5 lg:px-8 lg:py-6">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="font-display text-title font-bold text-ink">Rooms</h1>
+          <h1 className="font-display text-lg font-bold leading-6 tracking-tight text-ink sm:text-[28px] sm:leading-8">Rooms</h1>
           <p className="mt-1 text-body text-muted">A clear view of every stay, room request and checkout.{data.maxRooms !== null && data.canManage ? ` · ${rooms.length} of ${data.maxRooms} rooms in your plan` : ""}</p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -183,7 +183,7 @@ export function RoomsScreen({ initial, history: initialHistory }: { initial: Roo
       <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
       <div role="tablist" aria-label="Rooms" className="inline-flex rounded-xl border border-line bg-surface p-1">
         {([["rooms", "Rooms"], ["history", "Past stays"]] as const).map(([k, label]) => (
-          <button key={k} role="tab" type="button" aria-selected={tab === k} onClick={() => setTab(k)} className={`min-h-9 rounded-lg px-4 text-body font-semibold ${focus} ${tab === k ? "bg-ink text-paper" : "text-muted hover:text-ink"}`}>
+          <button key={k} role="tab" type="button" aria-selected={tab === k} onClick={() => setTab(k)} className={`min-h-9 rounded-lg px-4 text-body font-semibold ${focus} ${tab === k ? "bg-forest text-white" : "text-muted hover:text-ink"}`}>
             {label}
           </button>
         ))}
@@ -272,7 +272,7 @@ export function RoomsScreen({ initial, history: initialHistory }: { initial: Roo
                       <button type="button" className={quiet} disabled={busy} onClick={() => setPanel({ kind: "checkout", room })}>Check out</button>
                     </>
                   ) : room.status === "vacant" ? (
-                    <button type="button" className={`${quiet} border-ink bg-ink text-paper hover:bg-ink/90`} disabled={busy} onClick={() => setPanel({ kind: "checkin", room })}>Check in</button>
+                    <button type="button" className={`${quiet} border-forest bg-forest text-white hover:bg-forest-hover`} disabled={busy} onClick={() => setPanel({ kind: "checkin", room })}>Check in</button>
                   ) : room.status === "cleaning" ? (
                     <button type="button" className={quiet} disabled={busy} onClick={() => void run(() => roomStatusAction(room.id, "vacant"), `Room ${room.number} is ready.`, false)}>Mark ready</button>
                   ) : null}
@@ -302,7 +302,7 @@ export function RoomsScreen({ initial, history: initialHistory }: { initial: Roo
           <label className="relative min-w-[200px] flex-1"><Search size={16} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted" aria-hidden /><input value={histQuery} onChange={(e) => setHistQuery(e.target.value)} placeholder="Search guest, phone or room" aria-label="Search past stays" className={`min-h-11 w-full rounded-xl border border-line bg-surface pr-3 pl-9 text-body ${focus}`} /></label>
           <select value={histRoom} onChange={(e) => setHistRoom(e.target.value)} aria-label="Room" className={`min-h-11 rounded-xl border border-line bg-surface px-3 text-body ${focus}`}><option value="all">All rooms</option>{roomsInHistory.map((n) => <option key={n} value={n}>Room {n}</option>)}</select>
           <div className="flex rounded-xl border border-line bg-surface p-1" role="group" aria-label="Period">
-            {([["today", "Today"], ["7", "7 days"], ["30", "30 days"], ["all", "All"]] as const).map(([k, label]) => <button key={k} type="button" aria-pressed={histPeriod === k} onClick={() => setHistPeriod(k)} className={`min-h-9 rounded-lg px-3 text-caption font-semibold ${histPeriod === k ? "bg-ink text-paper" : "text-muted hover:text-ink"} ${focus}`}>{label}</button>)}
+            {([["today", "Today"], ["7", "7 days"], ["30", "30 days"], ["all", "All"]] as const).map(([k, label]) => <button key={k} type="button" aria-pressed={histPeriod === k} onClick={() => setHistPeriod(k)} className={`min-h-9 rounded-lg px-3 text-caption font-semibold ${histPeriod === k ? "bg-forest text-white" : "text-muted hover:text-ink"} ${focus}`}>{label}</button>)}
           </div>
           <span className="text-caption text-muted">{shown.length} {shown.length === 1 ? "stay" : "stays"} · {rs(shown.reduce((n, h) => n + h.foodPaise, 0))} food</span>
         </div>

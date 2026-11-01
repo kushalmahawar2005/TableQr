@@ -22,12 +22,15 @@ export function forPaper(html: string, mm: PaperMm = paperSaved()) {
 
 const PAGE_RULE = /@page\{size:(\d+)mm [\d.]+mm;margin:0\}/;
 
+/** Chrome's print window can add its own margins and header lines, whatever the page asks for; this spare paper stops the last line spilling onto a second page */
+const DIALOG_TAIL_MM = 14;
+
 /**
  * A slip's page height is only an estimate when the html is built. Once laid out, set it to the
  * real height of the tallest slip so the roll neither feeds blank paper nor cuts the last lines.
  * The page is never shorter than portrait needs: a page wider than tall is printed sideways.
  */
-export function fitThermalPage(doc: Document) {
+export function fitThermalPage(doc: Document, tailMm = 0) {
   const width = Number(doc.head?.innerHTML.match(PAGE_RULE)?.[1]);
   const box = doc.body?.getBoundingClientRect();
   if (!width || !box?.height || !box.width) return;
@@ -36,7 +39,7 @@ export function fitThermalPage(doc: Document) {
   // A slip scaled down for a narrower roll may be measured before or after its zoom; the body
   // spans the paper width once scaled, so the width ratio gives the printed height either way
   const scale = Math.min(1, (width * 96) / 25.4 / box.width);
-  const wanted = Math.ceil((contentPx * scale * 25.4) / 96) + 1;
+  const wanted = Math.ceil((contentPx * scale * 25.4) / 96) + 1 + tailMm;
   const style = doc.createElement("style");
   style.textContent = `@page{size:${width}mm ${Math.max(wanted, width + PORTRAIT_GUARD_MM)}mm;margin:0}`;
   doc.head.appendChild(style);
@@ -86,7 +89,7 @@ function printInPopup(html: string) {
     return false;
   }
   let done = false;
-  const go = () => { if (done) return; done = true; fitThermalPage(win.document); win.focus(); win.print(); };
+  const go = () => { if (done) return; done = true; fitThermalPage(win.document, DIALOG_TAIL_MM); win.focus(); win.print(); };
   win.addEventListener("load", go);
   setTimeout(go, 500);
   win.addEventListener("afterprint", () => win.close());
@@ -105,7 +108,7 @@ function printInFrame(html: string) {
   doc.write(forPaper(html));
   doc.close();
   let done = false;
-  const go = () => { if (done) return; done = true; fitThermalPage(doc); frame.contentWindow?.focus(); frame.contentWindow?.print(); setTimeout(() => frame.remove(), 1500); };
+  const go = () => { if (done) return; done = true; fitThermalPage(doc, DIALOG_TAIL_MM); frame.contentWindow?.focus(); frame.contentWindow?.print(); setTimeout(() => frame.remove(), 1500); };
   frame.onload = go;
   setTimeout(go, 400);
 }

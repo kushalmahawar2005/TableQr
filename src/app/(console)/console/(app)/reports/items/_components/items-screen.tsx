@@ -61,7 +61,7 @@ export function ItemsScreen({ report: r, outletName }: { report: SalesDetail; ou
       <div className="mt-5 flex flex-wrap items-center gap-2 print:hidden">
         <div className="flex flex-wrap gap-1 rounded-xl border border-line bg-surface p-1">
           {presets.map(([label, f, t]) => (
-            <button key={label} type="button" onClick={() => go(f, t)} aria-pressed={r.from === f && r.to === t} className={`min-h-9 rounded-lg px-3 text-sm font-semibold ${r.from === f && r.to === t ? "bg-ink text-paper" : "text-muted hover:text-ink"}`}>
+            <button key={label} type="button" onClick={() => go(f, t)} aria-pressed={r.from === f && r.to === t} className={`min-h-9 rounded-lg px-3 text-sm font-semibold ${r.from === f && r.to === t ? "bg-forest text-white" : "text-muted hover:text-ink"}`}>
               {label}
             </button>
           ))}

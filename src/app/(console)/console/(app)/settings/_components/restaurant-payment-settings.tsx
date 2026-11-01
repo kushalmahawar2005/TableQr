@@ -60,7 +60,7 @@ export function RestaurantPaymentSettings({ initial, canEdit }: { initial: Outle
         <div className="space-y-2 sm:col-span-2"><Label htmlFor="merchant-cashfree-secret">Cashfree Secret Key</Label><Input id="merchant-cashfree-secret" type="password" autoComplete="new-password" value={clientSecret} onChange={event => setClientSecret(event.target.value)} placeholder="Secret is never displayed after saving" disabled={busy} /></div>
       </div> : <p className="text-sm text-muted">Only the outlet owner can connect payment credentials.</p>}
       <div className="flex flex-wrap items-center gap-3">
-        {canEdit && <button type="button" onClick={save} disabled={busy || !clientId.trim() || !clientSecret} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-brand px-5 text-sm font-semibold text-white disabled:opacity-50"><LockKeyhole className="size-4" />{busy ? "Saving securely…" : status.configured ? "Update merchant account" : "Connect merchant account"}</button>}
+        {canEdit && <button type="button" onClick={save} disabled={busy || !clientId.trim() || !clientSecret} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-forest px-5 text-sm font-semibold text-white disabled:opacity-50"><LockKeyhole className="size-4" />{busy ? "Saving securely…" : status.configured ? "Update merchant account" : "Connect merchant account"}</button>}
         {canEdit && status.configured && <button type="button" onClick={remove} disabled={busy} className="min-h-11 rounded-xl border border-line px-4 text-sm font-semibold text-ink disabled:opacity-50">Disconnect</button>}
         {message && <p role="status" className="text-sm text-muted">{message}</p>}
       </div>

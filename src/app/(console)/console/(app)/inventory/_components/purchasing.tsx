@@ -17,7 +17,7 @@ type Supplier = Purchasing["suppliers"][number];
 type Done = (message: string) => Promise<void>;
 const METHODS = [["cash", "Cash"], ["upi", "UPI"], ["bank", "Bank transfer"], ["card", "Card"], ["cheque", "Cheque"]] as const;
 
-export type BillPanel = { kind: "bill"; mode: "purchase" | "return"; supplierId?: string } | { kind: "pay"; supplier: Supplier; purchaseId?: string; due?: number } | { kind: "supplier"; supplier: Supplier | null };
+export type BillPanel = { kind: "bill"; mode: "purchase" | "return"; supplierId?: string; itemId?: string } | { kind: "pay"; supplier: Supplier; purchaseId?: string; due?: number } | { kind: "supplier"; supplier: Supplier | null };
 
 export function PurchasesTab({ data, onOpen }: { data: Purchasing; onOpen: (p: BillPanel) => void }) {
   const [open, setOpen] = useState<string | null>(null);
@@ -139,11 +139,11 @@ export function SuppliersTab({ data, onOpen }: { data: Purchasing; onOpen: (p: B
 
 // ---- sheets
 
-export function BillSheet({ mode, items, suppliers, supplierId, onClose, done }: { mode: "purchase" | "return"; items: Item[]; suppliers: Supplier[]; supplierId?: string; onClose: () => void; done: Done }) {
+export function BillSheet({ mode, items, suppliers, supplierId, itemId = "", onClose, done }: { mode: "purchase" | "return"; items: Item[]; suppliers: Supplier[]; supplierId?: string; /** Starts the bill on this item, when it was opened from one */ itemId?: string; onClose: () => void; done: Done }) {
   const [supplier, setSupplier] = useState(supplierId ?? (mode === "return" ? suppliers[0]?.id ?? "" : ""));
   const [billNo, setBillNo] = useState("");
   const [billDate, setBillDate] = useState(todayIst());
-  const [rows, setRows] = useState<{ stockItemId: string; qty: string; byPack: boolean; amount: string }[]>([{ stockItemId: "", qty: "", byPack: false, amount: "" }]);
+  const [rows, setRows] = useState<{ stockItemId: string; qty: string; byPack: boolean; amount: string }[]>([{ stockItemId: itemId, qty: "", byPack: false, amount: "" }]);
   const [paid, setPaid] = useState("");
   const [method, setMethod] = useState("cash");
   const [note, setNote] = useState("");

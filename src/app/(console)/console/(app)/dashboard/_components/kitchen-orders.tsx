@@ -1,5 +1,6 @@
 import { CheckCircle2 } from "lucide-react";
 import Link from "next/link";
+import { placeLabel } from "@/domain/delivery";
 import type { KitchenOrderItem } from "@/server/staff/dashboard";
 import { EmptyLine, Panel, viewAllClass } from "./dashboard-shared";
 
@@ -16,24 +17,25 @@ export function KitchenOrders({ orders }: { orders: KitchenOrderItem[] }) {
       title="Kitchen"
       action={<Link href="/console/kitchen" className={viewAllClass}><span>Open kitchen</span></Link>}
     >
-      <p className="-mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs font-medium text-muted">
-        <span><strong className="text-ink tabular">{orders.length}</strong> active orders</span>
-        <span aria-hidden="true">·</span>
-        <span><strong className="text-ink tabular">{preparing}</strong> preparing</span>
-        <span aria-hidden="true">·</span>
-        <span><strong className="text-ink tabular">{ready}</strong> ready</span>
-      </p>
+      <dl className="grid grid-cols-3 gap-2 rounded-input bg-sage px-3 py-2.5">
+        {[["active", orders.length], ["preparing", preparing], ["ready", ready]].map(([name, count]) => (
+          <div key={name} className="flex flex-col-reverse">
+            <dt className="text-[11px] font-medium text-muted">{name}</dt>
+            <dd className="font-display text-lg font-bold leading-6 text-ink tabular">{count}</dd>
+          </div>
+        ))}
+      </dl>
       {orders.length === 0 ? (
         <EmptyLine>Kitchen is clear — no active tickets.</EmptyLine>
       ) : (
-        <div className="mt-2 divide-y divide-line">
+        <div className="mt-3 divide-y divide-line">
           {preview.map((o) => {
             const delayed = o.elapsedMinutes >= 20 && o.status !== "ready";
             return (
               <div key={o.id} className="flex items-center justify-between gap-2 py-2 first:pt-0 last:pb-0">
-                <div className="flex min-w-0 items-center gap-2.5">
-                  <span className="shrink-0 rounded bg-neutral-100 px-1.5 py-0.5 text-xs font-bold text-ink">{o.tableCode}</span>
-                  <p className="line-clamp-2 min-w-0 break-words text-sm font-semibold leading-snug text-ink">{o.items}</p>
+                <div className="min-w-0">
+                  <p className="truncate text-xs font-bold text-ink">{placeLabel(o.tableCode, o.guestName)}</p>
+                  <p className="mt-0.5 truncate text-[13px] font-medium text-muted">{o.items}</p>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   {o.status === "ready" ? (

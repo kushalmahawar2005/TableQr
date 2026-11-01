@@ -10,10 +10,10 @@ import type { FloorData } from "@/server/floor/read";
 type Entry = FloorData["waitlist"][number];
 type Free = { id: string; code: string; seats: number; combinableWith: string[] };
 
-const field = "mt-1 block h-11 w-full rounded-input border border-line bg-surface px-3 text-body text-ink outline-none focus:border-ink focus-visible:ring-2 focus-visible:ring-ink/20";
-const base = "inline-flex min-h-11 items-center justify-center gap-2 rounded-input border px-4 text-body font-semibold transition-colors disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink";
+const field = "mt-1 block h-11 w-full rounded-input border border-line bg-surface px-3 text-body text-ink outline-none focus:border-forest focus-visible:ring-2 focus-visible:ring-ink/20";
+const base = "inline-flex min-h-11 items-center justify-center gap-2 rounded-input border px-4 text-body font-semibold transition-colors disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-forest";
 const quiet = `${base} border-line bg-surface text-ink hover:border-ink/40`;
-const solid = `${base} border-ink bg-ink text-white hover:bg-ink/90`;
+const solid = `${base} border-forest bg-forest text-white hover:bg-forest-hover`;
 const brand = `${base} border-brand bg-brand text-white hover:bg-brand-strong`;
 const WAITS = [10, 15, 20, 30, 45, 60];
 
@@ -94,11 +94,10 @@ export function WaitlistScreen({ entries, outlet, outletCode, freeTables, canMan
   };
 
   return (
-    <main className="mx-auto w-full max-w-[1680px] px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
+    <main className="mx-auto w-full max-w-[1440px] px-3 py-3 pb-6 sm:px-6 sm:py-5 lg:px-8 lg:py-6">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-caption font-semibold text-muted">{outlet}</p>
-          <h1 className="mt-1 font-display text-title font-bold text-ink">Waitlist</h1>
+          <h1 className="font-display text-lg font-bold leading-6 tracking-tight text-ink sm:text-[28px] sm:leading-8">Waitlist</h1>
           <p className="mt-1 text-body text-muted">Live queue · updates automatically</p>
         </div>
         <div className="flex flex-wrap gap-2">

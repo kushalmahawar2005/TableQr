@@ -7,7 +7,8 @@ import * as actions from "@/server/staff/pos-actions";
 // shows it and asks. A refund is never taken back, so it asks to confirm in the page, with a
 // manager PIN when the signed-in role is not a manager or owner.
 
-const button = "min-h-11 rounded-xl border border-line bg-surface px-4 py-3 text-sm font-semibold disabled:opacity-40";
+const button = "mt-2 min-h-9 cursor-pointer rounded-input border border-line bg-surface px-3 text-xs font-semibold hover:border-forest/40 disabled:cursor-not-allowed disabled:opacity-40";
+const METHOD: Record<string, string> = { cash: "Cash", card: "Card", upi: "UPI", wallet: "Wallet" };
 // Its own classes: the shared button sets a white surface that would hide the white label
 const danger = "min-h-11 rounded-xl border border-danger bg-danger px-4 py-3 text-sm font-semibold text-white disabled:opacity-40";
 const field = "min-h-11 w-full rounded-xl border border-line bg-surface p-3";
@@ -17,7 +18,7 @@ const TONE = { pending: "text-warning", success: "text-success", failed: "text-d
 
 type Payment = PosBillDetail["payments"][number];
 
-export function RefundPanel({ payments, needsApproval, disabled, hi, onChanged }: { payments: Payment[]; needsApproval: boolean; disabled: boolean; hi: boolean; onChanged: () => Promise<void> }) {
+export function RefundPanel({ payments, needsApproval, disabled, onChanged }: { payments: Payment[]; needsApproval: boolean; disabled: boolean; hi?: boolean; onChanged: () => Promise<void> }) {
   const [open, setOpen] = useState<string | null>(null);
   const [amount, setAmount] = useState("");
   const [reason, setReason] = useState("");
@@ -55,15 +56,14 @@ export function RefundPanel({ payments, needsApproval, disabled, hi, onChanged }
   };
 
   return (
-    <div className="rounded-2xl border border-line bg-surface p-4">
-      <h3 className="font-bold">{hi ? "भुगतान इतिहास" : "Payment history"}</h3>
+    <div>
       {note && <p role="status" className={`mt-2 rounded-xl border px-3 py-2 text-sm ${note.tone === "ok" ? "border-success/30 text-success" : "border-danger/30 text-danger"}`}>{note.text}</p>}
       {payments.length === 0 && <p className="mt-2 text-sm text-muted">No payments yet.</p>}
       {payments.map((p) => (
-        <section key={p.id} aria-label={`Payment ${p.method} ${money(p.amountPaise)}`} className="mt-3 border-t border-line pt-3 text-sm">
-          <p className="flex flex-wrap justify-between gap-2"><span className="font-semibold">{p.method} · {p.channel === "counter" ? "counter" : p.channel === "manual_qr" ? "restaurant QR · staff verified" : "online"}</span><span className="tabular-nums">{money(p.amountPaise + p.tipPaise)} · {p.status}</span></p>
-          {p.status === "success" && (
-            <dl className="mt-1 grid grid-cols-3 gap-2 text-xs text-muted">
+        <section key={p.id} aria-label={`Payment ${p.method} ${money(p.amountPaise)}`} className="border-t border-line py-3 text-sm first:border-t-0 first:pt-0">
+          <p className="flex flex-wrap items-center justify-between gap-2"><span className="font-semibold">{METHOD[p.method] ?? p.method}{p.channel === "manual_qr" ? " · Restaurant QR · staff verified" : p.channel === "counter" ? "" : " · Online"}</span><span className="flex items-center gap-2"><span className="font-semibold tabular-nums">{money(p.amountPaise + p.tipPaise)}</span><span className={`rounded-md px-2 py-0.5 text-xs font-semibold ${p.status === "success" ? "bg-[var(--state-available-soft)] text-[var(--state-available-text)]" : "bg-ink/5 text-muted"}`}>{p.status === "success" ? "Paid" : p.status}</span></span></p>
+          {p.status === "success" && (p.refund.refundedPaise > 0 || p.refund.pendingPaise > 0) && (
+            <dl className="mt-2 grid grid-cols-3 gap-2 text-xs text-muted">
               <div><dt>Refunded</dt><dd className="tabular-nums text-ink">{money(p.refund.refundedPaise)}</dd></div>
               <div><dt>Pending</dt><dd className="tabular-nums text-ink">{money(p.refund.pendingPaise)}</dd></div>
               <div><dt>Refundable</dt><dd className="tabular-nums text-ink">{money(p.refund.refundablePaise)}</dd></div>

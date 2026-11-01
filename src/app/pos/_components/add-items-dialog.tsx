@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, Minus, Package, Plus, Search, UserPlus } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { buttonVariants } from "@/components/ui/button";
+import { primaryButton } from "@/app/(console)/console/(app)/orders/_components/orders-ui";
 import { cn } from "@/lib/utils";
 import { priceLine } from "@/domain/pricing";
 import * as pos from "@/server/staff/pos-actions";
@@ -15,11 +15,11 @@ import { checkFirstName, isPlaceholderName } from "@/domain/guest-name";
 
 type Line = { key: string; item: WaiterMenu[number]; qty: number; mods: string[]; parcel: boolean };
 const rs = (paise: number) => `₹${(paise / 100).toLocaleString("en-IN", { minimumFractionDigits: paise % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
-const primary = cn(buttonVariants({ variant: "default" }), "h-11 w-full gap-2 text-sm");
-const field = "h-11 w-full rounded-lg border border-border bg-card px-3 text-sm text-foreground outline-none focus:border-foreground/40 focus-visible:ring-2 focus-visible:ring-ring";
+const primary = cn(primaryButton, "h-11 w-full");
+const field = "h-11 w-full rounded-lg border border-border bg-card px-3 text-sm text-foreground outline-none focus:border-[var(--state-available)] focus-visible:ring-1 focus-visible:ring-[var(--state-available)]/30";
 
 /** Add dishes to a table's running bill, optionally marked as parcel (packed to take away). */
-export function AddItemsDialog({ detail, open, hi, onClose, onPlaced }: { detail: PosBillDetail; open: boolean; hi: boolean; onClose: () => void; onPlaced: () => Promise<void> }) {
+export function AddItemsDialog({ detail, open, hi, onClose, onDismiss, onPlaced }: { detail: PosBillDetail; open: boolean; hi: boolean; onClose: () => void; /** Closed by hand, with nothing added */ onDismiss?: () => void; onPlaced: () => Promise<void> }) {
   const [menu, setMenu] = useState<WaiterMenu | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -40,7 +40,8 @@ export function AddItemsDialog({ detail, open, hi, onClose, onPlaced }: { detail
   }, [open, menu]);
   const who = person || people[0]?.id || "";
   const selectedPerson = people.find((p) => p.id === who);
-  const nameMissing = !newGuest.trim() && (!selectedPerson || isPlaceholderName(selectedPerson.name) || !checkFirstName(selectedPerson.name).ok);
+  const nameRequired = !selectedPerson || isPlaceholderName(selectedPerson.name) || !checkFirstName(selectedPerson.name).ok;
+  const nameMissing = !newGuest.trim() && nameRequired;
 
   const shown = useMemo(() => (menu ?? []).filter((m) => !query.trim() || `${m.name} ${m.nameHi ?? ""}`.toLowerCase().includes(query.trim().toLowerCase())), [menu, query]);
   const price = (l: Line) => { const r = priceLine(l.item.pricing, l.qty, l.mods); return r.ok ? r.line.linePaise : 0; };
@@ -97,17 +98,17 @@ export function AddItemsDialog({ detail, open, hi, onClose, onPlaced }: { detail
   };
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+    <Dialog open={open} onOpenChange={(o) => { if (o) return; onClose(); onDismiss?.(); }}>
       <DialogContent className="no-scrollbar max-h-[92dvh] gap-3 overflow-y-auto p-5 sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle className="font-display text-title font-bold">{L("Add items", "आइटम जोड़ें")} · {isDeliveryTable(detail.tableCode) ? L("Delivery", "डिलीवरी") : <>{detail.takeaway ? L("Takeaway", "पार्सल") : (isRoomCode(detail.tableCode) ? "" : L("Table", "टेबल"))} {detail.tableCode}</>}</DialogTitle>
+          <DialogTitle className="font-display text-title font-bold">{L("Add items", "आइटम जोड़ें")} · {isDeliveryTable(detail.tableCode) ? L("Delivery", "डिलीवरी") : <>{detail.takeaway ? L("Takeaway", "पार्सल") : (isRoomCode(detail.tableCode) ? "" : L("Table", "टेबल"))} {detail.takeaway ? detail.tableCode.replace(/^TA-/, "") : detail.tableCode}</>}</DialogTitle>
           <DialogDescription>{detail.status === "bill_requested" ? L("Unmarked items are handed over at the counter. Parcel items are sent to the kitchen to be packed and added to this bill.", "बिना पार्सल वाले आइटम काउंटर पर दिए जाएँगे। पार्सल आइटम पैक होने के लिए किचन में जाएँगे और इसी बिल में जुड़ेंगे।") : L("These go to the kitchen and are added to the bill. Mark an item as parcel to have it packed.", "ये किचन को जाएँगे और बिल में जुड़ेंगे। पैक कराने के लिए पार्सल चुनें।")}</DialogDescription>
         </DialogHeader>
 
         <div>
-          <p className="text-sm font-semibold">{detail.takeaway ? L("Customer name", "ग्राहक का नाम") : L("For whom?", "किसके लिए?")}</p>
+          <p className="text-sm font-semibold">{detail.takeaway ? L("Customer name", "ग्राहक का नाम") : L("For whom?", "किसके लिए?")}{nameRequired && <span className="ml-0.5 text-destructive" aria-hidden="true">*</span>}</p>
           <div className="mt-1.5 flex flex-wrap gap-2">
-            {people.map((p) => <button key={p.id} type="button" aria-pressed={who === p.id && !newGuest.trim()} onClick={() => { setPerson(p.id); setNewGuest(""); }} className={`min-h-10 rounded-lg border px-3 text-sm font-semibold ${who === p.id && !newGuest.trim() ? "border-primary bg-primary/10" : "border-border text-muted-foreground hover:text-foreground"}`}>{p.name}</button>)}
+            {people.map((p) => <button key={p.id} type="button" aria-pressed={who === p.id && !newGuest.trim()} onClick={() => { setPerson(p.id); setNewGuest(""); }} className={`min-h-10 rounded-lg border px-3 text-sm font-semibold ${who === p.id && !newGuest.trim() ? "border-[var(--state-available)] bg-[var(--state-available-soft)]" : "border-border text-muted-foreground hover:text-foreground"}`}>{p.name}</button>)}
             <div className="relative min-w-40 flex-1"><UserPlus className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" /><input ref={nameInput} value={newGuest} onChange={(e) => { setNewGuest(e.target.value); setNameError(""); }} placeholder={L("Enter customer name", "ग्राहक का नाम लिखें")} aria-invalid={!!nameError} aria-describedby={nameError ? "counter-customer-name-error" : undefined} className={`${field} h-10 pl-8 ${nameError ? "border-destructive focus:border-destructive focus-visible:ring-destructive/20" : ""}`} /></div>
           </div>
           {nameError && <p id="counter-customer-name-error" role="alert" className="mt-1.5 text-xs font-semibold text-destructive">{nameError}</p>}
@@ -144,7 +145,7 @@ export function AddItemsDialog({ detail, open, hi, onClose, onPlaced }: { detail
                     </div>
                   </div>
                   <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <button type="button" aria-pressed={l.parcel} onClick={() => change(l.key, { parcel: !l.parcel })} className={`inline-flex min-h-8 items-center gap-1.5 rounded-full border px-2.5 text-xs font-semibold ${l.parcel ? "border-primary bg-primary/10" : "border-border text-muted-foreground hover:text-foreground"}`}><Package className="size-3.5" aria-hidden="true" />{L("Parcel", "पार्सल")}</button>
+                    <button type="button" aria-pressed={l.parcel} onClick={() => change(l.key, { parcel: !l.parcel })} className={`inline-flex min-h-8 items-center gap-1.5 rounded-full border px-2.5 text-xs font-semibold ${l.parcel ? "border-[var(--state-available)] bg-[var(--state-available-soft)]" : "border-border text-muted-foreground hover:text-foreground"}`}><Package className="size-3.5" aria-hidden="true" />{L("Parcel", "पार्सल")}</button>
                   </div>
                   {l.item.pricing.groups.filter((g) => g.modifiers.length > 0).map((g) => {
                     const need = g.minSelect > 0 && g.modifiers.filter((m) => l.mods.includes(m.id)).length < g.minSelect;
@@ -155,7 +156,7 @@ export function AddItemsDialog({ detail, open, hi, onClose, onPlaced }: { detail
                           {g.modifiers.map((mod) => {
                             const on = l.mods.includes(mod.id);
                             return (
-                              <button key={mod.id} type="button" role={g.maxSelect === 1 ? "radio" : "checkbox"} aria-checked={on} disabled={!mod.isAvailable} onClick={() => pick(l, g, mod.id, g.maxSelect === 1 && g.minSelect > 0 ? true : !on)} className={`inline-flex min-h-9 items-center rounded-full border px-3 text-xs font-semibold disabled:opacity-40 ${on ? "border-primary bg-primary/10" : need ? "border-destructive/50" : "border-border text-muted-foreground hover:text-foreground"}`}>
+                              <button key={mod.id} type="button" role={g.maxSelect === 1 ? "radio" : "checkbox"} aria-checked={on} disabled={!mod.isAvailable} onClick={() => pick(l, g, mod.id, g.maxSelect === 1 && g.minSelect > 0 ? true : !on)} className={`inline-flex min-h-9 items-center rounded-full border px-3 text-xs font-semibold disabled:opacity-40 ${on ? "border-[var(--state-available)] bg-[var(--state-available-soft)]" : need ? "border-destructive/50" : "border-border text-muted-foreground hover:text-foreground"}`}>
                                 {hi ? mod.nameHi || mod.nameEn : mod.nameEn}{mod.priceDeltaPaise ? ` +${rs(mod.priceDeltaPaise)}` : ""}
                               </button>
                             );

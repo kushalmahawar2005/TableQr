@@ -27,7 +27,7 @@ const STATUS: Record<JobStatus, { label: string; tone: string }> = {
 const when = (ms: number) => new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" }).format(ms);
 
 const field = "h-11 w-full rounded-xl border border-line bg-surface px-3 text-sm text-ink";
-const primary = "h-11 rounded-xl bg-brand px-5 text-sm font-semibold text-white disabled:opacity-50";
+const primary = "h-11 rounded-xl bg-forest px-5 text-sm font-semibold text-white disabled:opacity-50";
 const quiet = "h-9 rounded-lg border border-line px-3 text-xs font-semibold text-ink hover:bg-ink/5 disabled:opacity-50";
 
 type Draft = { id?: string; name: string; paperMm: 58 | 80; transport: string; systemPrinterName: string };

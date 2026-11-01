@@ -1,5 +1,6 @@
 import { Banknote, CheckCircle2, CreditCard, Smartphone, Wallet } from "lucide-react";
 import Link from "next/link";
+import { placeLabel } from "@/domain/delivery";
 import type { RecentPaymentItem } from "@/server/staff/dashboard";
 import { EmptyLine, Panel, formatTimeAgo, money, viewAllClass } from "./dashboard-shared";
 
@@ -19,7 +20,7 @@ export function RecentPayments({ payments, timezone }: { payments: RecentPayment
   return (
     <Panel
       title="Recent Payments"
-      action={<Link href="/console/billing" className={viewAllClass}><span>View all</span></Link>}
+      action={payments.length > 0 ? <Link href="/console/billing" className={viewAllClass}><span>View all</span></Link> : undefined}
     >
       {payments.length === 0 ? (
         <EmptyLine>No payments yet today.</EmptyLine>
@@ -36,7 +37,7 @@ export function RecentPayments({ payments, timezone }: { payments: RecentPayment
                     <Icon className="size-4.5" aria-hidden="true" />
                   </span>
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-bold text-ink">{p.tableCode ? `Table ${p.tableCode}` : "Table"} payment</p>
+                    <p className="truncate text-sm font-bold text-ink">{p.tableCode ? placeLabel(p.tableCode, p.guestName) : "Table"} payment</p>
                     <p className="text-xs font-medium capitalize text-muted">
                       {methodLabel(p.method)} · {formatTimeAgo(p.createdAt)}
                     </p>

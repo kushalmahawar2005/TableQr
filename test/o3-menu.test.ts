@@ -51,10 +51,11 @@ describe("O3 menu manager safety contracts", () => {
 });
 
 describe("phone and tablet width", () => {
-  it("dishes are a wrapping card grid, editors open in a full-width sheet, and the import table scrolls in its own box", async () => {
+  it("categories are tabs above a wrapping dish grid, editors open in a full-width sheet, and the import table scrolls in its own box", async () => {
     const { readFileSync } = await import("node:fs");
     const src = readFileSync(new URL("../src/app/(console)/console/(app)/menu/_components/menu-manager.tsx", import.meta.url), "utf8");
-    expect(src).toContain('className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3"');
+    expect(src).toContain('role="tablist"');
+    expect(src).toContain("grid grid-cols-2 gap-3 md:grid-cols-3");
     expect(src).toContain("<SheetContent");
     expect(src).toContain('<div className="max-h-72 overflow-auto rounded-xl border border-line"><table');
   });

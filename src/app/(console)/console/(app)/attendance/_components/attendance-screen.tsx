@@ -31,10 +31,10 @@ export function AttendanceScreen({ day, month }: { day: Register | null; month: 
   const go = (p: Record<string, string>) => nav(() => router.push(`/console/attendance?${new URLSearchParams({ view, outlet: outletId, ...p }).toString()}`));
 
   return (
-    <main className="mx-auto w-full max-w-[1100px] space-y-5 px-4 py-5 sm:px-6 lg:py-6">
+    <main className="mx-auto w-full max-w-[1440px] px-3 py-3 pb-6 sm:px-6 sm:py-5 lg:px-8 lg:py-6 space-y-4">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="font-display text-title font-bold tracking-tight text-ink">Attendance</h1>
+          <h1 className="font-display text-lg font-bold leading-6 tracking-tight text-ink sm:text-[28px] sm:leading-8">Attendance</h1>
           <p className="mt-0.5 text-body text-muted">Mark who was present, on a half day or absent.</p>
         </div>
         <div className="flex items-center gap-2">

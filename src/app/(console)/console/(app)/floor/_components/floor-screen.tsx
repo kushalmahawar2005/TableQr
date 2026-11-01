@@ -799,7 +799,7 @@ function SeatSheet({
         <input
           value={name}
           onChange={(e) => setName(e.target.value.slice(0, 80))}
-          className="mt-1 h-11 w-full rounded-input border border-line px-3 text-body outline-none focus:border-ink"
+          className="mt-1 h-11 w-full rounded-input border border-line px-3 text-body outline-none focus:border-forest"
         />
       </label>
       {sheet.error && (
@@ -1015,7 +1015,7 @@ function CloseSheet({
               autoFocus
               value={reason}
               onChange={(e) => setReason(e.target.value.slice(0, 200))}
-              className="mt-1 h-11 w-full rounded-input border border-line px-3 text-body outline-none focus:border-ink"
+              className="mt-1 h-11 w-full rounded-input border border-line px-3 text-body outline-none focus:border-forest"
             />
           </label>
         </>
@@ -1117,7 +1117,7 @@ function BlockSheet({
         <input
           value={note}
           onChange={(e) => setNote(e.target.value.slice(0, 120))}
-          className="mt-1 h-11 w-full rounded-input border border-line px-3 text-body outline-none focus:border-ink"
+          className="mt-1 h-11 w-full rounded-input border border-line px-3 text-body outline-none focus:border-forest"
         />
       </label>
       <label className="mt-3 block text-body font-semibold">
@@ -1184,7 +1184,7 @@ function WaitlistSheet({
   const [quote, setQuote] = useState("20");
   const [notes, setNotes] = useState("");
   const input =
-    "mt-1 h-11 w-full rounded-input border border-line px-3 text-body outline-none focus:border-ink";
+    "mt-1 h-11 w-full rounded-input border border-line px-3 text-body outline-none focus:border-forest";
   return (
     <Dialog title={c.addWalkIn} onClose={onClose} closeLabel={c.close}>
       <label className="block text-body font-semibold">

@@ -158,11 +158,11 @@ export function ReservationCalendar({ initial, realtimeUrl, preview = false, ini
   const clock12 = (t: string) => { const [h, m] = t.split(":").map(Number); return `${h % 12 === 0 ? 12 : h % 12}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`; };
 
   return (
-    <main className="mx-auto min-h-dvh w-full max-w-[1680px] px-4 py-5 text-ink sm:px-6 lg:px-8 lg:py-7">
+    <main className="mx-auto w-full max-w-[1440px] px-3 py-3 pb-6 sm:px-6 sm:py-5 lg:px-8 lg:py-6 text-ink">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
           <p className="text-caption font-semibold text-muted">{data.reservations.length} {data.reservations.length === 1 ? "booking" : "bookings"} · {data.view === "day" ? "one day" : "this week"}</p>
-          <h1 className="mt-1 font-display text-title font-bold">{data.view === "day" ? formatDay(data.date) : `${formatDay(data.date)} – ${formatDay(addDays(data.date, 6))}`}</h1>
+          <h1 className="font-display text-lg font-bold leading-6 tracking-tight text-ink sm:text-[28px] sm:leading-8">{data.view === "day" ? formatDay(data.date) : `${formatDay(data.date)} – ${formatDay(addDays(data.date, 6))}`}</h1>
         </div>
         {data.mayOperate && (
           <button type="button" onClick={() => { setNewDate(query.date); setAdding(true); }} disabled={preview} className="inline-flex min-h-11 items-center gap-2 rounded-input bg-brand px-4 text-button font-semibold text-white hover:bg-brand-strong disabled:opacity-50">
@@ -212,7 +212,7 @@ export function ReservationCalendar({ initial, realtimeUrl, preview = false, ini
         </div>
         <div className="flex rounded-input border border-line bg-surface p-1" role="group" aria-label="View">
           {(["day", "week"] as const).map((v) => (
-            <button key={v} type="button" aria-pressed={data.view === v} className="min-h-10 rounded-[8px] px-3 text-body font-semibold text-muted aria-pressed:bg-ink aria-pressed:text-paper" onClick={() => change({ view: v })}>{v === "day" ? "Day" : "Week"}</button>
+            <button key={v} type="button" aria-pressed={data.view === v} className="min-h-10 rounded-[8px] px-3 text-body font-semibold text-muted aria-pressed:bg-forest aria-pressed:text-white" onClick={() => change({ view: v })}>{v === "day" ? "Day" : "Week"}</button>
           ))}
         </div>
         <form className="flex min-w-0 flex-1 gap-2 sm:max-w-md" onSubmit={(e) => { e.preventDefault(); change({ search: query.search }); }}>
@@ -242,7 +242,7 @@ export function ReservationCalendar({ initial, realtimeUrl, preview = false, ini
 
       <div role="tablist" aria-label="Booking status" className="mt-3 flex gap-2 overflow-x-auto pb-1">
         {chips.map(([value, label]) => (
-          <button key={value || "all"} role="tab" aria-selected={query.status === value} onClick={() => change({ status: value })} className={`min-h-10 shrink-0 rounded-full border px-3.5 text-body font-semibold ${query.status === value ? "border-ink bg-ink text-paper" : "border-line bg-surface text-muted hover:text-ink"}`}>
+          <button key={value || "all"} role="tab" aria-selected={query.status === value} onClick={() => change({ status: value })} className={`min-h-10 shrink-0 rounded-full border px-3.5 text-body font-semibold ${query.status === value ? "border-forest bg-forest text-white" : "border-line bg-surface text-muted hover:text-ink"}`}>
             {label}{!query.status && value ? ` ${count(value)}` : ""}
           </button>
         ))}

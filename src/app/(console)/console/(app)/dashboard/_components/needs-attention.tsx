@@ -1,7 +1,8 @@
 import type { Features } from "@/lib/plan-features";
-import { ArrowRight, CheckCircle2, Clock, Lock, Receipt, UtensilsCrossed, Wallet } from "lucide-react";
+import { ArrowRight, BedDouble, CheckCircle2, Clock, Lock, Receipt, UtensilsCrossed, Wallet } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { placeLabel } from "@/domain/delivery";
 import type { DashboardData } from "@/server/staff/dashboard";
 import { focusRing, money, timeIn } from "./dashboard-shared";
 
@@ -12,7 +13,7 @@ export function alertsOf(data: DashboardData, features?: Features): Alert[] {
   const a = data.alerts;
   const out: Alert[] = [];
   for (const b of (features && !features.dineIn ? [] : a.slowBills)) {
-    out.push({ key: `bill-${b.sessionId}`, tone: "bad", icon: Receipt, text: <><strong>{b.tableCode}</strong> · bill requested {b.waitedMinutes} min ago</>, href: "/console/floor", linkLabel: "Floor" });
+    out.push({ key: `bill-${b.sessionId}`, tone: "bad", icon: Receipt, text: <><strong>{placeLabel(b.tableCode)}</strong> · bill requested {b.waitedMinutes} min ago</>, href: b.tableCode.startsWith("TA-") ? "/console/billing" : "/console/floor", linkLabel: b.tableCode.startsWith("TA-") ? "Billing" : "Floor" });
   }
   for (const r of (features && !features.reservations ? [] : a.late)) {
     out.push({
@@ -29,6 +30,7 @@ export function alertsOf(data: DashboardData, features?: Features): Alert[] {
       linkLabel: "Reservations",
     });
   }
+  if ((!features || features.rooms) && a.roomRequests > 0) out.push({ key: "room-requests", tone: "warn", icon: BedDouble, text: <><strong>{a.roomRequests}</strong> room {a.roomRequests === 1 ? "request" : "requests"} waiting</>, href: "/console/rooms", linkLabel: "Rooms" });
   if (a.soldOut > 0) out.push({ key: "sold-out", tone: "warn", icon: UtensilsCrossed, text: <><strong>{a.soldOut}</strong> {a.soldOut === 1 ? "item" : "items"} sold out</>, href: "/console/menu", linkLabel: "Menu" });
   if (a.pendingRefunds.count > 0) {
     out.push({ key: "refunds", tone: "info", icon: Wallet, text: <><strong>{a.pendingRefunds.count}</strong> pending {a.pendingRefunds.count === 1 ? "refund" : "refunds"} · {money(a.pendingRefunds.paise)}</> });
@@ -54,7 +56,7 @@ export function NeedsAttention({ data, features }: { data: DashboardData; featur
   const alerts = alertsOf(data, features);
   if (alerts.length === 0) {
     return (
-      <p className="flex items-center gap-2 rounded-card border border-line bg-surface px-4 py-2.5 text-[13px] font-medium text-muted" role="status">
+      <p className="flex items-center gap-2 text-[13px] font-medium text-muted" role="status">
         <CheckCircle2 className="size-4 shrink-0 text-emerald-700" aria-hidden="true" />
         Nothing needs your attention
         <span className="sr-only"> — all good right now.</span>
@@ -62,7 +64,7 @@ export function NeedsAttention({ data, features }: { data: DashboardData; featur
     );
   }
   return (
-    <section className="rounded-card border border-line bg-surface p-4" aria-label="Needs Attention">
+    <section className="w-full rounded-card border border-line bg-surface p-4" aria-label="Needs Attention">
       <div className="flex items-center justify-between gap-2">
         <h2 className="font-display text-base font-bold text-ink">Needs Attention</h2>
         <span className="rounded-full bg-terracotta/10 px-2 py-0.5 text-xs font-bold text-terracotta tabular">{alerts.length}</span>

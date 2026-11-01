@@ -101,7 +101,7 @@ export function LibraryPanel({ canEdit, onDone }: { canEdit: boolean; onDone: (m
   const row = (item: LibraryItemView) => {
     const p = picks[item.id];
     return (
-      <li key={item.id} className={`rounded-xl border p-3 transition-colors ${p ? "border-brand bg-brand-soft/60" : "border-line bg-surface"} ${item.onMenu ? "opacity-60" : ""}`}>
+      <li key={item.id} className={`rounded-xl border p-3 transition-colors ${p ? "border-forest bg-sage" : "border-line bg-surface"} ${item.onMenu ? "opacity-60" : ""}`}>
         <label className={`flex items-center gap-3 ${item.onMenu || !canEdit ? "" : "cursor-pointer"}`}>
           <input type="checkbox" className="size-4 shrink-0 accent-[#c9482b]" checked={!!p} disabled={item.onMenu || !canEdit} onChange={() => toggle(item)} />
           <VegMark veg={item.isVeg} />
@@ -120,7 +120,7 @@ export function LibraryPanel({ canEdit, onDone }: { canEdit: boolean; onDone: (m
         </label>
         {p && item.sizes.length > 0 && (
           <div className="mt-2 pl-7">
-            <button type="button" className="text-xs font-semibold text-brand-strong underline underline-offset-4" onClick={() => setPick(item.id, { useSizes: !p.useSizes })}>
+            <button type="button" className="text-xs font-semibold text-forest underline underline-offset-4" onClick={() => setPick(item.id, { useSizes: !p.useSizes })}>
               {p.useSizes ? "One price instead" : `Sell in sizes (${item.sizes.join(" / ")})`}
             </button>
             {p.useSizes && (
@@ -179,7 +179,7 @@ export function LibraryPanel({ canEdit, onDone }: { canEdit: boolean; onDone: (m
                 onDone(!r.ok ? r.error : r.data.filled ? `Added photos to ${r.data.filled} ${r.data.filled === 1 ? "dish" : "dishes"}.${r.data.withoutPhoto ? ` ${r.data.withoutPhoto} still have no photo in the library yet.` : ""}` : "No matching library photos for your dishes without a photo yet.");
               });
             }}
-            className="min-h-10 shrink-0 rounded-lg bg-brand px-3.5 text-sm font-semibold text-brand-on disabled:opacity-60"
+            className="min-h-10 shrink-0 rounded-lg bg-forest px-3.5 text-sm font-semibold text-white disabled:opacity-60"
           >
             {filling ? "Adding photos…" : "Add photos to my dishes"}
           </button>
@@ -229,7 +229,7 @@ export function LibraryPanel({ canEdit, onDone }: { canEdit: boolean; onDone: (m
             {canEdit && (
               <button
                 type="button"
-                className="mt-1 text-xs font-semibold text-brand-strong underline underline-offset-4"
+                className="mt-1 text-xs font-semibold text-forest underline underline-offset-4"
                 onClick={() => open.items.filter((i) => !i.onMenu && !picks[i.id]).forEach(toggle)}
               >
                 Tick every dish not on my menu
@@ -254,7 +254,7 @@ export function LibraryPanel({ canEdit, onDone }: { canEdit: boolean; onDone: (m
             type="button"
             disabled={busy || missing > 0 || !canEdit}
             onClick={() => void add()}
-            className="inline-flex h-12 w-full items-center justify-center rounded-xl border border-brand bg-brand text-base font-semibold text-white hover:bg-brand-strong disabled:opacity-50"
+            className="inline-flex h-12 w-full items-center justify-center rounded-xl border border-forest bg-forest text-base font-semibold text-white hover:bg-forest-hover disabled:opacity-50"
           >
             {busy ? "Adding…" : `Add ${picked.length} ${picked.length === 1 ? "dish" : "dishes"}`}
           </button>
@@ -269,7 +269,7 @@ export function LibraryQuickPick({ onPick }: { onPick: (item: LibraryItemView) =
   const [query, setQuery] = useState("");
   const { result, loading } = useLibrarySearch(query);
   return (
-    <section className="rounded-2xl border border-dashed border-brand/50 bg-brand-soft/40 p-4">
+    <section className="rounded-2xl border border-dashed border-forest/50 bg-sage p-4">
       <p className="text-sm font-semibold text-ink">Start from the Tableeqr list</p>
       <p className="mt-0.5 text-xs text-muted">Type a dish name. We fill in the details and its category; you add the price.</p>
       <Input aria-label="Search the library" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="e.g. margherita, paneer tikka, cold coffee" className="mt-2 h-11 rounded-xl" />

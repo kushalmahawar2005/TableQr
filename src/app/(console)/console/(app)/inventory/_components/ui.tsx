@@ -7,11 +7,11 @@ import { HugeiconsIcon } from "@hugeicons/react";
 // Shared pieces of the inventory screens: the look of fields and buttons, money and dates, and the
 // sheet that holds every form.
 
-export const focus = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand";
+export const focus = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-forest";
 export const card = "rounded-2xl border border-line bg-surface";
 export const field = `h-11 w-full rounded-xl border border-line bg-surface px-3 text-body text-ink placeholder:text-muted ${focus}`;
-export const primary = `inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-ink px-4 text-button font-semibold text-paper disabled:opacity-50 ${focus}`;
-export const quiet = `inline-flex min-h-9 items-center justify-center rounded-lg border border-line px-3 text-caption font-semibold text-ink hover:bg-ink/[0.05] disabled:opacity-50 ${focus}`;
+export const primary = `inline-flex min-h-11 items-center justify-center gap-2 rounded-input bg-forest px-4 text-sm font-semibold text-white transition-colors hover:bg-forest-hover disabled:opacity-50 ${focus}`;
+export const quiet = `inline-flex min-h-9 items-center justify-center rounded-lg border border-line bg-surface px-3 text-caption font-semibold text-ink hover:border-forest/40 hover:bg-paper disabled:opacity-50 ${focus}`;
 export const label = "grid gap-1 text-caption font-semibold text-muted";
 export const th = "px-3 py-3 font-medium";
 export const rs = (paise: number) => `${paise < 0 ? "−" : ""}₹${Math.abs(Math.round(paise / 100)).toLocaleString("en-IN")}`;

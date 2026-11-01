@@ -14,7 +14,7 @@ const TONE = {
   break: "bg-[var(--state-held-soft)] text-[var(--state-held-text)]",
   off: "bg-ink/10 text-muted",
 } as const;
-const ROLE: Record<string, string> = { manager: "Manager", waiter: "Waiter", host: "Host", cashier: "Cashier", kitchen: "Kitchen" };
+const ROLE: Record<string, string> = { manager: "Manager", waiter: "Waiter", host: "Host", cashier: "Cashier", kitchen: "Kitchen", reception: "Reception", accountant: "Accountant", rider: "Rider" };
 
 function ago(ms: number) {
   const m = Math.floor(ms / 60_000);
@@ -52,29 +52,27 @@ export function WhoIsWorking({ rows, canChange = false, onSelect }: { rows: Duty
   const onDuty = rows.filter((r) => r.status === "on");
   if (rows.length === 0) return null;
   return (
-    <section aria-labelledby="who-working" className="mt-4 rounded-2xl border border-line bg-surface p-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 id="who-working" className="font-display text-section font-bold text-ink">Who&apos;s working now</h2>
-        <p className="text-sm text-muted">{onDuty.length} on duty · {onDuty.filter((r) => r.online).length} with the app open</p>
-      </div>
+    <section aria-labelledby="who-working" className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
+      <h2 id="who-working" className="font-display text-[15px] font-bold text-ink">Who&apos;s working now</h2>
+      <p className="mt-0.5 text-xs text-muted">{onDuty.length} on duty · {onDuty.filter((r) => r.online).length} with the app open</p>
       {canChange && <p className="mt-1 text-xs text-muted">Set who is on duty. Only staff on duty get the alerts for new requests.</p>}
       {error && <p role="alert" className="mt-2 text-sm font-semibold text-danger">{error}</p>}
-      <ul className="mt-3 grid gap-2">
+      <ul className="mt-2 divide-y divide-line">
         {rows.map((r) => (
-          <li key={r.id} className="flex items-center justify-between gap-3 rounded-xl border border-line px-3 py-2.5">
+          <li key={r.id} className="flex items-center justify-between gap-2 py-2.5">
             <div className="min-w-0">
-              {onSelect ? <button type="button" onClick={() => onSelect(r.id)} className="flex items-center gap-2 truncate rounded-lg text-left font-semibold text-ink outline-none hover:text-brand focus-visible:ring-2 focus-visible:ring-brand">
-                <span className="relative grid size-9 shrink-0 place-items-center rounded-full bg-[var(--state-available-soft)] text-sm font-bold text-[var(--state-available-text)]">{r.name.trim().slice(0, 1).toUpperCase()}<span className={`absolute right-0 bottom-0 size-2.5 rounded-full border-2 border-surface ${r.online ? "bg-[var(--state-available)]" : "bg-ink/30"}`} aria-hidden="true" /></span>
-                {r.name}
-              </button> : <p className="flex items-center gap-2 truncate font-semibold text-ink"><span className="relative grid size-9 shrink-0 place-items-center rounded-full bg-[var(--state-available-soft)] text-sm font-bold text-[var(--state-available-text)]">{r.name.trim().slice(0, 1).toUpperCase()}<span className={`absolute right-0 bottom-0 size-2.5 rounded-full border-2 border-surface ${r.online ? "bg-[var(--state-available)]" : "bg-ink/30"}`} aria-hidden="true" /></span>{r.name}</p>}
-              <p className="text-xs text-muted">
+              {onSelect ? <button type="button" onClick={() => onSelect(r.id)} className="flex max-w-full items-center gap-2 truncate rounded-lg text-left text-sm font-bold text-ink outline-none hover:text-forest focus-visible:ring-2 focus-visible:ring-forest">
+                <span className="relative grid size-9 shrink-0 place-items-center rounded-full bg-sage text-sm font-bold text-forest">{r.name.trim().slice(0, 1).toUpperCase()}<span className={`absolute right-0 bottom-0 size-2.5 rounded-full border-2 border-surface ${r.online ? "bg-[var(--state-available)]" : "bg-ink/30"}`} aria-hidden="true" /></span>
+                <span className="min-w-0 truncate">{r.name}</span>
+              </button> : <p className="flex items-center gap-2 truncate text-sm font-bold text-ink"><span className="relative grid size-9 shrink-0 place-items-center rounded-full bg-sage text-sm font-bold text-forest">{r.name.trim().slice(0, 1).toUpperCase()}<span className={`absolute right-0 bottom-0 size-2.5 rounded-full border-2 border-surface ${r.online ? "bg-[var(--state-available)]" : "bg-ink/30"}`} aria-hidden="true" /></span><span className="min-w-0 truncate">{r.name}</span></p>}
+              <p className="mt-0.5 truncate text-xs text-muted">
                 {r.roles.map((x) => ROLE[x] ?? x).join(", ")} · {r.online ? "app open" : r.lastSeenAt ? `last seen ${ago(now - r.lastSeenAt)}` : "never opened the app"}
               </p>
             </div>
             {canChange ? (
-              <div role="radiogroup" aria-label={`Shift for ${r.name}`} className="flex shrink-0 gap-1">
+              <div role="radiogroup" aria-label={`Shift for ${r.name}`} className="flex shrink-0 gap-0.5 rounded-lg bg-ink/5 p-0.5">
                 {(["on", "break", "off"] as const).map((v) => (
-                  <button key={v} type="button" role="radio" aria-checked={r.status === v} onClick={() => r.status !== v && change(r.id, v)} className={`min-h-9 rounded-full px-2.5 text-xs font-semibold disabled:opacity-60 ${r.status === v ? TONE[v] : "text-muted hover:bg-ink/5 hover:text-ink"}`}>
+                  <button key={v} type="button" role="radio" aria-checked={r.status === v} onClick={() => r.status !== v && change(r.id, v)} className={`min-h-8 cursor-pointer rounded-md px-2 text-xs font-semibold disabled:opacity-60 ${r.status === v ? `bg-surface shadow-xs ${v === "on" ? "text-[var(--state-available-text)]" : v === "break" ? "text-[var(--state-held-text)]" : "text-ink"}` : "text-muted hover:text-ink"}`}>
                     {v === "on" ? "On" : v === "break" ? "Break" : "Off"}
                   </button>
                 ))}

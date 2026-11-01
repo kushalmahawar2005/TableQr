@@ -18,7 +18,7 @@ import {
   waitedMinutes,
   type DayRange,
 } from "@/domain/dashboard";
-import { isDeliveryTable } from "@/domain/delivery";
+import { isDeliveryTable, placeLabel } from "@/domain/delivery";
 import { isPlaceholderName } from "@/domain/guest-name";
 import { canSee } from "@/lib/staff-permissions";
 import { AppError } from "../errors";
@@ -182,6 +182,7 @@ export type TableTileItem = {
 export type KitchenOrderItem = {
   id: string;
   tableCode: string;
+  guestName?: string | null;
   roundNo: number;
   items: string;
   itemCount: number;
@@ -201,6 +202,7 @@ export type CustomerRequestItem = {
 export type RecentPaymentItem = {
   key: string;
   tableCode: string;
+  guestName?: string | null;
   amountPaise: number;
   method: "upi" | "card" | "wallet" | "cash";
   status: string;
@@ -215,6 +217,16 @@ export type ActivityFeedItem = {
   timestamp: number;
   amountPaise?: number;
 };
+
+/** Hotel rooms by status and guest requests still open; empty for a business without rooms */
+async function roomSnapshot(scope: { tenantId: string; outletId: string }) {
+  const [states, open] = await Promise.all([
+    db.select({ status: s.rooms.status, n: count() }).from(s.rooms).where(and(eq(s.rooms.tenantId, scope.tenantId), eq(s.rooms.outletId, scope.outletId), eq(s.rooms.isActive, true))).groupBy(s.rooms.status),
+    db.select({ n: count() }).from(s.roomRequests).where(and(eq(s.roomRequests.tenantId, scope.tenantId), eq(s.roomRequests.outletId, scope.outletId), eq(s.roomRequests.status, "open"))),
+  ]);
+  const of = (status: string) => Number(states.find((r) => r.status === status)?.n ?? 0);
+  return { total: states.reduce((n, r) => n + Number(r.n), 0), occupied: of("occupied"), cleaning: of("cleaning"), available: of("vacant"), requests: Number(open[0]?.n ?? 0) };
+}
 
 /** Everything on the dashboard except the 7-day trend, which refreshes on its own slower cadence */
 export async function getDashboard(staff: Staff, now = new Date()) {
@@ -288,6 +300,7 @@ export async function getDashboard(staff: Staff, now = new Date()) {
         status: s.orders.status,
         placedAt: s.orders.placedAt,
         tableCode: s.diningTables.code,
+        guestName: s.tableSessions.guestName,
       })
       .from(s.orders)
       .innerJoin(s.tableSessions, and(eq(s.tableSessions.tenantId, s.orders.tenantId), eq(s.tableSessions.id, s.orders.sessionId)))
@@ -312,14 +325,14 @@ export async function getDashboard(staff: Staff, now = new Date()) {
         .limit(6);
       if (!latest.length) return [];
       const tables = await db
-        .select({ billId: s.bills.id, tableCode: s.diningTables.code })
+        .select({ billId: s.bills.id, tableCode: s.diningTables.code, guestName: s.tableSessions.guestName })
         .from(s.bills)
         .innerJoin(s.tableSessions, and(eq(s.tableSessions.tenantId, s.bills.tenantId), eq(s.tableSessions.id, s.bills.sessionId)))
         .innerJoin(s.diningTables, and(eq(s.diningTables.tenantId, s.tableSessions.tenantId), eq(s.diningTables.id, s.tableSessions.tableId)))
         .where(and(eq(s.bills.tenantId, scope.tenantId), inArray(s.bills.id, latest.map((p) => p.billId))));
-      const code = new Map(tables.map((x) => [x.billId, x.tableCode]));
+      const place = new Map(tables.map((x) => [x.billId, x]));
       // A payment whose table is gone is left out, as the inner joins did
-      return latest.filter((p) => code.has(p.billId)).map(({ billId, ...p }) => ({ ...p, tableCode: code.get(billId)! }));
+      return latest.filter((p) => place.has(p.billId)).map(({ billId, ...p }) => ({ ...p, tableCode: place.get(billId)!.tableCode, guestName: place.get(billId)!.guestName }));
     })(),
     // Home delivery: everything still out, and what was delivered today
     db
@@ -441,6 +454,7 @@ export async function getDashboard(staff: Staff, now = new Date()) {
     return {
       id: o.id,
       tableCode: o.tableCode,
+      guestName: o.guestName,
       roundNo: o.roundNo,
       items: itemsSummary,
       itemCount: totalQty,
@@ -461,6 +475,7 @@ export async function getDashboard(staff: Staff, now = new Date()) {
   const recentPayments: RecentPaymentItem[] = rawPayments.map((p, index) => ({
     key: `${p.tableCode}-${p.createdAt.getTime()}-${index}`,
     tableCode: p.tableCode,
+    guestName: p.guestName,
     amountPaise: p.amountPaise,
     method: p.method,
     status: p.status,
@@ -473,7 +488,7 @@ export async function getDashboard(staff: Staff, now = new Date()) {
       id: `pay-${p.key}`,
       type: "payment" as const,
       title: "Payment received",
-      subtitle: `Table ${p.tableCode}`,
+      subtitle: placeLabel(p.tableCode, p.guestName),
       timestamp: p.createdAt,
       amountPaise: p.amountPaise,
     })),
@@ -481,13 +496,13 @@ export async function getDashboard(staff: Staff, now = new Date()) {
       id: `ord-${k.id}`,
       type: "order" as const,
       title: "New order placed",
-      subtitle: `Table ${k.tableCode} · ${k.itemCount} item${k.itemCount > 1 ? "s" : ""}`,
+      subtitle: `${placeLabel(k.tableCode, k.guestName)} · ${k.itemCount} item${k.itemCount > 1 ? "s" : ""}`,
       timestamp: k.placedAt,
     })),
     ...customerRequests.map((r) => ({
       id: `req-${r.id}`,
       type: "request" as const,
-      title: `Table ${r.tableCode} requested ${r.kind.replace("_", " ")}`,
+      title: `${placeLabel(r.tableCode)} requested ${r.kind.replace("_", " ")}`,
       subtitle: "Assistance needed",
       timestamp: r.createdAt,
     })),
@@ -500,6 +515,7 @@ export async function getDashboard(staff: Staff, now = new Date()) {
     })),
   ].sort((a, b) => b.timestamp - a.timestamp).slice(0, 10);
 
+  const roomsNow = await roomSnapshot(scope);
   return redactDashboard(dashboardView(staff.roles), {
     outletName: outlet?.name ?? staff.outlet.name,
     timezone: tz,
@@ -507,6 +523,7 @@ export async function getDashboard(staff: Staff, now = new Date()) {
     greeting: greeting(now, tz),
     generatedAt: now.getTime(),
     kpis: {
+      rooms: { total: roomsNow.total, occupied: roomsNow.occupied, cleaning: roomsNow.cleaning, available: roomsNow.available },
       revenue: { today: moneyToday.revenuePaise, yesterday: moneyYesterday.revenuePaise },
       orders: { today: ordersToday, yesterday: ordersYesterday },
       covers: { today: coversToday, yesterday: coversYesterday },
@@ -542,6 +559,7 @@ export async function getDashboard(staff: Staff, now = new Date()) {
       late,
       pendingRefunds: { count: Number(refunds[0]?.n ?? 0), paise: Number(refunds[0]?.paise ?? 0) },
       blockedTables: states.blocked ?? 0,
+      roomRequests: roomsNow.requests,
       lowStock: low.map((l) => l.name),
     },
     topItems: top,

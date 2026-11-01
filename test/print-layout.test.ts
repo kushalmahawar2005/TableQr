@@ -155,6 +155,12 @@ describe("fitting the page to the slip just before printing", () => {
     expect(added[0]).toBe(`@page{size:80mm ${mm(900)}mm;margin:0}`);
   });
 
+  it("adds spare paper for the print window, so its margins cannot push the last line to a second page", () => {
+    const { doc, added } = fakeDoc(80, [1000]);
+    fitThermalPage(doc, 14);
+    expect(added[0]).toBe(`@page{size:80mm ${mm(1000) + 14}mm;margin:0}`);
+  });
+
   it("leaves a page that is not a thermal slip alone", () => {
     const { doc, added } = fakeDoc(80, [500], "@page{size:A4}");
     fitThermalPage(doc);

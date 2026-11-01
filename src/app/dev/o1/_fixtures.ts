@@ -34,6 +34,7 @@ const busy: DashboardData = {
   generatedAt: NOW,
   view: "full",
   kpis: {
+    rooms: { total: 0, occupied: 0, cleaning: 0, available: 0 },
     revenue: { today: 8_462_500, yesterday: 7_540_000 },
     orders: { today: 64, yesterday: 71 },
     covers: { today: 118, yesterday: 118 },
@@ -60,14 +61,18 @@ const busy: DashboardData = {
     kitchenOrders: [],
     customerRequests: [],
     recentPayments: [],
-    activityFeed: [],
+    activityFeed: [
+      { id: "a1", type: "payment", title: "Payment received", subtitle: "Delivery · Kushal", timestamp: min(-1), amountPaise: 12_000 },
+      { id: "a2", type: "order", title: "New order placed", subtitle: "Takeaway 5 · 2 items", timestamp: min(-14) },
+      { id: "a3", type: "order", title: "New order placed", subtitle: "Table T4 · 3 items", timestamp: min(-40) },
+    ],
   },
   alerts: {
     slowBills: [{ sessionId: "s1", tableCode: "T12", waitedMinutes: 14 }],
     soldOut: 2,
     late: [{ id: "l1", name: "Rao", partySize: 2, startAt: min(-22), status: "confirmed", tables: ["T6"], lateMinutes: 22, noShowEligible: true }],
     pendingRefunds: { count: 1, paise: 34_000 },
-    blockedTables: 1, lowStock: [],
+    blockedTables: 1, roomRequests: 0, lowStock: [],
   },
   topItems: [
     { itemId: "a", name: "Butter Chicken", qty: 23, grossPaise: 874_000 },
@@ -78,14 +83,14 @@ const busy: DashboardData = {
   ].sort((x, y) => y.qty - x.qty),
 };
 
-const calm = { slowBills: [], soldOut: 0, late: [], pendingRefunds: { count: 0, paise: 0 }, blockedTables: 0, lowStock: [] };
+const calm = { slowBills: [], soldOut: 0, late: [], pendingRefunds: { count: 0, paise: 0 }, blockedTables: 0, roomRequests: 0, lowStock: [] };
 
 const quiet: DashboardData = {
   ...busy,
   greeting: "Good morning",
   generatedAt: localTime(DATE, 9 * 60 + 5, TZ).getTime(),
   view: "full",
-  kpis: { revenue: { today: 0, yesterday: 0 }, orders: { today: 0, yesterday: 0 }, covers: { today: 0, yesterday: 0 }, averageBill: { today: 0, yesterday: 0 }, paidBills: 0, openTables: { open: 0, total: 18 }, upcomingReservations: 0, waitlist: 0, outstandingPaise: 0, delivery: { active: 0, onTheWay: 0, deliveredToday: 0, cashToCollectPaise: 0 } },
+  kpis: { rooms: { total: 0, occupied: 0, cleaning: 0, available: 0 }, revenue: { today: 0, yesterday: 0 }, orders: { today: 0, yesterday: 0 }, covers: { today: 0, yesterday: 0 }, averageBill: { today: 0, yesterday: 0 }, paidBills: 0, openTables: { open: 0, total: 18 }, upcomingReservations: 0, waitlist: 0, outstandingPaise: 0, delivery: { active: 0, onTheWay: 0, deliveredToday: 0, cashToCollectPaise: 0 } },
   secondary: { taxPaise: 0, serviceChargePaise: 0, tipPaise: 0 },
   operations: { tables: { available: 18, reserved: 0, seated: 0, billRequested: 0, blocked: 0, total: 18 }, tableTiles: [], waitlist: { waiting: 0, notified: 0 }, upcoming: [], billRequestedTables: 0, kitchenOrders: [], customerRequests: [], recentPayments: [], activityFeed: [] },
   alerts: calm,

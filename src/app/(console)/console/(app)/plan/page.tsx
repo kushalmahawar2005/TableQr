@@ -21,26 +21,27 @@ export default async function PlanPage() {
   }
   const plan = await planViewFor(staff);
   return (
-    <main className="mx-auto w-full max-w-[1320px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="text-caption font-semibold uppercase tracking-[0.08em] text-muted">Subscription & billing</p>
-          <h1 className="mt-1 font-display text-title font-bold text-ink">My plan</h1>
-          <p className="mt-1 text-body text-muted">Check your access, compare plans and pay securely when you’re ready.</p>
+    <div className="dashboard-theme min-h-[calc(100dvh-4rem)] bg-dashboard-canvas sm:min-h-[calc(100dvh-4.5rem)]">
+    <main className="mx-auto w-full max-w-[1440px] px-3 py-3 pb-6 sm:px-6 sm:py-5 lg:px-8 lg:py-6">
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="font-display text-lg font-bold leading-6 tracking-tight text-ink sm:text-[28px] sm:leading-8">My plan</h1>
+          <p className="mt-1 text-sm font-medium text-muted">Check your access, compare plans and pay when you are ready.</p>
         </div>
         <ContactTableeqr message={`Hi Tableeqr, this is ${staff.outlet.name}. I have a question about our plan.`} />
       </header>
-      <div className="mt-6 grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
+      <div className="mt-4 grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
         <PlanPass plan={plan} />
         <div className="lg:sticky lg:top-20">
           <PayOrPaid plan={plan} />
         </div>
       </div>
-      <div className="mt-6 grid gap-6">
+      <div className="mt-4 grid gap-4">
         <CommercialSummary plan={plan} />
         <ComparePlans plan={plan} />
         <PlanPayments plan={plan} />
       </div>
     </main>
+    </div>
   );
 }

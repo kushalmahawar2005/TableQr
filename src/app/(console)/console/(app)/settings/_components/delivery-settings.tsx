@@ -23,22 +23,22 @@ export function DeliverySettings({ value, onChange, disabled, hasGateway, hasPay
   const minimumLabel = deliveryOn && pickupOn ? "Minimum food order (₹)" : pickupOn ? "Minimum pickup order (₹)" : "Minimum delivery order (₹)";
 
   return <div className="space-y-5 py-5">
-    <div className="rounded-2xl border border-brand-border bg-brand-soft/40 p-4">
+    <div className="rounded-2xl border border-line bg-sage p-4">
       <p className="text-sm font-semibold text-ink">Guests only see the online services you turn on.</p>
       <p className="mt-1 text-sm text-muted">Online payment choices use this outlet’s connected payment setup. Pickup does not ask guests for a delivery address.</p>
     </div>
     {hasDelivery && <label className="flex min-h-[4.5rem] cursor-pointer items-center justify-between gap-4 rounded-2xl border border-line bg-surface px-4 py-3 text-sm font-semibold text-ink">
       <span><span className="block">Accept delivery orders</span><span className="mt-0.5 block text-xs font-normal text-muted">{value.acceptingOrders ? "Guests can place delivery orders." : "Delivery is hidden from guests."}</span></span>
-      <input type="checkbox" checked={value.acceptingOrders} disabled={disabled} onChange={event => update({ acceptingOrders: event.target.checked })} className="size-5 shrink-0 accent-[var(--brand)]" />
+      <input type="checkbox" checked={value.acceptingOrders} disabled={disabled} onChange={event => update({ acceptingOrders: event.target.checked })} className="size-5 shrink-0 accent-[var(--state-available)]" />
     </label>}
     {hasPickup && <label className="flex min-h-[4.5rem] cursor-pointer items-center justify-between gap-4 rounded-2xl border border-line bg-surface px-4 py-3 text-sm font-semibold text-ink">
       <span><span className="block">Accept pickup / takeaway orders</span><span className="mt-0.5 block text-xs font-normal text-muted">{value.acceptingPickupOrders ? "Guests can order online and collect at your counter." : "Pickup is hidden from guests."}</span></span>
-      <input type="checkbox" checked={value.acceptingPickupOrders} disabled={disabled} onChange={event => update({ acceptingPickupOrders: event.target.checked })} className="size-5 shrink-0 accent-[var(--brand)]" />
+      <input type="checkbox" checked={value.acceptingPickupOrders} disabled={disabled} onChange={event => update({ acceptingPickupOrders: event.target.checked })} className="size-5 shrink-0 accent-[var(--state-available)]" />
     </label>}
 
     {pickupOn && <label className="flex min-h-[4.5rem] cursor-pointer items-center justify-between gap-4 rounded-2xl border border-line bg-surface px-4 py-3 text-sm font-semibold text-ink">
       <span><span className="block">Allow pay at pickup</span><span className="mt-0.5 block text-xs font-normal text-muted">Guests can pay at the counter when collecting.</span></span>
-      <input type="checkbox" checked={value.pickupCodEnabled} disabled={disabled} onChange={event => update({ pickupCodEnabled: event.target.checked })} className="size-5 shrink-0 accent-[var(--brand)]" />
+      <input type="checkbox" checked={value.pickupCodEnabled} disabled={disabled} onChange={event => update({ pickupCodEnabled: event.target.checked })} className="size-5 shrink-0 accent-[var(--state-available)]" />
     </label>}
     {(hasDelivery || pickupOn) && <div className="space-y-1.5 rounded-2xl border border-line bg-surface px-4 py-3">
       <label htmlFor="first-cash-limit" className="block text-sm font-semibold text-ink">First cash order limit (₹)</label>

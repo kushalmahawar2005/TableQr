@@ -147,12 +147,11 @@ export function ReportsScreen({ report, outlet }: { report: Report; outlet: stri
   const busyHours = report.byHour.map((orders, h) => ({ h, orders })).filter((v) => v.orders > 0).sort((a, b) => b.orders - a.orders).slice(0, 6);
 
   return (
-    <main id="reports-screen" className="mx-auto w-full max-w-[1200px] px-4 py-5 sm:px-6 lg:px-8 lg:py-7 print:max-w-none print:p-0">
+    <main id="reports-screen" className="mx-auto w-full max-w-[1440px] px-3 py-3 pb-6 sm:px-6 sm:py-5 lg:px-8 lg:py-6 print:max-w-none print:p-0">
       <div className="print:hidden">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-caption font-semibold text-muted">{outlet}</p>
-          <h1 className="mt-1 font-display text-title font-bold text-ink">Reports</h1>
+          <h1 className="font-display text-lg font-bold leading-6 tracking-tight text-ink sm:text-[28px] sm:leading-8">Reports</h1>
           <p className="mt-0.5 text-body text-muted">{dateRange} · {report.range} days</p>
         </div>
         <div className="grid w-full grid-cols-2 items-center gap-2 print:hidden sm:flex sm:w-auto sm:flex-wrap">
@@ -161,7 +160,7 @@ export function ReportsScreen({ report, outlet }: { report: Report; outlet: stri
           <Link href="/console/reports/items" className="inline-flex min-h-11 min-w-0 items-center justify-center gap-1.5 rounded-xl border border-line bg-surface px-2 text-xs font-semibold text-ink hover:border-ink/40 sm:gap-2 sm:px-3.5 sm:text-sm"><Receipt className="size-4 shrink-0" aria-hidden="true" />Items &amp; staff</Link>
           <nav aria-label="Period" className="col-span-2 flex justify-center overflow-hidden rounded-xl border border-line bg-surface sm:col-span-1">
             {([7, 30, 90] as const).map((d) => (
-              <Link key={d} href={`/console/reports?days=${d}`} aria-current={report.range === d ? "page" : undefined} className={`flex min-h-11 flex-1 items-center justify-center px-2 text-xs font-semibold sm:flex-none sm:px-3.5 sm:text-sm ${report.range === d ? "bg-ink text-paper" : "text-muted hover:text-ink"}`}>{d} days</Link>
+              <Link key={d} href={`/console/reports?days=${d}`} aria-current={report.range === d ? "page" : undefined} className={`flex min-h-11 flex-1 items-center justify-center px-2 text-xs font-semibold sm:flex-none sm:px-3.5 sm:text-sm ${report.range === d ? "bg-forest text-white" : "text-muted hover:text-ink"}`}>{d} days</Link>
             ))}
           </nav>
           <button type="button" onClick={exportCsv} className="inline-flex min-h-11 min-w-0 items-center justify-center gap-1.5 rounded-xl border border-line bg-surface px-2 text-xs font-semibold hover:border-ink/40 sm:px-3.5 sm:text-sm"><Download className="size-4 shrink-0" aria-hidden="true" />Excel (CSV)</button>

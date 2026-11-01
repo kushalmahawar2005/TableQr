@@ -61,25 +61,28 @@ export default async function OrdersPage(props: PageProps<"/console/orders">) {
   ) : null;
   const tableLive = orders.filter(o => !o.delivery && o.status !== "served" && o.status !== "cancelled").length;
   const deliveryLive = deliveries.filter(d => d.status !== "delivered" && d.status !== "collected" && d.status !== "cancelled").length + pendingPayments.length;
+  const totalLive = tableLive + deliveryLive;
   const mainOrdersLabel = features.dineIn ? "Table / counter orders" : features.rooms ? "Room orders" : features.pos ? "Counter orders" : "Orders";
 
   const tab = (href: string, label: string, n: number, on: boolean) => (
-    <Link href={href} aria-current={on ? "page" : undefined} className={`inline-flex min-h-11 items-center gap-2 rounded-full border px-4 text-body font-semibold transition-colors ${on ? "border-brand bg-brand text-brand-on" : "border-line bg-surface text-ink hover:border-ink/40"}`}>
+    <Link href={href} aria-current={on ? "page" : undefined} className={`-mb-px inline-flex min-h-11 items-center gap-2 border-b-2 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-forest ${on ? "border-forest text-forest" : "border-transparent text-muted hover:text-ink"}`}>
       {label}
-      {n > 0 && <span className={`grid h-5 min-w-5 place-items-center rounded-full px-1.5 text-label font-bold tabular ${on ? "bg-white/25 text-brand-on" : "bg-brand text-brand-on"}`}>{n}</span>}
+      {n > 0 && <span className="grid h-5 min-w-5 place-items-center rounded-md bg-forest px-1.5 text-xs font-bold text-white tabular">{n}</span>}
     </Link>
   );
   const guestOrderLabel = modes.pickup && modes.delivery ? "Guest pickup & delivery" : modes.pickup ? "Guest pickup" : "Guest delivery";
+  const theme = "dashboard-theme min-h-[calc(100dvh-4rem)] bg-dashboard-canvas sm:min-h-[calc(100dvh-4.5rem)]";
   const tabs = hasGuestOrderSection ? (
-    <nav aria-label="Order type" className="mt-4 flex flex-wrap gap-2">
+    <nav aria-label="Order type" className="mt-4 flex flex-wrap items-center gap-x-7 border-b border-line">
       {tab("/console/orders", mainOrdersLabel, tableLive, !showGuestOrders)}
       {tab("/console/orders?view=delivery", guestOrderLabel, deliveryLive, showGuestOrders)}
+      {/* Both sections together, so nothing waiting in the other tab goes unseen */}
+      {totalLive > 0 && <p className="ml-auto pb-1 text-sm font-semibold text-ink"><span className="font-display text-lg font-bold tabular text-forest">{totalLive}</span> active {totalLive === 1 ? "order" : "orders"}</p>}
     </nav>
   ) : null;
 
   if (showGuestOrders) {
-    return <>{loadWarning}<DeliveryQueueScreen
-      outlet={staff.outlet.name}
+    return <div className={theme}>{loadWarning}<DeliveryQueueScreen
       tabs={tabs}
       riders={riders}
       realtimeUrl={process.env.REALTIME_URL?.replace(/^http/, "ws") ?? null}
@@ -87,8 +90,8 @@ export default async function OrdersPage(props: PageProps<"/console/orders">) {
       availableModes={modes}
       rows={deliveries.map(row => ({ ...row, address: row.address ?? { line: "", locality: "", pincode: "", instructions: "" }, placedAt: row.placedAt?.toISOString() ?? null }))}
       pendingPayments={pendingPayments.map(row => ({ ...row, claimedAt: row.claimedAt?.toISOString() ?? null }))}
-    /></>;
+    /></div>;
   }
   // Delivery orders have their own section, so the table queue leaves them out
-  return <>{loadWarning}<OrdersScreen orders={hasGuestOrderSection ? orders.filter(o => !o.delivery) : orders} outlet={staff.outlet.name} tabs={tabs} /></>;
+  return <div className={theme}>{loadWarning}<OrdersScreen orders={hasGuestOrderSection ? orders.filter(o => !o.delivery) : orders} outlet={staff.outlet.name} tabs={tabs} /></div>;
 }

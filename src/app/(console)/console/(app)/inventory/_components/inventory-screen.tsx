@@ -2,7 +2,8 @@
 
 import type { Features } from "@/lib/plan-features";
 import { useMemo, useState } from "react";
-import { Cancel01Icon, PlusSignIcon } from "@hugeicons/core-free-icons";
+import { AlertTriangle, ChefHat, MoreHorizontal, Package, Plus, Search, Wallet } from "lucide-react";
+import { Cancel01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { fromMilli, showQty, UNIT_LABEL, type StockUnit } from "@/domain/inventory";
 import type { Inventory } from "@/server/staff/inventory";
@@ -11,19 +12,21 @@ import { inventoryAction, moveAction, purchasingAction, recipeAction, removeItem
 import { CountTab, MakePrepSheet, PrepRecipeSheet, PrepTab, ReportTab } from "./count-prep-report";
 import { LibrarySheet } from "./library-sheet";
 import { BillSheet, PaySheet, PurchasesTab, SupplierSheet, SuppliersTab, type BillPanel } from "./purchasing";
+import { columnHead, DetailHead, DetailSection, DetailSheet, Pill, primaryButton, QueuePanel, RowSelect, rowCells, rowTone, secondaryButton, Segmented, StatCards, type Stat } from "../../orders/_components/orders-ui";
 import { card, field, focus, label, primary, quiet, rs, Sheet, when } from "./ui";
 
 // Inventory: what is on the shelf, what each dish uses, and every change. Paid bills take stock
 // off by the recipes; supplier bills put it in; the day-end count finds what went missing; the
-// report shows food cost. Organised like a counter POS: Stock, Purchases, Suppliers, Count,
-// Recipes, Prep, Report, History.
+// report shows food cost. Four daily tabs (Stock, Purchases, Day-end count, Reports); recipes and
+// prep sit under More because they are set up once, not used every day.
 
 type Item = Inventory["items"][number];
 type Dish = Inventory["dishes"][number];
-type Tab = "stock" | "purchases" | "suppliers" | "count" | "recipes" | "prep" | "report" | "history";
+type Tab = "stock" | "purchases" | "count" | "recipes" | "prep" | "reports";
 type Panel =
   | { kind: "item"; item: Item | null; prep?: boolean }
   | { kind: "move"; item: Item; move: "wastage" | "count" }
+  | { kind: "update"; item: Item }
   | { kind: "recipe"; dish: Dish }
   | { kind: "prepRecipe"; item: Item }
   | { kind: "make"; item: Item }
@@ -31,7 +34,13 @@ type Panel =
   | BillPanel
   | null;
 
-const TABS: [Tab, string][] = [["stock", "Stock"], ["purchases", "Purchases"], ["suppliers", "Suppliers"], ["count", "Day-end count"], ["recipes", "Recipes"], ["prep", "Prep items"], ["report", "Report"], ["history", "History"]];
+const COLUMNS = "lg:grid-cols-[minmax(0,1.6fr)_96px_72px_104px_84px]";
+const OK_TONE = "bg-[var(--state-available-soft)] text-[var(--state-available-text)]";
+const LOW_TONE = "bg-[var(--state-held-soft)] text-[var(--state-held-text)]";
+const OUT_TONE = "bg-danger/10 text-danger";
+/** One word for the shelf: nothing left, running low, or fine */
+const shelf = (i: Item) => (i.qtyMilli <= 0 ? { rank: 0, label: "Out", tone: OUT_TONE } : i.low ? { rank: 1, label: "Low", tone: LOW_TONE } : { rank: 2, label: "OK", tone: OK_TONE });
+const LOW_FILTER = "__low";
 const KIND = {
   purchase: { label: "Purchase", tone: "bg-[var(--state-available-soft)] text-[var(--state-available-text)]" },
   sale: { label: "Sold", tone: "bg-ink/[0.06] text-muted" },
@@ -52,6 +61,11 @@ export function InventoryScreen({ initial, purchasing, features }: { initial: In
   const [notice, setNotice] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [group, setGroup] = useState("all");
+  const [buyView, setBuyView] = useState<"bills" | "suppliers">("bills");
+  const [reportView, setReportView] = useState<"summary" | "history">("summary");
+  const [more, setMore] = useState(false);
+  // Chosen on purpose: opens the item on phones. Wide screens show the first item until then.
+  const [picked, setPicked] = useState<string | null>(null);
 
   const reload = async () => {
     const [a, b] = await Promise.all([inventoryAction(), purchasingAction()]);
@@ -78,129 +92,138 @@ export function InventoryScreen({ initial, purchasing, features }: { initial: In
     setError(null);
   };
 
-  const low = data.items.filter((i) => i.low);
   const groups = useMemo(() => [...new Set(data.items.map((i) => i.category ?? "Other"))].sort(), [data.items]);
-  const shown = data.items.filter((i) => (!query.trim() || i.name.toLowerCase().includes(query.trim().toLowerCase())) && (group === "all" || (i.category ?? "Other") === group));
+  const shown = data.items
+    .filter((i) => (!query.trim() || i.name.toLowerCase().includes(query.trim().toLowerCase())) && (group === "all" || (group === LOW_FILTER ? shelf(i).rank < 2 : (i.category ?? "Other") === group)))
+    .sort((a, b) => shelf(a).rank - shelf(b).rank || a.name.localeCompare(b.name));
+  const focused = shown.find((i) => i.id === picked) ?? shown[0] ?? null;
+  const needStock = data.items.filter((i) => shelf(i).rank < 2).length;
+  const canBuy = !features || features.purchasing;
+  const canCost = !features || features.recipeCosting;
+  const tabs: [Tab, string][] = [["stock", "Stock"], ...(canBuy ? [["purchases", "Purchases"], ["count", "Day-end count"]] as [Tab, string][] : []), ["reports", "Reports"]];
+  const showTab = (next: Tab) => { setTab(next); setNotice(null); setMore(false); };
   const itemName = useMemo(() => new Map(data.items.map((i) => [i.id, i])), [data.items]);
   const withRecipe = data.dishes.filter((d) => d.recipe.length).length;
   const held = data.dishes.filter((d) => d.heldByStock);
   const owed = buying.suppliers.reduce((n, s) => n + Math.max(0, s.duePaise), 0);
+  // The ways stock changes, from the row's Update button and from the item panel alike
+  const stockActions = (item: Item) => (
+    <div className="grid gap-2">
+      {item.isPrep
+        ? <button type="button" className={`${primaryButton} w-full`} disabled={!item.prep.length} onClick={() => setPanel({ kind: "make", item })}>Make a batch</button>
+        : canBuy && <button type="button" className={`${primaryButton} w-full`} onClick={() => setPanel({ kind: "bill", mode: "purchase", itemId: item.id })}>Stock came in</button>}
+      <div className="grid grid-cols-2 gap-2">
+        {canBuy && <button type="button" className={secondaryButton} onClick={() => setPanel({ kind: "move", item, move: "wastage" })}>Wastage</button>}
+        <button type="button" className={`${secondaryButton} ${canBuy ? "" : "col-span-2"}`} onClick={() => setPanel({ kind: "move", item, move: "count" })}>Count shelf</button>
+      </div>
+    </div>
+  );
+  const stats: Stat[] = [
+    { icon: AlertTriangle, label: "Need stock", value: String(needStock), note: needStock ? "Low or out right now" : "Nothing running low", tone: needStock ? "warn" : "forest" },
+    { icon: Package, label: "Stock value", value: rs(data.stockValuePaise), note: `${data.items.length} ${data.items.length === 1 ? "item" : "items"} on the shelf` },
+    ...(canBuy ? [{ icon: Wallet, label: "Suppliers to pay", value: rs(owed), note: owed ? "Unpaid purchase bills" : "Nothing due", tone: "accent" } as Stat] : []),
+    { icon: ChefHat, label: "Dishes with a recipe", value: `${withRecipe} / ${data.dishes.length}`, note: "These take stock off when sold" },
+  ];
 
   return (
-    <main className="mx-auto w-full max-w-[1200px] px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
+    <main className="mx-auto w-full max-w-[1440px] px-3 py-3 pb-6 sm:px-6 sm:py-5 lg:px-8 lg:py-6">
       <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="font-display text-title font-bold text-ink">Inventory</h1>
-          <p className="mt-1 text-body text-muted">
-            {data.items.length} {data.items.length === 1 ? "item" : "items"} worth about {rs(data.stockValuePaise)}. {withRecipe} of {data.dishes.length} dishes have a recipe.{owed > 0 ? ` You owe suppliers ${rs(owed)}.` : ""}
-          </p>
+        <div className="min-w-0">
+          <h1 className="font-display text-lg font-bold leading-6 tracking-tight text-ink sm:text-[28px] sm:leading-8">Inventory</h1>
+          <p className="mt-1 text-sm font-medium text-muted">What you have, what came in and what to buy next.</p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <button type="button" className={`${quiet} min-h-11 px-4`} onClick={() => setPanel({ kind: "library" })}>From library</button>
-          <button type="button" className={`${quiet} min-h-11 px-4`} onClick={() => setPanel({ kind: "item", item: null })}>
-            <HugeiconsIcon icon={PlusSignIcon} size={16} aria-hidden />
-            <span className="ml-1.5">Stock item</span>
-          </button>
-          {(!features || features.purchasing) && <button type="button" className={primary} disabled={!data.items.length} onClick={() => setPanel({ kind: "bill", mode: "purchase" })}>
-            <HugeiconsIcon icon={PlusSignIcon} size={18} aria-hidden />
-            New purchase bill
-          </button>}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative">
+            {more && <button type="button" aria-label="Close menu" className="fixed inset-0 z-10 cursor-default" onClick={() => setMore(false)} />}
+            <button type="button" aria-expanded={more} aria-label="More inventory actions" className={`${secondaryButton} relative z-20 !px-3`} onClick={() => setMore(!more)}><MoreHorizontal className="size-4" aria-hidden="true" />More</button>
+            {more && <div className="absolute left-0 z-20 mt-1 grid w-48 gap-1 rounded-input border border-line bg-surface p-1.5 shadow-lg sm:left-auto sm:right-0 [&>button]:w-full [&>button]:justify-start [&>button]:border-0">
+              <button type="button" className={secondaryButton} onClick={() => { setMore(false); setPanel({ kind: "library" }); }}>Add from library</button>
+              {canCost && <button type="button" className={secondaryButton} onClick={() => showTab("recipes")}>Recipes</button>}
+              {canCost && <button type="button" className={secondaryButton} onClick={() => showTab("prep")}>Prep items</button>}
+            </div>}
+          </div>
+          <button type="button" className={secondaryButton} onClick={() => setPanel({ kind: "item", item: null })}><Plus className="size-4" aria-hidden="true" />Add item</button>
+          {canBuy && <button type="button" className={primaryButton} disabled={!data.items.length} onClick={() => setPanel({ kind: "bill", mode: "purchase" })}><Plus className="size-4" aria-hidden="true" />New purchase bill</button>}
         </div>
       </header>
 
-      {notice && <p role="status" className="mt-4 rounded-xl bg-[var(--state-available-soft)] px-4 py-2.5 text-body text-[var(--state-available-text)]">{notice}</p>}
-      {low.length > 0 && (
-        <p role="alert" className="mt-4 rounded-xl border border-danger/30 bg-danger/[0.06] px-4 py-3 text-body text-ink">
-          <span className="font-semibold text-danger">Running low: </span>
-          {low.map((i) => `${i.name} (${showQty(i.qtyMilli, i.unit)})`).join(", ")}
-        </p>
-      )}
+      <StatCards stats={stats} />
+
+      {notice && <p role="status" className="mt-4 rounded-input bg-[var(--state-available-soft)] px-4 py-2.5 text-sm font-medium text-[var(--state-available-text)]">{notice}</p>}
       {held.length > 0 && (
-        <p className="mt-3 rounded-xl border border-line bg-surface px-4 py-3 text-body text-ink">
+        <p className="mt-3 rounded-input border border-line bg-surface px-4 py-3 text-sm text-ink">
           <span className="font-semibold">Sold out because stock ran out: </span>
           {held.map((d) => d.name).join(", ")}. They come back on by themselves when you add the stock.
         </p>
       )}
 
-      <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
-        <div role="tablist" aria-label="Inventory" className="no-scrollbar flex max-w-full overflow-x-auto rounded-xl border border-line bg-surface p-1">
-          {TABS.filter(([k])=> !features || (["stock","history"].includes(k) || (["purchases","suppliers","count"].includes(k) ? features.purchasing : features.recipeCosting))).map(([k, name]) => (
-            <button key={k} role="tab" type="button" aria-selected={tab === k} onClick={() => { setTab(k); setNotice(null); }} className={`min-h-9 shrink-0 whitespace-nowrap rounded-lg px-3.5 text-body font-semibold ${focus} ${tab === k ? "bg-ink text-paper" : "text-muted hover:text-ink"}`}>
-              {name}
-            </button>
-          ))}
-        </div>
-        {tab === "stock" && (
-          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-            {groups.length > 1 && (
-              <select value={group} onChange={(e) => setGroup(e.target.value)} aria-label="Shelf group" className={`${field} w-full sm:w-auto`}>
-                <option value="all">All groups</option>
-                {groups.map((g) => <option key={g} value={g}>{g}</option>)}
-              </select>
-            )}
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search stock" aria-label="Search stock" className={`${field} w-full sm:w-56`} />
-          </div>
-        )}
+      <div className="no-scrollbar mt-4 flex items-center gap-x-7 overflow-x-auto border-b border-line" role="tablist" aria-label="Inventory">
+        {tabs.map(([k, name]) => <button key={k} role="tab" type="button" aria-selected={tab === k} onClick={() => showTab(k)} className={`-mb-px min-h-11 shrink-0 cursor-pointer border-b-2 text-sm font-semibold transition-colors ${focus} ${tab === k ? "border-forest text-forest" : "border-transparent text-muted hover:text-ink"}`}>{name}</button>)}
       </div>
 
-      {tab === "stock" && (
-        <section className={`${card} mt-4 overflow-hidden`} aria-label="Stock">
-          {data.items.length === 0 ? (
-            <div className="px-6 py-12 text-center">
-              <p className="font-display text-section font-bold text-ink">Start with what you buy most</p>
-              <p className="mx-auto mt-1 max-w-md text-body text-muted">Pick from a ready list of 100+ common items (paneer, atta, onion, oil, Coke…), or add your own. Save a purchase bill to put stock in; count the shelf at closing to see what was used.</p>
-              <div className="mt-4 flex flex-wrap justify-center gap-2">
-                <button type="button" className={primary} onClick={() => setPanel({ kind: "library" })}>Choose from library</button>
-                <button type="button" className={`${quiet} min-h-11 px-4`} onClick={() => setPanel({ kind: "item", item: null })}>Add my own item</button>
-              </div>
+      {tab === "stock" && <>
+        {data.items.length > 0 && <div className="mt-4 flex flex-wrap items-center gap-3">
+          <div role="group" aria-label="Shelf group" className="no-scrollbar flex min-w-0 flex-1 basis-full gap-2 overflow-x-auto lg:basis-0">
+            {([["all", "All", data.items.length], ...(needStock ? [[LOW_FILTER, "Low stock", needStock]] : []), ...groups.map((g) => [g, g, data.items.filter((i) => (i.category ?? "Other") === g).length])] as [string, string, number][]).map(([id, name, n]) => <button key={id} type="button" aria-pressed={group === id} onClick={() => setGroup(id)} className={`min-h-10 shrink-0 cursor-pointer rounded-full border px-4 text-sm font-semibold transition-colors ${focus} ${group === id ? "border-forest bg-forest text-white" : "border-line bg-surface text-muted hover:text-ink"}`}>{name} <span className="tabular-nums opacity-70">{n}</span></button>)}
+          </div>
+          <div className="relative w-full lg:w-64"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" aria-hidden="true" /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search stock" aria-label="Search stock" className="h-10 w-full rounded-input border border-line bg-surface pl-9 pr-3 text-sm text-ink outline-none focus:border-[var(--state-available)]" /></div>
+        </div>}
+        {data.items.length === 0 ? (
+          <section className={`${card} mt-4 px-6 py-12 text-center`} aria-label="Stock">
+            <span className="mx-auto grid size-12 place-items-center rounded-full bg-sage text-forest"><Package className="size-6" aria-hidden="true" /></span>
+            <p className="mt-3 font-display text-[15px] font-bold text-ink">Start with what you buy most</p>
+            <p className="mx-auto mt-1 max-w-md text-sm text-muted">Pick from a ready list of 100+ common items (paneer, atta, onion, oil, Coke…), or add your own. Save a purchase bill to put stock in; count the shelf at closing to see what was used.</p>
+            <div className="mt-4 flex flex-wrap justify-center gap-2">
+              <button type="button" className={primaryButton} onClick={() => setPanel({ kind: "library" })}>Choose from library</button>
+              <button type="button" className={secondaryButton} onClick={() => setPanel({ kind: "item", item: null })}>Add my own item</button>
             </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[820px] text-left text-body">
-                <thead>
-                  <tr className="text-caption text-muted">
-                    <th className="px-5 py-3 font-medium">Item</th>
-                    <th className="px-3 py-3 text-right font-medium">On hand</th>
-                    <th className="px-3 py-3 text-right font-medium">Alert at</th>
-                    <th className="px-3 py-3 text-right font-medium">Price</th>
-                    <th className="px-3 py-3 text-right font-medium">Value</th>
-                    <th className="px-5 py-3 text-right font-medium">Update</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {shown.map((i) => (
-                    <tr key={i.id} className="border-t border-line">
-                      <td className="px-5 py-3">
-                        <button type="button" onClick={() => setPanel({ kind: "item", item: i })} className={`text-left font-semibold text-ink hover:underline ${focus}`}>{i.name}</button>
-                        {i.isPrep && <span className="ml-1.5 rounded-full bg-[var(--state-reserved-soft)] px-2 py-0.5 text-caption font-semibold text-[var(--state-reserved-text)]">Prep</span>}
-                        <span className="block text-caption text-muted">
-                          {[i.category, i.packName && i.packMilli ? `1 ${i.packName} = ${showQty(i.packMilli, i.unit)}` : null, i.usedIn ? `in ${i.usedIn} ${i.usedIn === 1 ? "dish" : "dishes"}` : "not in a recipe"].filter(Boolean).join(" · ")}
-                        </span>
-                      </td>
-                      <td className={`px-3 py-3 text-right font-semibold tabular-nums ${i.qtyMilli < 0 || i.low ? "text-danger" : "text-ink"}`}>{showQty(i.qtyMilli, i.unit)}</td>
-                      <td className="px-3 py-3 text-right text-muted tabular-nums">{i.lowMilli === null ? "—" : showQty(i.lowMilli, i.unit)}</td>
-                      <td className="px-3 py-3 text-right text-muted tabular-nums">{i.costPaise === null ? "—" : `₹${(i.costPaise / 100).toLocaleString("en-IN", { maximumFractionDigits: 2 })}/${UNIT_LABEL[i.unit]}`}</td>
-                      <td className="px-3 py-3 text-right text-muted tabular-nums">{i.costPaise && i.qtyMilli > 0 ? rs(Math.round((i.costPaise * i.qtyMilli) / 1000)) : "—"}</td>
-                      <td className="px-5 py-3">
-                        <div className="flex justify-end gap-1.5">
-                          {i.isPrep
-                            ? <button type="button" className={quiet} disabled={!i.prep.length} onClick={() => setPanel({ kind: "make", item: i })}>Make batch</button>
-                            : <button type="button" className={quiet} onClick={() => setPanel({ kind: "bill", mode: "purchase" })}>Purchase</button>}
-                          {(!features || features.purchasing) && <button type="button" className={quiet} onClick={() => setPanel({ kind: "move", item: i, move: "wastage" })}>Wastage</button>}
-                          <button type="button" className={quiet} onClick={() => setPanel({ kind: "move", item: i, move: "count" })}>Count</button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
-      )}
+          </section>
+        ) : (
+          <div className="mt-4 grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+            <QueuePanel title="Stock" meta={`${shown.length} of ${data.items.length} · Low stock first`} columns={shown.length > 0 && <div className={`${columnHead} ${COLUMNS}`}><span>Item</span><span>Left</span><span>Status</span><span>Price</span><span className="text-right">Action</span></div>}>
+              {shown.length === 0 ? <p className="px-5 py-10 text-center text-sm text-muted">Nothing matches.</p> : <ul>
+                {shown.map((i) => {
+                  const s = shelf(i), sel = focused?.id === i.id;
+                  return <li key={i.id} className={`${rowCells} ${COLUMNS} ${rowTone(sel, false)}`}>
+                    <span className="col-start-1 row-start-1 min-w-0 lg:col-auto lg:row-auto"><RowSelect selected={sel} onSelect={() => setPicked(i.id)}>
+                      <span className="flex items-center gap-1.5"><span className="truncate text-sm font-bold text-ink">{i.name}</span>{i.isPrep && <Pill className="bg-[var(--state-reserved-soft)] text-[var(--state-reserved-text)]">Prep</Pill>}</span>
+                      <span className="mt-0.5 block truncate text-xs font-medium text-muted">{[i.category, i.usedIn ? `in ${i.usedIn} ${i.usedIn === 1 ? "dish" : "dishes"}` : "not in a recipe"].filter(Boolean).join(" · ")}</span>
+                    </RowSelect></span>
+                    <span className={`col-start-2 row-start-1 justify-self-end text-sm font-bold tabular-nums lg:col-auto lg:row-auto lg:justify-self-start ${s.rank < 2 ? "text-danger" : "text-ink"}`}>{showQty(i.qtyMilli, i.unit)}</span>
+                    <span className="col-start-1 row-start-2 mt-1.5 lg:col-auto lg:row-auto lg:mt-0"><Pill className={s.tone}>{s.label}</Pill></span>
+                    <span className="hidden text-sm text-muted tabular-nums lg:inline">{i.costPaise === null ? "—" : `₹${(i.costPaise / 100).toLocaleString("en-IN", { maximumFractionDigits: 2 })}/${UNIT_LABEL[i.unit]}`}</span>
+                    <span className="relative z-10 col-start-2 row-start-2 mt-1.5 flex justify-end lg:col-auto lg:row-auto lg:mt-0"><button type="button" aria-label={`Update ${i.name}`} className={`${secondaryButton} !min-h-9 !px-3 text-xs`} onClick={() => setPanel({ kind: "update", item: i })}>Update</button></span>
+                  </li>;
+                })}
+              </ul>}
+            </QueuePanel>
+            {focused && <DetailSheet label="Item details" open={picked === focused.id} sticky>
+              <DetailHead title={focused.name} badge={<Pill className={shelf(focused).tone}>{shelf(focused).label}</Pill>} sub={[focused.category, focused.isPrep ? "Prep item" : null].filter(Boolean).join(" · ") || "Stock item"} onClose={() => setPicked(null)} />
+              <DetailSection>
+                <p className="text-xs font-medium text-muted">Left on the shelf</p>
+                <p className={`font-display text-2xl font-bold tabular-nums ${shelf(focused).rank < 2 ? "text-danger" : "text-ink"}`}>{showQty(focused.qtyMilli, focused.unit)}</p>
+                <dl className="mt-3 space-y-1.5 text-sm">
+                  <div className="flex justify-between gap-3"><dt className="text-muted">Alert at</dt><dd className="font-semibold tabular-nums">{focused.lowMilli === null ? "Not set" : showQty(focused.lowMilli, focused.unit)}</dd></div>
+                  <div className="flex justify-between gap-3"><dt className="text-muted">Price</dt><dd className="font-semibold tabular-nums">{focused.costPaise === null ? "Not set" : `₹${(focused.costPaise / 100).toLocaleString("en-IN", { maximumFractionDigits: 2 })}/${UNIT_LABEL[focused.unit]}`}</dd></div>
+                  <div className="flex justify-between gap-3"><dt className="text-muted">Value</dt><dd className="font-semibold tabular-nums">{focused.costPaise && focused.qtyMilli > 0 ? rs(Math.round((focused.costPaise * focused.qtyMilli) / 1000)) : "—"}</dd></div>
+                  {focused.packName && focused.packMilli ? <div className="flex justify-between gap-3"><dt className="text-muted">Pack</dt><dd className="font-semibold tabular-nums">1 {focused.packName} = {showQty(focused.packMilli, focused.unit)}</dd></div> : null}
+                </dl>
+              </DetailSection>
+              <DetailSection title="Update stock">
+                {stockActions(focused)}
+              </DetailSection>
+              {data.moves.some((m) => m.stockItemId === focused.id) && <DetailSection title="Last changes">
+                <ul className="grid gap-2 text-sm">{data.moves.filter((m) => m.stockItemId === focused.id).slice(0, 4).map((m) => <li key={m.id} className="flex items-center justify-between gap-2"><span className="min-w-0"><span className="block font-semibold text-ink">{KIND[m.kind].label}</span><span className="block text-xs text-muted">{when(m.createdAt)}</span></span><span className={`shrink-0 font-semibold tabular-nums ${m.qtyMilli < 0 ? "text-danger" : "text-[var(--state-available-text)]"}`}>{m.qtyMilli > 0 ? "+" : ""}{showQty(m.qtyMilli, focused.unit)}</span></li>)}</ul>
+              </DetailSection>}
+              <DetailSection><button type="button" className="cursor-pointer text-sm font-semibold text-forest hover:underline" onClick={() => setPanel({ kind: "item", item: focused })}>Edit item details</button></DetailSection>
+            </DetailSheet>}
+          </div>
+        )}
+      </>}
 
-      {tab === "purchases" && <PurchasesTab data={buying} onOpen={setPanel} />}
-      {tab === "suppliers" && <SuppliersTab data={buying} onOpen={setPanel} />}
+      {tab === "purchases" && <div className="mt-4"><Segmented label="Purchases" value={buyView} onChange={setBuyView} options={[{ key: "bills", label: "Bills", count: buying.bills.length }, { key: "suppliers", label: "Suppliers", count: buying.suppliers.length }]} /></div>}
+      {tab === "purchases" && buyView === "bills" && <PurchasesTab data={buying} onOpen={setPanel} />}
+      {tab === "purchases" && buyView === "suppliers" && <SuppliersTab data={buying} onOpen={setPanel} />}
       {tab === "count" && <CountTab items={data.items} done={async (m) => { setNotice(m); await reload(); }} />}
 
       {tab === "recipes" && (
@@ -208,7 +231,7 @@ export function InventoryScreen({ initial, purchasing, features }: { initial: In
           <div className="flex flex-wrap items-center justify-between gap-3 px-5 pt-4">
             <p className="text-caption text-muted">What one plate uses. When a bill is paid, these come off your stock.</p>
             <label className="inline-flex cursor-pointer items-center gap-2 text-caption font-semibold text-ink">
-              <input type="checkbox" className="size-4 accent-[var(--ink)]" checked={data.stockSoldOut} disabled={busy} onChange={(e) => void run(() => stockSoldOutAction(e.target.checked), e.target.checked ? "Dishes now go sold out when an ingredient runs out." : "Dishes no longer go sold out by stock.")} />
+              <input type="checkbox" className="size-4 accent-[var(--state-available)]" checked={data.stockSoldOut} disabled={busy} onChange={(e) => void run(() => stockSoldOutAction(e.target.checked), e.target.checked ? "Dishes now go sold out when an ingredient runs out." : "Dishes no longer go sold out by stock.")} />
               Sold out by itself when an ingredient runs out
             </label>
           </div>
@@ -235,9 +258,10 @@ export function InventoryScreen({ initial, purchasing, features }: { initial: In
       )}
 
       {tab === "prep" && <PrepTab items={data.items} onAdd={() => setPanel({ kind: "item", item: null, prep: true })} onRecipe={(i) => setPanel({ kind: "prepRecipe", item: i })} onMake={(i) => setPanel({ kind: "make", item: i })} />}
-      {tab === "report" && <ReportTab />}
+      {tab === "reports" && canCost && <div className="mt-4 inline-flex gap-1 rounded-input bg-ink/5 p-1" role="group" aria-label="Reports">{([["summary", "Stock report"], ["history", "History"]] as const).map(([key, name]) => <button key={key} type="button" aria-pressed={reportView === key} onClick={() => setReportView(key)} className={`min-h-9 cursor-pointer rounded-lg px-3 text-sm font-semibold ${focus} ${reportView === key ? "bg-surface text-ink shadow-xs" : "text-muted hover:text-ink"}`}>{name}</button>)}</div>}
+      {tab === "reports" && canCost && reportView === "summary" && <ReportTab />}
 
-      {tab === "history" && (
+      {tab === "reports" && (!canCost || reportView === "history") && (
         <section className={`${card} mt-4 overflow-hidden`} aria-label="History">
           {data.moves.length === 0 ? <p className="px-5 py-10 text-center text-body text-muted">No changes yet.</p> : (
             <div className="overflow-x-auto">
@@ -296,7 +320,7 @@ export function InventoryScreen({ initial, purchasing, features }: { initial: In
               <label className={label}>Units in one pack<input name="packSize" inputMode="decimal" defaultValue={panel.item?.packMilli ? fromMilli(panel.item.packMilli) : ""} placeholder="e.g. 30" className={field} /></label>
             </fieldset>
             <label className="inline-flex items-center gap-2 text-body text-ink">
-              <input name="isPrep" type="checkbox" className="size-4 accent-[var(--ink)]" defaultChecked={panel.item?.isPrep ?? !!panel.prep} />
+              <input name="isPrep" type="checkbox" className="size-4 accent-[var(--state-available)]" defaultChecked={panel.item?.isPrep ?? !!panel.prep} />
               Made in the kitchen from other stock (prep item)
             </label>
             {error && <p role="alert" className="text-caption text-danger">{error}</p>}
@@ -334,7 +358,11 @@ export function InventoryScreen({ initial, purchasing, features }: { initial: In
       {panel?.kind === "prepRecipe" && <PrepRecipeSheet prep={panel.item} items={data.items} onClose={close} done={done} />}
       {panel?.kind === "make" && <MakePrepSheet prep={panel.item} items={data.items} onClose={close} done={done} />}
       {panel?.kind === "library" && <LibrarySheet have={data.items.map((i) => i.name)} onClose={close} done={done} />}
-      {panel?.kind === "bill" && <BillSheet mode={panel.mode} items={data.items} suppliers={buying.suppliers} supplierId={panel.supplierId} onClose={close} done={done} />}
+      {panel?.kind === "update" && <Sheet title={`Update ${panel.item.name}`} onClose={close}>
+        <p className="text-sm text-muted">Left on the shelf: <b className="text-ink tabular-nums">{showQty(panel.item.qtyMilli, panel.item.unit)}</b></p>
+        <div className="mt-4">{stockActions(panel.item)}</div>
+      </Sheet>}
+      {panel?.kind === "bill" && <BillSheet mode={panel.mode} items={data.items} suppliers={buying.suppliers} supplierId={panel.supplierId} itemId={panel.itemId} onClose={close} done={done} />}
       {panel?.kind === "pay" && <PaySheet supplier={panel.supplier} purchaseId={panel.purchaseId} due={panel.due} onClose={close} done={done} />}
       {panel?.kind === "supplier" && <SupplierSheet supplier={panel.supplier} onClose={close} done={done} />}
     </main>

@@ -134,6 +134,10 @@ export function DashboardScreen({
 
   const dutyData = duty ?? undefined;
   const showStaff = !!dutyData;
+  // Two empty panels share a row, so a quiet day is not a long column of blank cards
+  const quietDay = data.view !== "operations" && data.operations.recentPayments.length === 0 && data.topItems.length === 0;
+  const payments = data.view !== "operations" && <RecentPayments payments={data.operations.recentPayments} timezone={data.timezone} />;
+  const dishes = data.view !== "operations" && <TopDishes data={data} />;
 
   return (
     <div className="dashboard-theme min-h-[calc(100dvh-4rem)] bg-dashboard-canvas sm:min-h-[calc(100dvh-4.5rem)]">
@@ -150,16 +154,19 @@ export function DashboardScreen({
 
         {data.view !== "operations" && <DashboardKpis data={data} trend={trend} features={features} />}
 
-        {data.view !== "money" && <QuickActions features={features} />}
-
-        <NeedsAttention data={data} features={features} />
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+          {data.view !== "money" && <QuickActions features={features} />}
+          <NeedsAttention data={data} features={features} />
+        </div>
 
         {/* Each column stacks panels end to end, so no column is left with an empty gap beneath it */}
         {data.view !== "money" && (
           <div className="grid items-start gap-5 xl:grid-cols-12">
-            <div className="min-w-0 space-y-5 xl:col-span-6">
+            <div className="min-w-0 space-y-5 xl:col-span-5">
               {features?.dineIn === true && <LiveFloor data={data} />}
-              {data.view !== "operations" && <RecentPayments payments={data.operations.recentPayments} timezone={data.timezone} />}
+              {quietDay ? <div className="grid items-start gap-5 sm:grid-cols-2">{payments}{dishes}</div> : payments}
+              {data.view !== "operations" && (!features || features.fullReports) && <SalesPerformance trend={trend} />}
+              {!quietDay && dishes}
             </div>
 
             <div className="min-w-0 space-y-5 xl:col-span-3">
@@ -167,17 +174,17 @@ export function DashboardScreen({
               {(!features || features.kitchenDisplay) && <KitchenOrders orders={data.operations.kitchenOrders} />}
             </div>
 
-            <div className="min-w-0 space-y-5 xl:col-span-3">
+            <div className="min-w-0 space-y-5 xl:col-span-4">
               {(!features || features.dineIn || features.rooms) && <CustomerRequests initialRequests={data.operations.customerRequests} />}
               {(!features || features.reservations) && <UpcomingReservations data={data} />}
-              <LiveActivity feed={data.operations.activityFeed} />
+              <LiveActivity feed={data.operations.activityFeed} live={conn === "live"} />
             </div>
           </div>
         )}
 
-        {data.view !== "operations" && (
+        {data.view === "money" && (
           <div className="grid items-start gap-5 xl:grid-cols-2">
-            {data.view === "money" && <RecentPayments payments={data.operations.recentPayments} timezone={data.timezone} />}
+            <RecentPayments payments={data.operations.recentPayments} timezone={data.timezone} />
             {(!features || features.fullReports) && <SalesPerformance trend={trend} />}
             <TopDishes data={data} />
           </div>

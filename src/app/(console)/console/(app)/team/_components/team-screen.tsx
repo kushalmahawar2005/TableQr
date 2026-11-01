@@ -2,15 +2,15 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Copy, KeyRound, MessageCircle, Phone, Plus, Power, Search, Settings2, UserRound, X } from "lucide-react";
+import { Check, Clock, Copy, KeyRound, MessageCircle, Plus, Power, Search, TriangleAlert, UserCheck, UserRound, Users } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import type { TeamMember } from "@/server/staff/team";
 import type { PendingStaffInvitation } from "@/server/staff/invitations";
 import type { DutyRow } from "@/server/staff/duty";
 import { WhoIsWorking } from "./who-is-working";
+import { columnHead, DetailHead, DetailSection, DetailSheet, Pill, primaryButton, QueuePanel, RowSelect, rowCells, rowTone, secondaryButton, Segmented, StatCards } from "../../orders/_components/orders-ui";
 import { changeRoleAction, createInvitationAction, resetPinAction, reviewRiderAction, revokeInvitationAction, riderVerificationAction, setActiveAction, setPhotoAction } from "../actions";
 import type { RiderVerification } from "@/server/delivery/rider-docs";
 
@@ -24,7 +24,8 @@ const ALL_ROLES = [
 ] as const;
 // Older roles still shown on people who have them
 const LABEL: Record<string, string> = { owner: "Owner", cashier: "Cashier", host: "Host", ...Object.fromEntries(ALL_ROLES.map((r) => [r.id, r.label])) };
-const TONE: Record<string, string> = { owner: "#c9482b", manager: "#315e9e", waiter: "#237a68", kitchen: "#a74608", cashier: "#8a5a00", host: "#6d5bd0", accountant: "#64748b", reception: "#0f766e" };
+// Person, role, login access, duty, action; the rows stack on phones
+const COLUMNS = "lg:grid-cols-[minmax(0,1.4fr)_76px_96px_84px_72px]";
 const field = "h-11 rounded-xl";
 
 // Shift status from the duty list; people without one (the owner) just show whether they can sign in
@@ -33,27 +34,20 @@ const DUTY = {
   break: ["On break", "bg-[var(--state-held-soft)] text-[var(--state-held-text)]"],
   off: ["Off duty", "bg-ink/10 text-muted"],
 } as const;
+const ENABLED = "bg-[var(--state-available-soft)] text-[var(--state-available-text)]";
+const PENDING = "bg-[var(--state-held-soft)] text-[var(--state-held-text)]";
+const FIELD = "h-10 rounded-input border border-line bg-surface px-3 text-sm text-ink outline-none focus:border-[var(--state-available)]";
+const OWNER_ROLE = { label: "Owner", does: "Full control of the outlet, team, plan and settings", opens: "Dashboard" };
 
-function Avatar({ name, role, online = false, photoUrl = null }: { name: string; role: string; online?: boolean; photoUrl?: string | null }) {
-  const c = TONE[role] ?? "#64748b";
+function Avatar({ name, online = false, photoUrl = null }: { name: string; online?: boolean; photoUrl?: string | null }) {
   return (
-    <span className="relative grid size-10 shrink-0 place-items-center rounded-full font-display text-base font-bold" style={{ background: `color-mix(in srgb, ${c} 16%, var(--surface))`, color: c }}>
+    <span className="relative grid size-10 shrink-0 place-items-center rounded-full bg-sage font-display text-base font-bold text-forest">
       {/* Staff photos live in the photo bucket, so this stays a plain image */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       {photoUrl ? <img src={photoUrl} alt="" className="size-10 rounded-full object-cover" /> : name.trim().slice(0, 1).toUpperCase() || "?"}
       {online && <span className="absolute -right-0.5 -bottom-0.5 size-3 rounded-full border-2 border-surface bg-[var(--state-available)]" title="App open" />}
     </span>
   );
-}
-
-function RoleBadge({ role }: { role: string }) {
-  const c = TONE[role] ?? "#64748b";
-  return <span className="rounded-full px-2 py-0.5 text-xs font-semibold" style={{ background: `color-mix(in srgb, ${c} 14%, var(--surface))`, color: c }}>{LABEL[role] ?? role}</span>;
-}
-
-function StatusBadge({ member, duty }: { member: TeamMember; duty?: DutyRow }) {
-  const [text, tone] = !member.isActive ? ["Switched off", "bg-ink/10 text-muted"] : duty ? DUTY[duty.status] : ["Can sign in", "bg-ink/5 text-muted"];
-  return <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${tone}`}>{text}</span>;
 }
 
 function copy(text: string) {
@@ -70,15 +64,28 @@ export function TeamScreen({ initial, invitations: initialInvitations = [], canE
   const [invitations, setInvitations] = useState(initialInvitations);
   const [created, setCreated] = useState<{ phone: string; role: string; inviteUrl: string; expiresAt: number } | null>(null);
   const [q, setQ] = useState("");
+  const [view, setView] = useState<"all" | "duty" | "pending" | "off">("all");
+  const [roleFilter, setRoleFilter] = useState("all");
+  // Chosen on purpose: opens the person on phones. Wide screens show the first person until then.
+  const [picked, setPicked] = useState<string | null>(null);
 
   const [phone, setPhone] = useState(""); const [role, setRole] = useState<string>("waiter");
   const [err, setErr] = useState<string | null>(null);
   const [newPin, setNewPin] = useState("");
 
   const member = initial.find((m) => m.id === manage) ?? null;
-  const shown = initial.filter((m) => !q.trim() || `${m.name} ${m.phone}`.toLowerCase().includes(q.trim().toLowerCase()));
   const active = initial.filter((m) => m.isActive).length;
   const dutyById = new Map(duty.map((d) => [d.id, d]));
+  const needle = q.trim().toLowerCase();
+  const onDuty = duty.filter((d) => d.status === "on");
+  const roleOk = (roles: readonly string[]) => roleFilter === "all" || roles.includes(roleFilter);
+  const shown = initial.filter((m) => (!needle || `${m.name} ${m.phone}`.toLowerCase().includes(needle)) && roleOk(m.roles) && (view === "all" || (view === "duty" && dutyById.get(m.id)?.status === "on") || (view === "off" && !m.isActive)));
+  const shownInvites = !canEdit || view === "duty" || view === "off" ? [] : invitations.filter((i) => (!needle || i.phone.toLowerCase().includes(needle)) && roleOk([i.role]));
+  const peopleShown = view === "pending" ? [] : shown;
+  const focus = peopleShown.find((m) => m.id === picked) ?? peopleShown[0] ?? null;
+  const focusRole = focus ? (focus.roles[0] === "owner" ? OWNER_ROLE : ALL_ROLES.find((r) => r.id === focus.roles[0])) : null;
+  const roleChoices = [...new Set([...initial.flatMap((m) => m.roles), ...invitations.map((i) => i.role)])];
+  const signInText = `Open /console/login, enter outlet code ${outletCode}, the staff phone number and a 4-digit PIN. Each role lands on its own screen.`;
   const openManage = (id: string) => { setManage(id); setErr(null); setNewPin(""); };
 
   const openAdd = () => { setPhone(""); setRole(ROLES[0]?.id ?? "manager"); setErr(null); setCreated(null); setAdding(true); };
@@ -112,91 +119,101 @@ export function TeamScreen({ initial, invitations: initialInvitations = [], canE
   const roleInfo = ROLES.find((r) => r.id === role);
 
   return (
-    <main className="mx-auto w-full max-w-[1000px] px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
+    <div className="dashboard-theme min-h-[calc(100dvh-4rem)] bg-dashboard-canvas sm:min-h-[calc(100dvh-4.5rem)]">
+    <main className="mx-auto w-full max-w-[1440px] px-3 py-3 pb-6 sm:px-6 sm:py-5 lg:px-8 lg:py-6">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-caption font-semibold text-muted">{outletName}</p>
-          <h1 className="mt-1 font-display text-title font-bold text-ink">Team</h1>
-          <p className="mt-1 text-body text-muted">{canEdit ? "Manage staff access, roles and shifts in one place." : "People who can sign in to this outlet."}</p>
+          <h1 className="font-display text-lg font-bold leading-6 tracking-tight text-ink sm:text-[28px] sm:leading-8">Team &amp; access</h1>
+          <p className="mt-1 text-sm font-medium text-muted">{canEdit ? "See who can sign in, their role, and who is working now." : "People who can sign in to this outlet."}</p>
         </div>
-        {canEdit && <button type="button" onClick={openAdd} className="inline-flex h-11 items-center gap-2 rounded-xl border border-brand bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-strong"><Plus className="size-4" aria-hidden="true" />Add person</button>}
+        {canEdit && <button type="button" onClick={openAdd} className={primaryButton}><Plus className="size-4" aria-hidden="true" />Add person</button>}
       </header>
 
-      <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
-        {([["People", initial.length, null], ["Can sign in", active, "var(--state-available)"], ["Switched off", initial.length - active, null]] as const).map(([k, v, dot]) => (
-          <div key={k} className={`rounded-2xl border border-line bg-surface px-4 py-3 ${k === "Switched off" ? "col-span-2 sm:col-span-1" : ""}`}>
-            <p className="flex items-center gap-1.5 text-caption font-medium text-muted">{dot && <span className="size-1.5 rounded-full" style={{ background: dot }} aria-hidden="true" />}{k}</p>
-            <p className="mt-1 font-display text-xl sm:text-2xl font-bold tabular-nums text-ink">{v}</p>
+      <StatCards stats={[
+        { icon: Users, label: "People", value: String(initial.length), note: "On this team" },
+        { icon: UserCheck, label: "Can sign in", value: String(active), note: "Login is on" },
+        { icon: Clock, label: "On duty", value: String(onDuty.length), note: `${onDuty.filter((d) => d.online).length} with the app open` },
+        { icon: TriangleAlert, label: "Needs a look", value: String(invitations.length + initial.length - active), note: `${invitations.length} invited · ${initial.length - active} switched off`, tone: "accent" },
+      ]} />
+
+      {notice && <p role={notice.ok ? "status" : "alert"} className={`mt-4 flex items-center gap-2 rounded-input border bg-surface px-3 py-2 text-sm font-semibold ${notice.ok ? "border-success/30 text-success" : "border-danger/40 text-danger"}`}><Check className="size-4" aria-hidden="true" />{notice.text}</p>}
+
+      <div className="mt-4 flex flex-wrap items-center gap-2 sm:mt-5">
+        <Segmented label="Show people" value={view} onChange={setView} options={[{ key: "all", label: "Everyone", count: initial.length + (canEdit ? invitations.length : 0) }, { key: "duty", label: "On duty", count: onDuty.length }, ...(canEdit ? [{ key: "pending" as const, label: "Pending", count: invitations.length }] : []), { key: "off", label: "Switched off", count: initial.length - active }]} />
+        <div className="flex w-full items-center gap-2 sm:ml-auto sm:w-auto">
+          <div className="relative min-w-0 flex-1 sm:w-64 sm:flex-none">
+            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted" aria-hidden="true" />
+            <input aria-label="Search team" className={`${FIELD} w-full pl-9`} placeholder="Search name or number" value={q} onChange={(e) => setQ(e.target.value)} />
           </div>
-        ))}
+          <select aria-label="Role" className={`${FIELD} font-semibold`} value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}><option value="all">All roles</option>{roleChoices.map((r) => <option key={r} value={r}>{LABEL[r] ?? r}</option>)}</select>
+        </div>
       </div>
 
-      {notice && <p role="status" className="mt-4 flex items-center gap-2 rounded-xl border border-success/30 bg-surface px-3 py-2 text-sm font-semibold text-success"><Check className="size-4" aria-hidden="true" />{notice.text}</p>}
+      <div className="mt-4 grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="min-w-0 space-y-4">
+          <QueuePanel title="Everyone" meta={`${peopleShown.length + shownInvites.length} of ${initial.length + (canEdit ? invitations.length : 0)}`} columns={peopleShown.length + shownInvites.length > 0 && <div className={`${columnHead} ${COLUMNS}`}><span>Person</span><span>Role</span><span>Login access</span><span>Duty</span><span className="text-right">Action</span></div>}>
+            {peopleShown.length + shownInvites.length === 0 ? <p className="p-10 text-center text-sm text-muted"><UserRound className="mx-auto mb-2 size-6" aria-hidden="true" />No one found.</p> : <ul>
+              {peopleShown.map((m) => {
+                const d = dutyById.get(m.id);
+                const editable = canEdit && !m.locked && !m.isMe;
+                const sel = focus?.id === m.id;
+                const [dutyText, dutyTone] = d ? DUTY[d.status] : ["—", "text-muted"];
+                return (
+                  <li key={m.id} className={`${rowCells} ${COLUMNS} ${rowTone(sel, false)}`}>
+                    <span className="col-start-1 row-start-1 min-w-0 lg:col-auto lg:row-auto">
+                      <RowSelect selected={sel} onSelect={() => setPicked(m.id)}>
+                        <span className={`flex min-w-0 items-center gap-3 ${m.isActive ? "" : "opacity-60"}`}>
+                          <Avatar name={m.name} online={d?.online} photoUrl={m.photoUrl} />
+                          <span className="min-w-0"><span className="block truncate text-sm font-bold text-ink">{m.name}</span><span className="block truncate text-xs font-medium text-muted tabular-nums">{m.phone}</span></span>
+                        </span>
+                      </RowSelect>
+                    </span>
+                    <span className="col-start-1 row-start-2 mt-1.5 truncate text-sm text-ink lg:col-auto lg:row-auto lg:mt-0">{m.roles.map((r) => LABEL[r] ?? r).join(", ")}</span>
+                    <span className="col-start-2 row-start-1 justify-self-end lg:col-auto lg:row-auto lg:justify-self-start"><Pill className={m.isActive ? ENABLED : "bg-ink/10 text-muted"}>{m.isActive ? "Enabled" : "Switched off"}</Pill></span>
+                    <span className="col-start-2 row-start-2 mt-1.5 justify-self-end lg:col-auto lg:row-auto lg:mt-0 lg:justify-self-start">{d ? <Pill className={dutyTone}>{dutyText}</Pill> : <span className="text-sm text-muted">—</span>}</span>
+                    <span className="relative z-10 hidden justify-end lg:flex">{editable ? <button type="button" aria-label={`Manage ${m.name}`} onClick={() => openManage(m.id)} className={`${secondaryButton} !min-h-9 !px-3 text-xs`}>Manage</button> : <span className="text-xs text-muted">{m.isMe ? "You" : "Protected"}</span>}</span>
+                  </li>
+                );
+              })}
+              {shownInvites.map((invite) => (
+                <li key={invite.id} className={`${rowCells} ${COLUMNS} border-l-transparent`}>
+                  <span className="col-start-1 row-start-1 flex min-w-0 items-center gap-3 lg:col-auto lg:row-auto"><Avatar name="?" /><span className="min-w-0"><span className="block truncate text-sm font-bold text-ink tabular-nums">{invite.phone}</span><span className="block truncate text-xs font-medium text-muted">Expires {new Date(invite.expiresAt).toLocaleDateString("en-IN")}</span></span></span>
+                  <span className="col-start-1 row-start-2 mt-1.5 truncate text-sm text-ink lg:col-auto lg:row-auto lg:mt-0">{LABEL[invite.role] ?? invite.role}</span>
+                  <span className="col-start-2 row-start-1 justify-self-end lg:col-auto lg:row-auto lg:justify-self-start"><Pill className={PENDING}>Invited</Pill></span>
+                  <span className="hidden text-sm text-muted lg:inline">—</span>
+                  <span className="col-start-2 row-start-2 mt-1.5 flex justify-end lg:col-auto lg:row-auto lg:mt-0"><button type="button" disabled={pending} onClick={() => start(async () => { const res = await revokeInvitationAction(invite.id); if (!res.ok) return setNotice({ ok: false, text: res.message }); setInvitations((rows) => rows.filter((row) => row.id !== invite.id)); setNotice({ ok: true, text: "Invitation revoked." }); router.refresh(); })} className={`${secondaryButton} !min-h-9 !px-3 text-xs hover:border-danger/50 hover:text-danger`}>Revoke</button></span>
+                </li>
+              ))}
+            </ul>}
+          </QueuePanel>
 
-      <section aria-labelledby="team-people" className="mt-4 overflow-hidden rounded-2xl border border-line bg-surface">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3">
-          <div><h2 id="team-people" className="font-display text-section font-bold text-ink">Everyone <span className="ml-1 text-sm font-semibold tabular-nums text-muted">{initial.length}</span></h2><p className="mt-0.5 text-xs text-muted">Select a person to manage their role, PIN or access.</p></div>
-          <div className="relative w-full sm:w-64">
-            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted" aria-hidden="true" />
-            <Input aria-label="Search team" className="h-10 rounded-xl pl-9" placeholder="Search name or number" value={q} onChange={(e) => setQ(e.target.value)} />
-          </div>
+          <WhoIsWorking rows={duty} canChange={canChangeDuty} onSelect={canEdit ? openManage : undefined} />
         </div>
-        <Table>
-          <TableHeader>
-            <TableRow className="border-line hover:bg-transparent">
-              <TableHead className="h-10 px-4 text-xs font-semibold tracking-wide text-muted uppercase">Person</TableHead>
-              <TableHead className="hidden h-10 px-4 text-xs font-semibold tracking-wide text-muted uppercase sm:table-cell">Role</TableHead>
-              <TableHead className="hidden h-10 px-4 text-xs font-semibold tracking-wide text-muted uppercase md:table-cell">Status</TableHead>
-              <TableHead className="h-10 w-0 px-4"><span className="sr-only">Change</span></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {shown.map((m) => {
-              const d = dutyById.get(m.id);
-              return (
-                <TableRow key={m.id} className={`border-line hover:bg-ink/[0.03] ${m.isActive ? "" : "opacity-60"}`}>
-                  <TableCell className="px-4 py-3 whitespace-normal">
-                    <div className="flex items-center gap-3">
-                      {canEdit && !m.locked && !m.isMe ? (
-                        <button type="button" onClick={() => openManage(m.id)} aria-label={`Manage ${m.name}`} className="group/person flex min-w-0 items-center gap-3 rounded-xl text-left outline-none focus-visible:ring-2 focus-visible:ring-brand">
-                          <Avatar name={m.name} role={m.roles[0]} online={d?.online} photoUrl={m.photoUrl} />
-                          <span className="min-w-0"><span className="block truncate font-semibold text-ink group-hover/person:text-brand">{m.name}<span className="ml-1.5 text-xs font-normal text-muted">(Manage)</span></span><span className="flex items-center gap-1 truncate text-caption text-muted"><Phone className="size-3" aria-hidden="true" />{m.phone}</span><span className="mt-1 flex flex-wrap gap-1.5 sm:hidden">{m.roles.map((r) => <RoleBadge key={r} role={r} />)}<StatusBadge member={m} duty={d} /></span></span>
-                        </button>
-                      ) : (
-                        <div className="flex min-w-0 items-center gap-3"><Avatar name={m.name} role={m.roles[0]} online={d?.online} photoUrl={m.photoUrl} /><div className="min-w-0"><p className="truncate font-semibold text-ink">{m.name}{m.isMe && <span className="ml-1.5 text-xs font-normal text-muted">(you)</span>}</p><p className="flex items-center gap-1 truncate text-caption text-muted"><Phone className="size-3" aria-hidden="true" />{m.phone}</p><p className="mt-1 flex flex-wrap gap-1.5 sm:hidden">{m.roles.map((r) => <RoleBadge key={r} role={r} />)}<StatusBadge member={m} duty={d} /></p></div></div>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell className="hidden px-4 py-3 sm:table-cell">
-                    <div className="flex flex-wrap gap-1.5">{m.roles.map((r) => <RoleBadge key={r} role={r} />)}<span className="md:hidden"><StatusBadge member={m} duty={d} /></span></div>
-                  </TableCell>
-                  <TableCell className="hidden px-4 py-3 md:table-cell"><StatusBadge member={m} duty={d} /></TableCell>
-                  <TableCell className="px-4 py-3 text-right">
-                    {canEdit && !m.locked && !m.isMe && <button type="button" onClick={() => openManage(m.id)} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-line px-3 text-sm font-semibold hover:border-ink/40"><Settings2 className="size-3.5" aria-hidden="true" />Manage</button>}
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-            {shown.length === 0 && (
-              <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={4} className="p-10 text-center text-sm text-muted"><UserRound className="mx-auto mb-2 size-6" aria-hidden="true" />No one found.</TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </section>
 
-      <WhoIsWorking rows={duty} canChange={canChangeDuty} onSelect={canEdit ? openManage : undefined} />
+        <div className="min-w-0 space-y-4">
+          {focus && <DetailSheet label="Person details" open={picked === focus.id}>
+            <DetailHead title={focus.name} badge={<Pill className="bg-surface/70 text-forest">{focus.roles.map((r) => LABEL[r] ?? r).join(", ")}</Pill>} sub={focus.phone} onClose={() => setPicked(null)} />
+            <DetailSection>
+              <div className="flex flex-wrap gap-1.5"><Pill className={focus.isActive ? ENABLED : "bg-ink/10 text-muted"}>{focus.isActive ? "Enabled" : "Switched off"}</Pill>{dutyById.get(focus.id) && <Pill className={DUTY[dutyById.get(focus.id)!.status][1]}>{DUTY[dutyById.get(focus.id)!.status][0]}</Pill>}</div>
+            </DetailSection>
+            {focusRole && <DetailSection title="What this role does">
+              <p className="text-sm text-ink">{focusRole.does}.</p>
+              <p className="mt-1 text-xs text-muted">Opens {focusRole.opens} after sign in.</p>
+            </DetailSection>}
+            <DetailSection>
+              {canEdit && !focus.locked && !focus.isMe ? <>
+                <button type="button" onClick={() => { setPicked(null); openManage(focus.id); }} className={`w-full ${primaryButton}`}>Manage role, PIN and access</button>
+                <p className="mt-2 text-xs text-muted">PINs are never shown. A reset signs them out everywhere.</p>
+              </> : <p className="text-sm text-muted">{focus.isMe ? "This is your own account." : "This account is protected."}</p>}
+            </DetailSection>
+          </DetailSheet>}
 
-      {canEdit && invitations.length > 0 && <section className="mt-4 rounded-2xl border border-line bg-surface p-4"><h2 className="font-display text-section font-bold text-ink">Pending invitations <span className="ml-1 text-sm text-muted">{invitations.length}</span></h2><p className="mt-1 text-sm text-muted">Staff access starts after they verify their invited phone number.</p><div className="mt-3 divide-y divide-line">{invitations.map((invite) => <div key={invite.id} className="flex flex-wrap items-center justify-between gap-3 py-3"><div><p className="font-semibold text-ink">{invite.phone} · {LABEL[invite.role] ?? invite.role}</p><p className="text-xs text-muted">Expires {new Date(invite.expiresAt).toLocaleDateString()}</p></div><button type="button" disabled={pending} onClick={() => start(async () => { const res = await revokeInvitationAction(invite.id); if (!res.ok) return setNotice({ ok: false, text: res.message }); setInvitations((rows) => rows.filter((row) => row.id !== invite.id)); setNotice({ ok: true, text: "Invitation revoked." }); router.refresh(); })} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-line px-3 text-sm font-semibold hover:border-danger/50 hover:text-danger"><X className="size-4" aria-hidden="true" />Revoke</button></div>)}</div></section>}
-
-      <section className="mt-4 rounded-2xl border border-line bg-surface p-4">
-        <p className="text-sm font-semibold">How your team signs in</p>
-        <p className="mt-1 text-sm text-muted">Open <b className="text-ink">/console/login</b>, type the outlet code <b className="font-mono text-ink">{outletCode}</b>, their phone number and 4-digit PIN. Each role lands on its own screen automatically.</p>
-        <div className="mt-3 flex flex-wrap gap-1.5 text-xs">
-          {ROLES.map((r) => <span key={r.id} className="rounded-full bg-ink/5 px-2.5 py-1 font-semibold">{r.label} → {r.opens}</span>)}
+          <section className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
+            <div className="flex items-center justify-between gap-2"><h2 className="font-display text-[15px] font-bold text-ink">How your team signs in</h2><button type="button" onClick={() => { copy(signInText); setNotice({ ok: true, text: "Sign-in steps copied." }); }} className="inline-flex shrink-0 cursor-pointer items-center gap-1 text-xs font-semibold text-forest hover:underline"><Copy className="size-3.5" aria-hidden="true" />Copy</button></div>
+            <p className="mt-1 text-sm text-muted">Open <b className="text-ink">/console/login</b>, enter outlet code <b className="font-mono text-ink">{outletCode}</b>, their phone number and 4-digit PIN.</p>
+          </section>
         </div>
-      </section>
+      </div>
 
       <Sheet open={adding} onOpenChange={(o) => !o && setAdding(false)}>
         <SheetContent className="w-full overflow-y-auto bg-background data-[side=right]:sm:max-w-md">
@@ -217,18 +234,18 @@ export function TeamScreen({ initial, invitations: initialInvitations = [], canE
                 <a href={whatsappUrl(created)} target="_blank" rel="noreferrer noopener" className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-[#1f8f4e] bg-[#1f8f4e] text-sm font-semibold text-white hover:bg-[#1a7a43]"><MessageCircle className="size-4" aria-hidden="true" />Send on WhatsApp</a>
                 <div className="flex gap-2">
                   <button type="button" onClick={() => copy(loginText(created))} className="inline-flex h-12 flex-1 items-center justify-center gap-2 rounded-xl border border-line text-sm font-semibold hover:border-ink/40"><Copy className="size-4" aria-hidden="true" />Copy invite</button>
-                  <button type="button" onClick={() => setAdding(false)} className="inline-flex h-12 flex-1 items-center justify-center rounded-xl border border-brand bg-brand text-sm font-semibold text-white hover:bg-brand-strong">Done</button>
+                  <button type="button" onClick={() => setAdding(false)} className="inline-flex h-12 flex-1 items-center justify-center rounded-xl border border-forest bg-forest text-sm font-semibold text-white hover:bg-forest-hover">Done</button>
                 </div>
               </>
             ) : (
               <>
                 <div className="space-y-1"><Label className="text-xs" htmlFor="t-phone">Mobile number</Label><Input id="t-phone" className="h-10 rounded-lg font-mono" inputMode="numeric" maxLength={14} placeholder="10 digits" value={phone} onChange={(e) => setPhone(e.target.value.replace(/[^\d+ ]/g, ""))} /></div>
                 <div className="space-y-1.5"><Label className="text-xs">Role</Label>
-                  <div className="grid grid-cols-2 gap-1.5">{ROLES.map((r) => <button key={r.id} type="button" aria-pressed={role === r.id} onClick={() => setRole(r.id)} className={`min-h-10 rounded-lg border px-2.5 text-sm font-semibold ${role === r.id ? "border-ink bg-ink text-paper" : "border-line hover:border-ink/40"}`}>{r.label}</button>)}</div>
+                  <div className="grid grid-cols-2 gap-1.5">{ROLES.map((r) => <button key={r.id} type="button" aria-pressed={role === r.id} onClick={() => setRole(r.id)} className={`min-h-10 rounded-lg border px-2.5 text-sm font-semibold ${role === r.id ? "border-forest bg-forest text-white" : "border-line hover:border-ink/40"}`}>{r.label}</button>)}</div>
                   {roleInfo && <p className="text-xs leading-snug text-muted">{roleInfo.does}. Opens the {roleInfo.opens}.</p>}
                 </div>
                 {err && <p role="alert" className="text-sm font-semibold text-danger">{err}</p>}
-                <button type="button" disabled={pending || phone.replace(/\D/g, "").length < 10} onClick={add} className="inline-flex h-11 w-full items-center justify-center rounded-lg border border-brand bg-brand text-sm font-semibold text-white hover:bg-brand-strong disabled:opacity-50">{pending ? "Creating…" : "Create invitation"}</button>
+                <button type="button" disabled={pending || phone.replace(/\D/g, "").length < 10} onClick={add} className="inline-flex h-11 w-full items-center justify-center rounded-lg border border-forest bg-forest text-sm font-semibold text-white hover:bg-forest-hover disabled:opacity-50">{pending ? "Creating…" : "Create invitation"}</button>
               </>
             )}
           </div>
@@ -242,12 +259,12 @@ export function TeamScreen({ initial, invitations: initialInvitations = [], canE
               <SheetHeader><SheetTitle className="font-display text-title font-bold">{member.name}</SheetTitle><SheetDescription>{member.phone} · {member.roles.map((r) => LABEL[r] ?? r).join(", ")}</SheetDescription></SheetHeader>
               <div className="space-y-6 px-4 pb-8">
                 <section className="space-y-2"><p className="text-sm font-semibold">Role</p>
-                  <div className="grid grid-cols-2 gap-2">{ROLES.map((r) => <button key={r.id} type="button" disabled={pending} aria-pressed={member.roles[0] === r.id} onClick={() => member.roles[0] !== r.id && act(() => changeRoleAction(member.id, r.id), `${member.name} is now ${r.label}.`)} className={`min-h-11 rounded-xl border px-3 text-sm font-semibold ${member.roles[0] === r.id ? "border-ink bg-ink text-paper" : "border-line hover:border-ink/40"}`}>{r.label}</button>)}</div>
+                  <div className="grid grid-cols-2 gap-2">{ROLES.map((r) => <button key={r.id} type="button" disabled={pending} aria-pressed={member.roles[0] === r.id} onClick={() => member.roles[0] !== r.id && act(() => changeRoleAction(member.id, r.id), `${member.name} is now ${r.label}.`)} className={`min-h-11 rounded-xl border px-3 text-sm font-semibold ${member.roles[0] === r.id ? "border-forest bg-forest text-white" : "border-line hover:border-ink/40"}`}>{r.label}</button>)}</div>
                 </section>
                 {member.roles.includes("rider") && <RiderCheck key={member.id} userId={member.id} name={member.name} />}
                 <section className="space-y-2"><p className="text-sm font-semibold">Photo</p>
                   <label className="flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border border-dashed border-line px-3 text-sm font-semibold hover:border-ink/40">
-                    <Avatar name={member.name} role={member.roles[0]} photoUrl={member.photoUrl} />
+                    <Avatar name={member.name} photoUrl={member.photoUrl} />
                     {member.photoUrl ? "Change photo" : "Add a photo"}<span className="ml-auto text-xs font-normal text-muted">Shown on the dashboard{member.roles.includes("rider") ? " and to customers" : ""}</span>
                     <input type="file" accept="image/*" className="sr-only" disabled={pending} onChange={(e) => { const file = e.target.files?.[0]; if (!file) return; const fd = new FormData(); fd.set("photo", file); act(() => setPhotoAction(member.id, fd), `Photo saved for ${member.name}.`); }} />
                   </label>
@@ -258,7 +275,7 @@ export function TeamScreen({ initial, invitations: initialInvitations = [], canE
                 </section>
                 <section className="space-y-2"><p className="flex items-center gap-1.5 text-sm font-semibold"><Power className="size-4" aria-hidden="true" />Access</p>
                   <p className="text-xs text-muted">{member.isActive ? "Switch off when someone leaves. They are signed out at once. You can switch them on again later." : "This person cannot sign in now."}</p>
-                  <button type="button" disabled={pending} onClick={() => act(() => setActiveAction(member.id, !member.isActive), member.isActive ? `${member.name} is switched off.` : `${member.name} can sign in again.`, true)} className={`inline-flex h-12 w-full items-center justify-center rounded-xl border text-sm font-semibold ${member.isActive ? "border-danger/40 text-danger hover:bg-[var(--state-seated-soft)]" : "border-brand bg-brand text-white hover:bg-brand-strong"}`}>{member.isActive ? "Switch off access" : "Switch on access"}</button>
+                  <button type="button" disabled={pending} onClick={() => act(() => setActiveAction(member.id, !member.isActive), member.isActive ? `${member.name} is switched off.` : `${member.name} can sign in again.`, true)} className={`inline-flex h-12 w-full items-center justify-center rounded-xl border text-sm font-semibold ${member.isActive ? "border-danger/40 text-danger hover:bg-[var(--state-seated-soft)]" : "border-forest bg-forest text-white hover:bg-forest-hover"}`}>{member.isActive ? "Switch off access" : "Switch on access"}</button>
                 </section>
                 {err && <p role="alert" className="text-sm font-semibold text-danger">{err}</p>}
               </div>
@@ -267,6 +284,7 @@ export function TeamScreen({ initial, invitations: initialInvitations = [], canE
         </SheetContent>
       </Sheet>
     </main>
+    </div>
   );
 }
 

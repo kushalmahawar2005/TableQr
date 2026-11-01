@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, FileUp, Loader2, Minus, Package, PenLine, Plus, ReceiptText, Search, Send, ShoppingBag, Trash2, Users, WifiOff } from "lucide-react";
+import { placeLabel } from "@/domain/delivery";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { OPEN_TAX_RATES } from "@/domain/gst";
 import { menuThumb } from "@/domain/menu-photo";
@@ -701,7 +702,7 @@ export function PosTerminalScreen({ initial, outletId, staffUserId, canReviewOff
               <nav aria-label={L("Categories", "कैटेगरी")} className="no-scrollbar flex gap-2 overflow-x-auto md:max-h-[calc(100dvh-220px)] md:flex-col md:overflow-y-auto">
                 {[{ id: "all", name: L("All", "सभी"), nameHi: null }, ...data.categories].map((c) => (
                   <button key={c.id} type="button" aria-pressed={category === c.id && !query} onClick={() => { setCategory(c.id); setQuery(""); }}
-                    className={`shrink-0 rounded-xl border px-3 py-2.5 text-left text-body font-semibold ${category === c.id && !query ? "border-ink bg-ink text-paper" : "border-line bg-surface text-ink hover:bg-accent"} ${focus}`}>
+                    className={`shrink-0 rounded-xl border px-3 py-2.5 text-left text-body font-semibold ${category === c.id && !query ? "border-forest bg-forest text-white" : "border-line bg-surface text-ink hover:bg-accent"} ${focus}`}>
                     {hi ? c.nameHi || c.name : c.name}
                   </button>
                 ))}
@@ -725,7 +726,7 @@ export function PosTerminalScreen({ initial, outletId, staffUserId, canReviewOff
           <aside className="flex flex-col rounded-2xl border border-line bg-surface lg:sticky lg:top-4 lg:max-h-[calc(100dvh-120px)]">
             <header className="border-b border-line p-4">
               <div className="flex items-center justify-between gap-2">
-                <h2 className="font-display text-section font-bold text-ink">{current.takeaway ? <span className="inline-flex items-center gap-1.5"><ShoppingBag className="size-4" aria-hidden="true" />{L("Takeaway", "पार्सल")}{current.sessionId ? ` ${current.code}` : ""}</span> : `${L("Table", "टेबल")} ${current.code}`}</h2>
+                <h2 className="font-display text-section font-bold text-ink">{current.takeaway ? <span className="inline-flex items-center gap-1.5"><ShoppingBag className="size-4" aria-hidden="true" />{L("Takeaway", "पार्सल")}{current.sessionId ? ` ${current.code.replace(/^TA-/, "")}` : ""}</span> : `${L("Table", "टेबल")} ${current.code}`}</h2>
                 {detail && <span className={`rounded-full px-2.5 py-1 text-caption font-semibold ${billAsked ? "bg-warning/15 text-warning" : "bg-brand-soft text-ink"}`}>{billAsked ? L("Bill asked", "बिल माँगा") : L("Running", "चल रहा")}</span>}
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
@@ -897,7 +898,7 @@ function TablesView({ L, now, zones, zone, setZone, tables, running, total, take
       <section>
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h1 className="font-display text-title font-bold text-ink">POS</h1>
+            <h1 className="font-display text-lg font-bold leading-6 tracking-tight text-ink sm:text-[28px] sm:leading-8">POS</h1>
             <p className="text-body text-muted">{L(`${running} of ${total} tables running. Tap a table to take its order.`, `${total} में से ${running} टेबल चल रहीं। ऑर्डर लेने के लिए टेबल टैप करें।`)}</p>
           </div>
           <button type="button" onClick={() => onTakeaway(null)} className={primary}><ShoppingBag className="size-4" aria-hidden="true" />{L("New takeaway", "नया पार्सल")}</button>
@@ -950,7 +951,7 @@ function TablesView({ L, now, zones, zone, setZone, tables, running, total, take
           <div className="mt-3 grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(160px,1fr))]">
             {takeaways.map((t) => (
               <button key={t.tableId} type="button" onClick={() => onTakeaway(t)} className={`flex min-h-20 flex-col justify-between rounded-2xl border p-3 text-left hover:border-ink ${t.visit.status === "bill_requested" ? "border-warning/50 bg-warning/15" : "border-brand-border bg-brand-soft"} ${focus}`}>
-                <span className="flex items-center gap-1.5 font-display text-section font-bold text-ink"><Package className="size-4" aria-hidden="true" />{t.code}</span>
+                <span className="flex items-center gap-1.5 font-display text-section font-bold text-ink"><Package className="size-4" aria-hidden="true" />{placeLabel(t.code)}</span>
                 <span className="text-caption text-ink"><span className="font-semibold tabular-nums">{rs(t.visit.orderedPaise)}</span>{t.visit.guestName ? <span className="text-muted"> · {t.visit.guestName}</span> : null}</span>
               </button>
             ))}

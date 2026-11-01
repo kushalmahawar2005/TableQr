@@ -417,6 +417,7 @@ body {
   --warning: #f0b94a;
   --danger: #ff8a8a;
   --info: #8fb8f0;
+  --sage: #24372f;
   --brand-soft: #3a2019;
   --brand-border: #6b3a2e;
   --state-available: #3fb594; --state-available-text: #6fd9bb; --state-available-soft: #18282a;
@@ -436,16 +437,15 @@ body {
 
 /* Owner dashboard uses Tableeqr's terracotta accent without changing the palette on other screens. */
 .dashboard-theme {
-  --paper: #F5F2EA;
-  --dashboard-canvas: #EFEEE8;
-  --surface: #FAF8F2;
-  --line: #E4DED2;
+  --paper: #F7F5EF;
+  --dashboard-canvas: #F4F2EC;
+  --surface: #FFFFFF;
+  --line: #E8E3D9;
   --forest: #103B2C;
   --forest-hover: #0c2b20;
   --terracotta: #D86B45;
   --sage: #E7EEE8;
   --ring: #103B2C;
-  --dashboard-sales-tint: #F1F3EC;
   --dashboard-chart-track: #F3F3F4;
   --dashboard-chart-bar: #D9DADD;
   --dashboard-chart-previous: #BFC1C5;
@@ -458,7 +458,6 @@ body {
   --dashboard-canvas: #171b22;
   --surface: #1b1f27;
   --line: #2c323e;
-  --dashboard-sales-tint: #202922;
   --dashboard-chart-track: #282d35;
   --dashboard-chart-bar: #56606b;
   --dashboard-chart-previous: #89919b;
@@ -493,6 +492,37 @@ body {
 .theme-dark .dashboard-theme .bg-neutral-100 { background-color: #282d35; }
 .theme-dark .dashboard-theme .ring-white { --tw-ring-color: #1b1f27; }
 .theme-dark .dashboard-theme [class*="focus-visible:outline-forest"]:focus-visible { outline-color: #86c9a8; }
+
+/* Staff console palette: forest green buttons and warm white cards on every screen, dialogs included.
+   Guest pages never carry these classes, so their outlet colours stay as they are. */
+html.console-ui, .staff-theme {
+  --brand-main: #103B2C;
+  --brand-strong: #103B2C;
+  --brand-hover: #174D39;
+  --brand-pressed: #0c2b20;
+  --brand-soft: #E7EEE8;
+  --brand-border: #C9D8CD;
+}
+html.console-ui:not(.theme-dark), .staff-theme:not(.theme-dark) {
+  --paper: #F7F5EF;
+  --dashboard-canvas: #F4F2EC;
+  --surface: #FFFFFF;
+  --line: #E8E3D9;
+  --sage: #E7EEE8;
+  --dashboard-badge: #F7F7F4;
+  --dashboard-footer-line: #F0EFEA;
+}
+html.console-ui.theme-dark, .staff-theme.theme-dark {
+  --brand-main: #2a8a66;
+  --brand-strong: #86c9a8;
+  --brand-hover: #2f9670;
+  --brand-pressed: #237a5a;
+  --brand-soft: #24372f;
+  --brand-border: #2f4a3e;
+  --sage: #24372f;
+  --dashboard-badge: #282d35;
+  --dashboard-footer-line: #343b46;
+}
 /* Paper is white: printing from the dark console uses the light palette, so text stays black and sharp */
 @media print {
   /* Define the paper gutter at page level so browsers keep every printed report inside it. */

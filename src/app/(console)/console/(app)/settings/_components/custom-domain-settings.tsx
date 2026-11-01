@@ -60,7 +60,7 @@ export function CustomDomainSettings({ domain: initialDomain, token: initialToke
     <div className="space-y-4 p-5">
       <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
         <div className="space-y-2"><Label htmlFor="custom-domain">Domain</Label><Input id="custom-domain" value={domain} onChange={(event) => { setDomain(event.target.value); setToken(""); setVerified(false); setLive(false); setMessage(null); }} placeholder="menu.example.com" disabled={!canEdit || busy} /></div>
-        {canEdit && <button type="button" onClick={save} disabled={busy} className="h-11 rounded-xl bg-brand px-5 text-sm font-semibold text-white disabled:opacity-50">{busy ? "Saving…" : "Save domain"}</button>}
+        {canEdit && <button type="button" onClick={save} disabled={busy} className="h-11 rounded-xl bg-forest px-5 text-sm font-semibold text-white disabled:opacity-50">{busy ? "Saving…" : "Save domain"}</button>}
       </div>
       {domain && token && !verified && <div className="rounded-xl border border-line bg-canvas p-4 text-sm">
         <p className="font-semibold text-ink">1. Prove domain ownership with this DNS TXT record</p>

@@ -38,15 +38,14 @@ export function CustomersScreen({ data, q, filter, outletName }: { data: Custome
     const timer = setTimeout(() => router.replace(href(query.trim(), filter, 1)), 350);
     return () => clearTimeout(timer);
   }, [query, q, filter, router]);
-  const chip = (on: boolean) => `inline-flex min-h-10 shrink-0 items-center rounded-full border px-4 text-sm font-semibold ${on ? "border-ink bg-ink text-white" : "border-line bg-surface text-muted hover:text-ink"}`;
+  const chip = (on: boolean) => `inline-flex min-h-10 shrink-0 items-center rounded-full border px-4 text-sm font-semibold ${on ? "border-forest bg-forest text-white" : "border-line bg-surface text-muted hover:text-ink"}`;
   const exportHref = `/console/customers/export${href(q, filter, 1).replace("/console/customers", "")}`;
 
   return (
-    <main className="mx-auto w-full max-w-[1100px] px-4 py-5 text-ink sm:px-6 lg:px-8 lg:py-7">
+    <main className="mx-auto w-full max-w-[1440px] px-3 py-3 pb-6 sm:px-6 sm:py-5 lg:px-8 lg:py-6 text-ink">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-caption font-semibold text-muted">{outletName}</p>
-          <h1 className="mt-1 font-display text-title font-bold">Customers</h1>
+          <h1 className="font-display text-lg font-bold leading-6 tracking-tight text-ink sm:text-[28px] sm:leading-8">Customers</h1>
           <p className="text-body text-muted">Guests who gave their number: at the table, for a booking, on the waitlist, or for a bill on WhatsApp.</p>
         </div>
         {total > 0 && <a href={exportHref} className="inline-flex min-h-11 items-center rounded-xl border border-line bg-surface px-4 text-sm font-semibold hover:border-ink/40">Download list (CSV)</a>}

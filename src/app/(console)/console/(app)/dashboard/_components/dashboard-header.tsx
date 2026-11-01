@@ -8,7 +8,7 @@ export type ConnState = "live" | "reconnecting" | "polling" | "stale";
 const CONN_META: Record<ConnState, { label: string; dot: string; text: string }> = {
   live: { label: "Live", dot: "bg-emerald-600", text: "text-emerald-700" },
   reconnecting: { label: "Reconnecting…", dot: "bg-amber-500 animate-pulse", text: "text-amber-700" },
-  polling: { label: "Polling", dot: "bg-neutral-400", text: "text-muted" },
+  polling: { label: "Auto-updating", dot: "bg-neutral-400", text: "text-muted" },
   stale: { label: "Offline · showing last data", dot: "bg-rose-500", text: "text-rose-700" },
 };
 

@@ -18,9 +18,9 @@ import { useEffect, useRef, type ReactNode } from "react";
 // Staff Foundation pieces for S1: calm, dense, readable from a few feet away. Every table state
 // is a colour plus a word and an icon, never colour alone.
 
-export const focus = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink";
+export const focus = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-forest";
 export const btn = `inline-flex min-h-11 items-center justify-center gap-2 rounded-input px-3.5 text-body font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${focus}`;
-export const btnPrimary = `${btn} bg-ink text-white hover:bg-ink/90`;
+export const btnPrimary = `${btn} bg-forest text-white hover:bg-forest-hover`;
 export const btnLine = `${btn} border border-line bg-surface text-ink hover:border-ink/40`;
 export const btnQuiet = `${btn} text-ink hover:bg-ink/5`;
 export const btnDanger = `${btn} border border-danger/30 bg-surface text-danger hover:bg-[var(--state-seated-soft)]`;

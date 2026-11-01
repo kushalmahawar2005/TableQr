@@ -7,7 +7,7 @@ import { tableQrAction } from "../actions";
 import { QR_SIZES, downloadSvg, posterHtml, printPoster, type QrSize } from "./qr-print";
 
 type Qr = NonNullable<Extract<Awaited<ReturnType<typeof tableQrAction>>, { ok: true }>["qr"]>;
-const act = "inline-flex min-h-10 items-center justify-center gap-1.5 rounded-input border border-line bg-surface px-3 text-body font-semibold text-ink hover:border-ink/40 focus-visible:outline-2 focus-visible:outline-ink";
+const act = "inline-flex min-h-10 items-center justify-center gap-1.5 rounded-input border border-line bg-surface px-3 text-body font-semibold text-ink hover:border-ink/40 focus-visible:outline-2 focus-visible:outline-forest";
 
 /** A table's QR: a preview in the panel, tap it to see it big, then print (A6/A5/A4), download or copy the link. */
 export function TableQr({ tableId, canSheet = false }: { tableId: string; canSheet?: boolean }) {
@@ -38,7 +38,7 @@ export function TableQr({ tableId, canSheet = false }: { tableId: string; canShe
         <p className="mt-2 text-body text-muted">This table has no live QR yet. It is created when the floor plan is published.</p>
       ) : (
         <div className="mt-2 flex items-start gap-3">
-          <button type="button" onClick={() => setOpen(true)} aria-label={`Show the QR for table ${qr.tableCode} bigger`} title="Tap to enlarge" className="group relative size-28 shrink-0 overflow-hidden rounded-input border border-line bg-white p-1.5 focus-visible:outline-2 focus-visible:outline-ink">
+          <button type="button" onClick={() => setOpen(true)} aria-label={`Show the QR for table ${qr.tableCode} bigger`} title="Tap to enlarge" className="group relative size-28 shrink-0 overflow-hidden rounded-input border border-line bg-white p-1.5 focus-visible:outline-2 focus-visible:outline-forest">
             <span className="block size-full [&>svg]:size-full" dangerouslySetInnerHTML={{ __html: qr.svg }} />
             <span className="absolute inset-x-0 bottom-0 bg-black/60 py-0.5 text-center text-label font-semibold text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">Enlarge</span>
           </button>
@@ -54,7 +54,7 @@ export function TableQr({ tableId, canSheet = false }: { tableId: string; canShe
           <div className="no-scrollbar max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-[1.25rem] border border-line bg-surface p-5 text-ink shadow-modal" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-start justify-between gap-3">
               <div><p className="text-caption font-semibold text-muted">{qr.outletName}</p><h2 className="font-display text-title font-bold">Table {qr.tableCode}</h2></div>
-              <button type="button" onClick={() => setOpen(false)} aria-label="Close" autoFocus className="grid size-10 place-items-center rounded-input text-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-2 focus-visible:outline-ink"><X className="size-5" aria-hidden="true" /></button>
+              <button type="button" onClick={() => setOpen(false)} aria-label="Close" autoFocus className="grid size-10 place-items-center rounded-input text-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-2 focus-visible:outline-forest"><X className="size-5" aria-hidden="true" /></button>
             </div>
             <div className="mx-auto mt-4 aspect-square w-full max-w-[300px] rounded-card border border-line bg-white p-3 [&>svg]:size-full" dangerouslySetInnerHTML={{ __html: qr.svg }} />
             {qr.joinCode && <p className="mt-3 text-center text-body text-muted">Join code <b className="tracking-[0.2em] text-ink">{qr.joinCode}</b></p>}
@@ -74,7 +74,7 @@ export function TableQr({ tableId, canSheet = false }: { tableId: string; canShe
             </fieldset>
 
             <div className="mt-4 grid grid-cols-2 gap-2">
-              <button type="button" onClick={print} className="col-span-2 inline-flex min-h-11 items-center justify-center gap-2 rounded-input bg-ink px-4 text-button font-semibold text-white hover:bg-ink/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"><Printer className="size-4" aria-hidden="true" />Print</button>
+              <button type="button" onClick={print} className="col-span-2 inline-flex min-h-11 items-center justify-center gap-2 rounded-input bg-ink px-4 text-button font-semibold text-white hover:bg-forest-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-forest"><Printer className="size-4" aria-hidden="true" />Print</button>
               <button type="button" onClick={() => downloadSvg(qr.svg, `qr-table-${qr.tableCode}.svg`)} className={act}><Download className="size-4" aria-hidden="true" />Download</button>
               <button type="button" onClick={copy} className={act}>{copied ? <Check className="size-4" aria-hidden="true" /> : <Copy className="size-4" aria-hidden="true" />}{copied ? "Copied" : "Copy link"}</button>
               <a href={qr.url} target="_blank" rel="noreferrer noopener" className={act}><ExternalLink className="size-4" aria-hidden="true" />Test the link</a>

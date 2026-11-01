@@ -71,24 +71,25 @@ export function Panel({
   return (
     <section className={cardClass} aria-label={labelledBy ?? title}>
       <div className="flex min-w-0 items-center justify-between gap-2 border-b border-line pb-3">
-        <h2 className="flex min-w-0 items-center gap-2 whitespace-nowrap font-display text-sm font-bold text-ink">
+        <h2 className="flex min-w-0 items-center gap-2 whitespace-nowrap font-display text-[15px] font-bold text-ink">
           {icon}
           {title}
         </h2>
         {action}
       </div>
-      <div className="mt-3">{children}</div>
+      <div className="mt-4">{children}</div>
     </section>
   );
 }
 
 /** Today-vs-yesterday delta, using the domain wording so nothing is ever fabricated */
-export function Delta({ today, yesterday, compact = false }: { today: number; yesterday: number; compact?: boolean }) {
+export function Delta({ today, yesterday, compact = false, inverse = false }: { today: number; yesterday: number; compact?: boolean; inverse?: boolean }) {
   const d = deltaOf(today, yesterday);
   const label = deltaLabel(d);
+  const muted = inverse ? "text-white/70" : "text-muted";
   if (d.kind === "up") {
     return (
-      <span className="flex items-center gap-1 text-[13px] font-bold text-emerald-700 tabular">
+      <span className={`flex items-center gap-1 text-[13px] font-bold tabular ${inverse ? "text-white" : "text-emerald-700"}`}>
         <TrendingUp className="size-3.5 stroke-[2.5]" aria-hidden="true" />
         <span>{compact ? label : `${label} vs yesterday`}</span>
       </span>
@@ -96,14 +97,14 @@ export function Delta({ today, yesterday, compact = false }: { today: number; ye
   }
   if (d.kind === "down") {
     return (
-      <span className="flex items-center gap-1 text-[13px] font-bold text-terracotta tabular">
+      <span className={`flex items-center gap-1 text-[13px] font-bold tabular ${inverse ? "text-white" : "text-terracotta"}`}>
         <TrendingDown className="size-3.5 stroke-[2.5]" aria-hidden="true" />
         <span>{compact ? label : `${label} vs yesterday`}</span>
       </span>
     );
   }
   if (d.kind === "same") {
-    return <span className="text-[13px] font-medium text-muted">{compact ? "No change" : "No change vs yesterday"}</span>;
+    return <span className={`text-[13px] font-medium ${muted}`}>{compact ? "No change" : "No change vs yesterday"}</span>;
   }
-  return <span className="text-[13px] font-medium text-muted">{compact ? "No baseline" : label}</span>;
+  return <span className={`text-[13px] font-medium ${muted}`}>{compact ? "No baseline" : label}</span>;
 }

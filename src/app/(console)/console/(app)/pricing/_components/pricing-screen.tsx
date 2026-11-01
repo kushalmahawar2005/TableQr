@@ -114,14 +114,13 @@ export function PricingScreen({ initial, preview }: { initial: PricingData; prev
   }
 
   const drawerRow = drawer ? (data.rows.find((r) => r.id === drawer) ?? null) : null;
-  const chip = (on: boolean) => `min-h-9 shrink-0 rounded-full border px-3.5 text-sm font-semibold transition-colors ${on ? "border-ink bg-ink text-paper" : "border-line bg-surface text-ink hover:border-ink/40"}`;
+  const chip = (on: boolean) => `min-h-9 shrink-0 rounded-full border px-3.5 text-sm font-semibold transition-colors ${on ? "border-forest bg-forest text-white" : "border-line bg-surface text-ink hover:border-ink/40"}`;
 
   return (
-    <main className="min-h-[calc(100dvh-5rem)] bg-paper p-4 pb-28 text-ink sm:p-6 sm:pb-28">
+    <main className="mx-auto w-full max-w-[1440px] px-3 py-3 pb-28 text-ink sm:px-6 sm:py-5 sm:pb-28 lg:px-8 lg:py-6">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-caption font-semibold text-muted">{data.outlet} · Outlet menu</p>
-          <h1 className="mt-1 font-display text-title font-bold">Pricing</h1>
+          <h1 className="font-display text-lg font-bold leading-6 tracking-tight text-ink sm:text-[28px] sm:leading-8">Pricing</h1>
           <p className="mt-1 max-w-2xl text-body text-muted">Set prices for this outlet. Dishes without a custom price keep the main menu price.</p>
         </div>
         <span className="inline-flex min-h-9 items-center gap-2 rounded-full border border-line bg-surface px-3 text-caption font-semibold text-muted"><span className="size-2 rounded-full bg-[var(--state-available)]" />Other outlets stay unchanged</span>
@@ -418,7 +417,7 @@ function BulkPanel({ rows, plan, busy, onChange, onApply }: { rows: PricingRow[]
         >
           <div className="grid grid-cols-2 gap-2">
             {(Object.keys(bulkLabels) as BulkKind[]).map((k) => (
-              <button key={k} type="button" onClick={() => { onChange({ ...plan, kind: k }); setError(null); }} className={`min-h-12 rounded-xl border px-3 text-sm font-semibold ${plan.kind === k ? "border-ink bg-ink text-paper" : "border-line bg-surface hover:border-ink/40"} ${k === "reset" ? "col-span-2" : ""}`}>
+              <button key={k} type="button" onClick={() => { onChange({ ...plan, kind: k }); setError(null); }} className={`min-h-12 rounded-xl border px-3 text-sm font-semibold ${plan.kind === k ? "border-forest bg-forest text-white" : "border-line bg-surface hover:border-ink/40"} ${k === "reset" ? "col-span-2" : ""}`}>
                 {bulkLabels[k]}
               </button>
             ))}
@@ -432,7 +431,7 @@ function BulkPanel({ rows, plan, busy, onChange, onApply }: { rows: PricingRow[]
               </div>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {quick.map((q) => (
-                  <button key={q} type="button" onClick={() => onChange({ ...plan, value: q })} className={`min-h-9 rounded-full border px-3 text-sm font-semibold ${plan.value === q ? "border-ink bg-ink text-paper" : "border-line hover:border-ink/40"}`}>{q}{isPercent ? "%" : ""}</button>
+                  <button key={q} type="button" onClick={() => onChange({ ...plan, value: q })} className={`min-h-9 rounded-full border px-3 text-sm font-semibold ${plan.value === q ? "border-forest bg-forest text-white" : "border-line hover:border-ink/40"}`}>{q}{isPercent ? "%" : ""}</button>
                 ))}
               </div>
             </div>

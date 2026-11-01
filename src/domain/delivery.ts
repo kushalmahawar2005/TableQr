@@ -63,6 +63,13 @@ export function deliveryQuote(policy: DeliveryPolicy, pincode: string, foodSubto
 export const DELIVERY_TABLE_PREFIX = "DL-";
 export const isDeliveryTable = (code: string) => code.startsWith(DELIVERY_TABLE_PREFIX);
 
+/** Staff-facing name for a table code: hidden delivery and takeaway counters never show their raw code */
+export function placeLabel(code: string, guestName?: string | null) {
+  if (isDeliveryTable(code)) return guestName ? `Delivery · ${guestName}` : "Delivery";
+  const takeaway = /^TA-(\d+)$/.exec(code);
+  return takeaway ? `Takeaway ${takeaway[1]}` : code.startsWith("Room ") ? code : `Table ${code}`;
+}
+
 /** A rider position older than this is not shown as live */
 export const LOCATION_FRESH_MS = 10 * 60_000;
 export const freshLocation = (lat: number | null, lng: number | null, at: Date | null, now = Date.now()) =>
