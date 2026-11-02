@@ -13,7 +13,7 @@ const waiterAppBrand = cache(async () => {
 
 // The waiter app uses the signed-in outlet's public name, logo and accent color.
 export async function generateMetadata(): Promise<Metadata> {
-  return staffAppMetadataFor(await waiterAppBrand());
+  return staffAppMetadataFor(await waiterAppBrand(), "waiter");
 }
 
 export async function generateViewport(): Promise<Viewport> {

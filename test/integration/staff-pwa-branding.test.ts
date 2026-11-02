@@ -28,7 +28,7 @@ describe("tenant-branded staff PWA", () => {
       name: "BMW Staff",
       short_name: "BMW",
       start_url: "/console",
-      scope: "/",
+      scope: "/console",
       display: "standalone",
       theme_color: "#c9482b",
     });

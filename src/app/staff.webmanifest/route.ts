@@ -6,7 +6,11 @@ import { staffAppIconUrl } from "@/lib/staff-app";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const code = new URL(request.url).searchParams.get("outlet");
+  const params = new URL(request.url).searchParams;
+  const code = params.get("outlet");
+  // Each app only claims its own pages, so a guest link or the admin opened from WhatsApp
+  // opens in the browser, never inside an installed staff app.
+  const home = params.get("app") === "waiter" ? "/waiter" : "/console";
   const brand = await staffAppBrandForOutletCode(code);
   const name = brand?.name?.trim() || "Tableeqr Staff";
   const icon = (size: 180 | 192 | 512) => staffAppIconUrl(size, brand?.code);
@@ -17,12 +21,12 @@ export async function GET(request: Request) {
   ];
   return Response.json(
     {
-      id: brand ? `/console?outlet=${encodeURIComponent(brand.code)}` : "/console",
+      id: brand ? `${home}?outlet=${encodeURIComponent(brand.code)}` : home,
       name: brand ? `${name} Staff` : name,
       short_name: name.slice(0, 12),
       description: `Orders, tables and bills for ${name} staff.`,
-      start_url: "/console",
-      scope: "/",
+      start_url: home,
+      scope: home,
       display: "standalone",
       orientation: "portrait",
       background_color: "#f3f1ec",

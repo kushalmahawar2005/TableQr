@@ -14,10 +14,14 @@ export function staffAppIconUrl(size: 180 | 192 | 512, outletCode?: string | nul
   return `/staff-icon/${size}${code ? `?outlet=${encodeURIComponent(code)}` : ""}`;
 }
 
+/** Which installed app: the owner console or the waiter app. Each keeps to its own pages. */
+export type StaffAppKind = "console" | "waiter";
+
 /** Head tags for the installable staff app, branded for the outlet saved at sign-in. */
-export function staffAppMetadataFor(brand: StaffAppBrand | null): Pick<Metadata, "manifest" | "appleWebApp" | "icons"> {
+export function staffAppMetadataFor(brand: StaffAppBrand | null, app: StaffAppKind = "console"): Pick<Metadata, "manifest" | "appleWebApp" | "icons"> {
   const code = safeCode(brand?.code);
-  const manifest = `/staff.webmanifest${code ? `?outlet=${encodeURIComponent(code)}` : ""}`;
+  const query = new URLSearchParams({ ...(code ? { outlet: code } : {}), ...(app === "waiter" ? { app } : {}) }).toString();
+  const manifest = `/staff.webmanifest${query ? `?${query}` : ""}`;
   return {
     manifest,
     appleWebApp: { capable: true, title: (brand?.name || "Tableeqr").trim().slice(0, 16), statusBarStyle: "default" },

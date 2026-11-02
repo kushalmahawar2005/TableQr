@@ -218,10 +218,10 @@ export function StaffShell({
     <div
       lang={lang}
       style={{ "--sidebar-width": folded ? "4rem" : "13rem" } as CSSProperties}
-      className={`staff-theme flex min-h-dvh flex-1 flex-col bg-dashboard-canvas pt-[max(env(safe-area-inset-top),var(--staff-app-top,0px))] text-ink sm:flex-row sm:pt-0 ${dark ? "theme-dark" : ""}`}
+      className={`staff-theme flex min-h-dvh flex-1 flex-col bg-dashboard-canvas text-ink sm:flex-row ${dark ? "theme-dark" : ""}`}
     >
       <header
-        className={`sticky top-[max(env(safe-area-inset-top),var(--staff-app-top,0px))] z-30 flex h-12 shrink-0 items-center justify-between border-b px-2.5 sm:hidden print:hidden ${active === "dashboard" ? "border-line bg-paper" : "border-line bg-surface"}`}
+        className={`sticky top-0 z-30 box-content flex h-12 shrink-0 items-center justify-between border-b px-2.5 pt-[max(env(safe-area-inset-top),var(--staff-app-top,0px))] sm:hidden print:hidden ${active === "dashboard" ? "border-line bg-paper" : "border-line bg-surface"}`}
       >
         <span className="flex min-w-0 items-center gap-1.5">
           <OutletBrandMark name={brandName ?? staff.outlet} logoUrl={logoUrl} />

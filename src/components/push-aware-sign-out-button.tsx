@@ -26,7 +26,8 @@ export function PushAwareSignOutButton({
     if (busy) return;
     setBusy(true);
     let endpoint = "";
-    try {
+    // Some phones never answer these push calls; sign-out must not wait on them for ever
+    const cleanUp = async () => {
       const registration = await navigator.serviceWorker?.getRegistration("/");
       const notifications = await registration?.getNotifications();
       notifications?.forEach((notification) => {
@@ -38,6 +39,9 @@ export function PushAwareSignOutButton({
         endpoint = subscription.endpoint;
         await subscription.unsubscribe().catch(() => false);
       }
+    };
+    try {
+      await Promise.race([cleanUp(), new Promise((done) => setTimeout(done, 2500))]);
     } catch {
       // Session sign-out should still work when push is unsupported or unavailable.
     }

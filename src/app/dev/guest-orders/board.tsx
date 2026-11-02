@@ -27,7 +27,7 @@ export function Board({ view, dark }: { view: string; dark: boolean }) {
     <div className="mx-auto w-full max-w-[480px] overflow-hidden px-4 min-[360px]:px-5"><div className="guest-app" data-appearance={dark ? "dark" : "light"} style={shell}>
       {view === "loading" ? <GuestSplash name="The fit bowl" />
         : view === "orders" ? <CustomerOrders outlet="DEMO" brandName="The fit bowl" initial={history} />
-        : <div className="pt-5 pb-8"><StatusView outletCode="DEMO" status={{ ...base, ...states[view] } as unknown as Status} hindi={false} pending={false} statusMessage="" onRefresh={() => undefined} newOrderHref="/dev/guest-orders?new=1" /></div>}
+        : <div className="pt-5 pb-8"><StatusView outletCode="DEMO" status={{ ...base, ...states[view] } as unknown as Status} hindi={false} pending={false} statusMessage="" onRefresh={async () => null} newOrderHref="/dev/guest-orders?new=1" /></div>}
     </div></div>
   );
 }

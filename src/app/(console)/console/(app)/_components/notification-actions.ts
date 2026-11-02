@@ -12,7 +12,8 @@ export async function noticesAction(since: number | null, expectedSessionId: str
   // A tab left open while another account signs in must not start polling that account's notices.
   if (!staff || staff.sessionId !== expectedSessionId) return { ok: false };
   const now = Date.now();
-  const waiting = await getLiveOrderCounts(staff);
+  // The bell must keep working even if this extra count fails
+  const waiting = await getLiveOrderCounts(staff).catch(() => ({ table: 0, guest: 0 }));
   if (since === null || !Number.isFinite(since)) return { ok: true, now, notices: [], waiting };
   // Never look back more than a day, whatever the screen sends
   const from = new Date(Math.max(Number(since), now - 86_400_000));

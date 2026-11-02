@@ -11,8 +11,11 @@ import { Delta, dayLabel, focusRing, money } from "./dashboard-shared";
 export function DashboardKpis({ data, trend, features }: { data: DashboardData; trend: RevenueTrend; features?: Features }) {
   const k = data.kpis;
   const tablePct = k.openTables.total > 0 ? Math.round((k.openTables.open / k.openTables.total) * 100) : 0;
-  const preparingCount = (data.operations.kitchenOrders || []).filter((o) => o.status === "preparing").length;
-  const readyCount = (data.operations.kitchenOrders || []).filter((o) => o.status === "ready").length;
+  // Sits under "Orders Today", so an order left unserved from an earlier day must not count here
+  const dayOf = (at: number) => new Intl.DateTimeFormat("en-CA", { timeZone: data.timezone }).format(at);
+  const kitchenToday = (data.operations.kitchenOrders || []).filter((o) => dayOf(o.placedAt) === dayOf(data.generatedAt));
+  const preparingCount = kitchenToday.filter((o) => o.status === "preparing").length;
+  const readyCount = kitchenToday.filter((o) => o.status === "ready").length;
 
   const showRooms = features?.rooms === true;
   const count = 4 + (features?.delivery === true ? 1 : 0) + (features?.dineIn === true ? 1 : 0) + (showRooms ? 1 : 0);

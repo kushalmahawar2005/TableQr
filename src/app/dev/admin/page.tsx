@@ -1,10 +1,12 @@
 import { notFound } from "next/navigation";
 import { adminLogoutAction } from "@/app/admin/actions";
 import { AdminShell } from "@/app/admin/admin-client";
-import type { AdminData, AnalyticsData } from "@/app/admin/admin-types";
+import type { AdminData, AnalyticsData, AuditData, SettingsData } from "@/app/admin/admin-types";
 import { DashboardView } from "@/app/admin/dashboard-view";
 import { AnalyticsView } from "@/app/admin/analytics-view";
 import { AppsView } from "@/app/admin/apps-view";
+import { AuditView } from "@/app/admin/audit-view";
+import { SettingsView } from "@/app/admin/settings-view";
 import { FeesView } from "@/app/admin/fees-view";
 import { PlansView } from "@/app/admin/plans-view";
 import { SubscriptionsView } from "@/app/admin/subscriptions-view";
@@ -83,8 +85,15 @@ const analytics: AnalyticsData = {
 };
 const releases = [{ id: "a1", version: "1.0.1", url: "#", sizeBytes: 4_600_000, notes: "Faster location updates", createdAt: iso(1) }, { id: "a2", version: "1.0.0", url: "#", sizeBytes: 4_500_000, notes: "First release: live deliveries, background location with the screen off", createdAt: iso(6) }];
 
+const audit = { truncated: false, entries: [
+  { id: "e1", createdAt: iso(0.1), tenantName: "The Fit Bowl", actorLabel: "admin:owner@tableeqr.com", action: "admin.plan_changed", reason: null, before: { planCode: "starter", status: "trial" }, after: { planCode: "pro", status: "trial" } },
+  { id: "e2", createdAt: iso(1), tenantName: "Spice Route Family Restaurant and Banquet", actorLabel: "staff:Ravi", action: "bill.discount_applied", reason: "Regular guest", before: null, after: { percent: 10 } },
+  { id: "e3", createdAt: iso(2), tenantName: "Chai Point", actorLabel: "system", action: "subscription.renewed", reason: null, before: null, after: null },
+] } as unknown as AuditData;
+const settings = { me: { name: "Kushal Mahawar", email: "owner@tableeqr.com", role: "super_admin" }, team: [{ id: "a1", name: "Kushal Mahawar", email: "owner@tableeqr.com", role: "super_admin", isActive: true, lastLoginAt: iso(0.1) }, { id: "a2", name: "Support Team", email: "support@tableeqr.com", role: "support", isActive: false, lastLoginAt: null }], system: [{ label: "Database", ok: true, detail: "Connected" }, { label: "Payments (Cashfree)", ok: true, detail: "Set up" }, { label: "SMS codes", ok: false, detail: "Not set up" }] } as unknown as SettingsData;
+
 // Development-only preview of the platform admin screens
 export default async function AdminPreview() {
   if (process.env.NODE_ENV === "production") notFound();
-  return <AdminShell email="owner@tableeqr.com" logout={adminLogoutAction} pages={{ Dashboard: <DashboardView data={data} name="Kushal" />, Tenants: <TenantsView data={data} canRemove />, Subscriptions: <SubscriptionsView data={data} />, "Plans & Pricing": <PlansView data={data} />, Fees: <FeesView data={data} preview={fees} />, Analytics: <AnalyticsView data={data} preview={analytics} />, Apps: <AppsView initial={releases} /> }} alerts={[{ id: "a1", title: "The Fit Bowl says they paid", detail: "₹1,499 · check it and confirm", page: "Fees" }]} />;
+  return <AdminShell email="owner@tableeqr.com" logout={adminLogoutAction} pages={{ Dashboard: <DashboardView data={data} name="Kushal" />, Tenants: <TenantsView data={data} canRemove />, Subscriptions: <SubscriptionsView data={data} />, "Plans & Pricing": <PlansView data={data} />, Fees: <FeesView data={data} preview={fees} />, Analytics: <AnalyticsView data={data} preview={analytics} />, Apps: <AppsView initial={releases} />, "Audit Logs": <AuditView preview={audit} />, Settings: <SettingsView preview={settings} /> }} alerts={[{ id: "a1", title: "The Fit Bowl says they paid", detail: "₹1,499 · check it and confirm", page: "Fees" }]} />;
 }

@@ -18,9 +18,9 @@ export function NewOrdersStrip() {
 }
 
 /** Quick link to guest app orders, with how many are waiting */
-export function DeliveryOrdersLink() {
+export function DeliveryOrdersLink({ wide }: { /** Fills the row on a phone when it would sit alone */ wide: boolean }) {
   const { guest } = useLiveOrderCounts();
-  return <Link href="/console/orders?view=delivery" className={`inline-flex h-11 min-w-0 items-center justify-center gap-2 whitespace-nowrap rounded-card border border-line bg-surface px-2 text-xs font-semibold text-ink transition-all hover:border-forest/40 sm:px-4 ${focusRing}`}>
+  return <Link href="/console/orders?view=delivery" className={`${wide ? "col-span-2 sm:col-span-1 " : ""}inline-flex h-11 min-w-0 items-center justify-center gap-2 whitespace-nowrap rounded-card border border-line bg-surface px-2 text-xs font-semibold text-ink transition-all hover:border-forest/40 sm:px-4 ${focusRing}`}>
     <Bike className="size-4 text-terracotta" aria-hidden="true" /><span>Delivery Orders</span>
     {guest > 0 && <span className="grid h-5 min-w-5 place-items-center rounded-full bg-danger px-1 text-[11px] font-bold text-white tabular">{guest}</span>}
   </Link>;

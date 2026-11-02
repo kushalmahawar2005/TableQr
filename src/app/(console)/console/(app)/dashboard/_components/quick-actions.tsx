@@ -40,7 +40,7 @@ export function QuickActions({ features }: { features?: Features }) {
           <span>{label}</span>
         </Link>
       ))}
-      {features?.delivery && <DeliveryOrdersLink />}
+      {features?.delivery && <DeliveryOrdersLink wide={secondary.length % 2 === 0} />}
     </nav>
   );
 }

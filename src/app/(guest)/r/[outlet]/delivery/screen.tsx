@@ -1,5 +1,5 @@
 "use client";
-import { ArrowLeft, CalendarDays, Check, ChevronDown, ChevronRight, Copy, Headphones, MapPin, ShoppingBag, Truck } from "lucide-react";
+import { ArrowLeft, CalendarDays, Check, ChevronDown, ChevronRight, Copy, Headphones, MapPin, ShoppingBag, Truck, RefreshCw } from "lucide-react";
 import { GuestSheet, LanguageSwitch } from "../_components/guest-ui";
 import { BagArt, ClocheArt, ReceiptArt, RouteArt } from "../_components/order-art";
 import { useGuestExperience } from "../guest-shell";
@@ -135,6 +135,8 @@ export function DeliveryScreen({ outletCode, data, initialStatus, initialService
     return () => { stop(); if (timer) clearTimeout(timer); };
   }, [outletCode, finished, realtimeUrl]);
   // The browser may close after order placement; the server cookie restores tracking on refresh.
+  /** The tracking screen's Refresh: says what went wrong, if anything */
+  async function refreshStatus() { const response = await deliveryStatusAction(outletCode); if (!response.ok) return response.message; setStatus(response.data); return null; }
   async function loadStatus() { const response = await deliveryStatusAction(outletCode); if (response.ok) setStatus(response.data); else setError(response.message); }
   async function payDelivery() {
     const response = await startDeliveryPaymentAction(outletCode);
@@ -235,7 +237,7 @@ export function DeliveryScreen({ outletCode, data, initialStatus, initialService
     </header>}
     {initialNotice && <p role="status" className="mt-4 rounded-2xl bg-brand-soft p-4 text-xs text-brand-strong">{initialNotice}</p>}
     {error && <p role="alert" className="mt-4 rounded-2xl border border-danger/20 bg-[var(--state-seated-soft)] p-4 text-caption font-semibold text-danger">{error}</p>}
-    {status ? <><StatusView outletCode={outletCode} status={status} hindi={hindi} pending={pending} statusMessage={statusMessage} onPay={() => run(payDelivery)} onRefresh={() => run(loadStatus)} newOrderHref={`${base}/delivery?new=1&lang=${hindi ? "hi" : "en"}`} />{installable && <InstallApp guest className="mt-4" name={installable.name} logoUrl={installable.logoUrl} title={t("Install our app", "हमारा ऐप इंस्टॉल करें")} blurb={t(`Track this order and order again from ${installable.name} in one tap.`, `इस ऑर्डर को ट्रैक करें और ${installable.name} से एक टैप में दोबारा ऑर्डर करें।`)} />}</> : <>
+    {status ? <><StatusView outletCode={outletCode} status={status} hindi={hindi} pending={pending} statusMessage={statusMessage} onPay={() => run(payDelivery)} onRefresh={refreshStatus} newOrderHref={`${base}/delivery?new=1&lang=${hindi ? "hi" : "en"}`} />{installable && <InstallApp guest className="mt-4" name={installable.name} logoUrl={installable.logoUrl} title={t("Install our app", "हमारा ऐप इंस्टॉल करें")} blurb={t(`Track this order and order again from ${installable.name} in one tap.`, `इस ऑर्डर को ट्रैक करें और ${installable.name} से एक टैप में दोबारा ऑर्डर करें।`)} />}</> : <>
     {step === "menu" && data && <>
       {orderModes.length > 1 && <div className="mt-5 grid grid-cols-2 gap-1 rounded-xl bg-ink/5 p-1" aria-label="Order type">
         {orderModes.map(({key,label,icon:Icon})=><button key={key} type="button" aria-pressed={serviceMode===key} onClick={()=>{setActiveMode(key);const url=new URL(window.location.href);url.searchParams.set("mode",key);window.history.replaceState(null,"",url);}} className={`flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-lg text-sm font-bold ${serviceMode===key?"bg-surface text-brand":"text-muted"}`}><Icon size={17}/>{label}</button>)}
@@ -456,7 +458,17 @@ function orderHeadline(status: Status, stage: number, t: (en: string, hi: string
   return { art: <ReceiptArt />, kicker: accepted ? t("Restaurant accepted", "रेस्टोरेंट ने ऑर्डर लिया") : t("Order received", "ऑर्डर मिल गया"), title: eta ?? t("Order placed", "ऑर्डर हो गया"), lead: accepted ? t("The restaurant has accepted your order.", "रेस्टोरेंट ने आपका ऑर्डर ले लिया है।") : t("The restaurant will accept your order shortly.", "रेस्टोरेंट जल्द ही ऑर्डर लेगा।"), nextTitle: t("What happens next", "आगे क्या होगा"), next: `${t("The kitchen starts preparing next.", "अब किचन तैयारी शुरू करेगा।")}${status.paid ? "" : ` ${pickup ? t("Payment is still due at pickup.", "पेमेंट पिकअप पर देना है।") : t("Payment is still due on delivery.", "पेमेंट डिलीवरी पर देना है।")}`}`, help };
 }
 
-export function StatusView({ status, hindi, pending, statusMessage, onPay, onRefresh, newOrderHref, outletCode, onBack, reorderHref }: { status: Status; hindi: boolean; outletCode: string; pending: boolean; statusMessage: string; onPay?: () => void; onRefresh: () => void; newOrderHref: string; onBack?: () => void; /** Finished orders only: the same order again */ reorderHref?: string }) {
+export function StatusView({ status, hindi, pending, statusMessage, onPay, onRefresh, newOrderHref, outletCode, onBack, reorderHref }: { status: Status; hindi: boolean; outletCode: string; pending: boolean; statusMessage: string; onPay?: () => void; onRefresh: () => Promise<string | null>; newOrderHref: string; onBack?: () => void; /** Finished orders only: the same order again */ reorderHref?: string }) {
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshNote, setRefreshNote] = useState<{ text: string; bad: boolean } | null>(null);
+  // Held for a moment so a fast answer still shows the tap worked
+  const refresh = async () => {
+    setRefreshing(true); setRefreshNote(null);
+    const lost = hindi ? "कनेक्शन टूट गया। दोबारा कोशिश करें।" : "Connection lost. Please try again.";
+    const [problem] = await Promise.all([onRefresh().catch(() => lost), new Promise((done) => setTimeout(done, 600))]);
+    setRefreshing(false);
+    setRefreshNote(problem ? { text: problem, bad: true } : { text: hindi ? "अभी अपडेट किया" : "Updated just now", bad: false });
+  };
   const t = (en: string, hi: string) => (hindi ? hi : en);
   const { brand } = useGuestExperience();
   const base = useGuestBase(outletCode);
@@ -548,8 +560,8 @@ export function StatusView({ status, hindi, pending, statusMessage, onPay, onRef
     {placed && !finished && <PushOffer hindi={hindi} outletCode={outletCode} />}
 
     {!finished && <div className="flex items-center justify-between gap-3">
-      <div className="min-w-0"><p className="text-sm font-bold">{t("Order status", "ऑर्डर की स्थिति")}</p><p className="text-xs text-muted">{t("Updates by itself", "अपने आप अपडेट होता है")}</p></div>
-      <button type="button" disabled={pending} onClick={onRefresh} className="min-h-11 shrink-0 cursor-pointer rounded-xl border border-line bg-surface px-4 text-sm font-bold text-brand disabled:opacity-50">{pending ? t("Updating…", "अपडेट हो रहा है…") : t("Refresh", "रिफ्रेश")}</button>
+      <div className="min-w-0"><p className="text-sm font-bold">{t("Order status", "ऑर्डर की स्थिति")}</p><p role="status" className={`text-xs ${refreshNote?.bad ? "font-semibold text-danger" : "text-muted"}`}>{refreshNote?.text ?? t("Updates by itself", "अपने आप अपडेट होता है")}</p></div>
+      <button type="button" disabled={refreshing || pending} onClick={() => void refresh()} className="inline-flex min-h-11 shrink-0 cursor-pointer items-center gap-2 rounded-xl border border-line bg-surface px-4 text-sm font-bold text-brand disabled:opacity-60"><RefreshCw size={15} className={refreshing ? "animate-spin" : ""} aria-hidden="true" />{refreshing ? t("Updating", "अपडेट हो रहा है") : t("Refresh", "रिफ्रेश")}</button>
     </div>}
 
     {brand?.outlet.phone && <a href={`tel:${brand.outlet.phone}`} className="flex items-center gap-3 rounded-2xl border border-line bg-surface p-4">

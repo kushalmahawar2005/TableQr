@@ -120,7 +120,7 @@ export function CustomerOrders({ outlet, brandName, initial }: { outlet: string;
     <main className="w-full min-w-0 pb-7 pt-5">
       {selected ? (
         <div className="guest-order-summary">
-          {tracking ? <StatusView outletCode={outlet} status={tracking} hindi={hindi} pending={false} statusMessage={statusLabel(tracking.status, tracking.serviceMode === "pickup", hindi)} onBack={() => { setSelected(null); setTracking(null); }} reorderHref={selectedOrder && allowedAgain(selectedOrder) ? againHref(selectedOrder) : undefined} onRefresh={() => { void trackCustomerOrderAction(outlet, selected).then((result) => { if (result.ok) setTracking(result.data); else setError(result.error); }); }} newOrderHref={`${base}/delivery?new=1`} />
+          {tracking ? <StatusView outletCode={outlet} status={tracking} hindi={hindi} pending={false} statusMessage={statusLabel(tracking.status, tracking.serviceMode === "pickup", hindi)} onBack={() => { setSelected(null); setTracking(null); }} reorderHref={selectedOrder && allowedAgain(selectedOrder) ? againHref(selectedOrder) : undefined} onRefresh={async () => { const result = await trackCustomerOrderAction(outlet, selected); if (!result.ok) return result.error; setTracking(result.data); return null; }} newOrderHref={`${base}/delivery?new=1`} />
             : <><header className="guest-page-header"><button className="guest-icon-button" aria-label={c.back} onClick={() => { setSelected(null); setTracking(null); }}><ArrowLeft size={20} /></button><h1>{c.summary}</h1></header><div className="guest-card mt-5 p-6" role="status">{error ? c.loadError : c.loading}</div></>}
         </div>
       ) : <>

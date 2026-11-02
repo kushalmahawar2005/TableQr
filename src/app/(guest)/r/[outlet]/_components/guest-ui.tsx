@@ -18,7 +18,7 @@ export function GuestSheet({title,children,onClose}:{title:string;children:React
 export function GuestSplash({name}:{name?:string}) {
  const {brand}=useGuestExperience();
  name=brand?.outlet.name ?? name ?? "Welcome";
- return <div className="guest-splash" role="status" aria-label={`Opening ${name}`}><BowlArt/><h1>{name}</h1><p>Your favourites. A little closer.</p></div>;
+ return <div className="guest-splash" role="status" aria-label={`Opening ${name}`}><span className="guest-splash-bowl"><BowlArt/></span><h1>{name}</h1><p>Your favourites. A little closer.</p><span className="guest-splash-bar" aria-hidden="true"/></div>;
 }
 
 /** "EN / हिन्दी": taps straight to the other language */
