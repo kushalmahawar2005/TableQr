@@ -44,7 +44,8 @@ export function InstallApp({ className = "", name = "Tableeqr", logoUrl = null, 
   const [helpOpen, setHelpOpen] = useState(false);
 
   useEffect(() => {
-    if (runningAsApp() || hiddenForNow(hideKey)) return;
+    // "Not now" on a card hides that card; the small top-bar button has no close, so it ignores it
+    if (runningAsApp() || (!pill && hiddenForNow(hideKey))) return;
     const onPrompt = (e: Event) => {
       e.preventDefault();
       setPrompt(e as InstallEvent);
@@ -70,7 +71,7 @@ export function InstallApp({ className = "", name = "Tableeqr", logoUrl = null, 
       window.removeEventListener("beforeinstallprompt", onPrompt);
       window.removeEventListener("appinstalled", onInstalled);
     };
-  }, [hideKey, downloadHref]);
+  }, [hideKey, downloadHref, pill]);
 
   if (!show) return null;
 
