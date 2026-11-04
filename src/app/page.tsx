@@ -86,7 +86,7 @@ export default function Home() {
           <p className={s.heroDescription}>Orders, kitchen, billing and guest service in one place. A setup that fits your restaurant, café, hotel or cloud kitchen.</p>
           <div className={s.heroActions}>
             <a href={CONTACT} target="_blank" rel="noopener noreferrer" className={cx(s.button, s.primary)}>Let’s talk about your business <ArrowUpRight size={18} aria-hidden="true" /></a>
-            <Link href={DEMO} className={cx(s.button, s.secondary)}>Try the guest demo <ArrowRight size={18} aria-hidden="true" /></Link>
+            <Link href="/demo" className={cx(s.button, s.secondary)}>Explore product demos <ArrowRight size={18} aria-hidden="true" /></Link>
           </div>
           <div className={s.heroNotes}><span><Check size={15} aria-hidden="true" /> No guest app needed</span><span><Check size={15} aria-hidden="true" /> English & Hindi</span></div>
         </div>
