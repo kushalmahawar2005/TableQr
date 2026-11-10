@@ -225,7 +225,7 @@ export function PricingScreen({ initial, preview }: { initial: PricingData; prev
       </section>
 
       {data.canEdit && selected.size > 0 && !bulk && (
-        <div className="fixed inset-x-3 bottom-3 z-20 mx-auto flex max-w-xl items-center justify-between gap-3 rounded-2xl border border-line bg-surface p-3 shadow-lg lg:left-[calc(var(--sidebar-width,16rem)+0.75rem)]">
+        <div className="fixed inset-x-3 bottom-[calc(4rem+env(safe-area-inset-bottom)+0.75rem)] z-20 mx-auto flex max-w-xl items-center justify-between gap-3 rounded-2xl border border-line bg-surface p-3 shadow-lg sm:bottom-3 sm:left-[4.75rem] lg:left-[calc(var(--sidebar-width,16rem)+0.75rem)]">
           <span className="text-sm font-semibold" aria-live="polite">{selected.size} selected</span>
           <div className="flex gap-2">
             <button type="button" className="min-h-11 rounded-xl border border-line px-3 text-sm font-semibold hover:border-ink/40" onClick={() => setSelected(new Set())}>Clear</button>

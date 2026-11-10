@@ -468,7 +468,7 @@ export function SettingsScreen({ o, canEdit, payments, printers, domain }: { o: 
       {logoToCrop && <LogoCropDialog file={logoToCrop} onCancel={() => setLogoToCrop(null)} onSave={acceptLogoCrop} />}
 
       {canEdit && !advancedOpen && (
-        <div className="fixed inset-x-3 bottom-[calc(4rem+env(safe-area-inset-bottom)+0.75rem)] z-20 mx-auto flex max-w-[1100px] items-center justify-between gap-3 rounded-2xl border border-line bg-surface p-3 shadow-lg sm:bottom-3 lg:left-[calc(var(--sidebar-width,16rem)+0.75rem)] lg:right-3 lg:mx-0 lg:max-w-none">
+        <div className="fixed inset-x-3 bottom-[calc(4rem+env(safe-area-inset-bottom)+0.75rem)] z-20 mx-auto flex max-w-[1100px] items-center justify-between gap-3 rounded-2xl border border-line bg-surface p-3 shadow-lg sm:bottom-3 sm:left-[4.75rem] lg:left-[calc(var(--sidebar-width,16rem)+0.75rem)] lg:right-3 lg:mx-0 lg:max-w-none">
           <p role={msg?.ok === false ? "alert" : "status"} className={`flex min-w-0 items-center gap-2 text-sm font-semibold ${msg ? (msg.ok ? "text-[var(--state-available-text)]" : "text-danger") : "text-muted"}`}>
             {!msg && <span className={`size-2 shrink-0 rounded-full ${dirty ? "bg-terracotta" : "bg-[var(--state-available)]"}`} aria-hidden="true" />}
             {msg && !(msg.ok && dirty) ? msg.text : dirty ? "You have changes that are not saved" : "Everything is saved"}

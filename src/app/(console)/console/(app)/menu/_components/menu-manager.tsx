@@ -66,7 +66,7 @@ export function MenuManager({initial,canEditPrice}:{initial:Data;canEditPrice:bo
   </>}
   <Sheet open={!!openDish} onOpenChange={o=>{if(!o)setPicked(null)}}><SheetContent className="w-full gap-0 overflow-y-auto bg-surface p-0 data-[side=right]:sm:max-w-md"><SheetTitle className="sr-only">{openDish?.nameEn??"Dish"}</SheetTitle><SheetDescription className="sr-only">Prices and availability for this dish.</SheetDescription>{openDish&&<DishPanel key={openDish.id} item={openDish} data={data} onEdit={()=>{setPicked(null);openPanel("item",openDish.id)}} onSizes={()=>{setPicked(null);openPanel("sizes",openDish.id)}} onToggle={()=>toggle(openDish)} done={done}/>}</SheetContent></Sheet>
   <Sheet open={open} onOpenChange={setOpen}><SheetContent className="w-full overflow-y-auto bg-background data-[side=right]:sm:max-w-xl"><SheetHeader><SheetTitle className="font-display text-title font-bold">{title}</SheetTitle><SheetDescription>{panel==="item"?(item?"Change anything about this dish and save.":"Fill in the basics. You can add extras and photos after."):panel==="library"?"Hundreds of common dishes, ready to add. You set the prices.":"Changes apply to your whole menu."}</SheetDescription></SheetHeader>
-   <div className="px-4 pb-8">{panel==="item"?<Editor item={item} data={data} canEditPrice={canEditPrice} onSaved={async m=>{setMessage(m);await refresh()}} onPanel={setPanel}/>:panel==="sizes"&&item?<SizesPanel item={item} data={data} canEditPrice={canEditPrice} onDone={m=>{setMessage(m);void refresh()}}/>:panel==="modifiers"&&item?<ModifierPanel item={item} data={data} canEditPrice={canEditPrice} onDone={m=>{setMessage(m);void refresh()}}/>:panel==="pairings"&&item?<PairingPanel item={item} data={data} onDone={m=>{setMessage(m);void refresh()}}/>:panel==="import"?<ImportPanel onDone={m=>{setMessage(m);void refresh()}}/>:panel==="bulk"?<BulkPanel data={data} onDone={m=>{setMessage(m);void refresh()}}/>:panel==="library"?<LibraryPanel canEdit={canEditPrice} onDone={m=>{setMessage(m);setOpen(false);void refresh()}}/>:<CategoryPanel data={data} onDone={m=>{setMessage(m);void refresh()}}/>}</div></SheetContent></Sheet>
+   <div className="px-4 pb-8">{panel==="item"?<Editor item={item} data={data} canEditPrice={canEditPrice} onSaved={async (m,added)=>{setMessage(m);if(added)setOpen(false);await refresh()}} onPanel={setPanel}/>:panel==="sizes"&&item?<SizesPanel item={item} data={data} canEditPrice={canEditPrice} onDone={m=>{setMessage(m);void refresh()}}/>:panel==="modifiers"&&item?<ModifierPanel item={item} data={data} canEditPrice={canEditPrice} onDone={m=>{setMessage(m);void refresh()}}/>:panel==="pairings"&&item?<PairingPanel item={item} data={data} onDone={m=>{setMessage(m);void refresh()}}/>:panel==="import"?<ImportPanel onDone={m=>{setMessage(m);void refresh()}}/>:panel==="bulk"?<BulkPanel data={data} onDone={m=>{setMessage(m);void refresh()}}/>:panel==="library"?<LibraryPanel canEdit={canEditPrice} onDone={m=>{setMessage(m);setOpen(false);void refresh()}}/>:<CategoryPanel data={data} onDone={m=>{setMessage(m);void refresh()}}/>}</div></SheetContent></Sheet>
  </main></div>;
 }
 function Thumb({url,size="size-9 sm:size-11"}:{url:string|null;size?:string}){
@@ -103,13 +103,13 @@ const lab="text-sm font-semibold text-ink";
 const hint="mt-1 text-xs text-muted";
 const inp="h-11 rounded-xl border-line bg-surface px-3 text-sm";
 function Block({title,note,children}:{title:string;note?:string;children:React.ReactNode}){return <section className="rounded-2xl border border-line bg-surface p-4"><h3 className="font-display text-section font-bold">{title}</h3>{note&&<p className={hint}>{note}</p>}<div className="mt-3 space-y-4">{children}</div></section>}
-function Editor(props:{item:Data["items"][number]|null;data:Data;canEditPrice:boolean;onSaved:(m:string)=>Promise<void>;onPanel:(p:"modifiers"|"pairings"|"sizes")=>void}){
+function Editor(props:{item:Data["items"][number]|null;data:Data;canEditPrice:boolean;onSaved:(m:string,added?:boolean)=>Promise<void>;onPanel:(p:"modifiers"|"pairings"|"sizes")=>void}){
  // A new dish can start from the library: picking one fills the form (and its category) in
  const [seed,setSeed]=useState<LibraryItemView|null>(null);
  if(props.item)return <EditorForm {...props} seed={null}/>;
  return <div className="space-y-4"><LibraryQuickPick onPick={setSeed}/>{seed&&<p role="status" className="rounded-xl bg-[var(--state-available-soft)] p-3 text-sm font-semibold text-[var(--state-available-text)]">Filled in from “{seed.nameEn}”. Add the price and check the rest.</p>}<EditorForm key={seed?.id??"blank"} {...props} seed={seed}/></div>;
 }
-function EditorForm({item,data,canEditPrice,onSaved,onPanel,seed}:{item:Data["items"][number]|null;data:Data;canEditPrice:boolean;onSaved:(m:string)=>Promise<void>;onPanel:(p:"modifiers"|"pairings"|"sizes")=>void;seed:LibraryItemView|null}){
+function EditorForm({item,data,canEditPrice,onSaved,onPanel,seed}:{item:Data["items"][number]|null;data:Data;canEditPrice:boolean;onSaved:(m:string,added?:boolean)=>Promise<void>;onPanel:(p:"modifiers"|"pairings"|"sizes")=>void;seed:LibraryItemView|null}){
  // The seed's category: the menu's own when it has one with that name, else made on save
  const seedCategory=seed?data.categories.find(c=>c.nameEn.trim().toLowerCase()===seed.categoryName.trim().toLowerCase()):undefined;
  const draft=item??{id:"",categoryId:seed?(seedCategory?.id??`lib:${seed.categoryKey}`):data.categories[0]?.id??"",nameEn:seed?.nameEn??"",nameHi:seed?.nameHi??null,pricePaise:0,isVeg:seed?.isVeg??true,isJain:false,spiceLevel:seed?seed.spice:null,allergens:null,searchTerms:seed?.searchTerms??null,prepMinutes:seed?.prepMinutes??15,station:seed?.station??"Main"};
@@ -120,16 +120,21 @@ function EditorForm({item,data,canEditPrice,onSaved,onPanel,seed}:{item:Data["it
  const [photo,setPhoto]=useState((draft as {imageUrl?:string|null}).imageUrl??""),[veg,setVeg]=useState(draft.isVeg),[jain,setJain]=useState(!!draft.isJain),[spice,setSpice]=useState(draft.spiceLevel==null?"":String(draft.spiceLevel));
  const [allergenMode,setAllergenMode]=useState<"unknown"|"none"|"some">(known.length===0?"unknown":known.length===1&&known[0].toLowerCase()==="none"?"none":"some");
  const [picked,setPicked]=useState<string[]>(known.filter(x=>x.toLowerCase()!=="none"));
+ // A failed save is shown inside the form: the page's message line sits behind this sheet
+ const [saveError,setSaveError]=useState("");
  const [prep,setPrep]=useState(String(draft.prepMinutes)),[busy,setBusy]=useState(false),[uploading,setUploading]=useState(false),[photoError,setPhotoError]=useState(""),[dragging,setDragging]=useState(false);
  const stations=[...new Set(data.items.map(x=>x.station).filter(Boolean))];
  const override=item?data.overrides.find(x=>x.itemId===item.id):null;
  const upload=async(file:File)=>{setUploading(true);setPhotoError("");try{const p=await shrinkPhoto(file);const r=await actions.uploadImageAction(p.name,p.type,p.base64);if(r.ok)setPhoto(r.data.url);else setPhotoError(r.error)}catch{setPhotoError(navigator.onLine?"Could not upload. The app may have just updated: refresh the page and try again.":"You are offline. Connect to the internet and try again.")}finally{setUploading(false)}};
- return <form className="space-y-4" onSubmit={async e=>{e.preventDefault();setBusy(true);const q=new FormData(e.currentTarget);
+ return <form className="space-y-4" onSubmit={async e=>{e.preventDefault();setBusy(true);setSaveError("");const q=new FormData(e.currentTarget);
   const allergens=allergenMode==="unknown"?[]:allergenMode==="none"?["none"]:picked;
   let categoryId=String(q.get("categoryId"));
-  if(categoryId.startsWith("lib:")){const c=await actions.libraryEnsureCategoryAction(categoryId.slice(4));if(!c.ok){setBusy(false);await onSaved(c.error||"Failed");return}categoryId=c.data}
+  if(categoryId.startsWith("lib:")){const c=await actions.libraryEnsureCategoryAction(categoryId.slice(4));if(!c.ok){setBusy(false);setSaveError(c.error||"Could not save the dish. Try again.");return}categoryId=c.data}
   const r=await actions.saveItemAction({id:newItem?undefined:draft.id,categoryId,nameEn:String(q.get("nameEn")),nameHi:String(q.get("nameHi")||""),pricePaise:Math.round(Number(q.get("price"))*100),isVeg:veg,isJain:jain,spiceLevel:spice===""?null:Number(spice),allergens,searchTerms:String(q.get("aliases")||""),prepMinutes:Number(prep),station:String(q.get("station")),imageUrl:photo,sizes:newItem&&useSizes?newSizes.map(x=>({name:x.name,pricePaise:Math.round(Number(x.price)*100)})):undefined});
-  setBusy(false);await onSaved(r.ok?(newItem?"Dish added.":"Dish saved."):r.error||"Failed")}}>
+  setBusy(false);
+  if(!r.ok){setSaveError(r.error||"Could not save the dish. Try again.");return}
+  // A new dish closes the form, so a second tap cannot add the same dish twice
+  await onSaved(newItem?"Dish added.":"Dish saved.",newItem)}}>
   <p className={hint}>{data.outlets.length>1?`Dish details and base prices are shared by all ${data.outlets.length} outlets. Availability and portions are set for this outlet; custom prices are in Pricing.`:"Dish details show up on your menu right away. Availability and portions are set for this outlet."}</p>
 
   <Block title="Photo" note="A good photo helps guests choose. Square photos look best.">
@@ -145,7 +150,7 @@ function EditorForm({item,data,canEditPrice,onSaved,onPanel,seed}:{item:Data["it
   </Block>
 
   <Block title="Price">
-   <div><Label htmlFor="price" className={lab}>Price</Label><div className="relative mt-1"><span aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-muted">₹</span><Input id="price" name="price" type="number" step="1" min="0" className={`${inp} pl-7 text-base font-bold`} defaultValue={draft.pricePaise/100} readOnly={!canEditPrice}/></div>
+   <div><Label htmlFor="price" className={lab}>Price</Label><div className="relative mt-1"><span aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-muted">₹</span><Input id="price" name="price" type="number" step="1" min="0" className={`${inp} pl-7 text-base font-bold`} defaultValue={newItem?"":draft.pricePaise/100} placeholder={newItem?"e.g. 250":undefined} required={newItem&&!useSizes} readOnly={!canEditPrice}/></div>
     {!canEditPrice&&<p className={hint}>Only the owner can change prices.</p>}
     {override?.pricePaise!=null&&<p className={hint}>At this outlet the price is ₹{(override.pricePaise/100).toFixed(2)} (set in Pricing).</p>}</div>
   </Block>
@@ -175,7 +180,7 @@ function EditorForm({item,data,canEditPrice,onSaved,onPanel,seed}:{item:Data["it
 
   {item&&<Block title="More options"><div className="grid gap-2 sm:grid-cols-2"><button type="button" className="rounded-xl border border-line p-3 text-left hover:border-ink/40 sm:col-span-2" onClick={()=>onPanel("sizes")}><b className="block text-sm">Sizes · Half / Full plate</b><span className="text-xs text-muted">Sell the same dish in different sizes at different prices</span></button><button type="button" className="rounded-xl border border-line p-3 text-left hover:border-ink/40" onClick={()=>onPanel("modifiers")}><b className="block text-sm">Choices and extras</b><span className="text-xs text-muted">Size, add-ons, spice level…</span></button><button type="button" className="rounded-xl border border-line p-3 text-left hover:border-ink/40" onClick={()=>onPanel("pairings")}><b className="block text-sm">Goes well with</b><span className="text-xs text-muted">Suggest other dishes</span></button></div></Block>}
 
-  <div className="sticky bottom-0 -mx-4 border-t border-line bg-background/95 px-4 py-3 backdrop-blur"><button disabled={busy} className="inline-flex h-12 w-full items-center justify-center rounded-xl border border-forest bg-forest text-base font-semibold text-white hover:bg-forest-hover disabled:opacity-60">{busy?"Saving…":newItem?"Add dish":"Save changes"}</button></div>
+  <div className="sticky bottom-0 -mx-4 border-t border-line bg-background/95 px-4 py-3 backdrop-blur">{saveError&&<p role="alert" className="mb-2 text-sm font-semibold text-danger">{saveError}</p>}<button disabled={busy} className="inline-flex h-12 w-full items-center justify-center rounded-xl border border-forest bg-forest text-base font-semibold text-white hover:bg-forest-hover disabled:opacity-60">{busy?"Saving…":newItem?"Add dish":"Save changes"}</button></div>
  </form>}
 const SIZE_PRESETS=["Quarter","Half","Full","Small","Medium","Large","Regular"];
 function SizesPanel({item,data,canEditPrice,onDone}:{item:Data["items"][number];data:Data;canEditPrice:boolean;onDone:(m:string)=>void}){

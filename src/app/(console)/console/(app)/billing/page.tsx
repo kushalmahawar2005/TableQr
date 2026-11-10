@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { BillingScreen } from "@/app/pos/_components/billing-screen";
+import { parseLang } from "@/lib/i18n";
+import { STAFF_LANG_COOKIE } from "@/lib/staff-language";
 import { canSee } from "@/lib/staff-permissions";
 import { posQueue } from "@/server/staff/pos-read";
 import { currentStaff } from "@/server/staff/request";
@@ -20,5 +23,6 @@ export default async function BillingPage(props: { searchParams: Promise<{ sessi
       </main>
     );
   }
-  return <BillingScreen embedded openSession={typeof session === "string" ? session : null} initial={await posQueue(staff)} realtimeUrl={process.env.REALTIME_URL?.replace(/^http/, "ws") ?? null} />;
+  const hindi = parseLang((await cookies()).get(STAFF_LANG_COOKIE)?.value) === "hi";
+  return <BillingScreen embedded initialHindi={hindi} openSession={typeof session === "string" ? session : null} initial={await posQueue(staff)} realtimeUrl={process.env.REALTIME_URL?.replace(/^http/, "ws") ?? null} />;
 }

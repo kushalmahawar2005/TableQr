@@ -100,12 +100,16 @@ function FeatureList({ features }: { features: Features }) {
 /** What this restaurant pays: the plan's price, or more or less as agreed with them */
 function PriceForm({ tenant, planPricePaise, pending, onSave }: { tenant: AdminTenant; planPricePaise: number | null; pending: boolean; onSave: (rupees: number | null) => void }) {
   const [price, setPrice] = useState(tenant.customPricePaise === null ? "" : String(tenant.customPricePaise / 100));
-  const list = planPricePaise === null ? "no list price" : `₹${(planPricePaise / 100).toLocaleString("en-IN")}`;
+  // With no agreed price the restaurant keeps paying its subscription's locked price, which can
+  // differ from today's list price; say which one applies so an empty box is not a surprise
+  const basePaise = tenant.basePricePaise !== undefined ? tenant.basePricePaise : planPricePaise;
+  const fromSubscription = basePaise !== null && basePaise !== planPricePaise && tenant.subscriptionId !== null;
+  const list = basePaise === null ? "no list price" : `₹${(basePaise / 100).toLocaleString("en-IN")}`;
   return <section className="space-y-1.5">
     <Label>Price per outlet per month</Label>
-    <p className="text-xs text-muted-foreground">Leave empty for the plan&apos;s price ({list}).</p>
+    <p className="text-xs text-muted-foreground">{fromSubscription ? <>Leave empty for the price on their subscription ({list}). Today&apos;s plan price is {planPricePaise === null ? "not set" : `₹${(planPricePaise / 100).toLocaleString("en-IN")}`}.</> : <>Leave empty for the plan&apos;s price ({list}).</>}</p>
     <div className="flex gap-2">
-      <Input inputMode="numeric" value={price} onChange={(e) => setPrice(e.target.value.replace(/\D/g, "").slice(0, 7))} placeholder={planPricePaise === null ? "₹ per month" : String(planPricePaise / 100)} aria-label="Price per outlet per month in rupees" />
+      <Input inputMode="numeric" value={price} onChange={(e) => setPrice(e.target.value.replace(/\D/g, "").slice(0, 7))} placeholder={basePaise === null ? "₹ per month" : String(basePaise / 100)} aria-label="Price per outlet per month in rupees" />
       <Button variant="outline" disabled={pending} onClick={() => onSave(price === "" ? null : Number(price))}>Save</Button>
     </div>
     {tenant.customPricePaise !== null && <p className="text-xs text-[var(--admin-brand)]">Special price: ₹{(tenant.customPricePaise / 100).toLocaleString("en-IN")} instead of {list}.</p>}
@@ -331,7 +335,7 @@ function TenantSheet({ tenant, plans, now, onClose }: { tenant: AdminTenant | nu
                 </Select>
               </div>
               {tenant.planCode !== "custom" && <PriceForm key={`${tenant.id}-${tenant.customPricePaise}`} tenant={tenant} planPricePaise={plans.find((p) => p.code === tenant.planCode)?.monthlyPricePaise ?? null} pending={pending}
-                onSave={(rupees) => run(() => setTenantPriceAction(tenant.id, rupees), rupees === null ? "Back to the plan's price." : "Price saved.")} />}
+                onSave={(rupees) => run(() => setTenantPriceAction(tenant.id, rupees), rupees === null ? "Back to the standard price." : "Price saved.")} />}
               {tenant.planCode !== "custom" && <><div>
                 <form
                   className="flex flex-wrap items-end justify-between gap-3"

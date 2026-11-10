@@ -30,7 +30,7 @@ const SECTION = "border-b border-line px-5 py-4 last:border-b-0";
 const SECTION_TITLE = "text-[11px] font-semibold uppercase tracking-wide text-muted";
 const field = "mt-1 block min-h-11 w-full rounded-input border border-line bg-surface px-3 text-body text-ink outline-none focus:border-ink focus-visible:ring-2 focus-visible:ring-ink/20";
 
-export function BillingScreen({ initial, realtimeUrl, embedded = false, openSession = null, preview = null }: { initial: PosQueue; realtimeUrl: string | null; embedded?: boolean; openSession?: string | null; /** Dev review board only: shows this bill and stays off the server */ preview?: PosBillDetail | null }) {
+export function BillingScreen({ initial, realtimeUrl, embedded = false, openSession = null, preview = null, initialHindi = false }: { initial: PosQueue; realtimeUrl: string | null; embedded?: boolean; openSession?: string | null; /** Opens in the staff member's chosen console language */ initialHindi?: boolean; /** Dev review board only: shows this bill and stays off the server */ preview?: PosBillDetail | null }) {
   const [queue, setQueue] = useState(initial);
   const [detail, setDetail] = useState<PosBillDetail | null>(preview);
   const [tab, setTab] = useState<"due" | "takeaway" | "paid">("due");
@@ -38,7 +38,7 @@ export function BillingScreen({ initial, realtimeUrl, embedded = false, openSess
   const [offline, setOffline] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ tone: "ok" | "bad"; text: string } | null>(null);
-  const [hi, setHi] = useState(false);
+  const [hi, setHi] = useState(initialHindi);
   const [now, setNow] = useState(() => Date.now());
   const [sheet, setSheet] = useState<Sheet>(null);
   const [method, setMethod] = useState<"cash" | "upi">("cash");

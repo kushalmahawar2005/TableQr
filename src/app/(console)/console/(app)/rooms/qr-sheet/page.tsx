@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
@@ -10,6 +11,8 @@ import { tenantFeatures, tenantSupportsCategorySection } from "@/server/plan";
 import { FeatureLocked } from "../../_components/feature-locked";
 import { QR_SIZES, qrPages, qrSheetCss, qrSize, type QrSize } from "../../floor/_components/qr-print";
 import { PrintBar } from "../../floor/editor/qr-sheet/print-bar";
+
+export const metadata: Metadata = { title: "Room QR sheet", robots: { index: false, follow: false } };
 
 // Every room's QR as a printable card, several per A4 sheet, to keep in the room. ?size=a6|a5|a4
 export default async function RoomQrSheetPage(props: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {

@@ -6,9 +6,16 @@ import { currentStaff, staffFor } from "@/server/staff/request";
 import { assignWaiterToTable } from "@/server/staff/waiter";
 import { revalidatePath } from "next/cache";
 import Link from "next/link";
+import { AppError } from "@/server/errors";
 async function assign(form:FormData){"use server";const staff=await staffFor(["host","manager","owner"]);await assignWaiterToTable(staff,String(form.get("table")),String(form.get("waiter"))||null,String(form.get("period")));revalidatePath("/waiter/assign");}
 export default async function AssignPage(){
- const staff=await currentStaff();if(!staff)redirect("/console/login");await staffFor(["host","manager","owner"]);
+ const staff=await currentStaff();if(!staff)redirect("/console/login");
+ // A waiter or cashier who opens this link gets a plain answer instead of the error page
+ try{await staffFor(["host","manager","owner"]);}catch(error){
+  if(error instanceof AppError&&error.code==="staff_signed_out")redirect("/console/login");
+  if(error instanceof AppError&&error.code==="forbidden")return <main className="mx-auto min-h-dvh max-w-lg space-y-3 bg-paper p-4"><Link href="/waiter" className="inline-flex min-h-11 items-center underline">← Waiter app</Link><h1 className="text-2xl font-bold">Permission denied</h1><p className="text-muted">{error.message}</p></main>;
+  throw error;
+ }
  const [tables,waiters,assignments]=await Promise.all([
  db.select({id:s.diningTables.id,code:s.diningTables.code}).from(s.diningTables).where(and(eq(s.diningTables.tenantId,staff.tenantId),eq(s.diningTables.outletId,staff.outletId))).orderBy(s.diningTables.code),
  db.select({id:s.users.id,name:s.users.name}).from(s.users).innerJoin(s.staffRoles,and(eq(s.staffRoles.tenantId,s.users.tenantId),eq(s.staffRoles.userId,s.users.id))).where(and(eq(s.users.tenantId,staff.tenantId),eq(s.users.isActive,true),eq(s.staffRoles.role,"waiter"),or(isNull(s.staffRoles.outletId),eq(s.staffRoles.outletId,staff.outletId)))),

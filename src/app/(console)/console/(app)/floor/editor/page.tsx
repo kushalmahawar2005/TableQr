@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { canSee } from "@/lib/staff-permissions";
 import { currentStaff } from "@/server/staff/request";
@@ -5,6 +6,8 @@ import { floorEditorRoles, getOrCreateDraft } from "@/server/floor/editor";
 import { tenantFeatures, tenantSupportsCategorySection } from "@/server/plan";
 import { FeatureLocked } from "../../_components/feature-locked";
 import { FloorEditor } from "./_components/floor-editor";
+
+export const metadata: Metadata = { title: "Floor plan", robots: { index: false, follow: false } };
 
 export default async function FloorEditorPage() {
   const staff = await currentStaff();

@@ -471,7 +471,22 @@ function BottomBar({
   );
 }
 
+/** Escape closes a KDS pop-up wherever focus is, like every other dialog in the app */
+function useEscapeToClose(onClose: () => void) {
+  const latest = useRef(onClose);
+  useEffect(() => { latest.current = onClose; }, [onClose]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") latest.current(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
+}
+
 function Drawer({ title, onClose, c, children }: { title: string; onClose: () => void; c: KdsCopy; children: React.ReactNode }) {
+  useEscapeToClose(onClose);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  // Move focus into the drawer so keyboard users land on it, not on the board behind
+  useEffect(() => { closeRef.current?.focus(); }, []);
   return (
     <div className="fixed inset-0 z-40 flex justify-end bg-kds-bg/70" onClick={onClose}>
       <section
@@ -483,7 +498,7 @@ function Drawer({ title, onClose, c, children }: { title: string; onClose: () =>
       >
         <div className="flex h-[72px] shrink-0 items-center justify-between border-b border-kds-line px-5">
           <h2 className="font-display text-[22px] font-bold sm:text-[26px]">{title}</h2>
-          <button type="button" onClick={onClose} aria-label={c.close} className="flex h-12 w-12 items-center justify-center rounded-lg bg-kds-bg">
+          <button ref={closeRef} type="button" onClick={onClose} aria-label={c.close} className="flex h-12 w-12 items-center justify-center rounded-lg bg-kds-bg">
             <HugeiconsIcon icon={Cancel01Icon} size={24} aria-hidden />
           </button>
         </div>
@@ -510,8 +525,9 @@ function CancelLineDialog({ c, item, needsPin, onClose, onDone, cancel }: { c: K
     if (r.ok) await onDone(); else setError(r.message);
   };
   const field = "h-12 w-full rounded-lg border border-kds-line bg-kds-bg px-3 text-[20px] text-kds-text";
+  useEscapeToClose(onClose);
   return (
-    <div role="dialog" aria-modal="true" aria-labelledby="kds-cancel-title" className="fixed inset-0 z-40 grid place-items-center bg-black/60 p-4" onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}>
+    <div role="dialog" aria-modal="true" aria-labelledby="kds-cancel-title" className="fixed inset-0 z-40 grid place-items-center bg-black/60 p-4">
       <div className="w-full max-w-lg rounded-2xl bg-kds-card p-5 text-kds-text shadow-2xl">
         <h2 id="kds-cancel-title" className="font-display text-[26px] font-bold">{c.cancelTitle(item.label)}</h2>
         <p className="mt-4 text-[18px] font-semibold text-kds-muted">{c.cancelWhy}</p>

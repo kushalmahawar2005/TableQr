@@ -53,7 +53,7 @@ export async function requestTableConfirmation(ctx: GuestContext, input: { reque
     visitChanged(ctx.sessionId, "service_request"),
   ]);
   const features = await tenantFeatures(ctx.tenantId, ctx.outletId);
-  const message = { title: "Confirm table order", body: "A returning guest wants to order. Check they are at the table.", tag: `confirm-${result.id}` };
+  const message = { title: "Confirm table order", body: "A guest wants to order. Check they are at the table.", tag: `confirm-${result.id}` };
   void (features.waiterApp
     ? sendOutletPush(ctx, { ...message, url: "/waiter" }, { sessionId: ctx.sessionId, kind: "service" })
     : sendOutletPush(ctx, { ...message, url: "/console/dashboard" }, { kind: "management" }));

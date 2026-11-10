@@ -52,7 +52,7 @@ export function CustomerRequests({ initialRequests }: { initialRequests: Custome
   const getKindDetails = (kind: string) => {
     switch (kind) {
       case "confirm_order":
-        return { label: "Returning guest · confirm they are at the table", icon: UtensilsCrossed, color: "text-terracotta bg-terracotta/10", actionLabel: "Accept order" };
+        return { label: "New order · confirm the guest is at the table", icon: UtensilsCrossed, color: "text-terracotta bg-terracotta/10", actionLabel: "Accept order" };
       case "water":
         return { label: "Extra water", icon: Droplets, color: "text-sky-600 bg-sky-50", actionLabel: "Mark done" };
       case "cutlery":

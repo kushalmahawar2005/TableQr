@@ -94,6 +94,60 @@ async function inheritPublishedZoneGeometry(tx: Tx, staff: Scope, draftVersionId
   }
 }
 
+/** Columns the editor fills before it starts a new row of areas (the editor's "New area" uses the same width) */
+const EDITOR_COLUMNS = 36;
+
+type Rect = { x: number; y: number; w: number; h: number };
+const overlaps = (a: Rect, b: Rect) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+
+/**
+ * Areas made outside the editor (onboarding, demo data, older outlets) have no position, so every one
+ * starts at the top-left corner and their tables land on top of each other: tables there cannot be
+ * tapped. In an untouched draft, lay the areas out in rows in their usual order, each sized to fit its
+ * tables, and move each area's tables with it. A draft whose areas do not overlap is left alone.
+ */
+export async function spreadStackedZones(tx: Tx, staff: Pick<Scope, "tenantId">, versionId: string) {
+  const [zones, tables] = await Promise.all([
+    tx.select().from(s.floorLayoutZones).where(and(eq(s.floorLayoutZones.tenantId, staff.tenantId), eq(s.floorLayoutZones.versionId, versionId))).orderBy(asc(s.floorLayoutZones.sortOrder)),
+    tx.select().from(s.floorLayoutTables).where(and(eq(s.floorLayoutTables.tenantId, staff.tenantId), eq(s.floorLayoutTables.versionId, versionId))),
+  ]);
+  const live = zones.filter((z) => !z.archived);
+  const rects = live.map((z) => ({ x: z.posX, y: z.posY, w: z.width, h: z.height }));
+  if (!rects.some((a, i) => rects.some((b, j) => i < j && overlaps(a, b)))) return false;
+
+  let x = 0;
+  let y = 0;
+  let rowHeight = 0;
+  for (const zone of live) {
+    const mine = tables.filter((t) => !t.archived && t.logicalZoneId === zone.id);
+    const minX = mine.length ? Math.min(...mine.map((t) => t.posX)) : 0;
+    const minY = mine.length ? Math.min(...mine.map((t) => t.posY)) : 0;
+    const maxX = mine.length ? Math.max(...mine.map((t) => t.posX + t.width)) : 0;
+    const maxY = mine.length ? Math.max(...mine.map((t) => t.posY + t.height)) : 0;
+    // One free cell around the tables and two on top for the area's name tag, never smaller than the area already was
+    const width = Math.max(zone.width, mine.length ? maxX - minX + 2 : 0);
+    const height = Math.max(zone.height, mine.length ? maxY - minY + 3 : 0);
+    if (x > 0 && x + width > EDITOR_COLUMNS) {
+      x = 0;
+      y += rowHeight + 1;
+      rowHeight = 0;
+    }
+    await tx.update(s.floorLayoutZones).set({ posX: x, posY: y, width, height, updatedAt: new Date() })
+      .where(and(eq(s.floorLayoutZones.tenantId, staff.tenantId), eq(s.floorLayoutZones.id, zone.id)));
+    const dx = x + 1 - minX;
+    const dy = y + 2 - minY;
+    if (dx || dy) {
+      for (const t of mine) {
+        await tx.update(s.floorLayoutTables).set({ posX: t.posX + dx, posY: t.posY + dy, updatedAt: new Date() })
+          .where(and(eq(s.floorLayoutTables.tenantId, staff.tenantId), eq(s.floorLayoutTables.id, t.id)));
+      }
+    }
+    x += width + 1;
+    rowHeight = Math.max(rowHeight, height);
+  }
+  return true;
+}
+
 /** Refuses when this draft would have more live tables than the restaurant pays for */
 async function assertTableRoom(tx: Tx, staff: Scope, versionId: string, adding: number) {
   const limit = await tenantTableLimit(staff.tenantId);
@@ -113,6 +167,7 @@ export async function getOrCreateDraft(staff: Scope) {
     if (existing[0].revision === 0) {
       return db.transaction(async (tx) => {
         await inheritPublishedZoneGeometry(tx, staff, existing[0].id);
+        await spreadStackedZones(tx, staff, existing[0].id);
         return loadDraftTx(tx, staff, existing[0]);
       });
     }
@@ -135,6 +190,7 @@ export async function getOrCreateDraft(staff: Scope) {
     const tableMap = new Map<string, string>();
     for (const t of tables) { const draftId = uuidv7(); tableMap.set(t.id, draftId); await tx.insert(s.floorLayoutTables).values({ id: draftId, tenantId: staff.tenantId, versionId, logicalTableId: t.id, logicalZoneId: zoneMap.get(t.zoneId) ?? null, code: t.code, minSeats: t.minSeats, maxSeats: t.maxSeats, tableClass: t.tableClass, shape: t.shape, posX: t.posX, posY: t.posY, width: t.width, height: t.height, isBookableOnline: t.isBookableOnline, archived: !t.isActive, createdAt: new Date(), updatedAt: new Date() }); }
     for (const t of tables) for (const other of t.combinableWith ?? []) { const a = tableMap.get(t.id); const b = tableMap.get(other); if (a && b && a !== b) await tx.insert(s.floorLayoutCombinations).values({ id: uuidv7(), tenantId: staff.tenantId, versionId, tableId: a, combinedTableId: b, createdAt: new Date() }).onDuplicateKeyUpdate({ set: { createdAt: new Date() } }); }
+    await spreadStackedZones(tx, staff, versionId);
     await audit(tx, staff, "floor.draft_created", "floor_layout_version", versionId, undefined, { versionNumber: await nextVersion(staff) });
     return loadDraftTx(tx, staff, (await tx.select().from(s.floorLayoutVersions).where(and(eq(s.floorLayoutVersions.tenantId, staff.tenantId), eq(s.floorLayoutVersions.id, versionId))))[0]);
   });
@@ -172,8 +228,22 @@ export async function updateDraftTable(staff: Scope, versionId: string, tableId:
   return revise(staff, versionId, expectedRevision, async (tx) => { const [old] = await tx.select().from(s.floorLayoutTables).where(and(eq(s.floorLayoutTables.tenantId, staff.tenantId), eq(s.floorLayoutTables.versionId, versionId), eq(s.floorLayoutTables.id, tableId))); if (!old) throw new AppError("not_found", "Draft table not found."); if (old.archived && next.archived === false) await assertTableRoom(tx, staff, versionId, 1); await tx.update(s.floorLayoutTables).set({ ...next, updatedAt: new Date() }).where(and(eq(s.floorLayoutTables.tenantId, staff.tenantId), eq(s.floorLayoutTables.id, tableId))); await audit(tx, staff, next.code && next.code !== old.code ? "floor.table_code_changed" : "floor.table_updated", "floor_layout_table", tableId, old, next); });
 }
 
+/** A new table goes in the first empty place inside its area, not on top of the table in the corner */
+export function freeTableSpot(zone: { posX: number; posY: number; width: number; height: number }, tables: { posX: number; posY: number; width: number; height: number }[], w: number, h: number) {
+  const taken = tables.map((t) => ({ x: t.posX, y: t.posY, w: t.width, h: t.height }));
+  // Row 1 holds the area's name tag
+  for (let y = zone.posY + 2; y + h <= zone.posY + zone.height; y++) {
+    for (let x = zone.posX + 1; x + w <= zone.posX + zone.width; x++) {
+      if (!taken.some((r) => overlaps(r, { x, y, w, h }))) return { x, y };
+    }
+  }
+  // The area is full: just below everything in it, so the owner can drag the area bigger
+  const bottom = Math.max(zone.posY + 2, ...taken.filter((r) => r.x < zone.posX + zone.width && r.x + r.w > zone.posX).map((r) => r.y + r.h + 1));
+  return { x: zone.posX + 1, y: bottom };
+}
+
 export async function addDraftTable(staff: Scope, versionId: string, input: { code: string; zoneId: string; shape?: "square" | "round" | "long"; maxSeats: number }, expectedRevision: number) {
-  return revise(staff, versionId, expectedRevision, async (tx) => { await assertTableRoom(tx, staff, versionId, 1); if (!input.code.trim() || input.maxSeats < 1) throw new AppError("invalid_state", "Enter a valid table code and capacity."); const [zone] = await tx.select().from(s.floorLayoutZones).where(and(eq(s.floorLayoutZones.tenantId, staff.tenantId), eq(s.floorLayoutZones.versionId, versionId), eq(s.floorLayoutZones.id, input.zoneId), eq(s.floorLayoutZones.archived, false))); if (!zone) throw new AppError("not_found", "Choose an active zone."); const [dup] = await tx.select({ id: s.floorLayoutTables.id }).from(s.floorLayoutTables).where(and(eq(s.floorLayoutTables.tenantId, staff.tenantId), eq(s.floorLayoutTables.versionId, versionId), eq(s.floorLayoutTables.code, input.code.trim().toUpperCase()))); if (dup) throw new AppError("conflict", "Table code already exists in this draft."); const id = uuidv7(); await tx.insert(s.floorLayoutTables).values({ id, tenantId: staff.tenantId, versionId, logicalZoneId: zone.id, code: input.code.trim().toUpperCase(), minSeats: 1, maxSeats: input.maxSeats, tableClass: `${input.maxSeats}-top`, shape: input.shape ?? "square", posX: 1, posY: 1, width: 2, height: 2, isBookableOnline: true, archived: false, createdAt: new Date(), updatedAt: new Date() }); await audit(tx, staff, "floor.table_created", "floor_layout_table", id, undefined, input); });
+  return revise(staff, versionId, expectedRevision, async (tx) => { await assertTableRoom(tx, staff, versionId, 1); if (!input.code.trim() || input.maxSeats < 1) throw new AppError("invalid_state", "Enter a valid table code and capacity."); const [zone] = await tx.select().from(s.floorLayoutZones).where(and(eq(s.floorLayoutZones.tenantId, staff.tenantId), eq(s.floorLayoutZones.versionId, versionId), eq(s.floorLayoutZones.id, input.zoneId), eq(s.floorLayoutZones.archived, false))); if (!zone) throw new AppError("not_found", "Choose an active zone."); const [dup] = await tx.select({ id: s.floorLayoutTables.id }).from(s.floorLayoutTables).where(and(eq(s.floorLayoutTables.tenantId, staff.tenantId), eq(s.floorLayoutTables.versionId, versionId), eq(s.floorLayoutTables.code, input.code.trim().toUpperCase()))); if (dup) throw new AppError("conflict", "Table code already exists in this draft."); const others = await tx.select({ posX: s.floorLayoutTables.posX, posY: s.floorLayoutTables.posY, width: s.floorLayoutTables.width, height: s.floorLayoutTables.height }).from(s.floorLayoutTables).where(and(eq(s.floorLayoutTables.tenantId, staff.tenantId), eq(s.floorLayoutTables.versionId, versionId), eq(s.floorLayoutTables.archived, false))); const spot = freeTableSpot(zone, others, 2, 2); const id = uuidv7(); await tx.insert(s.floorLayoutTables).values({ id, tenantId: staff.tenantId, versionId, logicalZoneId: zone.id, code: input.code.trim().toUpperCase(), minSeats: 1, maxSeats: input.maxSeats, tableClass: `${input.maxSeats}-top`, shape: input.shape ?? "square", posX: spot.x, posY: spot.y, width: 2, height: 2, isBookableOnline: true, archived: false, createdAt: new Date(), updatedAt: new Date() }); await audit(tx, staff, "floor.table_created", "floor_layout_table", id, undefined, input); });
 }
 
 export async function addDraftZone(staff: Scope, versionId: string, name: string, expectedRevision: number) { return revise(staff, versionId, expectedRevision, async (tx) => { const id = uuidv7(); await tx.insert(s.floorLayoutZones).values({ id, tenantId: staff.tenantId, versionId, name: name.trim().slice(0, 60) || "New zone", sortOrder: 999, posX: 0, posY: 0, width: 12, height: 8, archived: false, createdAt: new Date(), updatedAt: new Date() }); await audit(tx, staff, "floor.zone_created", "floor_layout_zone", id, undefined, { name }); }); }

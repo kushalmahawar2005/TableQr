@@ -38,6 +38,8 @@ export type AdminTenant = {
   outletCount: number;
   cities: string[];
   monthlyPricePaise: number | null;
+  /** What this restaurant pays per outlet with no agreed price: its subscription's locked price, else the plan's list price */
+  basePricePaise?: number | null;
   billingCycle: "monthly" | "annual" | null;
   renewalAt: string | null;
   subscriptionStatus: string | null;

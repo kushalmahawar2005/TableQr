@@ -233,6 +233,7 @@ export async function getAdminData(): Promise<AdminData> {
         outletCount: outlets?.count ?? 0,
         cities: outlets?.cities.sort((a, b) => a.localeCompare(b)) ?? [],
         monthlyPricePaise: tenant.customPricePaise ?? subscription?.pricePerOutletPaise ?? plan?.monthlyPricePaise ?? null,
+        basePricePaise: subscription?.pricePerOutletPaise ?? plan?.monthlyPricePaise ?? null,
         billingCycle: subscription?.billingCycle ?? null,
         renewalAt: subscription?.status === "cancelled" ? null : subscription?.periodEnd.toISOString() ?? tenant.trialEndsAt?.toISOString() ?? null,
         subscriptionStatus: subscription?.status ?? null,

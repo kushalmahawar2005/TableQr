@@ -41,7 +41,7 @@ import { OutletLogo } from "../../_components/outlet-logo";
 import { cancelLineAction, repeatOrderRoundAction, serviceRequestAction } from "../actions";
 import { g6Copy, type G6Copy } from "../_copy";
 import { useTrackerSync } from "../_hooks/use-tracker-sync";
-import { isRoomCode, placeHi } from "@/domain/rooms";
+import { placeEn, placeHi } from "@/domain/rooms";
 
 type Round = TrackerScreenData["rounds"][number];
 type Line = Round["lines"][number];
@@ -216,7 +216,7 @@ export function TrackerScreen({
             prefetch={false}
             className="relative text-caption whitespace-nowrap text-muted underline-offset-2 before:absolute before:-inset-y-3.5 before:inset-x-0 hover:text-ink hover:underline focus-visible:outline-2 focus-visible:outline-brand"
           >
-            {c.tableLine(isRoomCode(data.table.code) ? (lang === "hi" ? placeHi(data.table.code) : data.table.code) : `${lang === "hi" ? "टेबल" : "Table"} ${data.table.code.replace(/^T(?=\d)/, "")}`, session.people)} <span aria-hidden>›</span>
+            {c.tableLine(lang === "hi" ? placeHi(data.table.code) : placeEn(data.table.code), session.people)} <span aria-hidden>›</span>
           </Link>
         </div>
         <LanguageToggle lang={lang} label={c.language} preview={!!preview} />

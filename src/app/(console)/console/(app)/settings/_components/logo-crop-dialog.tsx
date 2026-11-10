@@ -22,6 +22,16 @@ export function LogoCropDialog({ file, onCancel, onSave }: { file: File; onCance
     return () => URL.revokeObjectURL(url);
   }, [file]);
 
+  // Escape cancels like the Cancel button (not while the crop is being saved)
+  const cancelRef = useRef(onCancel);
+  useEffect(() => { cancelRef.current = onCancel; }, [onCancel]);
+  useEffect(() => {
+    if (busy) return;
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") cancelRef.current(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [busy]);
+
   const base = image ? Math.max(SIZE / image.width, SIZE / image.height) : 1;
   const width = image ? image.width * base * zoom : SIZE;
   const height = image ? image.height * base * zoom : SIZE;
@@ -53,7 +63,7 @@ export function LogoCropDialog({ file, onCancel, onSave }: { file: File; onCance
     }
   }
 
-  return <div className="fixed inset-0 z-[100] grid place-items-center bg-black/60 p-4" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onCancel(); }}>
+  return <div className="fixed inset-0 z-[100] grid place-items-center bg-black/60 p-4" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget && !busy) onCancel(); }}>
     <section role="dialog" aria-modal="true" aria-labelledby="logo-crop-title" className="w-full max-w-sm rounded-3xl bg-surface p-5 text-ink shadow-2xl">
       <h2 id="logo-crop-title" className="text-xl font-bold">Crop restaurant logo</h2>
       <p className="mt-1 text-sm text-muted">Drag to position it. Zoom in if needed.</p>

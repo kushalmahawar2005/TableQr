@@ -226,7 +226,13 @@ export function FloorEditor({
     if (!t) return;
     const nextX = Math.max(0, Math.round(t.posX));
     const nextY = Math.max(0, Math.round(t.posY));
+    const start = drag;
     setDrag(null);
+    // A tap that only selects the table saves nothing: no new revision, no audit entry
+    if (nextX === start.baseX && nextY === start.baseY) {
+      if (t.posX !== nextX || t.posY !== nextY) setData((d) => ({ ...d, tables: d.tables.map((x) => (x.id === t.id ? { ...x, posX: nextX, posY: nextY } : x)) }));
+      return;
+    }
     await patchTable({ posX: nextX, posY: nextY });
   };
   const addTable = async (shape: "square" | "round" | "long") => {
@@ -236,12 +242,16 @@ export function FloorEditor({
     }
     const z = activeZones[0];
     if (!z) return;
+    // The next free T number: counting tables repeats a code once one was removed (T1, T3 → "T3")
+    const taken = new Set(data.tables.map((t) => t.code.toUpperCase()));
+    let n = Math.max(0, ...data.tables.map((t) => Number(/^T(\d+)$/i.exec(t.code)?.[1] ?? 0))) + 1;
+    while (taken.has(`T${n}`)) n += 1;
     await save(
       () =>
         addTableAction(
           data.version.id,
           {
-            code: `T${data.tables.length + 1}`,
+            code: `T${n}`,
             zoneId: z.id,
             shape,
             maxSeats: shape === "long" ? 8 : 4,
@@ -482,7 +492,8 @@ export function FloorEditor({
                 <span
                   title="Drag to move this area"
                   className="absolute left-1.5 cursor-move touch-none select-none rounded-lg border border-line bg-surface px-2 py-1 text-caption font-bold text-ink shadow-sm"
-                  style={{ top: 6 + zi * 24 }}
+                  // Areas drawn on top of each other keep their name tags apart so each stays draggable
+                  style={{ top: 6 + activeZones.slice(0, zi).filter((o) => o.posX < z.posX + z.width && z.posX < o.posX + o.width && o.posY < z.posY + z.height && z.posY < o.posY + o.height).length * 24 }}
                   onPointerDown={(e) => {
                     if (!canEdit) return;
                     e.stopPropagation();

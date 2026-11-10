@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
@@ -11,6 +12,8 @@ import { currentStaff } from "@/server/staff/request";
 import { FeatureLocked } from "../../../_components/feature-locked";
 import { QR_SIZES, qrPages, qrSheetCss, qrSize, type QrSize } from "../../_components/qr-print";
 import { PrintBar } from "./print-bar";
+
+export const metadata: Metadata = { title: "Table QR sheet", robots: { index: false, follow: false } };
 
 // Every table's QR as a printable poster, several per A4 sheet. ?size=a6|a5|a4, ?table=<id> for just one.
 export default async function QrSheetPage(props: PageProps<"/console/floor/editor/qr-sheet">) {

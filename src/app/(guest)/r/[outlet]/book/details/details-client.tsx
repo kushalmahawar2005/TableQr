@@ -65,7 +65,14 @@ export function DetailsClient({ outletCode, token, timezone, freeCancellationMin
   }, [outletCode, token]);
   useEffect(() => {
     if (summary?.status === "confirmed") router.replace(`${base}/book/confirmed?token=${encodeURIComponent(token)}&lang=${lang}`);
-  }, [summary?.status, outletCode, token, router, lang]);
+  }, [summary?.status, base, token, router, lang]);
+  // The full-screen preorder menu closes with Escape too, like the × button
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setMenuOpen(false); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [menuOpen]);
   useEffect(() => {
     if (!summary?.manualClaimedAt || summary.manualConfirmedAt) return;
     let active = true;

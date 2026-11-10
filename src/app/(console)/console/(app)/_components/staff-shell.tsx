@@ -371,9 +371,10 @@ export function StaffShell({
         </div>
       </aside>
       <div className="flex min-w-0 flex-1 flex-col pb-[calc(4rem+env(safe-area-inset-bottom))] sm:pb-0">
-        {/* Top bar on tablets and computers, level with the sidebar's logo row */}
+        {/* Top bar on tablets and computers, level with the sidebar's logo row. z-30 keeps its
+            menus (notifications, user menu, search) above page headers that stick at z-20. */}
         <header
-          className={`sticky top-0 z-20 hidden h-18 shrink-0 print:hidden items-center justify-between gap-4 border-b border-line bg-surface px-4 sm:flex lg:px-6`}
+          className={`sticky top-0 z-30 hidden h-18 shrink-0 print:hidden items-center justify-between gap-4 border-b border-line bg-surface px-4 sm:flex lg:px-6`}
         >
           {/* Left: Sidebar toggle + Restaurant / Outlet Identity */}
           <div className="flex items-center gap-2.5 min-w-0">

@@ -13,6 +13,27 @@ beforeAll(async () => { env = await resetTestDb(); owner = (await resolveStaff((
 afterAll(async () => { await env.conn.end(); });
 
 describe("O2 versioned floor editor", () => {
+  it("lays out areas side by side in a new draft so their tables do not sit on top of each other", async () => {
+    const draft = await getOrCreateDraft(owner);
+    expect(draft.version.revision).toBe(0);
+    const zones = draft.zones.filter((z) => !z.archived);
+    expect(zones.length).toBeGreaterThan(1);
+    const box = (z: (typeof zones)[number]) => ({ x: z.posX, y: z.posY, w: z.width, h: z.height });
+    const overlap = (a: ReturnType<typeof box>, b: ReturnType<typeof box>) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+    for (const [i, a] of zones.entries()) for (const b of zones.slice(i + 1)) expect(overlap(box(a), box(b))).toBe(false);
+    for (const t of draft.tables.filter((x) => !x.archived)) {
+      const z = zones.find((x) => x.id === t.logicalZoneId)!;
+      expect(t.posX).toBeGreaterThanOrEqual(z.posX);
+      expect(t.posY).toBeGreaterThanOrEqual(z.posY);
+      expect(t.posX + t.width).toBeLessThanOrEqual(z.posX + z.width);
+      expect(t.posY + t.height).toBeLessThanOrEqual(z.posY + z.height);
+    }
+    // Opening the editor again changes nothing
+    const again = await getOrCreateDraft(owner);
+    expect(again.zones.map(box)).toEqual(draft.zones.map(box));
+    expect(again.tables.map((t) => [t.posX, t.posY])).toEqual(draft.tables.map((t) => [t.posX, t.posY]));
+  });
+
   it("clones canonical data, isolates draft edits and rejects stale revisions", async () => {
     const before = await getFloor(host); const draft = await getOrCreateDraft(owner); expect(draft.version.status).toBe("draft");
     const table = draft.tables.find((t) => t.logicalTableId === env.demo.tableIds.T1)!;

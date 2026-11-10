@@ -1,8 +1,11 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { canSee } from "@/lib/staff-permissions";
 import { currentStaff } from "@/server/staff/request";
 import { menuManagerData, menuManagerRoles } from "@/server/staff/menu-manager";
 import { MenuManager } from "./_components/menu-manager";
+
+export const metadata: Metadata = { title: "Menu", robots: { index: false, follow: false } };
 
 export default async function MenuPage() {
   const staff = await currentStaff();
