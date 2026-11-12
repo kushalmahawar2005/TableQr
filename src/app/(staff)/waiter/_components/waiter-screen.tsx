@@ -21,7 +21,7 @@ type MenuItem = WaiterMenu[number];
 
 const btn = "inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-line bg-surface px-4 text-base font-semibold transition-colors hover:border-ink/40 disabled:cursor-not-allowed disabled:opacity-40";
 const primary = "inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-brand bg-brand px-4 text-base font-semibold text-white transition-colors hover:bg-brand-strong disabled:cursor-not-allowed disabled:opacity-40";
-const card = "rounded-2xl border border-line bg-surface p-4";
+const card = "rounded-2xl border border-line bg-surface p-4 transition-[border-color,background-color,box-shadow] duration-200";
 const fieldCls = "h-12 rounded-xl text-base";
 const NOTES = [["Less spicy", "कम तीखा"], ["No onion", "बिना प्याज"], ["Extra spicy", "ज़्यादा तीखा"], ["Parcel", "पार्सल"]] as const;
 const STATE_TONE: Record<string, { bg: string; fg: string; en: string; hi: string }> = {
@@ -93,7 +93,8 @@ export function WaiterScreen({
     pingRef.current = (text: string, quiet = false) => {
       if (!quiet) setMessage(text);
       if (!alertsRef.current || dutyRef.current !== "on") return;
-      try { navigator.vibrate?.(quiet ? [600, 150, 600, 150, 600] : [220, 90, 220, 90, 420]); } catch { /* not supported, e.g. iPhone */ }
+      // Browsers block (and log) vibration before the first tap on the page
+      try { if ((navigator as Navigator & { userActivation?: { hasBeenActive: boolean } }).userActivation?.hasBeenActive !== false) navigator.vibrate?.(quiet ? [600, 150, 600, 150, 600] : [220, 90, 220, 90, 420]); } catch { /* not supported, e.g. iPhone */ }
       try {
         const ctx = audioRef.current;
         const beep = () => {
@@ -281,7 +282,7 @@ export function WaiterScreen({
   const NAV = [["tasks", ClipboardList], ["tables", LayoutGrid], ["order", ShoppingBag], ["me", User]] as const;
 
   return (
-    <main lang={hi ? "hi" : "en"} className={`${dark ? "theme-dark " : ""}min-h-dvh bg-paper pb-28 text-ink [overflow-wrap:anywhere]`}>
+    <main lang={hi ? "hi" : "en"} className={`${dark ? "theme-dark " : ""}staff-press min-h-dvh bg-paper pb-28 text-ink [overflow-wrap:anywhere]`}>
       <div className="mx-auto w-full max-w-xl px-4 pt-5">
         <header className="flex items-center gap-3">
           <span className="grid size-12 shrink-0 place-items-center rounded-full bg-brand-soft font-display text-xl font-bold text-brand-strong">{board.identity.name.trim().slice(0, 1).toUpperCase()}</span>
@@ -319,10 +320,10 @@ export function WaiterScreen({
         )}
 
         {tab === "tasks" && (
-          <div className="mt-5 space-y-6">
+          <div className="mt-5 space-y-6 animate-fade">
             <div className="grid grid-cols-2 gap-3">
-              <div className={card}><p className="font-display text-3xl font-bold tabular-nums">{board.requests.length}</p><p className="text-sm text-muted">{c.requests}</p></div>
-              <div className={card}><p className="font-display text-3xl font-bold tabular-nums">{board.ready.length}</p><p className="text-sm text-muted">{c.ready}</p></div>
+              <div className={card}><p key={board.requests.length} className="animate-pulse-once origin-left font-display text-3xl font-bold tabular-nums">{board.requests.length}</p><p className="text-sm text-muted">{c.requests}</p></div>
+              <div className={card}><p key={board.ready.length} className="animate-pulse-once origin-left font-display text-3xl font-bold tabular-nums">{board.ready.length}</p><p className="text-sm text-muted">{c.ready}</p></div>
             </div>
             {taskCount === 0 && (
               <div className="rounded-2xl border border-dashed border-line bg-surface p-8 text-center">
@@ -333,12 +334,12 @@ export function WaiterScreen({
             {board.requests.length > 0 && (
               <section aria-label={c.requests}>
                 <h2 className="mb-2 text-sm font-bold uppercase tracking-wider text-muted">{c.requests}</h2>
-                <div className="space-y-3">
+                <div className="stagger space-y-3">
                   {sortedRequests.map((r) => {
                     const urgency = requestUrgency(r.createdAt, now, r.escalated);
                     const Icon = REQUEST_ICON[r.kind] ?? BellRing;
                     return (
-                      <article key={r.id} className={`${card} ${urgency === "urgent" ? "border-danger bg-[var(--state-seated-soft)]" : urgency === "warning" ? "border-warning bg-[var(--state-held-soft)]" : ""}`}>
+                      <article key={r.id} className={`${card} ${urgency === "urgent" ? "animate-urgent border-danger bg-[var(--state-seated-soft)]" : urgency === "warning" ? "border-warning bg-[var(--state-held-soft)]" : ""}`}>
                         <div className="flex items-center gap-3">
                           <span className="grid size-12 shrink-0 place-items-center rounded-xl bg-ink/5"><Icon className="size-6" aria-hidden="true" /></span>
                           <div className="min-w-0 flex-1">
@@ -361,7 +362,7 @@ export function WaiterScreen({
             {board.ready.length > 0 && (
               <section aria-label={c.ready}>
                 <h2 className="mb-2 text-sm font-bold uppercase tracking-wider text-muted">{c.ready}</h2>
-                <div className="space-y-3">
+                <div className="stagger space-y-3">
                   {[...board.ready].sort((a, b) => a.readyAt - b.readyAt).map((g) => (
                     <article key={g.id} className={card}>
                       <div className="flex items-center justify-between gap-2">
@@ -379,7 +380,7 @@ export function WaiterScreen({
         )}
 
         {tab === "tables" && !detail && (
-          <section className="mt-5">
+          <section className="mt-5 animate-fade">
             <h2 className="font-display text-2xl font-bold">{c.tables}</h2>
             {!board.tables.length && <p className={`${card} mt-3 text-center text-muted`}>{c.noTables}</p>}
             {(board.unassignedTables?.length ?? 0) > 0 && <div className="mt-4 rounded-2xl border border-brand-border bg-brand-soft/30 p-4">
@@ -387,11 +388,11 @@ export function WaiterScreen({
               <p className="mt-1 text-sm text-muted">{L("Take a table to receive its requests and ready-food alerts.", "अनुरोध और तैयार खाने के अलर्ट पाने के लिए टेबल लें।")}</p>
               <div className="mt-3 grid gap-2">{board.unassignedTables.map(t => <div key={t.id} className="flex items-center justify-between gap-3 rounded-xl border border-line bg-surface p-3"><span className="font-bold">{t.label}</span><button type="button" className={btn} disabled={disabled || duty !== "on"} onClick={() => void perform(() => actions.claimTableAction(t.sessionId!))}>{L("Take table", "टेबल लें")}</button></div>)}</div>
             </div>}
-            <div className="mt-3 grid grid-cols-2 gap-3">
+            <div className="stagger mt-3 grid grid-cols-2 gap-3">
               {board.tables.map((t) => {
                 const tone = STATE_TONE[t.state] ?? STATE_TONE.available;
                 return (
-                  <article key={t.id} className="flex flex-col rounded-2xl border border-line bg-surface p-3">
+                  <article key={t.id} className="flex flex-col rounded-2xl border border-line bg-surface p-3 transition-[border-color,box-shadow] duration-200 hover:border-ink/30 hover:shadow-sm">
                     <button disabled={disabled || (!t.sessionId && t.state !== "available")} onClick={() => (t.sessionId ? openTable(t.sessionId) : (setSeatFor({ id: t.id, label: t.label }), setSeatSize(2)))} className="flex-1 text-left disabled:cursor-default">
                       <span className="flex items-start justify-between gap-2"><span className="font-display text-2xl font-bold leading-tight">{t.label}</span>
                         {t.sessionId && (t.requestCount > 0 || t.readyCount > 0) && <span className="flex gap-1">{t.requestCount > 0 && <span className="grid size-6 place-items-center rounded-full bg-danger text-xs font-bold text-white">{t.requestCount}</span>}{t.readyCount > 0 && <span className="grid size-6 place-items-center rounded-full bg-[var(--state-available)] text-xs font-bold text-white">{t.readyCount}</span>}</span>}
@@ -409,7 +410,7 @@ export function WaiterScreen({
         )}
 
         {tab === "tables" && detail && (
-          <section className="mt-4 space-y-4">
+          <section key={detail.sessionId} className="mt-4 space-y-4 animate-rise">
             <button className="inline-flex min-h-11 items-center gap-1.5 text-base font-semibold text-muted hover:text-ink" onClick={() => setDetail(null)}><ArrowLeft className="size-5" aria-hidden="true" />{c.back}</button>
             <div className={card}>
               <div className="flex items-center justify-between gap-3">
@@ -458,14 +459,14 @@ export function WaiterScreen({
         )}
 
         {tab === "order" && (
-          <section className="mt-5 space-y-4">
+          <section key={`${stage}-${detail?.sessionId ?? ""}`} className="mt-5 space-y-4 animate-fade">
             <div className="flex items-center gap-3">
               {detail && <button aria-label={c.back} className="grid size-11 shrink-0 place-items-center rounded-xl border border-line bg-surface" onClick={() => { if (stage === "person") { setDetail(null); setDraft([]); } else setStage(stage === "cart" ? "menu" : "person"); }}><ArrowLeft className="size-5" aria-hidden="true" /></button>}
               <div className="min-w-0"><h2 className="font-display text-2xl font-bold leading-tight">{stageTitle}</h2>
                 {detail && <p className="text-sm text-muted">{board.orderTables.find((t) => t.sessionId === detail.sessionId)?.label ?? board.tables.find((t) => t.sessionId === detail.sessionId)?.label}{person ? ` · ${personName(person)}` : ""}</p>}</div>
             </div>
             {!detail ? (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="stagger grid grid-cols-2 gap-3">
                 {board.orderTables.map((t) => <button key={t.id} className="rounded-2xl border border-line bg-surface p-4 text-left hover:border-ink/40 disabled:opacity-40" disabled={disabled} onClick={() => openTable(t.sessionId!, true)}><span className="font-display text-2xl font-bold">{t.label}</span><span className="mt-1 block text-sm text-muted">{t.partySize} {t.partySize === 1 ? L("guest", "व्यक्ति") : L("guests", "लोग")}</span></button>)}
                 {!board.orderTables.length && <p className={`${card} col-span-2 text-center text-muted`}>{L("No table is seated right now.", "अभी कोई टेबल नहीं बैठी है।")}</p>}
               </div>
@@ -476,7 +477,7 @@ export function WaiterScreen({
                 {detail.orderingPaused && <p className="rounded-xl bg-[var(--state-held-soft)] p-3 text-sm font-semibold text-[var(--state-held-text)]">{c.paused}</p>}
                 {stage === "person" && (
                   <>
-                    <div className="space-y-2">{detail.people.filter((p) => !p.paidOut).map((p) => (
+                    <div className="stagger space-y-2">{detail.people.filter((p) => !p.paidOut).map((p) => (
                       <button key={p.id} disabled={disabled} className="flex min-h-14 w-full items-center justify-between rounded-2xl border border-line bg-surface px-4 text-left text-lg font-semibold hover:border-ink/40 disabled:opacity-40" onClick={() => { setPerson(p.id); setDraft([]); orderKey.current = null; void showMenu(); }}>
                         <span className="flex items-center gap-3"><span className="grid size-9 place-items-center rounded-full bg-ink/5 text-sm font-bold">{p.name.trim().slice(0, 1).toUpperCase()}</span>{p.name}</span><span className="text-muted">→</span>
                       </button>
@@ -497,21 +498,21 @@ export function WaiterScreen({
                         const hasChoice = m.pricing.groups.some((g) => g.minSelect > 0);
                         return (
                           <li key={m.id}>
-                            <button disabled={disabled || !m.pricing.isAvailable} onClick={() => { setItem(m); setMods([]); setQty(1); setNote(""); }} className="flex w-full items-center justify-between gap-3 rounded-2xl border border-line bg-surface p-3.5 text-left hover:border-ink/40 disabled:opacity-50">
+                            <button disabled={disabled || !m.pricing.isAvailable} onClick={() => { setItem(m); setMods([]); setQty(1); setNote(""); }} className="group flex w-full items-center justify-between gap-3 rounded-2xl border border-line bg-surface p-3.5 text-left transition-colors hover:border-ink/40 disabled:opacity-50">
                               <span className="min-w-0"><span className="block truncate text-base font-semibold">{hi ? m.nameHi || m.name : m.name}</span><span className="text-sm text-muted tabular-nums">{hasChoice ? L("from ", "से ") : ""}{money(m.pricing.pricePaise)}{!m.pricing.isAvailable ? ` · ${c.soldOut}` : ""}</span></span>
-                              <span className="grid size-10 shrink-0 place-items-center rounded-xl border border-brand bg-brand text-white"><Plus className="size-5" aria-hidden="true" /></span>
+                              <span className="grid size-10 shrink-0 place-items-center rounded-xl border border-brand bg-brand text-white transition-transform duration-150 group-hover:scale-105 group-active:scale-90"><Plus className="size-5" aria-hidden="true" /></span>
                             </button>
                           </li>
                         );
                       })}
                       {shownMenu.length === 0 && <li className={`${card} text-center text-muted`}>{L("Nothing matches.", "कुछ नहीं मिला।")}</li>}
                     </ul>
-                    {draft.length > 0 && <button className={`${primary} sticky bottom-20 z-10 w-full shadow-lg`} onClick={() => setStage("cart")}><ShoppingBag className="size-5" aria-hidden="true" />{L("Review order", "ऑर्डर देखें")} · {draft.length} · {money(total)}</button>}
+                    {draft.length > 0 && <button key={draft.length} className={`${primary} sticky bottom-20 z-10 w-full shadow-lg animate-pulse-once`} onClick={() => setStage("cart")}><ShoppingBag className="size-5" aria-hidden="true" />{L("Review order", "ऑर्डर देखें")} · {draft.length} · {money(total)}</button>}
                   </>
                 )}
                 {stage === "cart" && (
                   <>
-                    <ul className="space-y-2">
+                    <ul className="stagger space-y-2">
                       {draft.map((l, i) => (
                         <li key={i} className={`${card} flex items-start justify-between gap-3`}>
                           <div className="min-w-0"><p className="font-semibold"><b className="tabular-nums">{l.qty}×</b> {l.name}</p>{l.note && <p className="mt-0.5 text-sm text-muted">{l.note}</p>}<p className="mt-1 text-sm font-semibold tabular-nums">{money(l.paise)}</p></div>
@@ -529,7 +530,7 @@ export function WaiterScreen({
         )}
 
         {tab === "me" && (
-          <section className="mt-5 space-y-3">
+          <section className="mt-5 space-y-3 animate-fade">
             <MyProfile name={board.identity.name} subtitle={`${board.identity.roles.join(", ")} · ${board.identity.outlet}`} hi={hi} preview={preview} />
             <div className={card}>
               <h3 className="font-display text-lg font-bold">{L("My shift", "मेरी शिफ़्ट")}</h3>
@@ -560,13 +561,13 @@ export function WaiterScreen({
         )}
       </div>
 
-      {message && <p role="status" className="fixed inset-x-4 bottom-24 z-40 mx-auto max-w-md rounded-xl border border-line bg-ink px-4 py-3 text-center text-sm font-semibold text-paper shadow-lg">{message}</p>}
+      {message && <p key={message} role="status" className="animate-toast fixed inset-x-4 bottom-24 z-40 mx-auto max-w-md rounded-xl border border-line bg-ink px-4 py-3 text-center text-sm font-semibold text-paper shadow-lg">{message}</p>}
 
       <nav aria-label="Waiter navigation" className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface pb-[env(safe-area-inset-bottom)]">
         <div className="mx-auto grid max-w-xl grid-cols-4">
           {NAV.map(([key, Icon]) => (
-            <button key={key} aria-current={tab === key ? "page" : undefined} className={`relative flex min-h-16 min-w-0 flex-col items-center justify-center gap-1 px-1 text-xs font-semibold ${tab === key ? "text-brand-strong" : "text-muted"}`} onClick={() => { setTab(key); if (key === "tables") setDetail(null); }}>
-              <span className={`relative grid h-7 w-12 place-items-center rounded-full ${tab === key ? "bg-brand-soft" : ""}`}><Icon className="size-5" aria-hidden="true" />{key === "tasks" && taskCount > 0 && <span className="absolute -right-0.5 -top-1 grid min-w-4 place-items-center rounded-full bg-danger px-1 text-[10px] font-bold leading-4 text-white">{taskCount}</span>}</span>
+            <button key={key} aria-current={tab === key ? "page" : undefined} className={`relative flex min-h-16 min-w-0 flex-col items-center justify-center gap-1 px-1 text-xs font-semibold transition-colors ${tab === key ? "text-brand-strong" : "text-muted"}`} onClick={() => { setTab(key); if (key === "tables") setDetail(null); }}>
+              <span className={`relative grid h-7 place-items-center rounded-full transition-[background-color,width] duration-200 ${tab === key ? "w-14 bg-brand-soft" : "w-12"}`}><Icon className="size-5" aria-hidden="true" />{key === "tasks" && taskCount > 0 && <span key={taskCount} className="animate-pulse-once absolute -right-0.5 -top-1 grid min-w-4 place-items-center rounded-full bg-danger px-1 text-[10px] font-bold leading-4 text-white">{taskCount}</span>}</span>
               {c[key]}
             </button>
           ))}
@@ -579,7 +580,7 @@ export function WaiterScreen({
             <>
               <SheetHeader><SheetTitle className="font-display text-2xl font-bold">{L(`Seat guests at ${seatFor.label}`, `${seatFor.label} पर ग्राहक बैठाएं`)}</SheetTitle><SheetDescription>{L("How many people? Then take their order.", "कितने लोग हैं? फिर ऑर्डर लें।")}</SheetDescription></SheetHeader>
               <div className="space-y-5 px-4 pb-6">
-                <div className="grid grid-cols-4 gap-2">{[1, 2, 3, 4, 5, 6, 7, 8].map((n) => <button key={n} type="button" aria-pressed={seatSize === n} onClick={() => setSeatSize(n)} className={`min-h-12 rounded-xl border text-lg font-semibold ${seatSize === n ? "border-ink bg-ink text-paper" : "border-line bg-surface"}`}>{n}</button>)}</div>
+                <div className="grid grid-cols-4 gap-2">{[1, 2, 3, 4, 5, 6, 7, 8].map((n) => <button key={n} type="button" aria-pressed={seatSize === n} onClick={() => setSeatSize(n)} className={`min-h-12 rounded-xl border text-lg font-semibold ${seatSize === n ? "border-ink bg-ink text-paper" : "border-line bg-surface"} transition-colors duration-150`}>{n}</button>)}</div>
                 <button type="button" className={`${primary} w-full`} disabled={disabled || duty !== "on"} onClick={async () => { let opened: string | null = null; await perform(() => actions.seatAction(seatFor.id, seatSize), (r) => { setSeatFor(null); opened = r.sessionId; }); if (opened) await openTable(opened, true); }}><Plus className="size-5" aria-hidden="true" />{L("Seat & take order", "बैठाएं और ऑर्डर लें")}</button>
                 {duty !== "on" && <p className="text-center text-sm text-muted">{L("Go on duty first (Me tab).", "पहले ड्यूटी शुरू करें (मैं टैब)।")}</p>}
               </div>
@@ -632,7 +633,7 @@ export function WaiterScreen({
               <SheetHeader><SheetTitle className="font-display text-2xl font-bold">{sheet.kind === "settle" ? c.settle : c[sheet.kind]}</SheetTitle>{sheet.kind === "settle" && <SheetDescription>{L("Take cash or card at the table.", "टेबल पर नकद या कार्ड लें।")}</SheetDescription>}</SheetHeader>
               <div className="space-y-4 px-4 pb-6">
                 {sheet.kind === "move" && (
-                  <div className="space-y-2"><p className="text-sm font-bold">{c.choosePerson}</p><div className="flex flex-wrap gap-2">{detail.people.filter((p) => !p.paidOut).map((p) => <button key={p.id} type="button" aria-pressed={destination === p.id} onClick={() => setDestination(p.id)} className={`min-h-12 rounded-xl border px-4 text-base font-semibold ${destination === p.id ? "border-ink bg-ink text-paper" : "border-line bg-surface"}`}>{p.name}</button>)}</div></div>
+                  <div className="space-y-2"><p className="text-sm font-bold">{c.choosePerson}</p><div className="flex flex-wrap gap-2">{detail.people.filter((p) => !p.paidOut).map((p) => <button key={p.id} type="button" aria-pressed={destination === p.id} onClick={() => setDestination(p.id)} className={`min-h-12 rounded-xl border px-4 text-base font-semibold ${destination === p.id ? "border-ink bg-ink text-paper" : "border-line bg-surface"} transition-colors duration-150`}>{p.name}</button>)}</div></div>
                 )}
                 {sheet.kind === "void" && <div className="space-y-2"><label className="text-sm font-bold" htmlFor="void-reason">{c.reason}</label><textarea id="void-reason" className="min-h-24 w-full rounded-xl border border-line bg-surface p-3 text-base" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={200} /></div>}
                 {(sheet.kind === "reopen" || (sheet.kind === "void" && sheet.status !== "placed")) && !isManager && (
@@ -644,8 +645,8 @@ export function WaiterScreen({
                 {sheet.kind === "settle" && (
                   <>
                     <div className="flex flex-wrap gap-2">
-                      <button type="button" aria-pressed={!share} onClick={() => { setShare(""); settleKey.current = null; }} className={`min-h-11 rounded-xl border px-4 text-sm font-semibold ${!share ? "border-ink bg-ink text-paper" : "border-line bg-surface"}`}>{c.all}</button>
-                      {detail.people.map((p) => <button key={p.id} type="button" aria-pressed={share === p.id} onClick={() => { setShare(p.id); settleKey.current = null; }} className={`min-h-11 rounded-xl border px-4 text-sm font-semibold ${share === p.id ? "border-ink bg-ink text-paper" : "border-line bg-surface"}`}>{p.name}</button>)}
+                      <button type="button" aria-pressed={!share} onClick={() => { setShare(""); settleKey.current = null; }} className={`min-h-11 rounded-xl border px-4 text-sm font-semibold ${!share ? "border-ink bg-ink text-paper" : "border-line bg-surface"} transition-colors duration-150`}>{c.all}</button>
+                      {detail.people.map((p) => <button key={p.id} type="button" aria-pressed={share === p.id} onClick={() => { setShare(p.id); settleKey.current = null; }} className={`min-h-11 rounded-xl border px-4 text-sm font-semibold ${share === p.id ? "border-ink bg-ink text-paper" : "border-line bg-surface"} transition-colors duration-150`}>{p.name}</button>)}
                     </div>
                     <div className="rounded-2xl bg-brand-soft p-4 text-center"><p className="text-sm text-muted">{L("Amount to collect", "वसूलने की राशि")}</p><p className="font-display text-4xl font-bold tabular-nums">{money(balance)}</p></div>
                     <div className="grid grid-cols-2 gap-2">{(["cash", "upi"] as const).map((m) => <button key={m} className={method === m ? primary : btn} onClick={() => { setMethod(m); settleKey.current = null; }}>{c[m]}</button>)}</div>

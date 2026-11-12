@@ -331,6 +331,94 @@ body {
   animation: pulse-once 180ms var(--ease-natural);
 }
 
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Menus and popovers: a quick drop from their button */
+@utility animate-pop {
+  animation: pop-in 160ms var(--ease-natural) both;
+  transform-origin: top right;
+}
+
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Native <dialog> pop-ups that bring no animation of their own ease in, with their dimmed backdrop */
+dialog[open]:not([class*="animate-"]) {
+  animation: dialog-in 200ms var(--ease-natural) both;
+}
+dialog[open]::backdrop {
+  animation: fade-in 200ms var(--ease-natural) both;
+}
+
+/* Staff screens: a light press on buttons so every tap is felt. Buttons that are positioned with
+   transforms keep them untouched. */
+:is(.staff-theme, .staff-press) button:not(:disabled):not([class*="translate"]):not([class*="scale"]):not([aria-pressed]) {
+  transition-property: color, background-color, border-color, box-shadow, transform;
+  transition-duration: 120ms;
+}
+.staff-theme button:not(:disabled):not([class*="translate"]):not([class*="scale"]):not([aria-pressed]):active {
+  transform: scale(0.97);
+}
+.staff-press button:not(:disabled):not([class*="translate"]):not([class*="scale"]):not([aria-pressed]):active {
+  transform: scale(0.97);
+}
+
+/* Waiter and rider lists: cards rise in one after another; a card that arrives later rises on its own */
+.stagger > * {
+  animation: rise-in 260ms var(--ease-natural) both;
+}
+.stagger > :nth-child(2) { animation-delay: 40ms; }
+.stagger > :nth-child(3) { animation-delay: 80ms; }
+.stagger > :nth-child(4) { animation-delay: 120ms; }
+.stagger > :nth-child(5) { animation-delay: 160ms; }
+.stagger > :nth-child(n + 6) { animation-delay: 200ms; }
+
+/* An overdue waiter task breathes a soft red ring so it is seen across the room */
+@keyframes urgent-ring {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-danger) 40%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--color-danger) 0%, transparent);
+  }
+}
+.animate-urgent {
+  animation: urgent-ring 1.6s ease-in-out infinite;
+}
+
+/* Toasts slide up from the bottom bar */
+@keyframes toast-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@utility animate-toast {
+  animation: toast-up 220ms var(--ease-natural) both;
+}
+
 /* Reduced motion: short opacity fades only */
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -346,8 +434,22 @@ body {
     animation: none !important;
   }
   .animate-rise,
-  .animate-sheet {
+  .animate-sheet,
+  .animate-pop,
+  dialog[open] {
     animation-name: fade-in !important;
+  }
+  .staff-theme button:active,
+  .staff-press button:active {
+    transform: none !important;
+  }
+  .animate-urgent {
+    animation: none !important;
+  }
+  .stagger > *,
+  .animate-toast {
+    animation-name: fade-in !important;
+    animation-delay: 0ms !important;
   }
   .animate-shake,
   .animate-pulse-once {
@@ -811,4 +913,56 @@ html.console-ui.theme-dark, .staff-theme.theme-dark {
   html.console-ui .text-title { font-size: 18px; line-height: 24px; }
   html.console-ui .text-section { font-size: 14px; line-height: 20px; }
   html.console-ui main > header > div > p.text-body { font-size: 12px; line-height: 18px; }
+}
+
+/* Dashboard: panels and KPI tiles rise in one after another when the page opens. Live data refreshes
+   keep the same elements, so they do not replay. */
+.dash-stagger > * {
+  animation: rise-in 360ms var(--ease-natural) both;
+}
+.dash-stagger > :nth-child(2) { animation-delay: 50ms; }
+.dash-stagger > :nth-child(3) { animation-delay: 100ms; }
+.dash-stagger > :nth-child(4) { animation-delay: 150ms; }
+.dash-stagger > :nth-child(5) { animation-delay: 200ms; }
+.dash-stagger > :nth-child(6) { animation-delay: 250ms; }
+.dash-stagger > :nth-child(n + 7) { animation-delay: 300ms; }
+@media (prefers-reduced-motion: reduce) {
+  .dash-stagger > * {
+    animation-name: fade-in !important;
+    animation-delay: 0ms !important;
+  }
+}
+
+/* Rider empty state: the bike rocks gently while waiting for a delivery */
+@keyframes bike-ride {
+  0%,
+  100% {
+    transform: translateX(-3px);
+  }
+  50% {
+    transform: translateX(3px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  [class*="bike-ride"] {
+    animation: none !important;
+  }
+}
+
+/* Dashboard sales sparkline: the line draws itself left to right, then its soft fill fades in */
+@keyframes dash-draw {
+  from { stroke-dasharray: 1; stroke-dashoffset: 1; }
+  to { stroke-dasharray: 1; stroke-dashoffset: 0; }
+}
+.dash-draw {
+  animation: dash-draw 900ms 250ms var(--ease-natural) both;
+}
+.dash-area {
+  animation: fade-in 500ms 900ms var(--ease-natural) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .dash-draw,
+  .dash-area {
+    animation: none !important;
+  }
 }

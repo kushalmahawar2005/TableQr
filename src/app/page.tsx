@@ -8,6 +8,7 @@ import {
   Sparkles, Split, Store, Users, Utensils,
 } from "lucide-react";
 import s from "./landing.module.css";
+import { ServiceStory } from "./_landing/service-story";
 
 const publicOrigin = process.env.PUBLIC_APP_URL || process.env.NEXT_PUBLIC_APP_URL;
 
@@ -28,6 +29,7 @@ const CONTACT = "https://wa.me/916367828788?text=Hi%20Craftory%20Innovation%2C%2
 const cx = (...classes: string[]) => classes.filter(Boolean).join(" ");
 const nav = [
   { href: "#experience", label: "Guest experience" },
+  { href: "#how-it-works", label: "How it works" },
   { href: "#solutions", label: "Solutions" },
   { href: "#why-tableeqr", label: "Why Tableeqr" },
 ];
@@ -112,6 +114,8 @@ export default function Home() {
         </article>)}</div>
         <Link href={DEMO} className={s.textLink}>Take a look around the guest experience <ArrowRight size={18} aria-hidden="true" /></Link>
       </section>
+
+      <ServiceStory />
 
       <section id="solutions" className={s.solutionsSection} aria-labelledby="solutions-heading"><div className={s.container}>
         <div className={s.sectionTop}><div><p className={s.eyebrow}>BUILT AROUND YOUR BUSINESS</p><h2 id="solutions-heading">Your floor. Your rooms.<br /><span>Your kind of service.</span></h2></div><p>A café, a busy restaurant or a hotel with room service. Keep the workflows you need connected.</p></div>

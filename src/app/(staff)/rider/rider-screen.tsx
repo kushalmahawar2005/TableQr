@@ -91,7 +91,7 @@ export function RiderScreen({ initialJobs, initialProfile, initialVerification, 
 
   const cashDue = live.filter((j) => !j.paid).reduce((n, j) => n + j.totalPaise, 0);
   return (
-    <main className="mx-auto min-h-dvh w-full max-w-xl px-4 pt-4 pb-28 text-ink">
+    <main className="staff-press mx-auto min-h-dvh w-full max-w-xl px-4 pt-4 pb-28 text-ink">
       {/* Who I am, and whether I take deliveries now */}
       <header className="flex items-center gap-3">
         <Avatar url={profile.photoUrl} name={profile.name} />
@@ -116,45 +116,45 @@ export function RiderScreen({ initialJobs, initialProfile, initialVerification, 
       {!profile.online && locationPermission === "denied" && <p role="status" className="mt-3 rounded-xl bg-[var(--state-held-soft)] p-3 text-caption text-[var(--state-held-text)]">Location is blocked. Allow it for Tableeqr Rider in your phone or browser settings, then go online to share your location.</p>}
       {!profile.online && locationPermission === "unsupported" && <p role="status" className="mt-3 rounded-xl bg-[var(--state-held-soft)] p-3 text-caption text-[var(--state-held-text)]">This device does not support location sharing.</p>}
 
-      {error && <p role="alert" className="mt-4 rounded-2xl border border-danger/30 bg-[var(--state-seated-soft)] p-3 text-body font-semibold text-danger">{error}</p>}
+      {error && <p key={error} role="alert" className="animate-shake mt-4 rounded-2xl border border-danger/30 bg-[var(--state-seated-soft)] p-3 text-body font-semibold text-danger">{error}</p>}
 
-      {tab === "rides" ? <>
+      {tab === "rides" ? <div key="rides" className="animate-fade">
         <p className={`mt-3 flex items-center gap-2 rounded-2xl px-3 py-2 text-caption font-semibold ${!profile.online ? "bg-ink/5 text-muted" : here.error ? "bg-[var(--state-held-soft)] text-[var(--state-held-text)]" : "bg-[var(--state-available-soft)] text-[var(--state-available-text)]"}`}>
           <MapPin className="size-4" aria-hidden="true" />
           {!profile.online ? "Location is off while you are offline" : here.error ?? (here.point ? "Sharing your live location with the restaurant and customer" : "Finding your location…")}
         </p>
 
-        <div className="mt-4 grid grid-cols-3 gap-2">
+        <div className="stagger mt-4 grid grid-cols-3 gap-2">
           {([[Bike, "Active", String(live.length)], [CircleCheck, "Delivered today", String(delivered.length)], [Banknote, "To collect", money(cashDue)]] as const).map(([Icon, label, value]) => (
             <div key={label} className="rounded-2xl border border-line bg-surface p-3">
               <p className="flex items-center gap-1.5 text-label font-semibold text-muted"><Icon className="size-3.5 shrink-0" aria-hidden="true" />{label}</p>
-              <p className="mt-1 font-display text-section font-bold tabular">{value}</p>
+              <p key={value} className="animate-pulse-once origin-left mt-1 font-display text-section font-bold tabular">{value}</p>
             </div>
           ))}
         </div>
 
         {!profile.online && live.length === 0 && <p className="mt-4 rounded-2xl bg-ink/5 p-4 text-center text-body text-muted">You are offline. Go online to get deliveries.</p>}
         {profile.online && live.length === 0 && (
-          <div className="mt-6 rounded-3xl border border-dashed border-line p-8 text-center">
-            <Bike className="mx-auto size-9 text-muted" aria-hidden="true" />
+          <div className="mt-6 rounded-3xl border border-dashed border-line p-8 text-center animate-fade">
+            <Bike className="mx-auto size-9 animate-[bike-ride_2.4s_ease-in-out_infinite] text-muted" aria-hidden="true" />
             <p className="mt-3 font-semibold">Waiting for a delivery</p>
             <p className="mt-1 text-caption text-muted">New orders given to you show up here by themselves.</p>
           </div>
         )}
 
-        <div className="mt-4 grid gap-4">
+        <div className="stagger mt-4 grid gap-4">
           {live.map((job) => <JobCard key={job.id} job={job} pickup={jobs.pickup} pending={pending} act={act} here={here.point} photoUrl={profile.photoUrl} />)}
         </div>
 
         {delivered.length > 0 && (
           <section className="mt-6">
             <h2 className="text-caption font-bold tracking-wide text-muted uppercase">Delivered today</h2>
-            <ul className="mt-2 divide-y divide-line rounded-2xl border border-line bg-surface">
+            <ul className="stagger mt-2 divide-y divide-line rounded-2xl border border-line bg-surface">
               {delivered.map((j) => <li key={j.id} className="flex items-center justify-between gap-3 px-4 py-3"><span className="min-w-0 truncate text-body">{j.name}</span><span className="shrink-0 text-caption text-muted tabular">{clock(j.deliveredAt)} · {money(j.totalPaise)}</span></li>)}
             </ul>
           </section>
         )}
-      </> : <>
+      </div> : <div key="me" className="animate-fade">
         {/* Me: the rider's own record and profile */}
         <section className="mt-4 overflow-hidden rounded-3xl border border-line bg-surface">
           <div className="flex flex-col items-center gap-2 bg-brand-soft/50 px-4 pt-6 pb-5 text-center">
@@ -178,14 +178,14 @@ export function RiderScreen({ initialJobs, initialProfile, initialVerification, 
           : <button type="button" onClick={() => setEditing(true)} className="mt-4 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-line bg-surface text-body font-semibold"><Camera className="size-4" aria-hidden="true" />Edit photo and vehicle</button>}
 
         <PushAwareSignOutButton audience="rider" className="mt-3 flex min-h-12 w-full items-center justify-center rounded-2xl border border-line bg-surface text-body font-semibold text-danger">Sign out</PushAwareSignOutButton>
-      </>}
+      </div>}
 
       {/* Bottom tabs: the work, and me */}
       <nav aria-label="Rider navigation" className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface pb-[env(safe-area-inset-bottom)]">
         <div className="mx-auto grid max-w-xl grid-cols-2">
           {([["rides", Bike, "Rides", live.length], ["me", UserRound, "Me", 0]] as const).map(([key, Icon, label, badge]) => (
-            <button key={key} type="button" aria-current={tab === key ? "page" : undefined} onClick={() => { setTab(key); window.scrollTo({ top: 0 }); }} className={`flex min-h-16 flex-col items-center justify-center gap-1 text-caption font-semibold ${tab === key ? "text-brand-strong" : "text-muted"}`}>
-              <span className={`relative grid h-7 w-14 place-items-center rounded-full ${tab === key ? "bg-brand-soft" : ""}`}><Icon className="size-5" aria-hidden="true" />{badge > 0 && <span className="absolute -top-1 right-1 grid min-w-4 place-items-center rounded-full bg-brand px-1 text-[10px] leading-4 font-bold text-brand-on">{badge}</span>}</span>
+            <button key={key} type="button" aria-current={tab === key ? "page" : undefined} onClick={() => { setTab(key); window.scrollTo({ top: 0 }); }} className={`flex min-h-16 flex-col items-center justify-center gap-1 text-caption font-semibold transition-colors ${tab === key ? "text-brand-strong" : "text-muted"}`}>
+              <span className={`relative grid h-7 place-items-center rounded-full transition-[background-color,width] duration-200 ${tab === key ? "w-16 bg-brand-soft" : "w-14"}`}><Icon className="size-5" aria-hidden="true" />{badge > 0 && <span key={badge} className="animate-pulse-once absolute -top-1 right-1 grid min-w-4 place-items-center rounded-full bg-brand px-1 text-[10px] leading-4 font-bold text-brand-on">{badge}</span>}</span>
               {label}
             </button>
           ))}
@@ -207,7 +207,7 @@ function JobCard({ job, pickup, pending, act, here, photoUrl }: { job: Job; pick
   const dropTarget = address.lat !== undefined && address.lng !== undefined ? `${address.lat},${address.lng}` : drop;
   const onWay = job.status === "dispatched";
   return (
-    <article className="overflow-hidden rounded-3xl border border-line bg-surface shadow-[0_4px_18px_rgb(31_41_55/0.06)]">
+    <article className="overflow-hidden rounded-3xl border border-line bg-surface shadow-[0_4px_18px_rgb(31_41_55/0.06)] transition-shadow duration-200 hover:shadow-[0_8px_24px_rgb(31_41_55/0.1)]">
       <div className={`flex items-center justify-between gap-3 px-4 py-3 ${onWay ? "bg-[var(--state-cleaning-soft)] text-[var(--state-cleaning-text)]" : job.kitchenReady ? "bg-[var(--state-bill-soft)] text-[var(--state-bill-text)]" : "bg-[var(--state-held-soft)] text-[var(--state-held-text)]"}`}>
         <p className="flex items-center gap-2 text-body font-bold">
           {onWay ? <><Bike className="size-4" aria-hidden="true" />On the way</> : job.kitchenReady ? <><Package className="size-4" aria-hidden="true" />Ready to pick up</> : <><ChefHat className="size-4" aria-hidden="true" />Kitchen is preparing</>}

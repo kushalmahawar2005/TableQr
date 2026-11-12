@@ -445,7 +445,8 @@ export function StaffShell({
         </header>
         {!preview && <NotificationPermissionOnboarding key={outlets.find((o) => o.current)?.id} lang={lang} />}
         {!preview && !networkOnline && <div role="status" className="flex flex-wrap items-center justify-between gap-2 border-b border-warning/40 bg-warning/10 px-4 py-2 text-caption font-semibold text-warning"><span>{lang === "hi" ? "इंटरनेट बंद है। डैशबोर्ड का डेटा पुराना हो सकता है। काउंटर जारी रखने के लिए सेव POS खोलें।" : "Internet is disconnected. Dashboard data may be out of date. Open saved POS to continue at the counter."}</span><a href="/offline-pos" className="inline-flex min-h-9 items-center rounded-lg border border-warning/50 bg-surface px-3 text-ink">{lang === "hi" ? "सेव POS खोलें" : "Open saved POS"}</a></div>}
-        {children}
+        {/* Each section fades in on arrival, so switching sections feels like one app, not a reload */}
+        <div key={path} className="flex min-w-0 flex-1 flex-col animate-fade">{children}</div>
       </div>
       <nav
         aria-label={lang === "hi" ? "स्टाफ मेन्यू" : "Staff menu"}
@@ -609,7 +610,7 @@ function HeaderSearch({
       </div>
 
       {open && hasResults && (
-        <div className="absolute left-4 right-4 top-13 z-50 overflow-hidden rounded-2xl border border-line bg-surface p-2 shadow-[0_12px_28px_rgba(23,37,31,0.12)]">
+        <div className="animate-pop absolute left-4 right-4 top-13 z-50 overflow-hidden rounded-2xl border border-line bg-surface p-2 shadow-[0_12px_28px_rgba(23,37,31,0.12)]">
           <p className="px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-muted">
             Quick Destinations
           </p>
@@ -747,7 +748,7 @@ function UserProfileDropdown({
       </button>
 
       {open && (
-        <div className="absolute right-0 top-13 z-50 w-56 rounded-2xl border border-line bg-surface p-2 shadow-[0_12px_28px_rgba(23,37,31,0.14)]">
+        <div className="animate-pop absolute right-0 top-13 z-50 w-56 rounded-2xl border border-line bg-surface p-2 shadow-[0_12px_28px_rgba(23,37,31,0.14)]">
           <div className="border-b border-line px-3 py-2.5">
             <p className="truncate text-xs font-bold text-ink">{staff.name}</p>
             <p className="truncate text-[11px] font-medium text-muted">

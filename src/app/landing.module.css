@@ -263,3 +263,63 @@
 .footerBottom>span:last-child{flex-wrap:wrap}
 }
 @media(max-width:380px){.hero h1{font-size:35px}.heroVisual{height:310px}.company{font-size:7px}.container{padding-inline:16px}}
+
+/* ---------- Motion ---------- */
+@keyframes lpRise{from{opacity:0;transform:translateY(22px)}to{opacity:1;transform:none}}
+@keyframes lpFade{from{opacity:0}to{opacity:1}}
+@keyframes lpZoom{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:none}}
+@keyframes lpFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-9px)}}
+@keyframes lpSpin{to{transform:rotate(360deg)}}
+@keyframes lpReveal{from{opacity:0;translate:0 26px}to{opacity:1;translate:none}}
+@keyframes lpHeaderIn{from{opacity:0;transform:translateY(-12px)}to{opacity:1;transform:none}}
+
+/* Page load: header drops in, hero copy rises line by line, the phone zooms in, the chips float */
+.header{animation:lpHeaderIn .5s cubic-bezier(.2,0,0,1) both}
+.heroCopy>*{animation:lpRise .7s cubic-bezier(.2,0,0,1) both}
+.heroCopy>:nth-child(1){animation-delay:.05s}
+.heroCopy>:nth-child(2){animation-delay:.15s}
+.heroCopy>:nth-child(3){animation-delay:.28s}
+.heroCopy>:nth-child(4){animation-delay:.4s}
+.heroCopy>:nth-child(5){animation-delay:.5s}
+.heroImage{animation:lpZoom .9s .2s cubic-bezier(.2,0,0,1) both}
+.heroOrbit{animation:lpSpin 60s linear infinite}
+.floatingChip{animation:lpFade .6s .7s both,lpFloat 5s 1.3s ease-in-out infinite}
+.chipHotel{animation-delay:.85s,2.4s}
+.heroCaption{animation:lpFade .6s .9s both}
+
+/* Hover: cards lift, photos ease in a little closer */
+.journeyImage{overflow:hidden}
+.journeyImage>img,.hotelCard>img,.restaurantImage img,.compactImage img{transition:transform .7s cubic-bezier(.2,0,0,1)}
+.journeyCard:hover .journeyImage>img,.hotelCard:hover>img,.restaurantCard:hover .restaurantImage img,.compactSolution:hover .compactImage img{transform:scale(1.05)}
+.restaurantCard,.hotelCard,.compactSolution,.cta{transition:transform .35s cubic-bezier(.2,0,0,1),box-shadow .35s}
+.restaurantCard:hover,.hotelCard:hover,.compactSolution:hover{transform:translateY(-4px);box-shadow:0 22px 40px #653f521f}
+.controlIcon{transition:transform .3s cubic-bezier(.2,0,0,1)}
+.controlsGrid>article:hover .controlIcon{transform:translateY(-3px) rotate(-6deg)}
+.capabilities>span{transition:transform .25s}
+.capabilities>span:hover{transform:translateY(-2px)}
+.capabilities>span svg{transition:transform .3s}
+.capabilities>span:hover svg{transform:scale(1.15)}
+.faqList summary{transition:color .2s}
+.faqList summary:hover{color:#c34a70}
+.faqList details[open]>p{animation:lpRise .35s cubic-bezier(.2,0,0,1) both}
+.textLink svg{transition:transform .2s}
+.textLink:hover svg{transform:translateX(4px)}
+
+/* Scroll: sections rise into view as they enter (browsers without scroll timelines show them at once) */
+@supports (animation-timeline:view()){
+  .sectionTop,.journeyCard,.solutionGrid>article,.controlsGrid>article,.controlStrip,.faqSection>*,.cta,.capabilities>*{
+    animation:lpReveal linear both;animation-timeline:view();animation-range:entry 0% entry 55%
+  }
+}
+
+@media(prefers-reduced-motion:reduce){
+  .landing *,.landing *::before,.landing *::after{animation:none!important}
+  .landing .journeyCard:hover .journeyImage>img,.landing .hotelCard:hover>img,.landing .restaurantCard:hover .restaurantImage img,.landing .compactSolution:hover .compactImage img,
+  .landing .restaurantCard:hover,.landing .hotelCard:hover,.landing .compactSolution:hover{transform:none}
+}
+
+/* Reading progress: a thin red line under the header fills as the page scrolls */
+@supports (animation-timeline:scroll()){
+  .header::after{content:"";position:absolute;left:22px;right:22px;bottom:-1px;height:2px;border-radius:2px;background:var(--lp-red);transform-origin:left;transform:scaleX(0);animation:lpProgress linear both;animation-timeline:scroll(root)}
+  @keyframes lpProgress{to{transform:scaleX(1)}}
+}

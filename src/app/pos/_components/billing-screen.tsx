@@ -224,7 +224,7 @@ export function BillingScreen({ initial, realtimeUrl, embedded = false, openSess
                       <span className="min-w-0 lg:order-1">
                         <RowSelect selected={sel} onSelect={() => open(c.sessionId)}>
                           <span className="block truncate text-sm font-bold text-ink">{placeName(c.tableCode, c.takeaway)}</span>
-                          <span className="mt-0.5 flex items-center gap-1.5 truncate text-xs font-medium text-muted">{c.guestName ? c.guestName : isDeliveryTable(c.tableCode) ? L("Home delivery", "होम डिलीवरी") : c.takeaway ? L("Walk-in guest", "काउंटर ग्राहक") : <><Users className="size-3.5" aria-hidden="true" />{c.partySize} {L(c.partySize === 1 ? "guest" : "guests", "लोग")}</>}</span>
+                          <span className="mt-0.5 flex items-center gap-1.5 truncate text-xs font-medium text-muted">{c.guestName ? c.guestName : isDeliveryTable(c.tableCode) ? L("Home delivery", "होम डिलीवरी") : c.takeaway ? L("Walk-in guest", "काउंटर ग्राहक") : <><Users className="size-3.5" aria-hidden="true" />{c.partySize} {L(c.partySize === 1 ? "guest" : "guests", c.partySize === 1 ? "व्यक्ति" : "लोग")}</>}</span>
                         </RowSelect>
                       </span>
                       <span className={`justify-self-end text-sm font-bold tabular lg:order-5 lg:justify-self-start ${tab === "due" ? "" : "lg:hidden"}`}>{tab === "due" ? rs(c.balancePaise) : tab === "paid" ? <span className="lg:hidden">{rs(c.totalPaise)}</span> : <span className="lg:hidden">{c.itemCount ? `${c.itemCount} ${L(c.itemCount === 1 ? "item" : "items", "आइटम")}` : ""}</span>}</span>

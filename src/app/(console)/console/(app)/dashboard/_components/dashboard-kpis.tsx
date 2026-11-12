@@ -2,6 +2,7 @@ import type { Features } from "@/lib/plan-features";
 import { BedDouble, Calendar, CreditCard, FileText, Receipt, Truck, Wallet } from "lucide-react";
 import Link from "next/link";
 import type { DashboardData, RevenueTrend } from "@/server/staff/dashboard";
+import { CountUpMoney } from "./count-up";
 import { Delta, dayLabel, focusRing, money } from "./dashboard-shared";
 
 /**
@@ -22,7 +23,7 @@ export function DashboardKpis({ data, trend, features }: { data: DashboardData; 
   const columns = count === 7 ? "xl:grid-cols-4" : count === 6 ? "xl:grid-cols-3 2xl:grid-cols-6" : count === 5 ? "xl:grid-cols-5" : "xl:grid-cols-4";
   const roomPct = k.rooms.total > 0 ? Math.round((k.rooms.occupied / k.rooms.total) * 100) : 0;
 
-  const shell = `group relative flex min-h-[112px] flex-col justify-between rounded-2xl border p-3 transition-colors duration-200 sm:min-h-[148px] sm:p-5 ${focusRing}`;
+  const shell = `group relative flex min-h-[112px] flex-col justify-between rounded-2xl border p-3 transition-[color,background-color,border-color,box-shadow,translate] duration-200 hover:-translate-y-0.5 sm:min-h-[148px] sm:p-5 ${focusRing}`;
   const card = `${shell} border-line bg-surface shadow-[0_1px_2px_rgba(25,37,30,0.035)] hover:border-forest/30 hover:shadow-[0_8px_24px_rgba(25,37,30,0.07)]`;
   // On phones the sales card fills a row, so an even count leaves the last card alone: let it fill its row too
   const lastCard = count % 2 === 0 ? `${card} col-span-2 xl:col-span-1` : card;
@@ -35,7 +36,7 @@ export function DashboardKpis({ data, trend, features }: { data: DashboardData; 
 
   return (
     <section aria-label="Key Performance Indicators">
-      <div className={`grid grid-cols-2 gap-2 sm:gap-4 ${columns}`}>
+      <div className={`dash-stagger grid grid-cols-2 gap-2 sm:gap-4 ${columns}`}>
         <Link href="/console/billing" className={`${shell} col-span-2 border-forest bg-forest text-white hover:bg-forest-hover ${count === 7 ? "xl:col-span-2" : "xl:col-span-1"}`}>
           <div className="flex items-center justify-between gap-3">
             <p className="text-[12px] font-semibold leading-4 text-white/80 sm:text-[13px]">Today&apos;s Sales</p>
@@ -43,7 +44,7 @@ export function DashboardKpis({ data, trend, features }: { data: DashboardData; 
           </div>
           <div className="mt-2 flex min-w-0 items-end justify-between gap-3">
             <div className="min-w-0">
-              <p className={value}>{money(k.revenue.today)}</p>
+              <p className={value}><CountUpMoney paise={k.revenue.today} /></p>
               <p className="mt-1 text-[11px] font-medium leading-4 text-white/70 sm:mt-2">Money from paid bills</p>
             </div>
             <RevenueSparkline trend={trend} />
@@ -74,7 +75,7 @@ export function DashboardKpis({ data, trend, features }: { data: DashboardData; 
             <span className={`${iconBox} bg-terracotta/10 text-terracotta`} aria-hidden="true"><Receipt className="size-[18px]" /></span>
           </div>
           <div className="mt-2">
-            <p className={`${value} text-ink`}>{money(k.outstandingPaise)}</p>
+            <p className={`${value} text-ink`}><CountUpMoney paise={k.outstandingPaise} /></p>
             <p className={note}>Total amount due</p>
           </div>
           <div className={`${footer} justify-start`}><span className="text-[11px] font-medium text-muted">Across open bills</span></div>
@@ -132,7 +133,7 @@ export function DashboardKpis({ data, trend, features }: { data: DashboardData; 
             <span className={`${iconBox} bg-sage text-forest`} aria-hidden="true"><CreditCard className="size-[18px]" /></span>
           </div>
           <div className="mt-2">
-            <p className={`${value} text-ink`}>{money(k.averageBill.today)}</p>
+            <p className={`${value} text-ink`}><CountUpMoney paise={k.averageBill.today} /></p>
             <p className={note}>Per paid bill</p>
           </div>
           <div className={footer}><span className="whitespace-nowrap text-[10px] font-medium text-muted">Yesterday</span><span className={deltaBadge}><Versus today={k.averageBill.today} yesterday={k.averageBill.yesterday} text={money(k.averageBill.yesterday)} /></span></div>
@@ -193,8 +194,8 @@ function RevenueSparkline({ trend }: { trend: RevenueTrend }) {
 
   return (
     <svg className="mb-0.5 h-8 w-[72px] shrink-0 overflow-visible sm:w-[104px]" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Revenue trend for the last 7 days: ${trend.map((day) => `${dayLabel(day.date, { weekday: "short" })} ${money(day.revenuePaise)}`).join(", ")}`}>
-      <path d={area} fill="currentColor" className="text-white" opacity="0.12" />
-      <path d={line} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-white" />
+      <path d={area} fill="currentColor" className="dash-area text-white" opacity="0.12" />
+      <path d={line} pathLength={1} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="dash-draw text-white" />
       <circle cx={last[0]} cy={last[1]} r="3.5" fill="currentColor" className="text-white" />
     </svg>
   );

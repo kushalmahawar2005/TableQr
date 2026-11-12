@@ -142,7 +142,7 @@ export function DashboardScreen({
 
   return (
     <div className="dashboard-theme min-h-[calc(100dvh-4rem)] bg-dashboard-canvas sm:min-h-[calc(100dvh-4.5rem)]">
-      <main className="mx-auto w-full max-w-[1440px] space-y-3 px-3 py-3 sm:space-y-5 sm:px-6 sm:py-5 lg:px-8 lg:py-6">
+      <main className="dash-stagger mx-auto w-full max-w-[1440px] space-y-3 px-3 py-3 sm:space-y-5 sm:px-6 sm:py-5 lg:px-8 lg:py-6">
         <DashboardHeader data={data} conn={conn} refreshing={refreshing} onRefresh={refresh} />
 
         {refreshError && (
@@ -165,19 +165,19 @@ export function DashboardScreen({
         {/* Each column stacks panels end to end, so no column is left with an empty gap beneath it */}
         {data.view !== "money" && (
           <div className="grid items-start gap-5 xl:grid-cols-12">
-            <div className="min-w-0 space-y-5 xl:col-span-5">
+            <div className="dash-stagger min-w-0 space-y-5 xl:col-span-5">
               {features?.dineIn === true && <LiveFloor data={data} />}
               {quietDay ? <div className="grid items-start gap-5 sm:grid-cols-2">{payments}{dishes}</div> : payments}
               {data.view !== "operations" && (!features || features.fullReports) && <SalesPerformance trend={trend} />}
               {!quietDay && dishes}
             </div>
 
-            <div className="min-w-0 space-y-5 xl:col-span-3">
+            <div className="dash-stagger min-w-0 space-y-5 xl:col-span-3">
               {showStaff && <StaffOnDuty duty={dutyData} />}
               {(!features || features.kitchenDisplay) && <KitchenOrders orders={data.operations.kitchenOrders} />}
             </div>
 
-            <div className="min-w-0 space-y-5 xl:col-span-4">
+            <div className="dash-stagger min-w-0 space-y-5 xl:col-span-4">
               {(!features || features.dineIn || features.rooms) && <CustomerRequests initialRequests={data.operations.customerRequests} />}
               {(!features || features.reservations) && <UpcomingReservations data={data} />}
               <LiveActivity feed={data.operations.activityFeed} live={conn === "live"} />
@@ -186,7 +186,7 @@ export function DashboardScreen({
         )}
 
         {data.view === "money" && (
-          <div className="grid items-start gap-5 xl:grid-cols-2">
+          <div className="dash-stagger grid items-start gap-5 xl:grid-cols-2">
             <RecentPayments payments={data.operations.recentPayments} timezone={data.timezone} />
             {(!features || features.fullReports) && <SalesPerformance trend={trend} />}
             <TopDishes data={data} />

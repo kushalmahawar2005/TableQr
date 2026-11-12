@@ -166,7 +166,7 @@ export function NotificationBell({ sessionId, preview = false, className = "", p
       </button>
 
       {open && (
-        <div className={`absolute z-50 w-80 max-w-[calc(100vw-2rem)] rounded-card border border-line bg-surface shadow-[var(--shadow-float)] ${placement === "sidebar" ? "bottom-0 left-full ml-2" : "top-12 right-0 max-h-[calc(100dvh-5rem)]"}`}>
+        <div className={`animate-pop absolute z-50 w-80 max-w-[calc(100vw-2rem)] rounded-card border border-line bg-surface shadow-[var(--shadow-float)] ${placement === "sidebar" ? "bottom-0 left-full ml-2" : "top-12 right-0 max-h-[calc(100dvh-5rem)]"}`}>
           <div className="flex items-center justify-between gap-2 border-b border-line px-4 py-3">
             <p className="font-display text-body font-bold">Notifications</p>
             <div className="flex items-center gap-1">
