@@ -9,6 +9,7 @@ import { ArrowLeft01Icon, Cancel01Icon, FilterHorizontalIcon, Location01Icon, Mi
 import { useGuestBase } from "@/lib/guest-base";
 import { HugeiconsIcon } from "@hugeicons/react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { applyFilters, hasActiveFilters, NO_FILTERS, type MenuFilters } from "@/domain/menu-filter";
@@ -28,7 +29,7 @@ import { FilterBar } from "../t/[table]/menu/_components/filter-bar";
 import { Thumb, VegMark } from "../t/[table]/menu/_components/menu-row";
 import { connectRealtime } from "@/lib/realtime-client";
 import { enableGuestPush, guestPushSupported } from "@/lib/guest-push-client";
-import { claimManualQrDeliveryAction, deliveryPushAction, deliveryStatusAction, deliveryTokenAction, pushKeyAction, pincodeAction, placeAction, placeDeliveryAction, rateRiderAction, quoteDeliveryAction, resendDeliveryAction, startDeliveryAction, startDeliveryPaymentAction, verifyDeliveryAction } from "./actions";
+import { retryFailedDeliveryAction, claimManualQrDeliveryAction, deliveryPushAction, deliveryStatusAction, deliveryTokenAction, pushKeyAction, pincodeAction, placeAction, placeDeliveryAction, rateRiderAction, quoteDeliveryAction, resendDeliveryAction, startDeliveryAction, startDeliveryPaymentAction, verifyDeliveryAction } from "./actions";
 
 type Menu = Awaited<ReturnType<typeof deliveryMenu>>;
 type Quote = Awaited<ReturnType<typeof priceDeliveryCart>>;
@@ -50,6 +51,7 @@ const button = "min-h-13 w-full rounded-2xl bg-brand px-4 font-bold text-brand-o
 
 export function DeliveryScreen({ outletCode, data, initialStatus, initialServiceMode = "delivery", realtimeUrl = null, installable = null, initialCart = [], initialNotice }: { initialNotice?: string; initialCart?: DeliveryCartLine[]; outletCode: string; data?: Menu; initialStatus?: Status; initialServiceMode?: OrderServiceMode; hindi?: boolean; realtimeUrl?: string | null; installable?: { name: string; logoUrl: string | null } | null }) {
   const base = useGuestBase(outletCode);
+  const router = useRouter();
   const experience = useGuestExperience();
   const hindi = experience.language === "hi";
   const setHindi = (value: boolean) => experience.setLanguage(value ? "hi" : "en");
@@ -97,8 +99,12 @@ export function DeliveryScreen({ outletCode, data, initialStatus, initialService
   useEffect(() => {
     if (!status) return;
     try { sessionStorage.removeItem(draftKey); } catch { /* Private mode */ }
-    window.history.replaceState(null, "", `${base}/delivery?mode=${status.serviceMode}`);
-  }, [status, base, draftKey]);
+    // Read the real path: on the first render useGuestBase cannot know yet that this is the installed app,
+    // and rewriting /r/CODE/app/... to /r/CODE/... here would push the guest out of the app's scope
+    const plain = `/r/${encodeURIComponent(outletCode)}`;
+    const here = window.location.pathname.startsWith(`${plain}/app`) ? `${plain}/app` : plain;
+    window.history.replaceState(null, "", `${here}/delivery?mode=${status.serviceMode}`);
+  }, [status, draftKey, outletCode]);
   const [pickupPaymentMode, setPickupPaymentMode] = useState<"cod" | "gateway" | "manual_qr">("cod");
   const [error, setError] = useState<string | null>(null), [pending, start] = useTransition();
   const [selected, setSelected] = useState<Menu["items"][number] | null>(null), [choices, setChoices] = useState<string[]>([]);
@@ -143,6 +149,14 @@ export function DeliveryScreen({ outletCode, data, initialStatus, initialService
     if (!response.ok) { setError(response.message); return; }
     try { await openCheckout(response.data.checkout); }
     catch { setError(t("The secure payment page could not open. Your order has not been placed. Try again.", "सुरक्षित पेमेंट पेज नहीं खुला। आपका ऑर्डर नहीं हुआ है। फिर कोशिश करें।")); }
+  }
+  /** After a failed online payment: a fresh checkout with the same items in the cart, ready to pay again */
+  async function retryFailed() {
+    const response = await retryFailedDeliveryAction(outletCode);
+    if (!response.ok) { setError(response.message); return; }
+    // The status page has no menu loaded: hand the cart to a fresh checkout page through the saved draft
+    try { sessionStorage.setItem(draftKey, JSON.stringify({ cart: response.data.lines, details: true })); } catch { /* Private mode: the guest adds the items again */ }
+    router.push(`${base}/delivery?mode=${response.data.serviceMode}&new=1&lang=${hindi ? "hi" : "en"}`);
   }
   function run(fn: () => Promise<void>) { setError(null); start(async () => { try { await fn(); } catch { setError(t("Connection lost. Please try again.", "कनेक्शन टूट गया। दोबारा कोशिश करें।")); } }); }
   function add(item: Menu["items"][number], modifierIds: string[]) {
@@ -237,7 +251,7 @@ export function DeliveryScreen({ outletCode, data, initialStatus, initialService
     </header>}
     {initialNotice && <p role="status" className="mt-4 rounded-2xl bg-brand-soft p-4 text-xs text-brand-strong">{initialNotice}</p>}
     {error && <p role="alert" className="mt-4 rounded-2xl border border-danger/20 bg-[var(--state-seated-soft)] p-4 text-caption font-semibold text-danger">{error}</p>}
-    {status ? <><StatusView outletCode={outletCode} status={status} hindi={hindi} pending={pending} statusMessage={statusMessage} onPay={() => run(payDelivery)} onRefresh={refreshStatus} newOrderHref={`${base}/delivery?new=1&lang=${hindi ? "hi" : "en"}`} />{installable && <InstallApp guest className="mt-4" name={installable.name} logoUrl={installable.logoUrl} title={t("Install our app", "हमारा ऐप इंस्टॉल करें")} blurb={t(`Track this order and order again from ${installable.name} in one tap.`, `इस ऑर्डर को ट्रैक करें और ${installable.name} से एक टैप में दोबारा ऑर्डर करें।`)} />}</> : <>
+    {status ? <><StatusView outletCode={outletCode} status={status} hindi={hindi} pending={pending} statusMessage={statusMessage} onPay={() => run(payDelivery)} onRetry={() => run(retryFailed)} onRefresh={refreshStatus} newOrderHref={`${base}/delivery?new=1&lang=${hindi ? "hi" : "en"}`} />{installable && <InstallApp guest className="mt-4" name={installable.name} logoUrl={installable.logoUrl} title={t("Install our app", "हमारा ऐप इंस्टॉल करें")} blurb={t(`Track this order and order again from ${installable.name} in one tap.`, `इस ऑर्डर को ट्रैक करें और ${installable.name} से एक टैप में दोबारा ऑर्डर करें।`)} />}</> : <>
     {step === "menu" && data && <>
       {orderModes.length > 1 && <div className="mt-5 grid grid-cols-2 gap-1 rounded-xl bg-ink/5 p-1" aria-label="Order type">
         {orderModes.map(({key,label,icon:Icon})=><button key={key} type="button" aria-pressed={serviceMode===key} onClick={()=>{setActiveMode(key);const url=new URL(window.location.href);url.searchParams.set("mode",key);window.history.replaceState(null,"",url);}} className={`flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-lg text-sm font-bold ${serviceMode===key?"bg-surface text-brand":"text-muted"}`}><Icon size={17}/>{label}</button>)}
@@ -444,6 +458,7 @@ function orderHeadline(status: Status, stage: number, t: (en: string, hi: string
   const away = status.riderLocation && status.address.lat !== undefined && status.address.lng !== undefined ? etaMinutes(distanceKm(status.riderLocation, { lat: status.address.lat, lng: status.address.lng })) : null;
   const eta = status.minutesLeft !== null && status.minutesLeft > 0 ? t(`About ${status.minutesLeft} mins`, `लगभग ${status.minutesLeft} मिनट`) : null;
   const help = t("Need help with this order?", "इस ऑर्डर में मदद चाहिए?");
+  if (status.status === "draft" && status.paymentStatus === "failed") return { art: <ReceiptArt cancelled />, kicker: t("Payment failed", "पेमेंट नहीं हुआ"), title: t("Payment not completed", "पेमेंट पूरा नहीं हुआ"), lead: t("No order was placed and the restaurant has not received it.", "कोई ऑर्डर नहीं हुआ और रेस्टोरेंट को नहीं भेजा गया।"), next: t("Tap Try payment again to pay for the same items, or start a new order.", "उन्हीं आइटम के लिए दोबारा पेमेंट करें, या नया ऑर्डर शुरू करें।"), nextTitle: t("What you can do", "आप क्या कर सकते हैं"), help };
   if (status.status === "draft") return { art: <ReceiptArt />, kicker: t("Payment pending", "पेमेंट बाकी"), title: pickup ? t("Pickup payment", "पिकअप पेमेंट") : t("Delivery payment", "डिलीवरी पेमेंट"), next: t("We send your order to the kitchen once the payment is confirmed.", "पेमेंट की पुष्टि होते ही ऑर्डर किचन में जाएगा।"), nextTitle: t("What happens next", "आगे क्या होगा"), help };
   if (status.status === "cancelled") {
     const refund = status.refundStatus === "pending" ? t("Refund in progress", "रिफंड जारी है") : status.refundStatus === "success" ? t("Refund returned", "रिफंड लौटाया गया") : status.refundStatus === "failed" ? t("Refund failed", "रिफंड नहीं हुआ") : null;
@@ -458,7 +473,7 @@ function orderHeadline(status: Status, stage: number, t: (en: string, hi: string
   return { art: <ReceiptArt />, kicker: accepted ? t("Restaurant accepted", "रेस्टोरेंट ने ऑर्डर लिया") : t("Order received", "ऑर्डर मिल गया"), title: eta ?? t("Order placed", "ऑर्डर हो गया"), lead: accepted ? t("The restaurant has accepted your order.", "रेस्टोरेंट ने आपका ऑर्डर ले लिया है।") : t("The restaurant will accept your order shortly.", "रेस्टोरेंट जल्द ही ऑर्डर लेगा।"), nextTitle: t("What happens next", "आगे क्या होगा"), next: `${t("The kitchen starts preparing next.", "अब किचन तैयारी शुरू करेगा।")}${status.paid ? "" : ` ${pickup ? t("Payment is still due at pickup.", "पेमेंट पिकअप पर देना है।") : t("Payment is still due on delivery.", "पेमेंट डिलीवरी पर देना है।")}`}`, help };
 }
 
-export function StatusView({ status, hindi, pending, statusMessage, onPay, onRefresh, newOrderHref, outletCode, onBack, reorderHref }: { status: Status; hindi: boolean; outletCode: string; pending: boolean; statusMessage: string; onPay?: () => void; onRefresh: () => Promise<string | null>; newOrderHref: string; onBack?: () => void; /** Finished orders only: the same order again */ reorderHref?: string }) {
+export function StatusView({ status, hindi, pending, statusMessage, onPay, onRetry, onRefresh, newOrderHref, outletCode, onBack, reorderHref }: { onRetry?: () => void; status: Status; hindi: boolean; outletCode: string; pending: boolean; statusMessage: string; onPay?: () => void; onRefresh: () => Promise<string | null>; newOrderHref: string; onBack?: () => void; /** Finished orders only: the same order again */ reorderHref?: string }) {
   const [refreshing, setRefreshing] = useState(false);
   const [refreshNote, setRefreshNote] = useState<{ text: string; bad: boolean } | null>(null);
   // Held for a moment so a fast answer still shows the tap worked
@@ -606,6 +621,7 @@ export function StatusView({ status, hindi, pending, statusMessage, onPay, onRef
           <p className={`${row} font-bold`}><span>{status.status === "cancelled" ? t("Original order value", "ऑर्डर की मूल राशि") : t("Bill total", "बिल का कुल")}</span><span className="text-base tabular">{money(status.totalPaise)}</span></p>
           <div className="mt-1 rounded-xl bg-brand-soft p-3"><p className="text-sm font-bold">{box.title}</p><p className="mt-0.5 text-sm">{box.note}</p></div>
           {status.paymentFailureReason && <p role="status" className="rounded-xl bg-brand-soft p-3 text-xs">{status.paymentFailureReason}</p>}
+          {status.status === "draft" && status.paymentStatus === "failed" && status.paymentMode === "gateway" && onRetry && <button type="button" disabled={pending} className={button} onClick={onRetry}>{t("Try payment again", "दोबारा पेमेंट करें")}</button>}
           {status.status === "draft" && status.paymentStatus === "pending" && status.paymentMode === "gateway" && onPay && <button type="button" disabled={pending} className={button} onClick={onPay}>{t("Continue secure payment", "सुरक्षित पेमेंट जारी रखें")}</button>}
           {status.billPdfUrl && <a href={status.billPdfUrl} className="mt-1 flex min-h-12 items-center justify-center rounded-xl border border-line text-sm font-bold text-brand">{status.status === "cancelled" ? t("Download order record", "ऑर्डर रिकॉर्ड डाउनलोड करें") : t("Download bill", "बिल डाउनलोड करें")}</a>}
         </div>

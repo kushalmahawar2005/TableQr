@@ -32,7 +32,23 @@ async function announce(ctx: StaffContext, changes: Changed[]) {
   );
   // Only a pickup order has someone waiting for this; other visits find no checkout and stop there
   for (const change of changes) if (change.ready && change.status === "ready") void notifyDeliveryCustomer(ctx, change.sessionId, "ready");
-  await Promise.all(changes.filter(change => change.ready).map(change => sendOutletPush(ctx, { title: "Food ready to serve", body: "The kitchen has food ready for your table.", url: "/waiter", tag: `ready-${change.orderId}` }, { sessionId: change.sessionId, kind: "ready" })));
+  const ready = changes.filter(change => change.ready);
+  if (!ready.length) return;
+  // Delivery and pickup orders have no table: tell the rider or the order desk, not the floor
+  const online = await db.select({ sessionId: s.deliveryCheckouts.sessionId, id: s.deliveryCheckouts.id, serviceMode: s.deliveryCheckouts.serviceMode, name: s.deliveryCheckouts.name, riderId: s.deliveryCheckouts.courierUserId })
+    .from(s.deliveryCheckouts)
+    .where(and(eq(s.deliveryCheckouts.tenantId, ctx.tenantId), inArray(s.deliveryCheckouts.sessionId, [...new Set(ready.map(change => change.sessionId))])));
+  const bySession = new Map(online.map(row => [row.sessionId, row]));
+  await Promise.all(ready.map(change => {
+    const order = bySession.get(change.sessionId);
+    if (!order) return sendOutletPush(ctx, { title: "Food ready to serve", body: "The kitchen has food ready for your table.", url: "/waiter", tag: `ready-${change.orderId}` }, { sessionId: change.sessionId, kind: "ready" });
+    if (change.status !== "ready") return; // part of the order is still cooking
+    const who = order.name ? `${order.name}'s order` : "An order";
+    if (order.serviceMode === "delivery" && order.riderId) return sendOutletPush(ctx, { title: "Order ready to pick up", body: `${who} is packed. Collect it from the restaurant.`, url: "/rider", tag: `ready-${order.id}` }, { riderUserId: order.riderId });
+    return sendOutletPush(ctx, order.serviceMode === "pickup"
+      ? { title: "Pickup order ready", body: `${who} is packed for counter pickup.`, url: "/console/orders?view=delivery", tag: `ready-${order.id}` }
+      : { title: "Delivery order packed", body: `${who} is packed. Assign a rider to send it out.`, url: "/console/orders?view=delivery", tag: `ready-${order.id}` }, { kind: "management" });
+  }));
 }
 
 /** Kitchen changes are audited inside their transaction: who (user or screen), what, which order */

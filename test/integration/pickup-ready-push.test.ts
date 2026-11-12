@@ -7,6 +7,7 @@ import { DEFAULT_DELIVERY_POLICY } from "@/domain/delivery";
 import { createDeliveryCheckout, deliveryCheckout, placeDeliveryOrder } from "@/server/delivery/checkout";
 import { sendDeliveryOtp, verifyDeliveryOtp } from "@/server/delivery/otp";
 import { bumpLine } from "@/server/kitchen/actions";
+import { uuidv7 } from "@/db/id";
 import { resetTestDb } from "./setup-db";
 
 // The guest is told "we will let you know when it is ready", so the last finished dish must say so.
@@ -63,5 +64,24 @@ describe("telling a pickup guest their order is ready", () => {
     for (const line of lines) await bumpLine(kitchen(), line);
     await new Promise((resolve) => setTimeout(resolve, 100));
     expect(titles()).toEqual([]);
+  });
+
+  it("tells the assigned rider when a delivery is packed, instead of a table alert", async () => {
+    const { tenantId, outletId } = env.demo;
+    const riderId = uuidv7(), sessionId = uuidv7(), now = new Date();
+    await env.db.insert(s.users).values({ id: riderId, tenantId, name: "Test Rider", phone: "9000000099", pinHash: "not-used" });
+    await env.db.insert(s.staffRoles).values({ tenantId, userId: riderId, outletId, role: "rider" });
+    await env.db.insert(s.staffSessions).values({ id: sessionId, tenantId, userId: riderId, outletId, tokenHash: "r".repeat(64), createdAt: now, expiresAt: new Date(now.getTime() + 3_600_000), lastSeenAt: now });
+    await env.db.insert(s.staffPushSubscriptions).values({ id: uuidv7(), tenantId, outletId, userId: riderId, sessionId, endpointHash: "q".repeat(64), subscription: { endpoint: "https://fcm.googleapis.com/fcm/send/rider-test", keys: { p256dh: "key", auth: "auth" } } });
+    const lines = await placed("rider-ready-device", "9876500023", "delivery");
+    await env.db.update(s.deliveryCheckouts).set({ courierUserId: riderId }).where(and(eq(s.deliveryCheckouts.tenantId, tenantId), eq(s.deliveryCheckouts.deviceId, "rider-ready-device")));
+    sendNotification.mockClear();
+    for (const line of lines) await bumpLine(kitchen(), line);
+    // The push goes out after the kitchen's transaction, so give a busy test machine time
+    await vi.waitFor(() => expect(titles()).toContain("Order ready to pick up"), { timeout: 10_000, interval: 100 });
+    expect(titles()).not.toContain("Food ready to serve");
+    const toRider = (sendNotification.mock.calls as unknown as [{ endpoint: string }, string][]).filter(([sub]) => sub.endpoint.endsWith("rider-test"));
+    expect(toRider).toHaveLength(1);
+    expect(JSON.parse(toRider[0][1])).toMatchObject({ url: "/rider", sessionId });
   });
 });

@@ -6,6 +6,8 @@
 // - polls while disconnected, and polls only if realtime is not configured
 // - fetches a fresh token when the hub closes a socket whose token expired
 
+import { onPushWake } from "./push-wake";
+
 export type RealtimeEvent = { topic: string; type: string; data?: Record<string, unknown> };
 export type RealtimeStatus = "connecting" | "live" | "offline";
 
@@ -147,11 +149,14 @@ export function connectRealtime(opts: Options): () => void {
   };
 
   if (typeof document !== "undefined") document.addEventListener("visibilitychange", onVisible);
+  // A push alert for this outlet means something changed: reload now, not at the next poll
+  const stopPushWake = onPushWake(() => opts.onResync());
   if (opts.url) void open();
   else startPolling();
 
   return () => {
     stopped = true;
+    stopPushWake();
     clearTimeout(reconnectTimer);
     clearTimeout(refreshTimer);
     clearInterval(heartbeat);

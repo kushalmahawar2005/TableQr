@@ -15,6 +15,7 @@ import { askFromRoom, getRoomPage } from "@/server/guest/room";
 import { startOrJoinTable } from "@/server/guest/session";
 import { repeatOrderRound } from "@/server/guest/tracker";
 import { updateOutletSettings } from "@/server/staff/settings-write";
+import { getConsoleNotices } from "@/server/staff/notifications";
 import { checkIn, checkOut, finishRoomRequest, getRooms, roomFoodTab, saveRoom, setRoomStatus, stayHistory } from "@/server/staff/rooms";
 import { resetTestDb } from "./setup-db";
 
@@ -95,6 +96,12 @@ describe("hotel rooms", () => {
     await refused(askFromRoom("SRJ01", code, "water", null), "invalid_state");
     const first = await askFromRoom("SRJ01", code, "towels", null);
     expect((await askFromRoom("SRJ01", code, "towels", null)).repeated).toBe(true);
+    // Reception's bell names the room, not its hidden table code, for both the ask and the room's food
+    const notices = await getConsoleNotices({ ...owner(), outlet: { code: "SRJ01", name: "Spice Route", timezone: "Asia/Kolkata" }, access: null }, new Date(Date.now() - 3_600_000));
+    expect(notices).toEqual(expect.arrayContaining([
+      expect.objectContaining({ title: `Room ${room.number}: Fresh towels`, href: "/console/rooms" }),
+      expect.objectContaining({ title: `New order · Room ${room.number}` }),
+    ]));
     let view = (await getRooms(owner())).rooms[0];
     expect(view.status).toBe("occupied");
     expect(view.requests.map((r) => r.kind)).toEqual(["towels"]);

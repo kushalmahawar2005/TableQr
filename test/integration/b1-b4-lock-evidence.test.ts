@@ -141,3 +141,37 @@ describe("B1-B4 final credit and security evidence", () => {
     expect((await env.db.select().from(s.reservationCredits).where(eq(s.reservationCredits.id, creditId)))[0]).toMatchObject({ status: "paid", paidPaise: 80_000 });
   });
 });
+
+describe("paying a booking advance finishes the booking", () => {
+  // A fixed advance on every online booking at this outlet, like the owner's Guest experience setting
+  beforeAll(async () => { await env.db.update(s.outlets).set({ bookingAdvancePaise: 10_000, bookingPaymentMode: "gateway" }).where(eq(s.outlets.id, env.demo.outletId)); });
+  async function paid(label: string, offset: number, beforeReconcile?: (reservationId: string) => Promise<void>) {
+    const h = await hold(label, offset);
+    const sent = await sendBookingOtp("SRJ01", h.manageToken, `device-${h.reservationId}`, `98765431${String(creditGuest++).padStart(2, "0")}`, now);
+    await verifyBookingOtp("SRJ01", h.manageToken, `device-${h.reservationId}`, sent.challengeId, sent.devCode!, "Paying Guest", false, now);
+    const checkout = await startReservationCredit("SRJ01", h.manageToken, `payment-${h.reservationId}`, "http://localhost:3000/api/booking-credit/return?provider=mock&p=PLACEHOLDER");
+    mockGateway.settle(checkout.gatewayRef!, "success");
+    await beforeReconcile?.(h.reservationId);
+    await reconcileReservationCredit("mock", checkout.creditId!);
+    const [reservation] = await env.db.select().from(s.reservations).where(eq(s.reservations.id, h.reservationId));
+    const [credit] = await env.db.select().from(s.reservationCredits).where(eq(s.reservationCredits.id, checkout.creditId!));
+    return { reservation, credit };
+  }
+
+  it("confirms the held table as soon as the advance is paid, without a separate confirm tap", async () => {
+    const { reservation, credit } = await paid("auto-confirm", 38);
+    expect(credit.status).toBe("paid");
+    expect(reservation.status).toBe("confirmed");
+    expect(reservation.confirmedAt).not.toBeNull();
+    const [history] = await env.db.select().from(s.reservationHistory).where(and(eq(s.reservationHistory.reservationId, reservation.id), eq(s.reservationHistory.kind, "confirmed")));
+    expect(history.after).toMatchObject({ status: "confirmed", by: "advance_paid" });
+  });
+
+  it("refunds an advance that is paid after the table hold ran out instead of keeping it", async () => {
+    const { reservation, credit } = await paid("late-payment", 42, async (reservationId) => {
+      await env.db.update(s.reservations).set({ holdExpiresAt: new Date(Date.now() - 60_000) }).where(eq(s.reservations.id, reservationId));
+    });
+    expect(reservation.status).toBe("requested");
+    expect(credit.refundStatus).not.toBe("none");
+  });
+});

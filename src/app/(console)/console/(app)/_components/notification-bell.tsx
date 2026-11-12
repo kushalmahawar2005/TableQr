@@ -6,6 +6,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { chime } from "@/lib/bell-sound";
+import { onPushWake } from "@/lib/push-wake";
 import type { ConsoleNotice } from "@/server/staff/notifications";
 import { noticesAction } from "./notification-actions";
 import { enableStaffPushNotifications } from "@/lib/staff-push-client";
@@ -122,8 +123,11 @@ export function NotificationBell({ sessionId, preview = false, className = "", p
     const timer = setInterval(() => void check(), POLL_MS);
     const onVisible = () => { if (!document.hidden) void check(); };
     document.addEventListener("visibilitychange", onVisible);
+    // A push alert reached this phone: show it in the bell now, not at the next check
+    const stopPushWake = onPushWake(() => void check());
     return () => {
       stopped = true;
+      stopPushWake();
       clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisible);
     };

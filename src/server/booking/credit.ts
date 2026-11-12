@@ -6,7 +6,7 @@ import { LOCK_THEN_READ } from "../db-types";
 import { AppError } from "../errors";
 import { currencyAccepted } from "../payments/gateway";
 import { gatewayForOutletPayment } from "../payments/outlet-gateway";
-import { bookingByToken } from "./core";
+import { bookingByToken, settlePaidHold } from "./core";
 
 export async function startReservationCredit(outletCode: string, token: string, requestId: string, callbackUrl: string) {
   const { row, scope } = await bookingByToken(outletCode, token);
@@ -38,6 +38,8 @@ export async function reconcileReservationCredit(provider: string, creditId: str
   }
   if (status.status === "success" && status.amountPaise === credit.amountPaise && currencyAccepted(status.currency)) {
     await db.transaction(async (tx) => { await tx.update(s.reservationCredits).set({ status: "paid", paidPaise: credit.amountPaise, gatewayPaymentId: status.gatewayPaymentId ?? null, updatedAt: new Date() }).where(and(eq(s.reservationCredits.tenantId, credit.tenantId), eq(s.reservationCredits.id, credit.id))); await tx.update(s.reservations).set({ creditPaidPaise: credit.amountPaise, creditStatus: "paid", updatedAt: new Date() }).where(and(eq(s.reservations.tenantId, credit.tenantId), eq(s.reservations.id, credit.reservationId))); });
+    // Paying the advance finishes the booking: confirm the held table now (or refund a late payment)
+    await settlePaidHold(credit.tenantId, credit.reservationId).catch((error) => console.error("[booking] could not settle a paid hold", error));
   } else if (status.status === "failed") await db.update(s.reservationCredits).set({ status: "failed", failureReason: status.reason ?? "Payment failed", updatedAt: new Date() }).where(and(eq(s.reservationCredits.tenantId, credit.tenantId), eq(s.reservationCredits.id, credit.id)));
   return true;
 }

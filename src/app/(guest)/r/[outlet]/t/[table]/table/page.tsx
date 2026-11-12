@@ -4,7 +4,8 @@ import { redirect } from "next/navigation";
 import { DEVICE_COOKIE } from "@/lib/guest-device";
 import { LANG_COOKIE, parseLang } from "@/lib/i18n";
 import { AppError } from "@/server/errors";
-import { publicOrigin, tableInvite } from "@/server/guest/invite";
+import { tableInvite } from "@/server/guest/invite";
+import { requestOrigin } from "@/server/request-host";
 import { getTableScreen } from "@/server/guest/table-screen";
 import { TableScreen } from "./_components/table-screen";
 
@@ -22,7 +23,8 @@ export default async function TablePage(props: { params: Promise<{ outlet: strin
     if (err instanceof AppError) redirect(`/r/${encodeURIComponent(outlet)}/t/${encodeURIComponent(table)}`);
     throw err;
   }
-  const { qrPath, qrBox } = tableInvite(publicOrigin(await headers()), data.outlet.code, table);
+  // The invite matches the site the guest is on: the restaurant's own domain when they came through it
+  const { qrPath, qrBox } = tableInvite(requestOrigin(await headers()), data.outlet.code, table);
   const realtimeUrl = process.env.REALTIME_URL?.replace(/^http/, "ws") ?? null;
   return <TableScreen data={data} lang={parseLang(jar.get(LANG_COOKIE)?.value)} shortCode={table} realtimeUrl={realtimeUrl} invite={{ qrPath, qrBox }} />;
 }

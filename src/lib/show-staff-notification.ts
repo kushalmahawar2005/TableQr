@@ -16,6 +16,9 @@ export async function showStaffNotification(input: { sessionId: string; title: s
     if (!response.ok || (await response.json()).active !== true) return;
     const registration = await navigator.serviceWorker.getRegistration("/");
     if (!registration) return;
+    // This is the fallback for phones without push. With push on, the server's alert arrives too,
+    // and showing this one as well would put two notifications on the phone for one event.
+    if (await registration.pushManager?.getSubscription().catch(() => null)) return;
     await registration.showNotification(input.title, {
       body: input.body,
       tag: input.tag,

@@ -3,6 +3,7 @@ import { and, count, desc, eq, gt, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import * as s from "@/db/schema";
 import { formatRupees } from "@/domain/menu-price";
+import { ROOM_REQUEST_LABEL, type RoomRequestKind } from "@/domain/rooms";
 import type { StaffSession } from "./auth";
 import { tenantFeatures } from "../plan";
 import { canOpenNotification, orderNotificationDestination, serviceNotificationDestination } from "@/lib/staff-notification-access";
@@ -30,7 +31,16 @@ const REQUEST_TEXT: Record<string, string> = {
   request_bill: "asked for the bill",
   pay_at_counter: "will pay at the counter",
   paid_upi: "says they paid by UPI: check your UPI app and settle",
+  confirm_order: "has a new order to confirm",
 };
+
+/** Delivery and pickup orders sit on a hidden counter table, and rooms have a table for food:
+ * name what staff recognise instead of the internal table code */
+function placeOf(row: { table: string; serviceMode?: "delivery" | "pickup" | null; guestName?: string | null; roomNumber?: string | null }) {
+  if (row.serviceMode) return `${row.serviceMode === "pickup" ? "Pickup" : "Delivery"}${row.guestName ? ` · ${row.guestName}` : ""}`;
+  return row.roomNumber ? `Room ${row.roomNumber}` : `Table ${row.table}`;
+}
+const onlineOrder = (row: { serviceMode?: "delivery" | "pickup" | null }) => !!row.serviceMode;
 const LIMIT = 20;
 
 /** Orders the kitchen has not started yet, from the last day, split into table and guest app orders */
@@ -46,27 +56,32 @@ export async function getLiveOrderCounts(staff: Staff, now = new Date()) {
 
 /** Everything new at this outlet after `since`, newest first, at most a screenful */
 export async function getConsoleNotices(staff: Staff, since: Date): Promise<ConsoleNotice[]> {
-  const [orders, requests, paid, bookings, waitlist, parties, deliveryClaims, advances] = await Promise.all([
+  const [orders, requests, paid, bookings, waitlist, parties, deliveryClaims, advances, roomAsks] = await Promise.all([
     db
-      .select({ id: s.orders.id, roundNo: s.orders.roundNo, at: s.orders.placedAt, table: s.diningTables.code })
+      .select({ id: s.orders.id, roundNo: s.orders.roundNo, at: s.orders.placedAt, table: s.diningTables.code, serviceMode: s.deliveryCheckouts.serviceMode, guestName: s.deliveryCheckouts.name, roomNumber: s.rooms.number })
       .from(s.orders)
       .innerJoin(s.tableSessions, and(eq(s.tableSessions.tenantId, s.orders.tenantId), eq(s.tableSessions.id, s.orders.sessionId)))
       .innerJoin(s.diningTables, and(eq(s.diningTables.tenantId, s.orders.tenantId), eq(s.diningTables.id, s.tableSessions.tableId)))
+      .leftJoin(s.deliveryCheckouts, and(eq(s.deliveryCheckouts.tenantId, s.orders.tenantId), eq(s.deliveryCheckouts.sessionId, s.orders.sessionId)))
+      .leftJoin(s.rooms, and(eq(s.rooms.tenantId, s.orders.tenantId), eq(s.rooms.tableId, s.diningTables.id)))
       .where(and(eq(s.orders.tenantId, staff.tenantId), eq(s.orders.outletId, staff.outletId), gt(s.orders.placedAt, since)))
       .orderBy(desc(s.orders.placedAt))
       .limit(LIMIT),
     db
-      .select({ id: s.serviceRequests.id, kind: s.serviceRequests.kind, at: s.serviceRequests.createdAt, table: s.diningTables.code })
+      .select({ id: s.serviceRequests.id, kind: s.serviceRequests.kind, at: s.serviceRequests.createdAt, table: s.diningTables.code, roomNumber: s.rooms.number })
       .from(s.serviceRequests)
       .innerJoin(s.diningTables, and(eq(s.diningTables.tenantId, s.serviceRequests.tenantId), eq(s.diningTables.id, s.serviceRequests.tableId)))
+      .leftJoin(s.rooms, and(eq(s.rooms.tenantId, s.serviceRequests.tenantId), eq(s.rooms.tableId, s.diningTables.id)))
       .where(and(eq(s.serviceRequests.tenantId, staff.tenantId), eq(s.serviceRequests.outletId, staff.outletId), gt(s.serviceRequests.createdAt, since)))
       .orderBy(desc(s.serviceRequests.createdAt))
       .limit(LIMIT),
     db
-      .select({ id: s.bills.id, total: s.bills.totalPaise, at: s.bills.closedAt, table: s.diningTables.code })
+      .select({ id: s.bills.id, total: s.bills.totalPaise, at: s.bills.closedAt, table: s.diningTables.code, serviceMode: s.deliveryCheckouts.serviceMode, guestName: s.deliveryCheckouts.name, roomNumber: s.rooms.number })
       .from(s.bills)
       .innerJoin(s.tableSessions, and(eq(s.tableSessions.tenantId, s.bills.tenantId), eq(s.tableSessions.id, s.bills.sessionId)))
       .innerJoin(s.diningTables, and(eq(s.diningTables.tenantId, s.bills.tenantId), eq(s.diningTables.id, s.tableSessions.tableId)))
+      .leftJoin(s.deliveryCheckouts, and(eq(s.deliveryCheckouts.tenantId, s.bills.tenantId), eq(s.deliveryCheckouts.sessionId, s.bills.sessionId)))
+      .leftJoin(s.rooms, and(eq(s.rooms.tenantId, s.bills.tenantId), eq(s.rooms.tableId, s.diningTables.id)))
       .where(and(eq(s.bills.tenantId, staff.tenantId), eq(s.bills.outletId, staff.outletId), eq(s.bills.status, "paid"), gt(s.bills.closedAt, since)))
       .orderBy(desc(s.bills.closedAt))
       .limit(LIMIT),
@@ -92,6 +107,11 @@ export async function getConsoleNotices(staff: Staff, since: Date): Promise<Cons
     db.select({ id: s.reservations.id, at: s.reservations.manualAdvanceClaimedAt })
       .from(s.reservations).where(and(eq(s.reservations.tenantId, staff.tenantId), eq(s.reservations.outletId, staff.outletId), eq(s.reservations.status, "requested"), gt(s.reservations.manualAdvanceClaimedAt, since)))
       .orderBy(desc(s.reservations.manualAdvanceClaimedAt)).limit(LIMIT),
+    db.select({ id: s.roomRequests.id, kind: s.roomRequests.kind, note: s.roomRequests.note, at: s.roomRequests.createdAt, room: s.rooms.number })
+      .from(s.roomRequests)
+      .innerJoin(s.rooms, and(eq(s.rooms.tenantId, s.roomRequests.tenantId), eq(s.rooms.id, s.roomRequests.roomId)))
+      .where(and(eq(s.roomRequests.tenantId, staff.tenantId), eq(s.roomRequests.outletId, staff.outletId), eq(s.roomRequests.status, "open"), gt(s.roomRequests.createdAt, since)))
+      .orderBy(desc(s.roomRequests.createdAt)).limit(LIMIT),
   ]);
 
   const items = orders.length
@@ -114,23 +134,23 @@ export async function getConsoleNotices(staff: Staff, since: Date): Promise<Cons
     ...orders.map((o) => ({
       id: `order:${o.id}`,
       kind: "order" as const,
-      title: `New order · Table ${o.table}`,
-      body: `Round ${o.roundNo} · ${lines.get(o.id) ?? 0} dish${lines.get(o.id) === 1 ? "" : "es"}`,
+      title: onlineOrder(o) ? `New ${o.serviceMode} order · ${o.guestName ?? "Guest"}` : `New order · ${placeOf(o)}`,
+      body: `${onlineOrder(o) ? "" : `Round ${o.roundNo} · `}${lines.get(o.id) ?? 0} dish${lines.get(o.id) === 1 ? "" : "es"}`,
       at: o.at.getTime(),
-      href: "/console/orders",
+      href: onlineOrder(o) ? "/console/orders?view=delivery" : "/console/orders",
     })),
     ...requests.map((r) => ({
       id: `request:${r.id}`,
       kind: r.kind === "request_bill" ? ("bill_requested" as const) : ("request" as const),
-      title: `Table ${r.table} ${REQUEST_TEXT[r.kind] ?? "needs something"}`,
-      body: r.kind === "request_bill" || r.kind === "pay_at_counter" || r.kind === "paid_upi" ? "Open billing to settle" : "Someone on the floor should go",
+      title: `${placeOf(r)} ${REQUEST_TEXT[r.kind] ?? "needs something"}`,
+      body: r.kind === "request_bill" || r.kind === "pay_at_counter" || r.kind === "paid_upi" ? "Open billing to settle" : r.kind === "confirm_order" ? "Check the guest is at the table, then accept the order" : "Someone on the floor should go",
       at: r.at.getTime(),
       href: r.kind === "request_bill" || r.kind === "pay_at_counter" || r.kind === "paid_upi" ? "/console/billing" : "/console/floor",
     })),
     ...paid.map((b) => ({
       id: `paid:${b.id}`,
       kind: "paid" as const,
-      title: `Table ${b.table} paid ${formatRupees(b.total)}`,
+      title: `${placeOf(b)} paid ${formatRupees(b.total)}`,
       body: "Bill settled",
       at: b.at!.getTime(),
       href: "/console/billing",
@@ -142,6 +162,14 @@ export async function getConsoleNotices(staff: Staff, since: Date): Promise<Cons
       body: `${r.party} ${r.party === 1 ? "person" : "people"} · ${when.format(r.startAt)}`,
       at: r.at!.getTime(),
       href: "/console/reservations",
+    })),
+    ...roomAsks.map((r) => ({
+      id: `room-request:${r.id}`,
+      kind: "request" as const,
+      title: `Room ${r.room}: ${ROOM_REQUEST_LABEL[r.kind as RoomRequestKind]?.en ?? "needs something"}`,
+      body: r.note ?? "Open Rooms to send someone",
+      at: r.at.getTime(),
+      href: "/console/rooms",
     })),
     ...waitlist.map((w) => ({
       id: `waitlist:${w.id}`,
@@ -155,8 +183,9 @@ export async function getConsoleNotices(staff: Staff, since: Date): Promise<Cons
   const features = await tenantFeatures(staff.tenantId, staff.outletId);
   return notices.flatMap(notice => {
     if (notice.id.startsWith("delivery-payment:") && !features.delivery) return [];
+    if (notice.id.startsWith("room-request:") && !features.rooms) return [];
     const href = notice.kind === "order"
-      ? orderNotificationDestination(staff, features)
+      ? (notice.href === "/console/orders?view=delivery" && canOpenNotification(staff, features, notice.href) ? notice.href : orderNotificationDestination(staff, features))
       : notice.href === "/console/floor"
         ? serviceNotificationDestination(staff, features)
         : canOpenNotification(staff, features, notice.href) ? notice.href : null;

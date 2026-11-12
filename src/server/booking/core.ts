@@ -357,6 +357,39 @@ export async function confirmBooking(outletCode: string, token: string, input: {
   return { row: confirmed, scope };
 }
 
+/**
+ * A held online booking whose advance was just paid. While the hold stands, confirm it: the phone is
+ * verified and the advance was the last thing missing, so a guest who pays and closes the app still
+ * has their table. A payment that lands after the hold ran out is refunded rather than kept without
+ * a booking.
+ */
+export async function settlePaidHold(tenantId: string, reservationId: string, now = new Date()): Promise<"confirmed" | "refunded" | "none"> {
+  const outcome = await db.transaction(async (tx) => {
+    const [row] = await tx.select().from(s.reservations).where(and(eq(s.reservations.tenantId, tenantId), eq(s.reservations.id, reservationId))).for("update");
+    if (!row || row.status !== "requested" || row.source !== "online") return { kind: "none" as const };
+    if (!row.holdExpiresAt || row.holdExpiresAt <= now) return { kind: "late" as const };
+    if (row.creditRequiredPaise > row.creditPaidPaise + row.advanceReceivedPaise || !row.guestId || !row.phone) return { kind: "none" as const };
+    const [guest] = await tx.select({ id: s.guests.id }).from(s.guests).where(and(eq(s.guests.tenantId, tenantId), eq(s.guests.id, row.guestId), eq(s.guests.phone, row.phone)));
+    if (!guest) return { kind: "none" as const };
+    await tx.update(s.reservations).set({ status: "confirmed", confirmedAt: now, holdExpiresAt: null, holdReleasedAt: null, updatedAt: now }).where(and(eq(s.reservations.tenantId, tenantId), eq(s.reservations.id, row.id)));
+    await tx.insert(s.reservationHistory).values({ tenantId, reservationId: row.id, kind: "confirmed", before: { status: row.status }, after: { status: "confirmed", guestId: guest.id, by: "advance_paid" }, createdAt: now });
+    return { kind: "confirmed" as const, row: { id: row.id, phone: row.phone, startAt: row.startAt, outletId: row.outletId } };
+  }, LOCK_THEN_READ);
+  if (outcome.kind === "late") {
+    const refund = await (await import("./credit")).refundReservationCredit(tenantId, reservationId);
+    return refund.status === "none" ? "none" : "refunded";
+  }
+  if (outcome.kind !== "confirmed") return "none";
+  const scope = { tenantId, outletId: outcome.row.outletId };
+  await publish(scope, [{ topic: topics.floor, type: "booking.updated", data: { reservationId: outcome.row.id } }]);
+  void sendOutletPush(scope, {
+    title: "New reservation", body: "A guest paid the advance and confirmed a reservation. Open reservations to review it.",
+    url: "/console/reservations", tag: `booking-${outcome.row.id}`,
+  }, { kind: "management" });
+  await queueReservationConfirmation(scope, outcome.row, now);
+  return "confirmed";
+}
+
 export async function cancelBookingPublic(outletCode: string, token: string, reason = "guest_cancelled", now = new Date()) {
   const { row, scope } = await bookingByToken(outletCode, token);
   if (["cancelled", "no_show"].includes(row.status)) return { status: row.status, freeCancellation: false, manualRefundNeedsRestaurant: false };

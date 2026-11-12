@@ -14,7 +14,8 @@ import { staffPushConfig, type PushSubscriptionInput } from "@/server/staff/web-
 import { db } from "@/db";
 import { AppError } from "@/server/errors";
 import { requestOrigin } from "@/server/request-host";
-import { reconcileDeliveryPayment, startDeliveryPayment } from "@/server/delivery/payment";
+import { guestBase } from "@/server/guest/guest-base";
+import { failedDeliveryRetry, reconcileDeliveryPayment, startDeliveryPayment } from "@/server/delivery/payment";
 
 const cookieName = (outlet: string) => `tq_delivery_${String(outlet).trim().toUpperCase().replace(/[^A-Z0-9]/g, "")}`;
 async function identity(outlet: string) {
@@ -66,9 +67,14 @@ export async function claimManualQrDeliveryAction(outlet: string, totalPaise: nu
 export async function startDeliveryPaymentAction(outlet: string) {
   return result(async () => {
     const who = await identity(outlet);
-    const callback = `${requestOrigin(await headers())}/api/delivery/payments/return?c={checkoutId}&o=${encodeURIComponent(outlet)}`;
+    // Back into the installed app when the guest paid from it, so the phone does not leave the app's scope
+    const inApp = (await guestBase(outlet)).endsWith("/app");
+    const callback = `${requestOrigin(await headers())}/api/delivery/payments/return?c={checkoutId}&o=${encodeURIComponent(outlet)}${inApp ? "&app=1" : ""}`;
     return startDeliveryPayment(outlet, who.token, who.deviceId, callback);
   });
+}
+export async function retryFailedDeliveryAction(outlet: string) {
+  return result(async () => { const who = await identity(outlet); return failedDeliveryRetry(outlet, who.token, who.deviceId); });
 }
 export async function deliveryStatusAction(outlet: string) {
   return result(async () => { const who = await identity(outlet); await reconcileDeliveryPayment(outlet, who.token, who.deviceId); return deliveryStatus(outlet, who.token, who.deviceId); });

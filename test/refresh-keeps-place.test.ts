@@ -15,6 +15,8 @@ describe("a refresh stays where you were", () => {
   it("keeps the guest cart and leads a placed order back to tracking", () => {
     const screen = read("src/app/(guest)/r/[outlet]/delivery/screen.tsx");
     expect(screen).toMatch(/sessionStorage\.setItem\(draftKey/);
-    expect(screen).toMatch(/replaceState\(null, "", `\$\{base\}\/delivery\?mode=\$\{status\.serviceMode\}`\)/);
+    expect(screen).toMatch(/replaceState\(null, "", `\$\{here\}\/delivery\?mode=\$\{status\.serviceMode\}`\)/);
+    // ...and stays inside the installed app (/r/CODE/app) when that is where the guest is
+    expect(screen).toMatch(/window\.location\.pathname\.startsWith\(`\$\{plain\}\/app`\)/);
   });
 });

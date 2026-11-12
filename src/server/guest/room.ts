@@ -3,8 +3,11 @@ import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import * as s from "@/db/schema";
 import { openingInfo } from "@/domain/hours";
-import { configuredRoomRequestKinds, ROOM_CLASS, roomRequestKinds, type RoomRequestKind } from "@/domain/rooms";
+import { configuredRoomRequestKinds, ROOM_CLASS, ROOM_REQUEST_LABEL, roomRequestKinds, type RoomRequestKind } from "@/domain/rooms";
 import { AppError } from "../errors";
+import { publish } from "../realtime/publish";
+import { topics } from "../realtime/token";
+import { sendOutletPush } from "../staff/web-push";
 import { findOpenSession, findTableByQr } from "./table";
 
 // A guest's page in a hotel room (/r/<outlet>/room/<code>): room service through the restaurant's
@@ -100,5 +103,14 @@ export async function askFromRoom(outletCode: string, shortCode: string, kind: R
   const n = open.length;
   if (n >= 10) throw new AppError("rate_limited", "Reception has your earlier requests. Please call them if it is urgent.");
   const [row] = await db.insert(s.roomRequests).values({ tenantId: room.tenantId, outletId: room.outletId, roomId: room.id, stayId: stay.id, kind, note: text, createdAt: now }).$returningId();
+  // Reception hears about it at once: a live hint for open screens and a push to whoever runs Rooms
+  const scope = { tenantId: room.tenantId, outletId: room.outletId };
+  await publish(scope, [{ topic: topics.floor, type: "room.request", data: { roomId: room.id } }]);
+  void sendOutletPush(scope, {
+    title: `Room ${room.number}: ${ROOM_REQUEST_LABEL[kind].en}`,
+    body: text ?? "A guest asked from their room. Open Rooms to send someone.",
+    url: "/console/rooms",
+    tag: `room-${row.id}`,
+  }, { kind: "management" });
   return { id: row.id, repeated: false };
 }

@@ -36,7 +36,7 @@ export function RiderScreen({ initialJobs, initialProfile, initialVerification, 
     const stop = connectRealtime({
       url: realtimeUrl,
       getToken: riderTokenAction,
-      pollMs: 20_000,
+      pollMs: 10_000,
       onResync: () => { if (!document.hidden) void reload(); },
       onEvents: () => { if (!timer) timer = setTimeout(() => { timer = null; void reload(); }, 1000); },
     });

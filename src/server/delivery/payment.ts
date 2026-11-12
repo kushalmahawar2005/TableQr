@@ -50,6 +50,13 @@ export async function startDeliveryPayment(code: string, token: string, deviceId
   return { checkout, amountPaise: row.totalPaise };
 }
 
+/** What a guest whose online payment failed had in the cart, so they can try again without starting over */
+export async function failedDeliveryRetry(code: string, token: string, deviceId: string) {
+  const { row } = await deliveryCheckout(code, token, deviceId);
+  if (row.status !== "draft" || row.paymentStatus !== "failed") throw noPayment("This order is not waiting for a new payment attempt.");
+  return { lines: row.lines, serviceMode: row.serviceMode };
+}
+
 /** Applies a signed webhook or server-fetched status. A browser callback can never mark an order paid. */
 export async function confirmDeliveryGatewayPayment(provider: string, verdict: DeliveryVerdict, now = new Date()) {
   // isolation-exempt: signed webhook or verified gateway reference identifies the tenant checkout.

@@ -5,6 +5,7 @@ import { saveBookingPush } from "@/server/guest/push";
 import { staffPushConfig, type PushSubscriptionInput } from "@/server/staff/web-push";
 import { cookies, headers } from "next/headers";
 import { requestOrigin } from "@/server/request-host";
+import { guestBase } from "@/server/guest/guest-base";
 import { DEVICE_COOKIE } from "@/lib/guest-device";
 import { AppError } from "@/server/errors";
 import { arriveBookingPublic, bookingByToken, bookingPreorderMenu, cancelBookingPublic, createBookingHold, createGroupRequest, getBookingAvailability, confirmBooking, lateBookingPublic, rescheduleBookingPublic, saveBookingPreorder } from "@/server/booking/core";
@@ -83,7 +84,7 @@ export async function groupRequestAction(outletCode: string, input: { requestId:
 
 export async function startBookingCreditAction(outletCode: string, token: string, requestId: string) {
   const origin = requestOrigin(await headers());
-  try { return { ok: true as const, data: await startReservationCredit(outletCode, token, requestId, `${origin}/api/booking-credit/return?provider={provider}&p={creditId}&to=${encodeURIComponent(`/r/${outletCode}/book/details?token=${token}`)}`) }; } catch (e) { return fail(e); }
+  try { return { ok: true as const, data: await startReservationCredit(outletCode, token, requestId, `${origin}/api/booking-credit/return?provider={provider}&p={creditId}&to=${encodeURIComponent(`${await guestBase(outletCode)}/book/details?token=${token}`)}`) }; } catch (e) { return fail(e); }
 }
 
 /** Reminders on this phone for the booking behind this manage link */

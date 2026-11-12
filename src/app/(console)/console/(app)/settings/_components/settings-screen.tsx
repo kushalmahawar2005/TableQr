@@ -158,9 +158,11 @@ export function SettingsScreen({ o, canEdit, payments, printers, domain }: { o: 
     try { void navigator.clipboard.writeText(o.code); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* clipboard may be blocked; the code stays on screen */ }
   }
 
+  // Guests get the restaurant's own domain once it is verified and switched on
+  const liveDomain = o.customDomain && o.customDomainVerifiedAt && o.customDomainLive ? o.customDomain : null;
   function copyGuestLink() {
     try {
-      const origin = o.customDomain && o.customDomainVerifiedAt && o.customDomainLive ? `https://${o.customDomain}` : window.location.origin;
+      const origin = liveDomain ? `https://${liveDomain}` : window.location.origin;
       void navigator.clipboard.writeText(`${origin}/r/${encodeURIComponent(o.code)}`);
       setGuestLinkCopied(true);
       setTimeout(() => setGuestLinkCopied(false), 1800);
@@ -322,7 +324,7 @@ export function SettingsScreen({ o, canEdit, payments, printers, domain }: { o: 
             </Row>
             <Row label="Guest link" hint="Share this link so guests can use the services you offer.">
               <div className="flex min-w-0 items-center gap-2 sm:justify-end">
-                <a href={`/r/${encodeURIComponent(o.code)}`} target="_blank" rel="noreferrer" className="min-w-0 truncate text-sm font-medium text-forest underline underline-offset-2">/r/{o.code}</a>
+                <a href={`${liveDomain ? `https://${liveDomain}` : ""}/r/${encodeURIComponent(o.code)}`} target="_blank" rel="noreferrer" className="min-w-0 truncate text-sm font-medium text-forest underline underline-offset-2">{liveDomain ? `${liveDomain}/r/${o.code}` : `/r/${o.code}`}</a>
                 <button type="button" onClick={copyGuestLink} aria-label="Copy guest link" className="inline-flex min-h-8 shrink-0 items-center gap-1 rounded-lg border border-line px-2 text-xs font-semibold hover:border-ink/40">{guestLinkCopied ? <Check className="size-3.5" aria-hidden="true" /> : <Copy className="size-3.5" aria-hidden="true" />}{guestLinkCopied ? "Copied" : "Copy"}</button>
               </div>
             </Row>
@@ -401,7 +403,7 @@ export function SettingsScreen({ o, canEdit, payments, printers, domain }: { o: 
                 finally { setQrBusy(false); }
               }} /></label>
             </div>}
-            <a className="inline-flex min-h-11 items-center py-3 font-semibold text-forest underline underline-offset-4" href={`/r/${encodeURIComponent(o.code)}`} target="_blank" rel="noreferrer">Preview guest link ↗</a>
+            <a className="inline-flex min-h-11 items-center py-3 font-semibold text-forest underline underline-offset-4" href={`${liveDomain ? `https://${liveDomain}` : ""}/r/${encodeURIComponent(o.code)}`} target="_blank" rel="noreferrer">Preview guest link ↗</a>
           </Section>
 
           {showDelivery && <Section id="delivery" icon={Store} title={o.deliveryAvailable && o.pickupAvailable ? "Online orders" : o.deliveryAvailable ? "Delivery setup" : "Pickup setup"} desc="Choose which online order types guests can place and how they pay.">

@@ -164,7 +164,7 @@ export function WaiterScreen({
     };
     refreshRef.current = refresh;
     const stop = connectRealtime({
-      url: realtimeUrl, getToken: actions.tokenAction, pollMs: 25000, onResync: () => void refresh(), onStatus: (s) => setConnection(s),
+      url: realtimeUrl, getToken: actions.tokenAction, pollMs: 10_000, onResync: () => void refresh(), onStatus: (s) => setConnection(s),
       onEvents: () => {
         // Refresh first: outlet-wide events are hints; only this waiter’s routed tasks may ring.
         clearTimeout(debounce); debounce = setTimeout(() => void refresh(), 350);

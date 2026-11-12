@@ -15,7 +15,7 @@ async function handle(request: Request) {
   }
   const base = requestOrigin(request.headers, url.host);
   const back = /^[A-Z0-9_-]{1,32}$/i.test(outletCode)
-    ? `/r/${encodeURIComponent(outletCode)}/delivery?payment=1`
+    ? `/r/${encodeURIComponent(outletCode)}${url.searchParams.get("app") === "1" ? "/app" : ""}/delivery?payment=1`
     : "/";
   return Response.redirect(new URL(back, base), 303);
 }

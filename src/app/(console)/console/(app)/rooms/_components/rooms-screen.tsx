@@ -9,6 +9,7 @@ import { CalendarDays, Search, Users, Utensils, BedDouble, QrCode, ExternalLink,
 import { ROOM_REQUEST_LABEL, ROOM_STATUS_LABEL, type RoomStatus } from "@/domain/rooms";
 import type { RoomsData, StayHistory } from "@/server/staff/rooms";
 import { checkInAction, checkOutAction, foodTabAction, removeRoomAction, requestDoneAction, roomStatusAction, roomWaiterAction, roomsAction, saveRoomAction } from "../actions";
+import { onPushWake } from "@/lib/push-wake";
 
 // Rooms: the front desk's screen. Who is in which room, check-in and check-out, room food (taken
 // on Billing like any table) and what guests asked for from the room QR. Refreshes on its own.
@@ -83,10 +84,14 @@ export function RoomsScreen({ initial, history: initialHistory }: { initial: Roo
       setHistory(r.data.history);
     }
   }, []);
-  // New room requests and food come in from guests' phones; check every 20 seconds
+  // New room requests and food come in from guests' phones: check every 15 seconds, at once when
+  // the screen comes back into view, and at once when a push alert reaches this phone
   useEffect(() => {
-    const t = setInterval(() => void reload(), 20_000);
-    return () => clearInterval(t);
+    const t = setInterval(() => void reload(), 15_000);
+    const onVisible = () => { if (!document.hidden) void reload(); };
+    document.addEventListener("visibilitychange", onVisible);
+    const stopPushWake = onPushWake(() => void reload());
+    return () => { clearInterval(t); document.removeEventListener("visibilitychange", onVisible); stopPushWake(); };
   }, [reload]);
 
   const run = async (task: () => Promise<{ ok: true } | { ok: false; error: string }>, done: string, inPanel = true) => {

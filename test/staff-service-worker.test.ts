@@ -95,4 +95,20 @@ describe('staff worker app chunk caching',()=>{
   expect(w.fetch).toHaveBeenCalledWith('https://app.example.com/api/staff/push-session?sessionId=session-a',expect.objectContaining({credentials:'include',cache:'no-store'}));
   expect(navigate).not.toHaveBeenCalled();expect(focus).not.toHaveBeenCalled();expect(openWindow).not.toHaveBeenCalled();
  });
+ it('tells open Tableeqr tabs to refresh when an alert arrives, without risking the alert',async()=>{
+  const listeners:Record<string,(event:unknown)=>void>={};
+  const showNotification=vi.fn().mockResolvedValue(undefined);const postMessage=vi.fn();
+  const matchAll=vi.fn().mockResolvedValue([{postMessage}]);
+  const fetch=vi.fn().mockResolvedValue(Response.json({active:true}));
+  vm.runInNewContext(code,{URL,Response,fetch,setTimeout:(run:()=>void)=>run(),caches:{open:async()=>({})},self:{location:{origin:'https://app.example.com'},registration:{showNotification},clients:{matchAll},addEventListener:(key:string,fn:(event:unknown)=>void)=>{listeners[key]=fn}}});
+  let pending:Promise<unknown>|undefined;
+  listeners.push({data:{json:()=>({title:'New order',body:'Table 4',url:'/console/orders',sessionId:'session-a',tag:'order-1'})},waitUntil:(work:Promise<unknown>)=>{pending=work}});
+  await pending;
+  expect(showNotification).toHaveBeenCalledOnce();
+  expect(postMessage).toHaveBeenCalledWith({type:'tableeqr:push',url:'/console/orders',tag:'order-1'});
+  matchAll.mockRejectedValueOnce(new Error('no clients'));
+  listeners.push({data:{json:()=>({title:'New order',url:'/console/orders',sessionId:'session-a'})},waitUntil:(work:Promise<unknown>)=>{pending=work}});
+  await expect(pending).resolves.toBeUndefined();
+  expect(showNotification).toHaveBeenCalledTimes(2);
+ });
 });

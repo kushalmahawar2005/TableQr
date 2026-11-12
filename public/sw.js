@@ -124,6 +124,12 @@ self.addEventListener("push", (event) => {
       data: { url, sessionId: staffNotification ? sessionId : null },
     };
     await self.registration.showNotification(title, options);
+    // Open Tableeqr tabs reload their data now instead of at their next poll (src/lib/push-wake.ts).
+    // Best effort: the notification above is what matters, so this can never undo it.
+    try {
+      const open = (await self.clients?.matchAll?.({ type: "window", includeUncontrolled: true })) ?? [];
+      for (const client of open) client.postMessage({ type: "tableeqr:push", url, tag: options.tag });
+    } catch { /* No tab to tell, or the browser refused: the screens still catch up on their next check. */ }
   })());
 });
 
