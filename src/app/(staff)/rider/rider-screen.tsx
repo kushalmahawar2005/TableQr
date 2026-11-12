@@ -232,10 +232,14 @@ function JobCard({ job, pickup, pending, act, here, photoUrl }: { job: Job; pick
         </li>
       </ol>
 
-      {onWay && here && address.lat !== undefined && address.lng !== undefined && (
+      {/* The drop on a live map as soon as the job arrives; the route and minutes left once the rider is on the way */}
+      {address.lat !== undefined && address.lng !== undefined && (
         <div className="mx-4 mt-4">
-          <LiveMap className="h-56" route points={[{ id: "me", kind: "rider", lat: here.lat, lng: here.lng, photoUrl, label: "You" }, { id: "home", kind: "home", lat: address.lat, lng: address.lng!, label: job.name ?? "Customer" }]}
-            overlay={<p className="text-caption font-bold text-ink">🛵 {etaMinutes(distanceKm(here, { lat: address.lat, lng: address.lng! }))} min <span className="font-medium text-muted">· {distanceKm(here, { lat: address.lat, lng: address.lng! }).toFixed(1)} km</span></p>} />
+          <LiveMap className="h-56" route={onWay && !!here} points={[
+            ...(here ? [{ id: "me", kind: "rider" as const, lat: here.lat, lng: here.lng, photoUrl, label: "You" }] : []),
+            { id: "home", kind: "home", lat: address.lat, lng: address.lng, label: job.name ?? "Customer" },
+          ]}
+            overlay={onWay && here ? <p className="text-caption font-bold text-ink">🛵 {etaMinutes(distanceKm(here, { lat: address.lat, lng: address.lng }))} min <span className="font-medium text-muted">· {distanceKm(here, { lat: address.lat, lng: address.lng }).toFixed(1)} km</span></p> : undefined} />
         </div>
       )}
 

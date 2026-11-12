@@ -35,7 +35,11 @@ const isComplete = (row: Row) => row.status === "delivered" || row.status === "c
 const isLive = (row: Row) => !isComplete(row) && row.status !== "cancelled";
 const nextStatusOf = (row: Row) => row.serviceMode === "pickup" ? "collected" as const : row.status === "placed" ? "dispatched" as const : "delivered" as const;
 /** Packed and paid, or out with the rider and paid: the order can move to its next step */
-const canAdvance = (row: Row) => isLive(row) && row.paid === "paid" && (row.status === "dispatched" || (row.status === "placed" && stageOf(row) >= 2));
+// Same rules as the server: a packed delivery can leave unpaid (pay on delivery: the rider collects),
+// but nothing is marked collected or delivered until its payment is recorded
+const canAdvance = (row: Row) => isLive(row) && (row.status === "dispatched"
+  ? row.paid === "paid"
+  : row.status === "placed" && stageOf(row) >= 2 && (row.serviceMode === "delivery" || row.paid === "paid"));
 const paymentLabel = (row: Row) => row.paid === "paid" ? "Paid" : row.serviceMode === "pickup" ? "Pay at pickup" : "Payment due";
 /** Still in the kitchen this long after it was placed */
 const LATE_MINUTES = 20;
@@ -299,7 +303,7 @@ function DeliveryDetail({ row, now, pending, canAssignCourier, run, riders, ride
     </DetailSection>
 
     {live && row.status === "placed" && stage < 2 && <p className="flex items-center gap-2 border-b border-line bg-paper px-5 py-2.5 text-xs text-muted"><Clock className="size-3.5 shrink-0" aria-hidden="true" />{delivery ? "Send out once kitchen marks every dish ready." : "Tell the customer when every dish is ready for counter pickup."}</p>}
-    {live && row.status === "placed" && stage >= 2 && !paid && <p className="border-b border-line bg-[var(--state-bill-soft)] px-5 py-2.5 text-xs font-semibold text-[var(--state-bill-text)]">{delivery ? `Record ${money(row.totalPaise)} in Billing before sending the order out.` : `Collect ${money(row.totalPaise)} at the counter, record it in Billing, then mark collected.`}</p>}
+    {live && row.status === "placed" && stage >= 2 && !paid && <p className="border-b border-line bg-[var(--state-bill-soft)] px-5 py-2.5 text-xs font-semibold text-[var(--state-bill-text)]">{delivery ? `Send it out; the rider collects ${money(row.totalPaise)} on delivery. Record it in Billing before marking it delivered.` : `Collect ${money(row.totalPaise)} at the counter, record it in Billing, then mark collected.`}</p>}
     {row.status === "dispatched" && !paid && <p className="border-b border-line bg-[var(--state-bill-soft)] px-5 py-2.5 text-xs font-semibold text-[var(--state-bill-text)]">Collect {money(row.totalPaise)} from the customer, record it in the bill, then mark delivered.</p>}
 
     <DetailSection>

@@ -44,6 +44,20 @@ function decryptMerchantCredentials(encrypted: string): MerchantConfig {
   }
 }
 
+/**
+ * Checks new merchant keys with Cashfree before they are saved, so an owner learns about a typo or
+ * test-vs-live mix-up now instead of a guest's checkout failing later. Input the save would reject
+ * anyway is "skipped" and left to its own validation message.
+ */
+export async function checkMerchantCredentials(input: { mode: unknown; clientId: unknown; clientSecret: unknown }): Promise<"ok" | "rejected" | "unknown" | "skipped"> {
+  const mode = String(input.mode ?? "");
+  const clientId = String(input.clientId ?? "").trim();
+  const clientSecret = String(input.clientSecret ?? "").trim();
+  if ((mode !== "sandbox" && mode !== "production") || clientId.length < 6 || clientSecret.length < 8) return "skipped";
+  if (mode === "production" && process.env.NODE_ENV !== "production") return "skipped";
+  return new CashfreeGateway(clientId, clientSecret, mode).verifyCredentials();
+}
+
 function makeGateway(config: MerchantConfig) {
   return new CashfreeGateway(config.clientId, config.clientSecret, config.mode);
 }

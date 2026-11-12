@@ -83,7 +83,8 @@ export function SuggestInput({
           if (e.key === "ArrowDown") { e.preventDefault(); setActive((a) => (a + 1) % shown.length); }
           else if (e.key === "ArrowUp") { e.preventDefault(); setActive((a) => (a <= 0 ? shown.length - 1 : a - 1)); }
           else if (e.key === "Enter" && active >= 0 && shown[active]) { e.preventDefault(); pick(shown[active]); }
-          else if (e.key === "Escape") setOpen(false);
+          // Close only the list: the Escape must not also reach a dialog around this field and close it
+          else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); setOpen(false); }
         }}
       />
       {open && shown.length > 0 && (

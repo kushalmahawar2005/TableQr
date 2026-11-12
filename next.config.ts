@@ -5,6 +5,10 @@ const nextConfig: NextConfig = {
   // A separate build folder for local load tests, so a running dev server is not disturbed
   ...(process.env.NEXT_DIST_DIR ? { distDir: process.env.NEXT_DIST_DIR } : {}),
   poweredByHeader: false,
+  // Metadata always goes in <head>. Next streams generateMetadata into <body> for normal browsers,
+  // and Chrome only reads <link rel="manifest"> from <head>, so the restaurant's guest app (whose
+  // manifest comes from generateMetadata) could not be installed on Android.
+  htmlLimitedBots: /.*/,
   // Dev only: let phones test the dev server through an ngrok tunnel (scripts and live reload)
   allowedDevOrigins: ["*.ngrok-free.dev", "*.ngrok-free.app", "*.ngrok.app"],
   // This folder is the project root, even though a stray lockfile sits in the home folder

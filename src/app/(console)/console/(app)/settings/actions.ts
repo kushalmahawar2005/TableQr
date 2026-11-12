@@ -11,6 +11,7 @@ import { staffFor } from "@/server/staff/request";
 import { archivePrinter, assignPrinters, printSetup, savePrinter, type PrinterInput, type PrintSetup } from "@/server/print/printers";
 import { recentPrintJobs, type JobRow } from "@/server/print/jobs";
 import { saveCustomDomain, setCustomDomainLive, verifyCustomDomain } from "@/server/staff/custom-domain";
+import { checkMerchantCredentials } from "@/server/payments/outlet-gateway";
 
 export type SettingsResult = { ok: true } | { ok: false; message: string };
 
@@ -63,8 +64,18 @@ export async function setCustomDomainLiveAction(live: boolean, confirmedHttps = 
 
 export async function saveRestaurantCashfreeAction(input: { mode: "sandbox" | "production"; clientId: string; clientSecret: string } | null) {
   try {
-    const status = await saveRestaurantCashfree(await staffFor(consoleSectionRoles.settings, "settings"), input);
-    return { ok: true as const, status };
+    const staff = await staffFor(consoleSectionRoles.settings, "settings");
+    if (!staff.roles.includes("owner")) throw new AppError("forbidden", "Only the owner can connect restaurant payments.");
+    const check = input ? await checkMerchantCredentials(input) : "skipped";
+    if (check === "rejected") {
+      const mode = input?.mode === "production" ? "Live" : "Test / Sandbox";
+      return { ok: false as const, message: `Cashfree did not accept this App ID and Secret Key in ${mode} mode. Copy both again from the same mode in your Cashfree dashboard (test keys only work in Test / Sandbox, live keys only in Live payments).` };
+    }
+    const status = await saveRestaurantCashfree(staff, input);
+    const notice = !input ? undefined
+      : check === "ok" ? "Cashfree accepted these keys. Guests can pay online once online payments are turned on."
+      : "Saved, but Cashfree could not be reached to confirm the keys. Try a small test payment before relying on it.";
+    return { ok: true as const, status, notice };
   } catch (err) {
     if (err instanceof AppError) return { ok: false as const, message: err.message };
     console.error("[settings] restaurant gateway save failed", err);

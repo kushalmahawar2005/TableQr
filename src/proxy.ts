@@ -30,6 +30,8 @@ export async function proxy(request: NextRequest) {
   requestHeaders.set("Content-Security-Policy", csp);
 
   let response: NextResponse | undefined;
+  // Guest page a custom domain maps to, before the installed-app rewrite below
+  let guestPath: string | null = null;
 
   if (!isLocal) {
     const configuredHosts = [process.env.PUBLIC_APP_URL, process.env.NEXT_PUBLIC_APP_URL]
@@ -48,14 +50,14 @@ export async function proxy(request: NextRequest) {
           response = new NextResponse("This host is not configured for Tableeqr.", { status: 421 });
         }
       } else {
-        const destination = request.nextUrl.clone();
-        if (destination.pathname === "/") {
-          destination.pathname = `/r/${encodeURIComponent(domainState)}`;
-          response = NextResponse.rewrite(destination, { request: { headers: requestHeaders } });
-        } else if (destination.pathname === "/r" || destination.pathname.startsWith("/r/")) {
-          const suffix = destination.pathname === "/r" ? "" : destination.pathname.replace(/^\/r\/[^/]+/, "");
-          destination.pathname = `/r/${encodeURIComponent(domainState)}${suffix}`;
-          response = NextResponse.rewrite(destination, { request: { headers: requestHeaders } });
+        const pathname = request.nextUrl.pathname;
+        if (pathname === "/") {
+          guestPath = `/r/${encodeURIComponent(domainState)}`;
+        } else if (pathname === "/r" || pathname.startsWith("/r/")) {
+          const suffix = pathname === "/r" ? "" : pathname.replace(/^\/r\/[^/]+/, "");
+          guestPath = `/r/${encodeURIComponent(domainState)}${suffix}`;
+        } else if (SAME_ORIGIN_FILES.has(pathname)) {
+          // Served from this host: browsers refuse a redirected worker script (see SAME_ORIGIN_FILES)
         } else if (fallbackOrigin) {
           const fallback = new URL(`${request.nextUrl.pathname}${request.nextUrl.search}`, fallbackOrigin);
           response = NextResponse.redirect(fallback, 307);
@@ -69,11 +71,14 @@ export async function proxy(request: NextRequest) {
   // The restaurant's installed app lives under /r/CODE/app, so its scope never covers the table QRs
   // (/r/CODE/t/...): a dine-in guest scanning a table stays in the browser. The app's pages are the
   // ordinary guest pages; they learn their link base from this header.
-  const app = !response && /^\/r\/([^/]+)\/app(\/.*)?$/.exec(request.nextUrl.pathname);
+  const app = !response && /^\/r\/([^/]+)\/app(\/.*)?$/.exec(guestPath ?? request.nextUrl.pathname);
   if (app && !(app[2] ?? "").startsWith("/t/") && app[2] !== "/app.webmanifest") {
-    const destination = request.nextUrl.clone();
-    destination.pathname = `/r/${app[1]}${app[2] ?? ""}`;
+    guestPath = `/r/${app[1]}${app[2] ?? ""}`;
     requestHeaders.set("x-guest-base", `/r/${app[1]}/app`);
+  }
+  if (!response && guestPath !== null) {
+    const destination = request.nextUrl.clone();
+    destination.pathname = guestPath;
     response = NextResponse.rewrite(destination, { request: { headers: requestHeaders } });
   }
 
@@ -81,6 +86,13 @@ export async function proxy(request: NextRequest) {
   response.headers.set("Content-Security-Policy", csp);
   return response;
 }
+
+/**
+ * Root files a custom guest domain serves itself instead of redirecting to the Tableeqr address:
+ * the service worker, and the user-independent offline shell its install step caches (a redirected
+ * fetch there fails the install, which blocks push alerts and installing the guest app).
+ */
+const SAME_ORIGIN_FILES = new Set(["/sw.js", "/offline-pos"]);
 
 export const config = {
   matcher: [
@@ -91,5 +103,7 @@ export const config = {
         { type: "header", key: "purpose", value: "prefetch" },
       ],
     },
+    // Prefetches of the installed guest app's pages need the /app rewrite too, or they 404
+    "/r/:outlet/app/:path*",
   ],
 };

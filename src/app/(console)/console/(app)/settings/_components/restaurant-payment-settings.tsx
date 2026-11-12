@@ -23,7 +23,7 @@ export function RestaurantPaymentSettings({ initial, canEdit }: { initial: Outle
       if (!result.ok) { setMessage(result.message); return; }
       setStatus(result.status);
       setClientId(""); setClientSecret("");
-      setMessage("Cashfree credentials saved. The first checkout will confirm that Cashfree accepts them.");
+      setMessage(result.notice ?? "Cashfree credentials saved.");
       router.refresh();
     });
   }

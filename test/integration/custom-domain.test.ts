@@ -56,6 +56,17 @@ describe("custom guest domain routing", () => {
     expect((await proxy(request)).headers.get("x-middleware-rewrite")).toContain("/r/SRJ01");
     const guestRequest = new NextRequest("https://menu.example.com/r/OTHER/t/table123?from=qr");
     expect((await proxy(guestRequest)).headers.get("x-middleware-rewrite")).toContain("/r/SRJ01/t/table123?from=qr");
+    // The installed guest app and its service worker work on the restaurant's own domain
+    const installed = await proxy(new NextRequest("https://menu.example.com/r/SRJ01/app/delivery?mode=delivery"));
+    expect(installed.headers.get("x-middleware-rewrite")).toContain("/r/SRJ01/delivery?mode=delivery");
+    expect(installed.headers.get("x-middleware-request-x-guest-base")).toBe("/r/SRJ01/app");
+    const appHome = await proxy(new NextRequest("https://menu.example.com/r/SRJ01/app"));
+    expect(new URL(appHome.headers.get("x-middleware-rewrite")!).pathname).toBe("/r/SRJ01");
+    const worker = await proxy(new NextRequest("https://menu.example.com/sw.js"));
+    expect(worker.headers.get("location")).toBeNull();
+    expect(worker.headers.get("x-middleware-next")).toBe("1");
+    expect((await proxy(new NextRequest("https://menu.example.com/offline-pos"))).headers.get("location")).toBeNull();
+    expect((await proxy(new NextRequest("https://menu.example.com/console/login"))).headers.get("location")).toBe("https://tableeqr.example/console/login");
     expect(await outletCodeForCustomDomain("menu.example.com,evil.example")).toBeNull();
     expect(await outletCodeForCustomDomain("http://menu.example.com")).toBeNull();
 

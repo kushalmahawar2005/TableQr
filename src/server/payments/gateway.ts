@@ -119,6 +119,25 @@ export class CashfreeGateway implements PaymentGateway {
     if (clientId.length < 6 || clientSecret.length < 8) throw new CashfreeConfigError("client credentials are incomplete");
   }
 
+  /**
+   * Asks Cashfree whether it accepts these keys, by looking up an order id that cannot exist.
+   * Accepted keys get "order not found" (404); wrong or wrong-mode keys get 401/403.
+   */
+  async verifyCredentials(): Promise<"ok" | "rejected" | "unknown"> {
+    try {
+      const res = await fetch(`${this.apiBase}/orders/tq_keycheck_${Date.now().toString(36)}`, {
+        method: "GET",
+        headers: { "x-client-id": this.clientId, "x-client-secret": this.clientSecret, "x-api-version": this.apiVersion, Accept: "application/json" },
+        signal: AbortSignal.timeout(8000),
+        cache: "no-store",
+      });
+      if (res.status === 401 || res.status === 403) return "rejected";
+      return res.ok || res.status === 404 ? "ok" : "unknown";
+    } catch {
+      return "unknown";
+    }
+  }
+
   private async call<T>(path: string, init: { method: "GET" | "POST"; body?: unknown; idempotencyKey?: string }): Promise<T> {
     const res = await fetch(`${this.apiBase}${path}`, {
       method: init.method,

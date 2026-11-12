@@ -520,13 +520,23 @@ export function StatusView({ status, hindi, pending, statusMessage, onPay, onRef
       </div>
     </section>
 
-    {!pickup && status.status === "dispatched" && (status.riderLocation ? <section>
-      <LiveMap className="h-56" route points={[
-        { id: "rider", kind: "rider", lat: status.riderLocation.lat, lng: status.riderLocation.lng, photoUrl: status.courierPhotoUrl, label: status.courierName ?? "Rider" },
-        ...(status.address.lat !== undefined && status.address.lng !== undefined ? [{ id: "home", kind: "home" as const, lat: status.address.lat, lng: status.address.lng, label: t("Your door", "आपका घर") }] : []),
-      ]} />
-      <p className="mt-2 text-xs text-muted">{t("Location last updated", "लोकेशन अपडेट")} · {lastUpdate}</p>
-    </section> : <RouteArt label={t("Illustrative route · Not a live map", "सिर्फ़ चित्र · लाइव नक्शा नहीं")} note={t("Waiting for a fresh location update", "नई लोकेशन का इंतज़ार")} />)}
+    {/* A real map from the moment the order is placed: the guest's door, then the rider once they share a location */}
+    {!pickup && (status.status === "placed" || status.status === "dispatched") && (() => {
+      const rider = status.status === "dispatched" ? status.riderLocation : null;
+      const hasHome = status.address.lat !== undefined && status.address.lng !== undefined;
+      if (!rider && !hasHome) return status.status === "dispatched"
+        ? <RouteArt label={t("Illustrative route · Not a live map", "सिर्फ़ चित्र · लाइव नक्शा नहीं")} note={t("Waiting for a fresh location update", "नई लोकेशन का इंतज़ार")} />
+        : null;
+      return <section>
+        <LiveMap className="h-56" route={!!rider} points={[
+          ...(rider ? [{ id: "rider", kind: "rider" as const, lat: rider.lat, lng: rider.lng, photoUrl: status.courierPhotoUrl, label: status.courierName ?? "Rider" }] : []),
+          ...(hasHome ? [{ id: "home", kind: "home" as const, lat: status.address.lat!, lng: status.address.lng!, label: t("Your door", "आपका घर") }] : []),
+        ]} />
+        <p className="mt-2 text-xs text-muted">{rider ? `${t("Location last updated", "लोकेशन अपडेट")} · ${lastUpdate}`
+          : status.status === "dispatched" ? t("Your order is on the way. The rider appears on the map as soon as their location comes in.", "आपका ऑर्डर रास्ते में है। राइडर की लोकेशन आते ही वे नक्शे पर दिखेंगे।")
+          : t("Your delivery spot. You can follow the rider here once your order leaves the restaurant.", "आपकी डिलीवरी की जगह। ऑर्डर निकलते ही आप राइडर को यहाँ देख सकेंगे।")}</p>
+      </section>;
+    })()}
 
     {status.status !== "cancelled" && status.status !== "draft" && <ol aria-label={t("Order progress", "ऑर्डर की स्थिति")} className="flex items-start">
       {steps.map((step, i) => {

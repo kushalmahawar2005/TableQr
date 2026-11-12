@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { encryptMerchantCredentials, outletGatewayFromConfig, outletGatewayReady } from "@/server/payments/outlet-gateway";
+import { checkMerchantCredentials, encryptMerchantCredentials, outletGatewayFromConfig, outletGatewayReady } from "@/server/payments/outlet-gateway";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -49,5 +49,28 @@ describe("restaurant Cashfree account isolation", () => {
     const encrypted = encryptMerchantCredentials({ mode: "sandbox", clientId: "restaurant_client_123", clientSecret: "restaurant_secret_456" });
     vi.stubEnv("NODE_ENV", "production");
     expect(outletGatewayFromConfig(encrypted)).toBeNull();
+  });
+
+  it("checks new merchant keys with Cashfree before saving them", async () => {
+    vi.stubEnv("NODE_ENV", "test");
+    const urls: string[] = [];
+    const answer = (status: number) => vi.stubGlobal("fetch", async (url: string) => { urls.push(url); return new Response("{}", { status }); });
+    const keys = { mode: "sandbox", clientId: "restaurant_client_123", clientSecret: "restaurant_secret_456" };
+
+    answer(404);
+    expect(await checkMerchantCredentials(keys)).toBe("ok");
+    expect(urls[0]).toMatch(/^https:\/\/sandbox\.cashfree\.com\/pg\/orders\/tq_keycheck_/);
+    answer(401);
+    expect(await checkMerchantCredentials(keys)).toBe("rejected");
+    answer(503);
+    expect(await checkMerchantCredentials(keys)).toBe("unknown");
+    vi.stubGlobal("fetch", async () => { throw new TypeError("network down"); });
+    expect(await checkMerchantCredentials(keys)).toBe("unknown");
+
+    // Input the save rejects anyway is left to its own message, without calling Cashfree
+    const before = urls.length;
+    expect(await checkMerchantCredentials({ ...keys, clientSecret: "short" })).toBe("skipped");
+    expect(await checkMerchantCredentials({ ...keys, mode: "production" })).toBe("skipped");
+    expect(urls.length).toBe(before);
   });
 });
